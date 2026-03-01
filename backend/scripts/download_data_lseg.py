@@ -22,6 +22,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "vendor"))
 
+from barra.gics_mapping import map_to_industry_group
 from portfolio.mock_portfolio import get_tickers
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "data.db"
@@ -88,6 +89,20 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gics_industry_history (
+            ticker TEXT NOT NULL,
+            as_of_date TEXT NOT NULL,
+            gics_industry_group TEXT,
+            trbc_economic_sector TEXT,
+            source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT,
+            PRIMARY KEY (ticker, as_of_date)
+        )
+        """
+    )
 
 
 def _existing_cols(conn: sqlite3.Connection, table: str) -> list[str]:
@@ -95,7 +110,13 @@ def _existing_cols(conn: sqlite3.Connection, table: str) -> list[str]:
     return [str(r[1]) for r in cur.fetchall()]
 
 
-def _insert_rows(conn: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> int:
+def _insert_rows(
+    conn: sqlite3.Connection,
+    table: str,
+    rows: list[dict[str, Any]],
+    *,
+    replace: bool = False,
+) -> int:
     if not rows:
         return 0
     cols = _existing_cols(conn, table)
@@ -103,7 +124,8 @@ def _insert_rows(conn: sqlite3.Connection, table: str, rows: list[dict[str, Any]
     if not use_cols:
         return 0
     placeholders = ",".join("?" for _ in use_cols)
-    sql = f'INSERT INTO {table} ({",".join(use_cols)}) VALUES ({placeholders})'
+    insert_kw = "INSERT OR REPLACE" if replace else "INSERT"
+    sql = f'{insert_kw} INTO {table} ({",".join(use_cols)}) VALUES ({placeholders})'
     conn.executemany(sql, [tuple(r.get(c) for c in use_cols) for r in rows])
     return len(rows)
 
@@ -211,6 +233,7 @@ def download_from_lseg(
     job_run_id = f"lseg_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     fundamentals_rows: list[dict[str, Any]] = []
     prices_rows: list[dict[str, Any]] = []
+    gics_history_rows: list[dict[str, Any]] = []
 
     for _, row in company.iterrows():
         ric = str(row.get(instrument_col) or "").strip()
@@ -224,6 +247,12 @@ def download_from_lseg(
         shares_outstanding = row.get(shares_col) if shares_col else None
         dividend_yield = row.get(divy_col) if divy_col else None
 
+        industry_group = map_to_industry_group(
+            sector=None if pd.isna(sector) else str(sector),
+            industry=None if pd.isna(industry) else str(industry),
+            ticker=ticker,
+        )
+
         fundamentals_rows.append(
             {
                 "ticker": ticker,
@@ -233,6 +262,17 @@ def download_from_lseg(
                 "dividend_yield": None if pd.isna(dividend_yield) else str(dividend_yield),
                 "sector": None if pd.isna(sector) else str(sector),
                 "industry": None if pd.isna(industry) else str(industry),
+                "source": "lseg_toolkit",
+                "job_run_id": job_run_id,
+                "updated_at": updated_at,
+            }
+        )
+        gics_history_rows.append(
+            {
+                "ticker": ticker,
+                "as_of_date": as_of,
+                "gics_industry_group": industry_group,
+                "trbc_economic_sector": None if pd.isna(sector) else str(sector),
                 "source": "lseg_toolkit",
                 "job_run_id": job_run_id,
                 "updated_at": updated_at,
@@ -263,11 +303,14 @@ def download_from_lseg(
         _ensure_tables(conn)
         n_f = _insert_rows(conn, "fundamental_snapshots", fundamentals_rows)
         n_p = _insert_rows(conn, "prices_daily", prices_rows)
+        n_g = _insert_rows(conn, "gics_industry_history", gics_history_rows, replace=True)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fund_ticker ON fundamental_snapshots(ticker)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fund_date ON fundamental_snapshots(fetch_date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prices_ticker ON prices_daily(ticker)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prices_date ON prices_daily(date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prices_ticker_date ON prices_daily(ticker, date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gics_hist_date ON gics_industry_history(as_of_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gics_hist_ticker ON gics_industry_history(ticker)")
         conn.commit()
     finally:
         conn.close()
@@ -278,6 +321,7 @@ def download_from_lseg(
         "universe": len(universe),
         "fundamental_rows_inserted": n_f,
         "price_rows_inserted": n_p,
+        "gics_rows_inserted": n_g,
         "db_path": str(db_path),
     }
     print(out)

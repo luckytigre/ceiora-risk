@@ -31,7 +31,7 @@ STYLE_FACTOR_NAMES = list(STYLE_COLUMN_TO_LABEL.values())
 RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v5_cov_and_specific_risk_2026_03_01"
+CACHE_METHOD_VERSION = "v6_industry_history_2026_03_01"
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS daily_specific_residuals (
     PRIMARY KEY (date, ticker)
 );
 """
+
+_GICS_HISTORY_TABLE = "gics_industry_history"
 
 
 def _winsorize_cross_section(values: np.ndarray, pct: float) -> np.ndarray:
@@ -100,6 +102,44 @@ def _load_exposures(data_db: Path) -> pd.DataFrame:
     for col in STYLE_SCORE_COLS:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def _load_industry_history(data_db: Path) -> pd.DataFrame:
+    """Load historical industry-group classifications if table exists."""
+    conn = sqlite3.connect(str(data_db))
+    try:
+        row = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table' AND name=?
+            """,
+            (_GICS_HISTORY_TABLE,),
+        ).fetchone()
+        if not row:
+            return pd.DataFrame(columns=["ticker", "as_of_date", "gics_industry_group"])
+        df = pd.read_sql_query(
+            f"""
+            SELECT ticker, as_of_date, gics_industry_group
+            FROM {_GICS_HISTORY_TABLE}
+            ORDER BY as_of_date, ticker
+            """,
+            conn,
+        )
+    finally:
+        conn.close()
+
+    if df.empty:
+        return pd.DataFrame(columns=["ticker", "as_of_date", "gics_industry_group"])
+    df["ticker"] = df["ticker"].astype(str).str.upper()
+    df["as_of_date"] = df["as_of_date"].astype(str)
+    df["gics_industry_group"] = (
+        df["gics_industry_group"]
+        .astype(str)
+        .str.strip()
+        .replace({"": "Unmapped", "None": "Unmapped", "nan": "Unmapped"})
+    )
     return df
 
 
@@ -247,6 +287,7 @@ def compute_daily_factor_returns(
 
     # Load source data
     exposures_df = _load_exposures(data_db)
+    industry_hist_df = _load_industry_history(data_db)
     prices_df = _load_prices(data_db)
     mcap_df = _load_market_caps(data_db)
 
@@ -260,7 +301,7 @@ def compute_daily_factor_returns(
     # Build daily returns: pivot prices to wide, then compute pct_change
     prices_wide = prices_df.pivot(index="date", columns="ticker", values="close")
     prices_wide = prices_wide.sort_index()
-    daily_returns = prices_wide.pct_change()  # r_i(t) = close(t)/close(t-1) - 1
+    daily_returns = prices_wide.pct_change(fill_method=None)  # r_i(t) = close(t)/close(t-1) - 1
     daily_returns = daily_returns.iloc[1:]  # drop first NaN row
     trading_dates = sorted(daily_returns.index.tolist())
 
@@ -297,10 +338,32 @@ def compute_daily_factor_returns(
 
     # Pre-build exposure lookup: for each exposure date, a DataFrame indexed by ticker
     exposure_snapshots: dict[str, pd.DataFrame] = {}
+    industry_hist_by_date: dict[str, pd.Series] = {}
+    if not industry_hist_df.empty:
+        for as_of, grp in industry_hist_df.groupby("as_of_date", sort=False):
+            s = (
+                grp.drop_duplicates(subset=["ticker"], keep="last")
+                .set_index("ticker")["gics_industry_group"]
+                .astype(str)
+            )
+            industry_hist_by_date[str(as_of)] = s
+
     for as_of in exposure_dates:
         snap = exposures_df[exposures_df["as_of_date"] == as_of].copy()
         snap = snap.drop_duplicates(subset=["ticker"], keep="last")
         snap = snap.set_index("ticker")
+        hist_groups = industry_hist_by_date.get(str(as_of))
+        if hist_groups is not None:
+            merged_group = (
+                hist_groups.reindex(snap.index)
+                .combine_first(snap.get("gics_industry_group"))
+                .fillna("Unmapped")
+            )
+            snap["gics_industry_group"] = merged_group.astype(str)
+        elif "gics_industry_group" in snap.columns:
+            snap["gics_industry_group"] = snap["gics_industry_group"].fillna("Unmapped").astype(str)
+        else:
+            snap["gics_industry_group"] = "Unmapped"
         exposure_snapshots[as_of] = snap
 
     # Process each trading day
