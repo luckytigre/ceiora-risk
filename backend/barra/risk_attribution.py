@@ -52,7 +52,7 @@ def risk_decomposition(
     *,
     cov: pd.DataFrame,
     positions: list[dict[str, Any]],
-    latest_r2: float,
+    specific_risk_by_ticker: dict[str, dict[str, float | int | str]] | None = None,
 ) -> tuple[dict[str, float], dict[str, float], list[dict[str, Any]]]:
     """Decompose portfolio risk into style/industry/idiosyncratic.
 
@@ -99,18 +99,35 @@ def risk_decomposition(
 
     raw_industry = _component_variance(industry_factors)
     raw_style = _component_variance(style_factors)
-    raw_total = raw_industry + raw_style
+    raw_systematic = raw_industry + raw_style
 
-    if raw_total <= 0:
+    spec_map = specific_risk_by_ticker or {}
+    raw_specific = 0.0
+    for pos in positions:
+        ticker = str(pos.get("ticker", "")).upper()
+        w_i = float(pos.get("weight", 0.0) or 0.0)
+        spec_row = spec_map.get(ticker, {})
+        spec_var = float(spec_row.get("specific_var", 0.0) or 0.0)
+        if not np.isfinite(spec_var) or spec_var < 0:
+            spec_var = 0.0
+        raw_specific += (w_i ** 2) * spec_var
+    raw_specific = max(0.0, raw_specific)
+    raw_total = raw_systematic + raw_specific
+
+    if raw_systematic <= 0:
         shares = {"industry": 0.5, "style": 0.5}
     else:
         shares = {
-            "industry": raw_industry / raw_total,
-            "style": raw_style / raw_total,
+            "industry": raw_industry / raw_systematic,
+            "style": raw_style / raw_systematic,
         }
 
-    systematic_pct = max(0.0, min(100.0, latest_r2 * 100.0))
-    idio_pct = max(0.0, 100.0 - systematic_pct)
+    if raw_total <= 0:
+        systematic_pct = 0.0
+        idio_pct = 100.0
+    else:
+        systematic_pct = max(0.0, min(100.0, 100.0 * raw_systematic / raw_total))
+        idio_pct = max(0.0, min(100.0, 100.0 * raw_specific / raw_total))
 
     risk_shares = {
         "industry": round(systematic_pct * shares["industry"], 2),
@@ -119,7 +136,8 @@ def risk_decomposition(
     }
 
     # Per-factor details
-    total_portfolio_var = float(h.T @ f_mat @ h)
+    total_portfolio_var = float(raw_total)
+    systematic_var = float(raw_systematic)
     factor_details = []
     for f_name in factors:
         i = idx[f_name]
@@ -129,6 +147,7 @@ def risk_decomposition(
         fh = f_mat @ h
         marginal = h[i] * fh[i]
         pct_of_total = (marginal / total_portfolio_var * 100.0) if total_portfolio_var > 0 else 0.0
+        pct_of_systematic = (marginal / systematic_var * 100.0) if systematic_var > 0 else 0.0
 
         category = "style" if f_name in STYLE_FACTOR_NAMES else "industry"
 
@@ -140,6 +159,7 @@ def risk_decomposition(
             "sensitivity": round(exp * factor_vol, 6),
             "marginal_var_contrib": round(marginal, 8),
             "pct_of_total": round(pct_of_total, 2),
+            "pct_of_systematic": round(pct_of_systematic, 2),
         })
 
     return risk_shares, shares, factor_details

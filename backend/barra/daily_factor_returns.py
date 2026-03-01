@@ -31,7 +31,7 @@ STYLE_FACTOR_NAMES = list(STYLE_COLUMN_TO_LABEL.values())
 RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v4_remove_market_factor_2026_03_01"
+CACHE_METHOD_VERSION = "v5_cov_and_specific_risk_2026_03_01"
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
@@ -51,6 +51,17 @@ _DAILY_FR_META_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+"""
+
+_DAILY_RESIDUALS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS daily_specific_residuals (
+    date TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    residual REAL NOT NULL,
+    market_cap REAL NOT NULL DEFAULT 0.0,
+    industry_group TEXT,
+    PRIMARY KEY (date, ticker)
 );
 """
 
@@ -121,6 +132,7 @@ def _load_cached_dates(cache_db: Path) -> set[str]:
     conn = sqlite3.connect(str(cache_db))
     conn.execute(_DAILY_FR_SCHEMA)
     conn.execute(_DAILY_FR_META_SCHEMA)
+    conn.execute(_DAILY_RESIDUALS_SCHEMA)
     conn.commit()
     cur = conn.execute("SELECT DISTINCT date FROM daily_factor_returns")
     dates = {row[0] for row in cur.fetchall()}
@@ -133,6 +145,7 @@ def _ensure_cache_version(cache_db: Path):
     conn = sqlite3.connect(str(cache_db))
     conn.execute(_DAILY_FR_SCHEMA)
     conn.execute(_DAILY_FR_META_SCHEMA)
+    conn.execute(_DAILY_RESIDUALS_SCHEMA)
     row = conn.execute(
         "SELECT value FROM daily_factor_returns_meta WHERE key = ?",
         ("method_version",),
@@ -140,7 +153,9 @@ def _ensure_cache_version(cache_db: Path):
     current_version = row[0] if row else None
     if current_version != CACHE_METHOD_VERSION:
         conn.execute("DROP TABLE IF EXISTS daily_factor_returns")
+        conn.execute("DROP TABLE IF EXISTS daily_specific_residuals")
         conn.execute(_DAILY_FR_SCHEMA)
+        conn.execute(_DAILY_RESIDUALS_SCHEMA)
         conn.execute(
             """
             INSERT INTO daily_factor_returns_meta(key, value)
@@ -181,6 +196,31 @@ def _save_daily_results(cache_db: Path, results: list[dict]):
                 r["coverage"],
             )
             for r in results
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+
+def _save_daily_residuals(cache_db: Path, rows: list[dict]):
+    """Batch-insert stock residual rows into cache."""
+    if not rows:
+        return
+    conn = sqlite3.connect(str(cache_db))
+    conn.execute(_DAILY_RESIDUALS_SCHEMA)
+    conn.executemany(
+        """INSERT OR REPLACE INTO daily_specific_residuals
+           (date, ticker, residual, market_cap, industry_group)
+           VALUES (?, ?, ?, ?, ?)""",
+        [
+            (
+                r["date"],
+                r["ticker"],
+                r["residual"],
+                r["market_cap"],
+                r["industry_group"],
+            )
+            for r in rows
         ],
     )
     conn.commit()
@@ -265,6 +305,7 @@ def compute_daily_factor_returns(
 
     # Process each trading day
     batch_results: list[dict] = []
+    batch_residuals: list[dict] = []
     n_computed = 0
     for i, date in enumerate(dates_to_compute):
         # 1. Carry-forward exposures: find most recent snapshot <= date
@@ -323,6 +364,7 @@ def compute_daily_factor_returns(
         style_scores.columns = style_names
 
         # Industry exposures (one-hot from gics_industry_group)
+        industry_series = pd.Series("Unmapped", index=valid_idx, dtype="object")
         if "gics_industry_group" in exp_snap.columns:
             industry_series = exp_snap.loc[valid_idx, "gics_industry_group"].fillna("Unmapped")
             industry_dummies = pd.get_dummies(industry_series, dtype=float)
@@ -366,12 +408,35 @@ def compute_daily_factor_returns(
                 "coverage": float(coverage) if np.isfinite(coverage) else 0.0,
             })
 
+        # 8. Store per-stock residual history for specific risk forecasting
+        residuals = np.asarray(result.residuals, dtype=float)
+        for idx, ticker in enumerate(valid_idx):
+            if idx >= residuals.shape[0]:
+                break
+            resid_val = float(residuals[idx])
+            if not np.isfinite(resid_val):
+                continue
+            mcap_val = float(market_cap_series.loc[ticker])
+            if not np.isfinite(mcap_val) or mcap_val <= 0:
+                mcap_val = 0.0
+            industry = str(industry_series.loc[ticker]) if ticker in industry_series.index else "Unmapped"
+            batch_residuals.append({
+                "date": date,
+                "ticker": str(ticker),
+                "residual": resid_val,
+                "market_cap": mcap_val,
+                "industry_group": industry,
+            })
+
         n_computed += 1
 
         # Batch save every 100 dates
         if len(batch_results) > 3000:
             _save_daily_results(cache_db, batch_results)
             batch_results = []
+        if len(batch_residuals) > 25000:
+            _save_daily_residuals(cache_db, batch_residuals)
+            batch_residuals = []
 
         if (i + 1) % 200 == 0:
             elapsed = time.time() - t0
@@ -380,6 +445,7 @@ def compute_daily_factor_returns(
 
     # Save remaining
     _save_daily_results(cache_db, batch_results)
+    _save_daily_residuals(cache_db, batch_residuals)
 
     elapsed = time.time() - t0
     logger.info(f"Computed {n_computed} daily cross-sections in {elapsed:.1f}s")
@@ -439,3 +505,42 @@ def load_daily_factor_returns(
     """Load cached daily factor returns as list of dicts (for covariance builder)."""
     df = _load_all_from_cache(cache_db, lookback_days)
     return df.to_dict("records")
+
+
+def load_specific_residuals(
+    cache_db: Path,
+    lookback_days: int = 504,
+) -> pd.DataFrame:
+    """Load per-stock daily residual returns from cache for specific-risk modeling."""
+    conn = sqlite3.connect(str(cache_db))
+    conn.execute(_DAILY_RESIDUALS_SCHEMA)
+    if lookback_days > 0:
+        df = pd.read_sql_query(
+            """
+            SELECT date, ticker, residual, market_cap, industry_group
+            FROM daily_specific_residuals
+            WHERE date IN (
+                SELECT date
+                FROM (
+                    SELECT DISTINCT date
+                    FROM daily_specific_residuals
+                    ORDER BY date DESC
+                    LIMIT ?
+                )
+            )
+            ORDER BY date, ticker
+            """,
+            conn,
+            params=(int(lookback_days),),
+        )
+    else:
+        df = pd.read_sql_query(
+            """
+            SELECT date, ticker, residual, market_cap, industry_group
+            FROM daily_specific_residuals
+            ORDER BY date, ticker
+            """,
+            conn,
+        )
+    conn.close()
+    return df

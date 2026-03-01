@@ -19,6 +19,7 @@ from barra.risk_attribution import (
     portfolio_factor_exposure,
     risk_decomposition,
 )
+from barra.specific_risk import build_specific_risk_from_cache
 from db import postgres, sqlite
 from portfolio.mock_portfolio import get_position_meta, get_shares, get_tickers
 
@@ -41,6 +42,7 @@ def _build_universe_ticker_loadings(
     fundamentals_df: pd.DataFrame,
     prices_df: pd.DataFrame,
     cov: pd.DataFrame,
+    specific_risk_by_ticker: dict[str, dict[str, float | int | str]] | None = None,
 ) -> dict[str, Any]:
     """Build full-universe cached loadings/risk context keyed by ticker."""
     # Latest price map for whole universe
@@ -159,6 +161,9 @@ def _build_universe_ticker_loadings(
             for factor, vol in factor_vol_map.items()
         }
         risk_loading = round(float(sum(abs(v) for v in sensitivities.values())), 6)
+        spec = (specific_risk_by_ticker or {}).get(ticker, {})
+        spec_var = _finite_float(spec.get("specific_var"), 0.0)
+        spec_vol = _finite_float(spec.get("specific_vol"), 0.0)
 
         universe_by_ticker[ticker] = {
             "ticker": ticker,
@@ -171,6 +176,8 @@ def _build_universe_ticker_loadings(
             "exposures": exposures,
             "sensitivities": sensitivities,
             "risk_loading": risk_loading,
+            "specific_var": round(spec_var, 8),
+            "specific_vol": round(spec_vol, 6),
         }
 
     # Lightweight search index for instant lookup
@@ -180,6 +187,7 @@ def _build_universe_ticker_loadings(
             "name": d.get("name", t),
             "sector": d.get("gics_sector", ""),
             "risk_loading": d.get("risk_loading", 0.0),
+            "specific_vol": d.get("specific_vol", 0.0),
         }
         for t, d in universe_by_ticker.items()
     ]
@@ -225,6 +233,8 @@ def _build_positions_from_universe(universe_by_ticker: dict[str, dict[str, Any]]
             "source": meta["source"],
             "industry_group": str(base.get("industry_group") or ""),
             "exposures": dict(base.get("exposures") or {}),
+            "specific_var": _finite_float(base.get("specific_var"), 0.0),
+            "specific_vol": _finite_float(base.get("specific_vol"), 0.0),
             "risk_contrib_pct": 0.0,
         })
 
@@ -376,6 +386,11 @@ def run_refresh() -> dict[str, Any]:
     cov, latest_r2 = build_factor_covariance_from_cache(
         CACHE_DB, lookback_days=config.LOOKBACK_DAYS
     )
+    logger.info("Computing stock-level specific risk from residual history...")
+    specific_risk_by_ticker = build_specific_risk_from_cache(
+        CACHE_DB,
+        lookback_days=config.LOOKBACK_DAYS,
+    )
 
     # 5. Build/cached full-universe loadings first (portfolio is a final projection only).
     logger.info("Building full-universe ticker loadings...")
@@ -384,6 +399,7 @@ def run_refresh() -> dict[str, Any]:
         fundamentals_universe_df,
         prices_universe_df,
         cov,
+        specific_risk_by_ticker=specific_risk_by_ticker,
     )
 
     # 6. Project held positions from full-universe cache
@@ -395,7 +411,7 @@ def run_refresh() -> dict[str, Any]:
     risk_shares, component_shares, factor_details = risk_decomposition(
         cov=cov,
         positions=positions,
-        latest_r2=latest_r2,
+        specific_risk_by_ticker=specific_risk_by_ticker,
     )
 
     # 8. Compute per-position risk contributions

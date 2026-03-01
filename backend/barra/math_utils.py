@@ -45,10 +45,14 @@ def standardize_cap_weighted(
     *,
     n_mad: float = 3.0,
 ) -> np.ndarray:
-    """Winsorize then return cap-weighted z-score."""
+    """Winsorize then return z-score with cap-weighted mean and equal-weighted std."""
     clipped = winsorize_mad(values, n_mad=n_mad)
     weights = np.asarray(market_caps, dtype=float)
-    mu, sigma = weighted_mean_std(clipped, weights)
+    mu, _ = weighted_mean_std(clipped, weights)
+    finite = np.isfinite(clipped)
+    if int(finite.sum()) < 2:
+        return np.zeros_like(clipped, dtype=float)
+    sigma = float(np.nanstd(clipped[finite], ddof=0))
     if not np.isfinite(sigma) or sigma <= 0:
         return np.zeros_like(clipped, dtype=float)
     return (clipped - mu) / sigma
