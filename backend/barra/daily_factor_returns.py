@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from db.trbc_schema import ensure_trbc_naming, pick_trbc_industry_column
 from barra.descriptors import FULL_STYLE_ORTH_RULES, canonicalize_style_scores
 from barra.risk_attribution import STYLE_COLUMN_TO_LABEL
 from barra.wls_regression import estimate_factor_returns_two_phase
@@ -31,7 +32,7 @@ STYLE_FACTOR_NAMES = list(STYLE_COLUMN_TO_LABEL.values())
 RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v6_industry_history_2026_03_01"
+CACHE_METHOD_VERSION = "v7_trbc_naming_2026_03_01"
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
@@ -60,12 +61,17 @@ CREATE TABLE IF NOT EXISTS daily_specific_residuals (
     ticker TEXT NOT NULL,
     residual REAL NOT NULL,
     market_cap REAL NOT NULL DEFAULT 0.0,
-    industry_group TEXT,
+    trbc_industry_group TEXT,
     PRIMARY KEY (date, ticker)
 );
 """
 
-_GICS_HISTORY_TABLE = "gics_industry_history"
+_TRBC_HISTORY_TABLE = "trbc_industry_history"
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(r[1]) for r in rows}
 
 
 def _winsorize_cross_section(values: np.ndarray, pct: float) -> np.ndarray:
@@ -85,19 +91,25 @@ def _winsorize_cross_section(values: np.ndarray, pct: float) -> np.ndarray:
 def _load_exposures(data_db: Path) -> pd.DataFrame:
     """Load all barra_exposures snapshots, sorted by date."""
     conn = sqlite3.connect(str(data_db))
-    df = pd.read_sql_query(
-        """SELECT ticker, as_of_date,
-                  beta_score, momentum_score, size_score, nonlinear_size_score,
-                  short_term_reversal_score, resid_vol_score, liquidity_score,
-                  book_to_price_score, earnings_yield_score, value_score,
-                  leverage_score, growth_score, profitability_score,
-                  investment_score, dividend_yield_score,
-                  gics_industry_group
-           FROM barra_exposures
-           ORDER BY as_of_date, ticker""",
-        conn,
-    )
-    conn.close()
+    try:
+        ensure_trbc_naming(conn)
+        cols = _table_columns(conn, "barra_exposures")
+        industry_col = pick_trbc_industry_column(cols)
+        industry_select = f"{industry_col} AS trbc_industry_group" if industry_col else "'Unmapped' AS trbc_industry_group"
+        df = pd.read_sql_query(
+            f"""SELECT ticker, as_of_date,
+                      beta_score, momentum_score, size_score, nonlinear_size_score,
+                      short_term_reversal_score, resid_vol_score, liquidity_score,
+                      book_to_price_score, earnings_yield_score, value_score,
+                      leverage_score, growth_score, profitability_score,
+                      investment_score, dividend_yield_score,
+                      {industry_select}
+               FROM barra_exposures
+               ORDER BY as_of_date, ticker""",
+            conn,
+        )
+    finally:
+        conn.close()
     # Cast score columns to float
     for col in STYLE_SCORE_COLS:
         if col in df.columns:
@@ -109,20 +121,25 @@ def _load_industry_history(data_db: Path) -> pd.DataFrame:
     """Load historical industry-group classifications if table exists."""
     conn = sqlite3.connect(str(data_db))
     try:
+        ensure_trbc_naming(conn)
         row = conn.execute(
             """
             SELECT name
             FROM sqlite_master
             WHERE type='table' AND name=?
             """,
-            (_GICS_HISTORY_TABLE,),
+            (_TRBC_HISTORY_TABLE,),
         ).fetchone()
         if not row:
-            return pd.DataFrame(columns=["ticker", "as_of_date", "gics_industry_group"])
+            return pd.DataFrame(columns=["ticker", "as_of_date", "trbc_industry_group"])
+        cols = _table_columns(conn, _TRBC_HISTORY_TABLE)
+        industry_col = pick_trbc_industry_column(cols)
+        if industry_col is None:
+            return pd.DataFrame(columns=["ticker", "as_of_date", "trbc_industry_group"])
         df = pd.read_sql_query(
             f"""
-            SELECT ticker, as_of_date, gics_industry_group
-            FROM {_GICS_HISTORY_TABLE}
+            SELECT ticker, as_of_date, {industry_col} AS trbc_industry_group
+            FROM {_TRBC_HISTORY_TABLE}
             ORDER BY as_of_date, ticker
             """,
             conn,
@@ -131,11 +148,11 @@ def _load_industry_history(data_db: Path) -> pd.DataFrame:
         conn.close()
 
     if df.empty:
-        return pd.DataFrame(columns=["ticker", "as_of_date", "gics_industry_group"])
+        return pd.DataFrame(columns=["ticker", "as_of_date", "trbc_industry_group"])
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["as_of_date"] = df["as_of_date"].astype(str)
-    df["gics_industry_group"] = (
-        df["gics_industry_group"]
+    df["trbc_industry_group"] = (
+        df["trbc_industry_group"]
         .astype(str)
         .str.strip()
         .replace({"": "Unmapped", "None": "Unmapped", "nan": "Unmapped"})
@@ -250,7 +267,7 @@ def _save_daily_residuals(cache_db: Path, rows: list[dict]):
     conn.execute(_DAILY_RESIDUALS_SCHEMA)
     conn.executemany(
         """INSERT OR REPLACE INTO daily_specific_residuals
-           (date, ticker, residual, market_cap, industry_group)
+           (date, ticker, residual, market_cap, trbc_industry_group)
            VALUES (?, ?, ?, ?, ?)""",
         [
             (
@@ -258,7 +275,7 @@ def _save_daily_residuals(cache_db: Path, rows: list[dict]):
                 r["ticker"],
                 r["residual"],
                 r["market_cap"],
-                r["industry_group"],
+                r["trbc_industry_group"],
             )
             for r in rows
         ],
@@ -343,7 +360,7 @@ def compute_daily_factor_returns(
         for as_of, grp in industry_hist_df.groupby("as_of_date", sort=False):
             s = (
                 grp.drop_duplicates(subset=["ticker"], keep="last")
-                .set_index("ticker")["gics_industry_group"]
+                .set_index("ticker")["trbc_industry_group"]
                 .astype(str)
             )
             industry_hist_by_date[str(as_of)] = s
@@ -356,14 +373,14 @@ def compute_daily_factor_returns(
         if hist_groups is not None:
             merged_group = (
                 hist_groups.reindex(snap.index)
-                .combine_first(snap.get("gics_industry_group"))
+                .combine_first(snap.get("trbc_industry_group"))
                 .fillna("Unmapped")
             )
-            snap["gics_industry_group"] = merged_group.astype(str)
-        elif "gics_industry_group" in snap.columns:
-            snap["gics_industry_group"] = snap["gics_industry_group"].fillna("Unmapped").astype(str)
+            snap["trbc_industry_group"] = merged_group.astype(str)
+        elif "trbc_industry_group" in snap.columns:
+            snap["trbc_industry_group"] = snap["trbc_industry_group"].fillna("Unmapped").astype(str)
         else:
-            snap["gics_industry_group"] = "Unmapped"
+            snap["trbc_industry_group"] = "Unmapped"
         exposure_snapshots[as_of] = snap
 
     # Process each trading day
@@ -426,10 +443,10 @@ def compute_daily_factor_returns(
         style_scores = exp_snap.loc[valid_idx, style_cols_present].copy()
         style_scores.columns = style_names
 
-        # Industry exposures (one-hot from gics_industry_group)
+        # Industry exposures (one-hot from trbc_industry_group)
         industry_series = pd.Series("Unmapped", index=valid_idx, dtype="object")
-        if "gics_industry_group" in exp_snap.columns:
-            industry_series = exp_snap.loc[valid_idx, "gics_industry_group"].fillna("Unmapped")
+        if "trbc_industry_group" in exp_snap.columns:
+            industry_series = exp_snap.loc[valid_idx, "trbc_industry_group"].fillna("Unmapped")
             industry_dummies = pd.get_dummies(industry_series, dtype=float)
             ind_x = industry_dummies.to_numpy(dtype=float)
             ind_names = list(industry_dummies.columns)
@@ -488,7 +505,7 @@ def compute_daily_factor_returns(
                 "ticker": str(ticker),
                 "residual": resid_val,
                 "market_cap": mcap_val,
-                "industry_group": industry,
+                "trbc_industry_group": industry,
             })
 
         n_computed += 1
@@ -577,10 +594,15 @@ def load_specific_residuals(
     """Load per-stock daily residual returns from cache for specific-risk modeling."""
     conn = sqlite3.connect(str(cache_db))
     conn.execute(_DAILY_RESIDUALS_SCHEMA)
+    cols = _table_columns(conn, "daily_specific_residuals")
+    industry_col = pick_trbc_industry_column(cols)
+    if industry_col is None:
+        conn.close()
+        return pd.DataFrame(columns=["date", "ticker", "residual", "market_cap", "trbc_industry_group"])
     if lookback_days > 0:
         df = pd.read_sql_query(
-            """
-            SELECT date, ticker, residual, market_cap, industry_group
+            f"""
+            SELECT date, ticker, residual, market_cap, {industry_col} AS trbc_industry_group
             FROM daily_specific_residuals
             WHERE date IN (
                 SELECT date
@@ -598,8 +620,8 @@ def load_specific_residuals(
         )
     else:
         df = pd.read_sql_query(
-            """
-            SELECT date, ticker, residual, market_cap, industry_group
+            f"""
+            SELECT date, ticker, residual, market_cap, {industry_col} AS trbc_industry_group
             FROM daily_specific_residuals
             ORDER BY date, ticker
             """,

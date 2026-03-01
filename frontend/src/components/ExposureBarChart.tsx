@@ -32,6 +32,7 @@ ChartJS.register(
 interface ExposureBarChartProps {
   factors: FactorExposure[];
   onBarClick?: (factor: string) => void;
+  mode?: "raw" | "sensitivity" | "risk_contribution";
 }
 
 const zeroLinePlugin: Plugin<"bar" | "line"> = {
@@ -81,7 +82,19 @@ const netMarkerPlugin: Plugin<"bar" | "line"> = {
   },
 };
 
-export default function ExposureBarChart({ factors, onBarClick }: ExposureBarChartProps) {
+export default function ExposureBarChart({ factors, onBarClick, mode = "raw" }: ExposureBarChartProps) {
+  const axisLabel = mode === "risk_contribution"
+    ? "% of total risk"
+    : mode === "sensitivity"
+      ? "vol-scaled loading"
+      : "factor loading";
+  const leftLabel = mode === "risk_contribution" ? "Hedging" : "Short";
+  const rightLabel = mode === "risk_contribution" ? "Risk-adding" : "Long";
+  const xTick = (n: number) => {
+    if (mode === "risk_contribution") return `${n.toFixed(1)}%`;
+    return n.toFixed(3);
+  };
+
   // Visual orientation lock:
   // - long arm always right (+)
   // - short arm always left (-)
@@ -141,9 +154,9 @@ export default function ExposureBarChart({ factors, onBarClick }: ExposureBarCha
 
         // Separator line
         ctx.beginPath();
-        ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = "rgba(154, 171, 214, 0.30)";
-        ctx.lineWidth = 0.5;
+        ctx.setLineDash([]);
+        ctx.strokeStyle = "rgba(154, 171, 214, 0.16)";
+        ctx.lineWidth = 1;
         ctx.moveTo(chart.chartArea.left, yMid);
         ctx.lineTo(chart.chartArea.right, yMid);
         ctx.stroke();
@@ -152,11 +165,11 @@ export default function ExposureBarChart({ factors, onBarClick }: ExposureBarCha
         const nextTier = factorTier(sorted[boundaryIdx + 1].factor);
         const tierLabel = TIER_LABELS[nextTier];
         if (tierLabel) {
-          ctx.font = "500 7px -apple-system, BlinkMacSystemFont, sans-serif";
-          ctx.fillStyle = "rgba(169, 182, 210, 0.32)";
+          ctx.font = "600 9px -apple-system, BlinkMacSystemFont, sans-serif";
+          ctx.fillStyle = "rgba(169, 182, 210, 0.7)";
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
-          ctx.fillText(tierLabel, chart.chartArea.right - 1, yMid + 3);
+          ctx.fillText(tierLabel, chart.chartArea.right - 1, yMid + 4);
         }
       }
 
@@ -165,8 +178,8 @@ export default function ExposureBarChart({ factors, onBarClick }: ExposureBarCha
         const firstTier = factorTier(sorted[0].factor);
         const firstLabel = TIER_LABELS[firstTier];
         if (firstLabel) {
-          ctx.font = "500 7px -apple-system, BlinkMacSystemFont, sans-serif";
-          ctx.fillStyle = "rgba(169, 182, 210, 0.32)";
+          ctx.font = "600 9px -apple-system, BlinkMacSystemFont, sans-serif";
+          ctx.fillStyle = "rgba(169, 182, 210, 0.7)";
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
           ctx.fillText(firstLabel, chart.chartArea.right - 1, chart.chartArea.top + 2);
@@ -176,43 +189,6 @@ export default function ExposureBarChart({ factors, onBarClick }: ExposureBarCha
       ctx.restore();
     },
   };
-  const coverageBadgePlugin: Plugin<"bar" | "line"> = {
-    id: "coverageBadgePlugin",
-    afterDatasetsDraw(chart) {
-      const yScale = chart.scales.y;
-      if (!yScale || !sorted.length) return;
-      const ctx = chart.ctx;
-      ctx.save();
-      ctx.font = "500 9px -apple-system, BlinkMacSystemFont, sans-serif";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      for (let i = 0; i < sorted.length; i++) {
-        const f = sorted[i];
-        const pct = Number(f.coverage_pct);
-        if (!Number.isFinite(pct) || pct <= 0) continue;
-        const cross = Number(f.cross_section_n || 0);
-        const eligible = Number(f.eligible_n || 0);
-        const label = `${(pct * 100).toFixed(1)}%${cross > 0 && eligible > 0 ? ` (${cross}/${eligible})` : ""}`;
-        const y = yScale.getPixelForValue(i);
-        const textWidth = ctx.measureText(label).width;
-        const padX = 5;
-        const boxW = textWidth + padX * 2;
-        const boxH = 14;
-        const xRight = chart.chartArea.right - 2;
-        const xLeft = xRight - boxW;
-        const yTop = y - boxH / 2;
-        ctx.fillStyle = "rgba(22, 26, 34, 0.68)";
-        ctx.fillRect(xLeft, yTop, boxW, boxH);
-        ctx.strokeStyle = "rgba(154, 171, 214, 0.30)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(xLeft, yTop, boxW, boxH);
-        ctx.fillStyle = "rgba(220, 228, 242, 0.86)";
-        ctx.fillText(label, xRight - padX, y);
-      }
-      ctx.restore();
-    },
-  };
-
   const labels = sorted.map((f) => shortFactorLabel(f.factor));
   const longValues = sorted.map((f) => f.longArm);
   const shortValues = sorted.map((f) => f.shortArm);
@@ -284,19 +260,8 @@ export default function ExposureBarChart({ factors, onBarClick }: ExposureBarCha
           label: (ctx) => {
             const val = Number(ctx.parsed.x ?? 0);
             const sign = val >= 0 ? "+" : "";
-            return ` ${ctx.dataset.label}: ${sign}${val.toFixed(4)}`;
-          },
-          footer: (items) => {
-            if (!items?.length) return "";
-            const idx = items[0].dataIndex;
-            const f = sorted[idx];
-            if (!f) return "";
-            const pct = Number(f.coverage_pct);
-            const cross = Number(f.cross_section_n || 0);
-            const eligible = Number(f.eligible_n || 0);
-            if (!Number.isFinite(pct) || pct <= 0) return "";
-            const sizeTxt = cross > 0 && eligible > 0 ? ` (${cross}/${eligible})` : "";
-            return `Coverage: ${(pct * 100).toFixed(2)}%${sizeTxt}`;
+            const suffix = mode === "risk_contribution" ? "%" : "";
+            return ` ${ctx.dataset.label}: ${sign}${val.toFixed(4)}${suffix}`;
           },
         },
       },
@@ -307,7 +272,7 @@ export default function ExposureBarChart({ factors, onBarClick }: ExposureBarCha
         grid: { color: "rgba(154, 171, 214, 0.16)" },
         ticks: {
           color: "rgba(169, 182, 210, 0.5)",
-          callback: (value) => Number(value).toFixed(3),
+          callback: (value) => xTick(Number(value)),
           font: { size: 9 },
         },
       },
@@ -331,13 +296,20 @@ export default function ExposureBarChart({ factors, onBarClick }: ExposureBarCha
   const height = Math.max(400, sorted.length * 22);
 
   return (
-    <div style={{ height }}>
-      <Chart
-        type="bar"
-        data={data}
-        options={options}
-        plugins={[zeroLinePlugin, tierSeparatorPlugin, netMarkerPlugin, coverageBadgePlugin]}
-      />
+    <div>
+      <div style={{ height }}>
+        <Chart
+          type="bar"
+          data={data}
+          options={options}
+          plugins={[zeroLinePlugin, tierSeparatorPlugin, netMarkerPlugin]}
+        />
+      </div>
+      <div className="exposure-axis-row">
+        <span className="exposure-axis-hint left">← {leftLabel}</span>
+        <span className="exposure-axis-label">{axisLabel}</span>
+        <span className="exposure-axis-hint right">{rightLabel} →</span>
+      </div>
     </div>
   );
 }

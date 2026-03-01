@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FactorDrilldownItem } from "@/lib/types";
 import TableRowToggle from "@/components/TableRowToggle";
 import FactorHistoryChart from "@/components/FactorHistoryChart";
@@ -18,7 +18,43 @@ type SortKey = "ticker" | "weight" | "exposure" | "sensitivity" | "contribution"
 
 export default function FactorDrilldown({ factor, items, mode, factorVol, onClose }: FactorDrilldownProps) {
   const isSensitivity = mode === "sensitivity";
-  const [sortKey, setSortKey] = useState<SortKey>(isSensitivity ? "sensitivity" : "exposure");
+  const isRiskContribution = mode === "risk_contribution";
+  const hints = {
+    weight: {
+      plain: "Position Market Value ÷ Total Portfolio Market Value.",
+      math: "wᵢ = MVᵢ / ΣMV",
+    },
+    loading: {
+      plain: "Position loading on the selected factor.",
+      math: "xᵢ,ᶠ",
+    },
+    sensitivity: isRiskContribution
+      ? {
+          plain: "Loading × covariance adjustment for this factor.",
+          math: "xᵢ,ᶠ × (Fh)ᶠ",
+        }
+      : {
+          plain: "Loading × 1σ factor volatility.",
+          math: "xᵢ,ᶠ × σᶠ",
+        },
+    contribution: isRiskContribution
+      ? {
+          plain: "Weight × Loading × covariance adjustment, then scaled to factor % of total risk.",
+          math: "((wᵢ × xᵢ,ᶠ × (Fh)ᶠ) / marginalᶠ) × factor % total",
+        }
+      : isSensitivity
+        ? {
+            plain: "Weight × Loading × 1σ factor volatility.",
+            math: "wᵢ × (xᵢ,ᶠ × σᶠ)",
+          }
+        : {
+            plain: "Weight × Loading.",
+            math: "wᵢ × xᵢ,ᶠ",
+          },
+  };
+  const [sortKey, setSortKey] = useState<SortKey>(
+    isSensitivity ? "sensitivity" : isRiskContribution ? "contribution" : "exposure",
+  );
   const [sortAsc, setSortAsc] = useState(false);
   const [showAllRows, setShowAllRows] = useState(false);
   const { data: historyData, isLoading: historyLoading } = useFactorHistory(factor, 5);
@@ -42,11 +78,69 @@ export default function FactorDrilldown({ factor, items, mode, factorVol, onClos
   };
   const arrow = (key: SortKey) => (sortKey === key ? (sortAsc ? " ↑" : " ↓") : "");
   const visibleRows = showAllRows ? sorted : sorted.slice(0, COLLAPSED_ROWS);
+  const Help = ({ label, plain, math }: { label: string; plain: string; math: string }) => {
+    const triggerRef = useRef<HTMLSpanElement | null>(null);
+    const [open, setOpen] = useState(false);
+    const [bubbleStyle, setBubbleStyle] = useState<{ left: number; top: number; width: number; placeAbove: boolean }>({
+      left: 12,
+      top: 12,
+      width: 260,
+      placeAbove: false,
+    });
+
+    const placeBubble = () => {
+      const el = triggerRef.current;
+      if (!el || typeof window === "undefined") return;
+      const rect = el.getBoundingClientRect();
+      const margin = 12;
+      const width = Math.min(280, window.innerWidth - margin * 2);
+      let left = rect.left + rect.width * 0.5 - width * 0.5;
+      left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+
+      const estimatedHeight = 112;
+      const spaceBelow = window.innerHeight - rect.bottom - margin;
+      const placeAbove = spaceBelow < estimatedHeight && rect.top > estimatedHeight + margin;
+      const top = placeAbove ? rect.top - 8 : rect.bottom + 8;
+
+      setBubbleStyle({ left, top, width, placeAbove });
+      setOpen(true);
+    };
+
+    return (
+      <span
+        ref={triggerRef}
+        className="col-help-trigger"
+        tabIndex={0}
+        aria-label={`Explain ${label}`}
+        onMouseEnter={placeBubble}
+        onFocus={placeBubble}
+        onMouseLeave={() => setOpen(false)}
+        onBlur={() => setOpen(false)}
+      >
+        {label}
+        {open && (
+          <span
+            className={`col-help-bubble ${bubbleStyle.placeAbove ? "above" : ""}`}
+            style={{ left: bubbleStyle.left, top: bubbleStyle.top, width: bubbleStyle.width }}
+          >
+            <span className="col-help-bubble-plain">{plain}</span>
+            <span className="col-help-bubble-math">Math: {math}</span>
+          </span>
+        )}
+      </span>
+    );
+  };
 
   return (
     <div className="detail-panel">
       <div className="detail-panel-header">
-        <h4>{factor} — {isSensitivity ? "Sensitivity Breakdown" : "Position Breakdown"}</h4>
+        <h4>
+          {factor} — {isSensitivity
+            ? "Sensitivity Breakdown"
+            : isRiskContribution
+              ? "Risk Contribution Breakdown"
+              : "Position Breakdown"}
+        </h4>
         <button
           onClick={onClose}
           className="detail-panel-close"
@@ -54,29 +148,85 @@ export default function FactorDrilldown({ factor, items, mode, factorVol, onClos
           CLOSE
         </button>
       </div>
-      <p className="detail-panel-meta">
-        {items.length} positions, {uniqueExposureCount} unique exposure values{factorVol != null ? `, factor vol ${(factorVol * 100).toFixed(2)}%` : ""}
-      </p>
       <div className="detail-history">
-        <h5>5Y Historical Return — {factor}</h5>
+        <div className="detail-history-header">
+          <h5>5Y Historical Return — {factor}</h5>
+          {!historyLoading && historyData?.points && historyData.points.length > 0 && (() => {
+            const vals = historyData.points.map((p) => p.cum_return * 100);
+            const latest = vals[vals.length - 1] ?? 0;
+            const pos = latest >= 0;
+            const s = latest >= 0 ? "+" : "";
+            return (
+              <div className="detail-history-stats">
+                <span
+                  className="detail-history-stat"
+                  style={{ color: pos ? "rgba(107, 207, 154, 0.85)" : "rgba(224, 87, 127, 0.85)" }}
+                >
+                  {s}{latest.toFixed(1)}%
+                </span>
+                {factorVol != null && (
+                  <span className="detail-history-stat muted">
+                    σ {(factorVol * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+        </div>
         {historyLoading
           ? <div className="detail-history-empty loading-pulse">Loading 5Y history...</div>
           : <FactorHistoryChart factor={factor} points={historyData?.points ?? []} factorVol={factorVol} />}
       </div>
+      <p className="detail-panel-meta">
+        {items.length} positions, {uniqueExposureCount} unique exposure values
+        {isRiskContribution ? ", covariance-adjusted contributions" : ""}
+      </p>
       <div className="dash-table">
         <table>
           <thead>
             <tr>
               <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
-              <th className="text-right" onClick={() => handleSort("weight")}>Weight{arrow("weight")}</th>
-              <th className="text-right" onClick={() => handleSort("exposure")}>Loading{arrow("exposure")}</th>
-              {isSensitivity && (
+              <th className="text-right" onClick={() => handleSort("weight")}>
+                <span className="col-help-wrap">
+                  <Help label="Weight" plain={hints.weight.plain} math={hints.weight.math} />
+                  {arrow("weight")}
+                </span>
+              </th>
+              <th className="text-right" onClick={() => handleSort("exposure")}>
+                <span className="col-help-wrap">
+                  <Help
+                    label={isRiskContribution ? "Raw Loading" : "Loading"}
+                    plain={hints.loading.plain}
+                    math={hints.loading.math}
+                  />
+                  {arrow("exposure")}
+                </span>
+              </th>
+              {(isSensitivity || isRiskContribution) && (
                 <th className="text-right" onClick={() => handleSort("sensitivity")}>
-                  Loading × Vol{arrow("sensitivity")}
+                  <span className="col-help-wrap">
+                    <Help
+                      label={isRiskContribution ? "Loading × CovAdj" : "Loading × 1σ Vol"}
+                      plain={hints.sensitivity.plain}
+                      math={hints.sensitivity.math}
+                    />
+                    {arrow("sensitivity")}
+                  </span>
                 </th>
               )}
               <th className="text-right" onClick={() => handleSort("contribution")}>
-                Contribution{arrow("contribution")}
+                <span className="col-help-wrap">
+                  <Help
+                    label={isRiskContribution
+                      ? "% Risk Contrib (w×x×CovAdj)"
+                      : isSensitivity
+                        ? "Contribution (w×x×σ)"
+                        : "Contribution (w×x)"}
+                    plain={hints.contribution.plain}
+                    math={hints.contribution.math}
+                  />
+                  {arrow("contribution")}
+                </span>
               </th>
             </tr>
           </thead>
@@ -90,7 +240,7 @@ export default function FactorDrilldown({ factor, items, mode, factorVol, onClos
                     {item.exposure.toFixed(4)}
                   </span>
                 </td>
-                {isSensitivity && (
+                {(isSensitivity || isRiskContribution) && (
                   <td className="text-right">
                     <span className={(item.sensitivity ?? 0) >= 0 ? "positive" : "negative"}>
                       {(item.sensitivity ?? 0).toFixed(4)}
@@ -99,7 +249,7 @@ export default function FactorDrilldown({ factor, items, mode, factorVol, onClos
                 )}
                 <td className="text-right">
                   <span className={item.contribution >= 0 ? "positive" : "negative"}>
-                    {item.contribution.toFixed(6)}
+                    {isRiskContribution ? `${item.contribution.toFixed(4)}%` : item.contribution.toFixed(6)}
                   </span>
                 </td>
               </tr>

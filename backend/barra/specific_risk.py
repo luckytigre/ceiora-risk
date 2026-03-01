@@ -39,7 +39,7 @@ def build_specific_risk_from_cache(
 
     resid_df["ticker"] = resid_df["ticker"].astype(str).str.upper()
     resid_df["residual"] = pd.to_numeric(resid_df["residual"], errors="coerce")
-    resid_df["industry_group"] = resid_df["industry_group"].fillna("Unmapped").astype(str)
+    resid_df["trbc_industry_group"] = resid_df["trbc_industry_group"].fillna("Unmapped").astype(str)
     resid_df = resid_df.dropna(subset=["ticker", "residual"])
     if resid_df.empty:
         return {}
@@ -53,10 +53,14 @@ def build_specific_risk_from_cache(
             continue
         raw_daily_var = _ewma_variance(values, half_life=half_life)
         raw_var = max(0.0, raw_daily_var * ANNUALIZATION)
-        industry = str(g["industry_group"].dropna().iloc[-1]) if not g["industry_group"].dropna().empty else "Unmapped"
+        industry = (
+            str(g["trbc_industry_group"].dropna().iloc[-1])
+            if not g["trbc_industry_group"].dropna().empty
+            else "Unmapped"
+        )
         rows.append({
             "ticker": str(ticker),
-            "industry_group": industry,
+            "trbc_industry_group": industry,
             "obs": obs,
             "raw_specific_var": raw_var,
         })
@@ -71,7 +75,7 @@ def build_specific_risk_from_cache(
         global_target = 1e-6
 
     industry_targets = (
-        stats.groupby("industry_group")["raw_specific_var"]
+        stats.groupby("trbc_industry_group")["raw_specific_var"]
         .median()
         .replace([np.inf, -np.inf], np.nan)
         .fillna(global_target)
@@ -81,7 +85,7 @@ def build_specific_risk_from_cache(
     out: dict[str, dict[str, float | int | str]] = {}
     for _, row in stats.iterrows():
         ticker = str(row["ticker"])
-        industry = str(row["industry_group"])
+        industry = str(row["trbc_industry_group"])
         obs = int(row["obs"])
         raw_var = float(row["raw_specific_var"])
 
@@ -97,7 +101,7 @@ def build_specific_risk_from_cache(
             "specific_var": float(specific_var),
             "specific_vol": float(np.sqrt(specific_var)),
             "obs": obs,
-            "industry_group": industry,
+            "trbc_industry_group": industry,
         }
 
     return out

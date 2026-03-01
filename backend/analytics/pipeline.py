@@ -20,7 +20,9 @@ from barra.risk_attribution import (
     risk_decomposition,
 )
 from barra.specific_risk import build_specific_risk_from_cache
+from analytics.trbc_sector import abbreviate_trbc_sector
 from db import postgres, sqlite
+from db.trbc_schema import pick_trbc_industry_column
 from portfolio.mock_portfolio import get_position_meta, get_shares, get_tickers
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,7 @@ def _build_universe_ticker_loadings(
 
     # Fundamentals maps for whole universe
     mcap_map: dict[str, float] = {}
-    sector_map: dict[str, str] = {}
+    trbc_sector_map: dict[str, str] = {}
     name_map: dict[str, str] = {}
     if fundamentals_df is not None and not fundamentals_df.empty:
         name_col = None
@@ -71,8 +73,9 @@ def _build_universe_ticker_loadings(
             mcap = _finite_float(row.get("market_cap"), np.nan)
             if np.isfinite(mcap) and mcap > 0:
                 mcap_map[ticker] = mcap
-            if "sector" in fundamentals_df.columns:
-                sector_map[ticker] = str(row.get("sector") or "")
+            trbc_sector = str(row.get("trbc_sector") or "").strip()
+            if trbc_sector:
+                trbc_sector_map[ticker] = trbc_sector
             if name_col:
                 raw_name = row.get(name_col)
                 if raw_name is not None:
@@ -98,13 +101,14 @@ def _build_universe_ticker_loadings(
             {t: float(mcap_map.get(t, cap_fallback)) for t in style_scores.index},
             dtype=float,
         )
-        if "gics_industry_group" in exposures_df.columns:
+        industry_col = pick_trbc_industry_column(exposures_df.columns)
+        if industry_col:
             industry_series = (
-                exposures_df[["ticker", "gics_industry_group"]]
+                exposures_df[["ticker", industry_col]]
                 .copy()
                 .assign(ticker=lambda d: d["ticker"].astype(str).str.upper())
                 .drop_duplicates(subset=["ticker"], keep="last")
-                .set_index("ticker")["gics_industry_group"]
+                .set_index("ticker")[industry_col]
                 .reindex(style_scores.index)
                 .fillna("Unmapped")
             )
@@ -131,9 +135,7 @@ def _build_universe_ticker_loadings(
             factor_vol_map[str(factor)] = float(np.sqrt(max(0.0, _finite_float(cov.loc[factor, factor], 0.0))))
 
     universe_by_ticker: dict[str, dict[str, Any]] = {}
-    industry_col = "gics_industry_group" if "gics_industry_group" in exposures_df.columns else (
-        "industry_group" if "industry_group" in exposures_df.columns else None
-    )
+    industry_col = pick_trbc_industry_column(exposures_df.columns)
     for _, row in exposures_df.iterrows():
         ticker = str(row.get("ticker", "")).upper()
         if not ticker:
@@ -149,11 +151,11 @@ def _build_universe_ticker_loadings(
             else:
                 exposures[label] = _finite_float(row.get(col), 0.0)
 
-        industry_group = ""
+        trbc_industry_group = ""
         if industry_col:
             ig = str(row.get(industry_col) or "").strip()
             if ig and ig.lower() not in {"", "nan", "none"}:
-                industry_group = ig
+                trbc_industry_group = ig
                 exposures[ig] = 1.0
 
         sensitivities = {
@@ -168,9 +170,9 @@ def _build_universe_ticker_loadings(
         universe_by_ticker[ticker] = {
             "ticker": ticker,
             "name": name_map.get(ticker, ticker),
-            "gics_sector": sector_map.get(ticker, ""),
-            "sector": sector_map.get(ticker, ""),
-            "industry_group": industry_group,
+            "trbc_sector": trbc_sector_map.get(ticker, ""),
+            "trbc_sector_abbr": abbreviate_trbc_sector(trbc_sector_map.get(ticker, "")),
+            "trbc_industry_group": trbc_industry_group,
             "market_cap": round(_finite_float(mcap_map.get(ticker), 0.0), 2),
             "price": round(_finite_float(price_map.get(ticker), 0.0), 4),
             "exposures": exposures,
@@ -185,7 +187,8 @@ def _build_universe_ticker_loadings(
         {
             "ticker": t,
             "name": d.get("name", t),
-            "sector": d.get("gics_sector", ""),
+            "trbc_sector": d.get("trbc_sector", ""),
+            "trbc_sector_abbr": d.get("trbc_sector_abbr", ""),
             "risk_loading": d.get("risk_loading", 0.0),
             "specific_vol": d.get("specific_vol", 0.0),
         }
@@ -226,12 +229,12 @@ def _build_positions_from_universe(universe_by_ticker: dict[str, dict[str, Any]]
             "price": round(price, 2),
             "market_value": round(mv, 2),
             "weight": 0.0,
-            "gics_sector": str(base.get("gics_sector") or ""),
-            "sector": str(base.get("sector") or ""),
+            "trbc_sector": str(base.get("trbc_sector") or ""),
+            "trbc_sector_abbr": str(base.get("trbc_sector_abbr") or ""),
             "account": meta["account"],
             "sleeve": meta["sleeve"],
             "source": meta["source"],
-            "industry_group": str(base.get("industry_group") or ""),
+            "trbc_industry_group": str(base.get("trbc_industry_group") or ""),
             "exposures": dict(base.get("exposures") or {}),
             "specific_var": _finite_float(base.get("specific_var"), 0.0),
             "specific_vol": _finite_float(base.get("specific_vol"), 0.0),
@@ -292,39 +295,78 @@ def _compute_exposures_modes(
 
     factor_detail_map = {d["factor"]: d for d in factor_details}
     coverage_map = factor_coverage or {}
+    exposure_map = {factor: portfolio_factor_exposure(positions, factor) for factor in all_factors}
+
+    # Covariance-aware marginal scalar per factor: (F @ h)_f
+    cov_adj_map: dict[str, float] = {}
+    if cov is not None and not cov.empty:
+        cov_factors = [str(c) for c in cov.columns if str(c).lower() != "market"]
+        if cov_factors:
+            h_vec = np.array([_finite_float(exposure_map.get(f), 0.0) for f in cov_factors], dtype=float)
+            f_mat = cov.reindex(index=cov_factors, columns=cov_factors).to_numpy(dtype=float)
+            fh_vec = f_mat @ h_vec
+            cov_adj_map = {
+                cov_factors[i]: _finite_float(fh_vec[i], 0.0)
+                for i in range(len(cov_factors))
+            }
 
     result: dict[str, list[dict]] = {"raw": [], "sensitivity": [], "risk_contribution": []}
 
     for factor in sorted(all_factors):
         # Raw portfolio-weighted exposure
-        raw_exp = portfolio_factor_exposure(positions, factor)
+        raw_exp = _finite_float(exposure_map.get(factor), 0.0)
 
         # Factor vol from cov matrix
         detail = factor_detail_map.get(factor)
-        factor_vol = detail["factor_vol"] if detail else 0.0
-        sensitivity = detail["sensitivity"] if detail else raw_exp * factor_vol
-        risk_pct = detail["pct_of_total"] if detail else 0.0
+        factor_vol = _finite_float(detail.get("factor_vol"), 0.0) if detail else 0.0
+        # 1-sigma scaled factor exposure.
+        sensitivity = _finite_float(detail.get("sensitivity"), raw_exp * factor_vol) if detail else raw_exp * factor_vol
+        # Contribution to total portfolio variance (%) from risk decomposition.
+        risk_pct = _finite_float(detail.get("pct_of_total"), 0.0) if detail else 0.0
+        # Factor-level marginal variance contribution (includes cross-factor correlations).
+        marginal_var = _finite_float(detail.get("marginal_var_contrib"), 0.0) if detail else 0.0
+        cov_adj = _finite_float(cov_adj_map.get(factor), 0.0)
 
         # Position-level drilldown
         drilldown_raw = []
         drilldown_sens = []
+        drilldown_risk = []
         for pos in positions:
-            pos_exp = float(pos.get("exposures", {}).get(factor, 0.0))
+            pos_exp = _finite_float(pos.get("exposures", {}).get(factor, 0.0), 0.0)
             if abs(pos_exp) > 1e-8:
-                raw_contrib = pos["weight"] * pos_exp
+                weight = _finite_float(pos.get("weight", 0.0), 0.0)
+                raw_contrib = weight * pos_exp
                 pos_sens = pos_exp * factor_vol
+                sens_contrib = weight * pos_sens
+                # Variance-units position contribution for this factor:
+                # (w_i * x_{i,f}) * (F @ h)_f
+                risk_var_contrib = weight * pos_exp * cov_adj
+                # Scale to displayed risk % so row sums align with bar value.
+                if abs(marginal_var) > 1e-12:
+                    risk_pct_contrib = (risk_var_contrib / marginal_var) * risk_pct
+                else:
+                    risk_pct_contrib = 0.0
                 drilldown_raw.append({
                     "ticker": pos["ticker"],
-                    "weight": pos["weight"],
+                    "weight": weight,
                     "exposure": round(pos_exp, 4),
                     "contribution": round(raw_contrib, 6),
                 })
                 drilldown_sens.append({
                     "ticker": pos["ticker"],
-                    "weight": pos["weight"],
+                    "weight": weight,
                     "exposure": round(pos_exp, 4),
                     "sensitivity": round(pos_sens, 6),
-                    "contribution": round(pos["weight"] * pos_sens, 6),
+                    "contribution": round(sens_contrib, 6),
+                })
+                drilldown_risk.append({
+                    "ticker": pos["ticker"],
+                    "weight": weight,
+                    "exposure": round(pos_exp, 4),
+                    # Covariance-adjusted loading scalar (not yet weight-scaled).
+                    "sensitivity": round(pos_exp * cov_adj, 8),
+                    # Percent contribution to total portfolio variance for this factor.
+                    "contribution": round(risk_pct_contrib, 8),
                 })
 
         fv_rounded = round(factor_vol, 6)
@@ -360,10 +402,108 @@ def _compute_exposures_modes(
             "eligible_n": eligible_n,
             "coverage_pct": round(coverage_pct, 6),
             "coverage_date": coverage_date,
-            "drilldown": drilldown_raw,
+            "drilldown": drilldown_risk,
         })
 
     return result
+
+
+def _compute_position_risk_mix(
+    positions: list[dict[str, Any]],
+    cov,
+    specific_risk_by_ticker: dict[str, dict[str, float | int | str]] | None = None,
+) -> dict[str, dict[str, float]]:
+    """Per-position risk split using Barra-style factor + specific variance."""
+    if cov is None or cov.empty:
+        out: dict[str, dict[str, float]] = {}
+        for pos in positions:
+            ticker = str(pos.get("ticker", "")).upper()
+            if ticker:
+                out[ticker] = {"industry": 0.0, "style": 0.0, "idio": 0.0}
+        return out
+
+    factors = [str(c) for c in cov.columns if str(c).lower() != "market"]
+    if not factors:
+        return {}
+    idx = {f: i for i, f in enumerate(factors)}
+    f_mat = cov.reindex(index=factors, columns=factors).to_numpy(dtype=float)
+    style_idx = [idx[f] for f in factors if f in STYLE_COLUMN_TO_LABEL.values()]
+    industry_idx = [idx[f] for f in factors if f not in STYLE_COLUMN_TO_LABEL.values()]
+
+    spec_map = specific_risk_by_ticker or {}
+    out: dict[str, dict[str, float]] = {}
+    for pos in positions:
+        ticker = str(pos.get("ticker", "")).upper()
+        if not ticker:
+            continue
+        exps = pos.get("exposures", {}) or {}
+        x = np.array([_finite_float(exps.get(f), 0.0) for f in factors], dtype=float)
+
+        # Decompose systematic variance into industry/style blocks and allocate cross term.
+        var_ind = 0.0
+        var_style = 0.0
+        var_cross = 0.0
+        if industry_idx:
+            xi = x[industry_idx]
+            fii = f_mat[np.ix_(industry_idx, industry_idx)]
+            var_ind = _finite_float(float(xi.T @ fii @ xi), 0.0)
+        if style_idx:
+            xs = x[style_idx]
+            fss = f_mat[np.ix_(style_idx, style_idx)]
+            var_style = _finite_float(float(xs.T @ fss @ xs), 0.0)
+        if industry_idx and style_idx:
+            xi = x[industry_idx]
+            xs = x[style_idx]
+            fis = f_mat[np.ix_(industry_idx, style_idx)]
+            var_cross = _finite_float(float(2.0 * xi.T @ fis @ xs), 0.0)
+
+        base_ind = max(0.0, var_ind)
+        base_style = max(0.0, var_style)
+        denom = base_ind + base_style
+        if abs(var_cross) <= 1e-12:
+            cross_ind = 0.0
+            cross_style = 0.0
+        elif denom <= 1e-12:
+            cross_ind = 0.5 * var_cross
+            cross_style = 0.5 * var_cross
+        else:
+            w_ind = base_ind / denom
+            w_style = base_style / denom
+            cross_ind = w_ind * var_cross
+            cross_style = w_style * var_cross
+
+        sys_ind = max(0.0, base_ind + cross_ind)
+        sys_style = max(0.0, base_style + cross_style)
+        spec_var = _finite_float(spec_map.get(ticker, {}).get("specific_var"), 0.0)
+        if spec_var < 0:
+            spec_var = 0.0
+
+        total = sys_ind + sys_style + spec_var
+        if total <= 0:
+            out[ticker] = {"industry": 0.0, "style": 0.0, "idio": 0.0}
+            continue
+
+        ind_pct = 100.0 * sys_ind / total
+        style_pct = 100.0 * sys_style / total
+        idio_pct = 100.0 * spec_var / total
+
+        # Normalize after clipping to keep sums at exactly 100.
+        ind_pct = max(0.0, ind_pct)
+        style_pct = max(0.0, style_pct)
+        idio_pct = max(0.0, idio_pct)
+        s = ind_pct + style_pct + idio_pct
+        if s > 0:
+            k = 100.0 / s
+            ind_pct *= k
+            style_pct *= k
+            idio_pct *= k
+
+        out[ticker] = {
+            "industry": round(ind_pct, 2),
+            "style": round(style_pct, 2),
+            "idio": round(idio_pct, 2),
+        }
+    return out
 
 
 def run_refresh() -> dict[str, Any]:
@@ -376,10 +516,13 @@ def run_refresh() -> dict[str, Any]:
 
     # 2. Fetch full-universe data from local data.db
     logger.info("Fetching data from local database...")
-    prices_universe_df = postgres.load_latest_prices()
-    fundamentals_universe_df = postgres.load_fundamental_snapshots()
-    exposures_universe_df = postgres.load_barra_exposures()
     source_dates = postgres.load_source_dates()
+    fundamentals_asof = source_dates.get("exposures_asof")
+    prices_universe_df = postgres.load_latest_prices()
+    fundamentals_universe_df = postgres.load_fundamental_snapshots(
+        as_of_date=str(fundamentals_asof) if fundamentals_asof else None,
+    )
+    exposures_universe_df = postgres.load_barra_exposures()
 
     # 4. Build factor covariance from daily factor returns (504-day lookback)
     logger.info("Computing factor covariance from daily returns...")
@@ -413,6 +556,11 @@ def run_refresh() -> dict[str, Any]:
         positions=positions,
         specific_risk_by_ticker=specific_risk_by_ticker,
     )
+    position_risk_mix = _compute_position_risk_mix(
+        positions=positions,
+        cov=cov,
+        specific_risk_by_ticker=specific_risk_by_ticker,
+    )
 
     # 8. Compute per-position risk contributions
     for pos in positions:
@@ -422,6 +570,11 @@ def run_refresh() -> dict[str, Any]:
             for d in factor_details
         )
         pos["risk_contrib_pct"] = round(risk_score * pos["weight"] * 100, 2)
+        pos["risk_mix"] = dict(position_risk_mix.get(str(pos.get("ticker", "")).upper(), {
+            "industry": 0.0,
+            "style": 0.0,
+            "idio": 0.0,
+        }))
 
     # 9. Compute condition number from cov matrix
     condition_number = 0.0

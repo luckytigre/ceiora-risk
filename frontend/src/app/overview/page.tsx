@@ -80,7 +80,7 @@ export default function OverviewPage() {
                   <td><strong>{pos.ticker}</strong></td>
                   <td className="text-right">{fmt(pos.market_value)}</td>
                   <td className="text-right">{(pos.weight * 100).toFixed(2)}%</td>
-                  <td>{pos.sector || "—"}</td>
+                  <td>{pos.trbc_sector || "—"}</td>
                   <td className="text-right">{pos.risk_contrib_pct.toFixed(2)}%</td>
                 </tr>
               ))}

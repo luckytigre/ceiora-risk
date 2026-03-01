@@ -27,19 +27,22 @@ export default function RiskDecompChart({ shares }: RiskDecompChartProps) {
     labels,
     datasets: [
       {
-        label: "Style",
-        data: [shares.style || 0],
-        backgroundColor: "#f5bae4",
-      },
-      {
         label: "Industry",
         data: [shares.industry || 0],
         backgroundColor: "#cc3558",
+        barThickness: 18,
+      },
+      {
+        label: "Style",
+        data: [shares.style || 0],
+        backgroundColor: "#f5bae4",
+        barThickness: 18,
       },
       {
         label: "Idiosyncratic",
         data: [shares.idio || 0],
         backgroundColor: "#ff8f2a",
+        barThickness: 18,
       },
     ],
   };
@@ -89,7 +92,7 @@ export default function RiskDecompChart({ shares }: RiskDecompChartProps) {
   };
 
   return (
-    <div style={{ height: 60 }}>
+    <div style={{ height: 68 }}>
       <Bar data={data} options={options} />
     </div>
   );

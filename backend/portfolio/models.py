@@ -10,17 +10,18 @@ class Position(BaseModel):
     name: str = ""
     long_short: str = "LONG"
     shares: float
-    gics_sector: str = ""
-    sector: str = ""
+    trbc_sector: str = ""
+    trbc_sector_abbr: str = ""
     account: str = ""
     sleeve: str = ""
     source: str = ""
-    industry_group: str = ""
+    trbc_industry_group: str = ""
     price: float = 0.0
     market_value: float = 0.0
     weight: float = 0.0
     exposures: dict[str, float] = {}
     risk_contrib_pct: float = 0.0
+    risk_mix: dict[str, float] = {"industry": 0.0, "style": 0.0, "idio": 0.0}
 
 
 class Portfolio(BaseModel):

@@ -2,7 +2,8 @@ export interface Position {
   ticker: string;
   name: string;
   long_short: string;
-  gics_sector: string;
+  trbc_sector: string;
+  trbc_sector_abbr: string;
   shares: number;
   price: number;
   market_value: number;
@@ -10,10 +11,14 @@ export interface Position {
   account: string;
   sleeve: string;
   source: string;
-  sector: string;
-  industry_group: string;
+  trbc_industry_group: string;
   exposures: Record<string, number>;
   risk_contrib_pct: number;
+  risk_mix?: {
+    industry: number;
+    style: number;
+    idio: number;
+  };
 }
 
 export interface PortfolioData {
@@ -95,9 +100,9 @@ export interface RiskData {
 export interface UniverseTickerItem {
   ticker: string;
   name: string;
-  gics_sector: string;
-  sector: string;
-  industry_group: string;
+  trbc_sector: string;
+  trbc_sector_abbr: string;
+  trbc_industry_group: string;
   market_cap: number;
   price: number;
   exposures: Record<string, number>;
@@ -113,7 +118,8 @@ export interface UniverseTickerData {
 export interface UniverseSearchItem {
   ticker: string;
   name: string;
-  sector: string;
+  trbc_sector: string;
+  trbc_sector_abbr: string;
   risk_loading: number;
 }
 

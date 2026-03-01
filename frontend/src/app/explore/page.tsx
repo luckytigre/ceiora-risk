@@ -208,7 +208,7 @@ export default function ExplorePage() {
                   <span className="ticker">{highlightMatch(r.ticker, query)}</span>
                   <span className="name">{highlightMatch(r.name, query)}</span>
                   <span className="explore-badge" style={{ flexShrink: 0 }}>
-                    {r.sector || "—"}
+                    {r.trbc_sector_abbr || r.trbc_sector || "—"}
                   </span>
                   <span className="risk">{r.risk_loading.toFixed(4)}</span>
                 </button>
@@ -236,9 +236,9 @@ export default function ExplorePage() {
                 <span className="name">{item.name}</span>
               </div>
               <div className="explore-hero-badges">
-                <span className="explore-badge">{item.gics_sector || "Unclassified"}</span>
-                {item.industry_group && item.industry_group !== item.gics_sector && (
-                  <span className="explore-badge">{item.industry_group}</span>
+                <span className="explore-badge">{item.trbc_sector || "Unclassified"}</span>
+                {item.trbc_industry_group && item.trbc_industry_group !== item.trbc_sector && (
+                  <span className="explore-badge">{item.trbc_industry_group}</span>
                 )}
               </div>
               <div className="explore-hero-stats">

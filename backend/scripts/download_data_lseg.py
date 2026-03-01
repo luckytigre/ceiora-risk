@@ -1,7 +1,7 @@
 """Update local SQLite market/fundamental data using jl-lseg-toolkit.
 
 This script is intentionally schema-compatible with the existing dashboard DB:
-  - updates `fundamental_snapshots` (market_cap/sector + basic fields)
+  - updates `fundamental_snapshots` (market_cap/TRBC sector + basic fields)
   - updates `prices_daily` (latest close snapshot)
 
 It does NOT overwrite `barra_exposures`. Factor exposures are handled separately.
@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "vendor"))
 
 from lseg_ric_resolver import ensure_ric_map_table, load_ric_map, resolve_ric_map
+from db.trbc_schema import ensure_trbc_naming
 from portfolio.mock_portfolio import get_tickers
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "data.db"
@@ -46,6 +47,7 @@ def _pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
 
 
 def _ensure_tables(conn: sqlite3.Connection) -> None:
+    ensure_trbc_naming(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS fundamental_snapshots (
@@ -54,8 +56,8 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
             market_cap TEXT,
             shares_outstanding TEXT,
             dividend_yield TEXT,
-            sector TEXT,
-            industry TEXT,
+            trbc_sector TEXT,
+            trbc_industry_group TEXT,
             source TEXT,
             job_run_id TEXT,
             updated_at TEXT
@@ -82,10 +84,10 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS gics_industry_history (
+        CREATE TABLE IF NOT EXISTS trbc_industry_history (
             ticker TEXT NOT NULL,
             as_of_date TEXT NOT NULL,
-            gics_industry_group TEXT,
+            trbc_industry_group TEXT,
             trbc_economic_sector TEXT,
             source TEXT,
             job_run_id TEXT,
@@ -246,7 +248,7 @@ def download_from_lseg(
     job_run_id = f"lseg_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     fundamentals_rows: list[dict[str, Any]] = []
     prices_rows: list[dict[str, Any]] = []
-    gics_history_rows: list[dict[str, Any]] = []
+    trbc_history_rows: list[dict[str, Any]] = []
 
     for _, row in company.iterrows():
         ric = str(row.get(instrument_col) or "").strip().upper()
@@ -255,14 +257,14 @@ def download_from_lseg(
             continue
         close = row.get(price_col) if price_col else None
         market_cap = row.get(mcap_col) if mcap_col else None
-        sector = row.get(sector_col) if sector_col else None
-        industry = row.get(industry_col) if industry_col else None
+        trbc_sector = row.get(sector_col) if sector_col else None
+        trbc_industry = row.get(industry_col) if industry_col else None
         shares_outstanding = row.get(shares_col) if shares_col else None
         dividend_yield = row.get(divy_col) if divy_col else None
 
-        industry_group = None if pd.isna(industry) else str(industry).strip()
-        if industry_group in {"", "None", "nan"}:
-            industry_group = "Unmapped"
+        trbc_industry_group = None if pd.isna(trbc_industry) else str(trbc_industry).strip()
+        if trbc_industry_group in {"", "None", "nan"}:
+            trbc_industry_group = "Unmapped"
 
         fundamentals_rows.append(
             {
@@ -271,19 +273,19 @@ def download_from_lseg(
                 "market_cap": None if pd.isna(market_cap) else str(market_cap),
                 "shares_outstanding": None if pd.isna(shares_outstanding) else str(shares_outstanding),
                 "dividend_yield": None if pd.isna(dividend_yield) else str(dividend_yield),
-                "sector": None if pd.isna(sector) else str(sector),
-                "industry": None if pd.isna(industry) else str(industry),
+                "trbc_sector": None if pd.isna(trbc_sector) else str(trbc_sector),
+                "trbc_industry_group": None if pd.isna(trbc_industry) else str(trbc_industry),
                 "source": "lseg_toolkit",
                 "job_run_id": job_run_id,
                 "updated_at": updated_at,
             }
         )
-        gics_history_rows.append(
+        trbc_history_rows.append(
             {
                 "ticker": ticker,
                 "as_of_date": as_of,
-                "gics_industry_group": industry_group,
-                "trbc_economic_sector": None if pd.isna(sector) else str(sector),
+                "trbc_industry_group": trbc_industry_group,
+                "trbc_economic_sector": None if pd.isna(trbc_sector) else str(trbc_sector),
                 "source": "lseg_toolkit",
                 "job_run_id": job_run_id,
                 "updated_at": updated_at,
@@ -310,15 +312,15 @@ def download_from_lseg(
     try:
         n_f = _insert_rows(conn, "fundamental_snapshots", fundamentals_rows)
         n_p = _insert_rows(conn, "prices_daily", prices_rows)
-        n_g = _insert_rows(conn, "gics_industry_history", gics_history_rows, replace=True)
+        n_g = _insert_rows(conn, "trbc_industry_history", trbc_history_rows, replace=True)
         n_ric = conn.execute("SELECT COUNT(*) FROM ticker_ric_map").fetchone()[0]
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fund_ticker ON fundamental_snapshots(ticker)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fund_date ON fundamental_snapshots(fetch_date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prices_ticker ON prices_daily(ticker)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prices_date ON prices_daily(date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prices_ticker_date ON prices_daily(ticker, date)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_gics_hist_date ON gics_industry_history(as_of_date)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_gics_hist_ticker ON gics_industry_history(ticker)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trbc_hist_date ON trbc_industry_history(as_of_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trbc_hist_ticker ON trbc_industry_history(ticker)")
         conn.commit()
     finally:
         conn.close()
@@ -329,7 +331,7 @@ def download_from_lseg(
         "universe": len(universe),
         "fundamental_rows_inserted": n_f,
         "price_rows_inserted": n_p,
-        "gics_rows_inserted": n_g,
+        "trbc_rows_inserted": n_g,
         "ticker_ric_map_size": int(n_ric or 0),
         "db_path": str(db_path),
     }

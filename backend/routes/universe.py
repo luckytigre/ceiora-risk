@@ -4,9 +4,28 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
+from analytics.trbc_sector import abbreviate_trbc_sector
 from db.sqlite import cache_get
 
 router = APIRouter()
+
+
+def _normalize_universe_item(item: dict) -> dict:
+    trbc_sector = str(item.get("trbc_sector") or item.get("sector") or "")
+    return {
+        **item,
+        "trbc_sector": trbc_sector,
+        "trbc_sector_abbr": str(item.get("trbc_sector_abbr") or abbreviate_trbc_sector(trbc_sector)),
+    }
+
+
+def _normalize_search_row(row: dict) -> dict:
+    trbc_sector = str(row.get("trbc_sector") or row.get("sector") or "")
+    return {
+        **row,
+        "trbc_sector": trbc_sector,
+        "trbc_sector_abbr": str(row.get("trbc_sector_abbr") or abbreviate_trbc_sector(trbc_sector)),
+    }
 
 
 @router.get("/universe/ticker/{ticker}")
@@ -18,7 +37,7 @@ async def get_universe_ticker(ticker: str):
     item = by_ticker.get(str(ticker).upper().strip())
     if item is None:
         raise HTTPException(status_code=404, detail="Ticker not found in cached universe")
-    return {"item": item, "_cached": True}
+    return {"item": _normalize_universe_item(item), "_cached": True}
 
 
 @router.get("/universe/search")
@@ -40,7 +59,7 @@ async def search_universe(
         ticker = str(row.get("ticker", "")).upper()
         name = str(row.get("name", "")).upper()
         if needle in ticker or needle in name:
-            hits.append(row)
+            hits.append(_normalize_search_row(row))
             if len(hits) >= limit:
                 break
     return {"query": q, "results": hits, "total": len(hits), "_cached": True}

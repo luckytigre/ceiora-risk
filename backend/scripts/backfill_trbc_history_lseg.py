@@ -1,7 +1,7 @@
-"""Backfill historical GICS industry groups from LSEG for all exposure dates.
+"""Backfill historical TRBC industry groups from LSEG for all exposure dates.
 
-This script creates and populates `gics_industry_history` and then syncs
-`barra_exposures.gics_industry_group` so each (ticker, as_of_date) cross-section
+This script creates and populates `trbc_industry_history` and then syncs
+`barra_exposures.trbc_industry_group` so each (ticker, as_of_date) cross-section
 has a point-in-time industry classification.
 """
 
@@ -22,10 +22,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "vendor"))
 
 from lseg_ric_resolver import ensure_ric_map_table, load_ric_map, resolve_ric_map
+from db.trbc_schema import ensure_trbc_naming
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "data.db"
 LSEG_BATCH_SIZE = 500
-TABLE = "gics_industry_history"
+TABLE = "trbc_industry_history"
 
 
 def _load_lseg_client():
@@ -54,12 +55,13 @@ def _to_local_ticker(ric: str) -> str:
 
 
 def _ensure_table(conn: sqlite3.Connection) -> None:
+    ensure_trbc_naming(conn)
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {TABLE} (
             ticker TEXT NOT NULL,
             as_of_date TEXT NOT NULL,
-            gics_industry_group TEXT,
+            trbc_industry_group TEXT,
             trbc_economic_sector TEXT,
             source TEXT,
             job_run_id TEXT,
@@ -100,14 +102,14 @@ def _insert_history_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -
     conn.executemany(
         f"""
         INSERT OR REPLACE INTO {TABLE}
-        (ticker, as_of_date, gics_industry_group, trbc_economic_sector, source, job_run_id, updated_at)
+        (ticker, as_of_date, trbc_industry_group, trbc_economic_sector, source, job_run_id, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
                 r["ticker"],
                 r["as_of_date"],
-                r["gics_industry_group"],
+                r["trbc_industry_group"],
                 r["trbc_economic_sector"],
                 r["source"],
                 r["job_run_id"],
@@ -120,10 +122,11 @@ def _insert_history_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -
 
 
 def _sync_barra_exposures(conn: sqlite3.Connection) -> dict[str, int]:
-    """Update barra_exposures.gics_industry_group from history with robust fill."""
+    """Update barra_exposures.trbc_industry_group from history with robust fill."""
+    ensure_trbc_naming(conn)
     exp_df = pd.read_sql_query(
         """
-        SELECT rowid, ticker, as_of_date, gics_industry_group
+        SELECT rowid, ticker, as_of_date, trbc_industry_group
         FROM barra_exposures
         ORDER BY ticker, as_of_date
         """,
@@ -134,10 +137,10 @@ def _sync_barra_exposures(conn: sqlite3.Connection) -> dict[str, int]:
 
     hist_df = pd.read_sql_query(
         f"""
-        SELECT ticker, as_of_date, gics_industry_group
+        SELECT ticker, as_of_date, trbc_industry_group
         FROM {TABLE}
-        WHERE gics_industry_group IS NOT NULL
-          AND TRIM(gics_industry_group) <> ''
+        WHERE trbc_industry_group IS NOT NULL
+          AND TRIM(trbc_industry_group) <> ''
         ORDER BY ticker, as_of_date
         """,
         conn,
@@ -148,20 +151,20 @@ def _sync_barra_exposures(conn: sqlite3.Connection) -> dict[str, int]:
     exp_df["ticker"] = exp_df["ticker"].astype(str).str.upper()
     exp_df["as_of_date"] = exp_df["as_of_date"].astype(str)
     exp_df["existing"] = (
-        exp_df["gics_industry_group"]
+        exp_df["trbc_industry_group"]
         .astype(str)
         .str.strip()
         .replace({"": np.nan, "None": np.nan, "nan": np.nan})
     )
     hist_df["ticker"] = hist_df["ticker"].astype(str).str.upper()
     hist_df["as_of_date"] = hist_df["as_of_date"].astype(str)
-    hist_df["gics_industry_group"] = (
-        hist_df["gics_industry_group"]
+    hist_df["trbc_industry_group"] = (
+        hist_df["trbc_industry_group"]
         .astype(str)
         .str.strip()
         .replace({"": np.nan, "None": np.nan, "nan": np.nan})
     )
-    hist_df = hist_df.dropna(subset=["gics_industry_group"])
+    hist_df = hist_df.dropna(subset=["trbc_industry_group"])
 
     exact = exp_df.merge(
         hist_df,
@@ -169,8 +172,8 @@ def _sync_barra_exposures(conn: sqlite3.Connection) -> dict[str, int]:
         how="left",
         suffixes=("", "_hist"),
     )
-    exact["resolved"] = exact["gics_industry_group_hist"].where(
-        exact["gics_industry_group_hist"].notna(),
+    exact["resolved"] = exact["trbc_industry_group_hist"].where(
+        exact["trbc_industry_group_hist"].notna(),
         exact["existing"],
     )
     exact["resolved"] = exact["resolved"].astype("object")
@@ -189,7 +192,7 @@ def _sync_barra_exposures(conn: sqlite3.Connection) -> dict[str, int]:
         return {"updated_rows": 0}
 
     conn.executemany(
-        "UPDATE barra_exposures SET gics_industry_group = ? WHERE rowid = ?",
+        "UPDATE barra_exposures SET trbc_industry_group = ? WHERE rowid = ?",
         [(str(r["resolved"]), int(r["rowid"])) for _, r in to_update.iterrows()],
     )
     return {"updated_rows": int(len(to_update))}
@@ -217,7 +220,7 @@ def run_backfill(
     finally:
         conn.close()
 
-    job_run_id = f"lseg_gics_backfill_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    job_run_id = f"lseg_trbc_backfill_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     updated_at = datetime.now(timezone.utc).isoformat()
 
     total_rows = 0
@@ -267,14 +270,14 @@ def run_backfill(
                             continue
                         industry = row.get(industry_col) if industry_col else None
                         sector = row.get(sector_col) if sector_col else None
-                        industry_group = None if pd.isna(industry) else str(industry).strip()
-                        if industry_group in {"", "None", "nan"}:
-                            industry_group = "Unmapped"
+                        trbc_industry_group = None if pd.isna(industry) else str(industry).strip()
+                        if trbc_industry_group in {"", "None", "nan"}:
+                            trbc_industry_group = "Unmapped"
                         rows.append(
                             {
                                 "ticker": ticker,
                                 "as_of_date": as_of,
-                                "gics_industry_group": industry_group,
+                                "trbc_industry_group": trbc_industry_group,
                                 "trbc_economic_sector": None if pd.isna(sector) else str(sector),
                                 "source": "lseg_toolkit_backfill",
                                 "job_run_id": job_run_id,
@@ -307,7 +310,7 @@ def run_backfill(
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Backfill historical GICS industry groups from LSEG.")
+    p = argparse.ArgumentParser(description="Backfill historical TRBC industry groups from LSEG.")
     p.add_argument("--db-path", default=str(DEFAULT_DB), help="Path to target SQLite DB")
     p.add_argument("--ric-suffix", default=".O", help="Suffix when converting plain tickers to RICs")
     p.add_argument("--start-date", default=None, help="Optional YYYY-MM-DD lower bound for as_of_date")

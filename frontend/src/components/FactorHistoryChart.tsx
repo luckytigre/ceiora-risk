@@ -56,7 +56,8 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
 
   const labels = points.map((p) => p.date);
   const values = points.map((p) => p.cum_return * 100);
-  const isPositive = values[values.length - 1] >= 0;
+  const latestReturn = values[values.length - 1] ?? 0;
+  const isPositive = latestReturn >= 0;
   const lineColor = isPositive ? "#6bcf9a" : "#e0577f";
 
   const data: ChartData<"line", number[], string> = {
@@ -151,25 +152,9 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
     },
   };
 
-  const volBadgePlugin: Plugin<"line"> = {
-    id: "volBadge",
-    afterDraw(chart) {
-      if (factorVol == null) return;
-      const { ctx, chartArea } = chart;
-      const text = `σ ${(factorVol * 100).toFixed(1)}%`;
-      ctx.save();
-      ctx.font = "9px -apple-system, BlinkMacSystemFont, sans-serif";
-      ctx.fillStyle = "rgba(169, 182, 210, 0.50)";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "top";
-      ctx.fillText(text, chartArea.right, chartArea.top + 4);
-      ctx.restore();
-    },
-  };
-
   return (
     <div className="detail-history-chart">
-      <Line data={data} options={options} plugins={[zeroLinePlugin, volBadgePlugin]} />
+      <Line data={data} options={options} plugins={[zeroLinePlugin]} />
     </div>
   );
 }
