@@ -22,20 +22,11 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "vendor"))
 
-from barra.gics_mapping import map_to_industry_group
+from lseg_ric_resolver import ensure_ric_map_table, load_ric_map, resolve_ric_map
 from portfolio.mock_portfolio import get_tickers
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "data.db"
 LSEG_BATCH_SIZE = 500
-
-
-def _to_ric(symbol: str, ric_suffix: str) -> str:
-    s = symbol.strip().upper()
-    if not s:
-        return s
-    if "." in s:
-        return s
-    return f"{s}{ric_suffix}"
 
 
 def _to_local_ticker(ric: str) -> str:
@@ -135,16 +126,17 @@ def _resolve_universe(
     db_path: Path,
     index: str | None,
     tickers_csv: str | None,
-    ric_suffix: str,
+    _ric_suffix: str,
 ) -> list[str]:
     if tickers_csv:
-        tickers = [t.strip().upper() for t in tickers_csv.split(",") if t.strip()]
-        return [_to_ric(t, ric_suffix) for t in tickers]
+        return [t.strip().upper() for t in tickers_csv.split(",") if t.strip()]
     if index:
         LsegClient = _load_lseg_client()
 
         with LsegClient() as client:
-            return client.get_index_constituents(index=index)
+            rics = client.get_index_constituents(index=index)
+        # Convert any returned RICs into local plain tickers for shared resolver path.
+        return [_to_local_ticker(str(r)) for r in rics if str(r).strip()]
     # Default: use the local barra universe if available, else fallback to mock portfolio.
     try:
         conn = sqlite3.connect(str(db_path))
@@ -155,10 +147,10 @@ def _resolve_universe(
         if rows:
             tickers = [str(r[0]).strip().upper() for r in rows if r and str(r[0]).strip()]
             if tickers:
-                return [_to_ric(t, ric_suffix) for t in tickers]
+                return tickers
     except Exception:
         pass
-    return [_to_ric(t, ric_suffix) for t in get_tickers()]
+    return [t.strip().upper() for t in get_tickers() if str(t).strip()]
 
 
 def _load_lseg_client():
@@ -187,16 +179,36 @@ def download_from_lseg(
         db_path=db_path,
         index=index,
         tickers_csv=tickers_csv,
-        ric_suffix=ric_suffix,
+        _ric_suffix=ric_suffix,
     )
     if not universe:
         return {"status": "no-universe", "as_of": as_of}
 
-    print(f"Fetching LSEG data for {len(universe)} instruments...")
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    _ensure_tables(conn)
+    ensure_ric_map_table(conn)
+
+    print(f"Resolving LSEG RICs for {len(universe)} tickers...")
+    ticker_to_ric: dict[str, str] = load_ric_map(conn)
     company_parts: list[pd.DataFrame] = []
     with LsegClient() as client:
-        for i in range(0, len(universe), LSEG_BATCH_SIZE):
-            batch = universe[i : i + LSEG_BATCH_SIZE]
+        ticker_to_ric = resolve_ric_map(
+            client=client,
+            conn=conn,
+            tickers=universe,
+            as_of_date=as_of,
+            source="lseg_daily",
+            suffixes=[ric_suffix, ".N", ".O", ".A", ".K", ".P", ".PK", ""],
+            batch_size=LSEG_BATCH_SIZE,
+        )
+        ric_universe = [ticker_to_ric[t] for t in universe if t in ticker_to_ric]
+        ric_to_ticker = {v.upper(): k.upper() for k, v in ticker_to_ric.items() if v}
+
+        print(f"Fetching LSEG data for {len(ric_universe)} instruments...")
+        for i in range(0, len(ric_universe), LSEG_BATCH_SIZE):
+            batch = ric_universe[i : i + LSEG_BATCH_SIZE]
             part = client.get_company_data(
                 batch,
                 fields=[
@@ -212,12 +224,13 @@ def download_from_lseg(
             )
             if part is not None and not part.empty:
                 company_parts.append(part)
-            done = min(i + LSEG_BATCH_SIZE, len(universe))
-            print(f"  company_data: {done:,}/{len(universe):,}")
+            done = min(i + LSEG_BATCH_SIZE, len(ric_universe))
+            print(f"  company_data: {done:,}/{len(ric_universe):,}")
 
     company = pd.concat(company_parts, ignore_index=True) if company_parts else pd.DataFrame()
 
     if company is None or company.empty:
+        conn.close()
         return {"status": "no-data", "as_of": as_of, "universe": len(universe)}
 
     instrument_col = _pick_col(company, ["Instrument"])
@@ -236,8 +249,8 @@ def download_from_lseg(
     gics_history_rows: list[dict[str, Any]] = []
 
     for _, row in company.iterrows():
-        ric = str(row.get(instrument_col) or "").strip()
-        ticker = _to_local_ticker(ric)
+        ric = str(row.get(instrument_col) or "").strip().upper()
+        ticker = ric_to_ticker.get(ric) or _to_local_ticker(ric)
         if not ticker:
             continue
         close = row.get(price_col) if price_col else None
@@ -247,11 +260,9 @@ def download_from_lseg(
         shares_outstanding = row.get(shares_col) if shares_col else None
         dividend_yield = row.get(divy_col) if divy_col else None
 
-        industry_group = map_to_industry_group(
-            sector=None if pd.isna(sector) else str(sector),
-            industry=None if pd.isna(industry) else str(industry),
-            ticker=ticker,
-        )
+        industry_group = None if pd.isna(industry) else str(industry).strip()
+        if industry_group in {"", "None", "nan"}:
+            industry_group = "Unmapped"
 
         fundamentals_rows.append(
             {
@@ -296,14 +307,11 @@ def download_from_lseg(
             }
         )
 
-    conn = sqlite3.connect(str(db_path))
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        _ensure_tables(conn)
         n_f = _insert_rows(conn, "fundamental_snapshots", fundamentals_rows)
         n_p = _insert_rows(conn, "prices_daily", prices_rows)
         n_g = _insert_rows(conn, "gics_industry_history", gics_history_rows, replace=True)
+        n_ric = conn.execute("SELECT COUNT(*) FROM ticker_ric_map").fetchone()[0]
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fund_ticker ON fundamental_snapshots(ticker)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fund_date ON fundamental_snapshots(fetch_date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_prices_ticker ON prices_daily(ticker)")
@@ -322,6 +330,7 @@ def download_from_lseg(
         "fundamental_rows_inserted": n_f,
         "price_rows_inserted": n_p,
         "gics_rows_inserted": n_g,
+        "ticker_ric_map_size": int(n_ric or 0),
         "db_path": str(db_path),
     }
     print(out)

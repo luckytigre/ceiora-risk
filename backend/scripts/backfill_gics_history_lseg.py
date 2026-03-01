@@ -21,7 +21,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "vendor"))
 
-from barra.gics_mapping import map_to_industry_group
+from lseg_ric_resolver import ensure_ric_map_table, load_ric_map, resolve_ric_map
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "data.db"
 LSEG_BATCH_SIZE = 500
@@ -46,13 +46,6 @@ def _pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
         if got:
             return got
     return None
-
-
-def _to_ric(symbol: str, ric_suffix: str) -> str:
-    s = symbol.strip().upper()
-    if "." in s:
-        return s
-    return f"{s}{ric_suffix}"
 
 
 def _to_local_ticker(ric: str) -> str:
@@ -215,11 +208,12 @@ def run_backfill(
     conn.execute("PRAGMA synchronous=NORMAL")
     try:
         _ensure_table(conn)
+        ensure_ric_map_table(conn)
         dates = _resolve_dates(conn, start_date=start_date, end_date=end_date)
         tickers = _resolve_tickers(conn)
         if not dates or not tickers:
             return {"status": "no-op", "dates": 0, "tickers": 0}
-        universe = [_to_ric(t, ric_suffix) for t in tickers]
+        ticker_to_ric = load_ric_map(conn)
     finally:
         conn.close()
 
@@ -232,6 +226,20 @@ def run_backfill(
         conn = sqlite3.connect(str(db_path))
         try:
             _ensure_table(conn)
+            ensure_ric_map_table(conn)
+            probe_date = dates[-1]
+            ticker_to_ric = resolve_ric_map(
+                client=client,
+                conn=conn,
+                tickers=tickers,
+                as_of_date=probe_date,
+                source="lseg_backfill",
+                suffixes=[ric_suffix, ".N", ".O", ".A", ".K", ".P", ".PK", ""],
+                batch_size=LSEG_BATCH_SIZE,
+            )
+            universe = [ticker_to_ric[t] for t in tickers if t in ticker_to_ric]
+            ric_to_ticker = {v.upper(): k.upper() for k, v in ticker_to_ric.items() if v}
+
             for date_idx, as_of in enumerate(dates, start=1):
                 rows: list[dict[str, Any]] = []
                 for i in range(0, len(universe), LSEG_BATCH_SIZE):
@@ -253,16 +261,15 @@ def run_backfill(
                     if not instrument_col:
                         continue
                     for _, row in part.iterrows():
-                        ticker = _to_local_ticker(str(row.get(instrument_col) or ""))
+                        instrument = str(row.get(instrument_col) or "").strip().upper()
+                        ticker = ric_to_ticker.get(instrument) or _to_local_ticker(instrument)
                         if not ticker:
                             continue
                         industry = row.get(industry_col) if industry_col else None
                         sector = row.get(sector_col) if sector_col else None
-                        industry_group = map_to_industry_group(
-                            sector=None if pd.isna(sector) else str(sector),
-                            industry=None if pd.isna(industry) else str(industry),
-                            ticker=ticker,
-                        )
+                        industry_group = None if pd.isna(industry) else str(industry).strip()
+                        if industry_group in {"", "None", "nan"}:
+                            industry_group = "Unmapped"
                         rows.append(
                             {
                                 "ticker": ticker,
@@ -281,6 +288,7 @@ def run_backfill(
 
             sync_stats = _sync_barra_exposures(conn)
             conn.commit()
+            ric_map_size = conn.execute("SELECT COUNT(*) FROM ticker_ric_map").fetchone()[0]
         finally:
             conn.close()
 
@@ -290,6 +298,7 @@ def run_backfill(
         "tickers": len(tickers),
         "history_rows_upserted": total_rows,
         "barra_exposures_updates": int(sync_stats.get("updated_rows", 0)),
+        "ticker_ric_map_size": int(ric_map_size or 0),
         "db_path": str(db_path),
         "job_run_id": job_run_id,
     }
