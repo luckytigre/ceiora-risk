@@ -57,6 +57,7 @@ body {
   font-family: var(--font-family);
   line-height: 1.36;
   position: relative;
+  overflow-x: hidden;
   background: var(--bg-primary);
 }
 
@@ -68,7 +69,6 @@ body {
   width: 100vw;
   pointer-events: none;
   z-index: 0;
-  opacity: 1;
   will-change: transform;
 }
 
@@ -504,40 +504,7 @@ main {
   color: rgba(107, 207, 154, 0.62);
 }
 
-/* Heatmap scope toggle & legend */
-.heatmap-scope-toggle {
-  display: inline-flex;
-  gap: 1px;
-  margin-bottom: 12px;
-  padding: 2px;
-  background: rgba(154, 171, 214, 0.06);
-  border-radius: 6px;
-}
-
-.heatmap-scope-toggle button {
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border: none;
-  background: transparent;
-  color: rgba(169, 182, 210, 0.5);
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-  font-weight: 500;
-}
-
-.heatmap-scope-toggle button:hover {
-  color: rgba(232, 237, 249, 0.75);
-}
-
-.heatmap-scope-toggle button.active {
-  color: rgba(232, 237, 249, 0.9);
-  background: rgba(154, 171, 214, 0.12);
-  font-weight: 600;
-}
-
+/* Heatmap legend */
 .heatmap-legend {
   display: flex;
   align-items: center;
@@ -768,6 +735,145 @@ main {
   position: relative;
 }
 
+/* Health tab */
+.health-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.health-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(169, 182, 210, 0.58);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.health-notes {
+  margin: 0;
+  padding-left: 16px;
+  color: rgba(169, 182, 210, 0.66);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.health-notes li {
+  margin-bottom: 3px;
+}
+
+.health-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1020px) {
+  .health-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.health-chart-lg {
+  height: 280px;
+  margin-bottom: 10px;
+}
+
+.health-chart-sm {
+  height: 220px;
+}
+
+.health-wrap h4 {
+  color: rgba(188, 192, 201, 0.9);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.health-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.health-picker-label {
+  color: rgba(169, 182, 210, 0.7);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.health-select {
+  min-width: 150px;
+  border: 1px solid rgba(226, 231, 238, 0.2);
+  background: rgba(226, 231, 238, 0.04);
+  color: rgba(232, 237, 249, 0.84);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 6px 8px;
+  border-radius: 0;
+}
+
+.health-select:focus {
+  outline: none;
+  border-color: rgba(226, 231, 238, 0.42);
+}
+
+.health-table {
+  margin-top: 10px;
+}
+
+.health-kpi-strip {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0 8px;
+}
+
+.health-kpi {
+  padding: 10px 12px;
+  background: rgba(226, 231, 238, 0.025);
+  border: 1px solid rgba(154, 171, 214, 0.12);
+  min-width: 220px;
+}
+
+.health-kpi-label {
+  color: rgba(169, 182, 210, 0.7);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.health-kpi-value {
+  margin-top: 4px;
+  color: rgba(232, 237, 249, 0.9);
+  font-size: 21px;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+}
+
+.health-kpi-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  color: rgba(200, 212, 235, 0.82);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.health-kpi-subrow strong {
+  color: rgba(232, 237, 249, 0.9);
+  font-weight: 600;
+}
+
 /* Detail panel */
 .detail-panel {
   width: min(88%, 980px);
@@ -938,9 +1044,28 @@ main {
   text-align: left;
 }
 
+.col-help-bubble-interpret {
+  display: block;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(154, 171, 214, 0.1);
+}
+
+.col-help-bubble-interpret-line {
+  display: block;
+  margin-top: 3px;
+  color: rgba(200, 212, 235, 0.8);
+  text-align: left;
+}
+
+.col-help-bubble-interpret-line strong {
+  color: rgba(232, 237, 249, 0.86);
+  font-weight: 600;
+}
+
 .col-help-bubble-math {
   display: block;
-  margin-top: 8px;
+  margin-top: 7px;
   padding-top: 7px;
   border-top: 1px solid rgba(154, 171, 214, 0.1);
   color: rgba(215, 87, 186, 0.7);

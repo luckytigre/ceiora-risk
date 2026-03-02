@@ -138,3 +138,117 @@ export interface UniverseFactorsData {
   ticker_count?: number;
   _cached: boolean;
 }
+
+export interface SeriesPoint {
+  date: string;
+  value: number;
+}
+
+export interface HealthHistogram {
+  centers: number[];
+  counts: number[];
+}
+
+export interface HealthCorrelationMatrix {
+  factors: string[];
+  correlation: number[][];
+}
+
+export interface HealthR2Point {
+  date: string;
+  r2: number;
+  roll60: number;
+  roll252: number;
+}
+
+export interface HealthFactorPctRow {
+  factor: string;
+  value: number;
+}
+
+export interface HealthIncrementalBlockR2Point {
+  date: string;
+  r2_full: number;
+  r2_industry: number;
+  r2_style_incremental: number;
+  roll60_full: number;
+  roll60_industry: number;
+  roll60_style_incremental: number;
+}
+
+export interface HealthBucketBreadthPoint {
+  date: string;
+  industry_mean_abs_t: number;
+  style_mean_abs_t: number;
+}
+
+export interface HealthBucketBreadthSummary {
+  industry_mean_abs_t: number;
+  style_mean_abs_t: number;
+}
+
+export interface HealthPortfolioVarianceSplit {
+  industry_pct_total: number;
+  style_pct_total: number;
+  idio_pct_total: number;
+  industry_pct_factor_only: number;
+  style_pct_factor_only: number;
+}
+
+export interface HealthExposureStats {
+  factor: string;
+  mean: number;
+  std: number;
+  p1: number;
+  p99: number;
+  max_abs: number;
+}
+
+export interface HealthTurnoverPoint {
+  date: string;
+  turnover: number;
+  roll60: number;
+}
+
+export interface HealthForecastRealizedRow {
+  name: string;
+  forecast_vol: number;
+  realized_vol_60d: number;
+}
+
+export interface HealthDiagnosticsData {
+  status: string;
+  as_of: string | null;
+  notes: string[];
+  section1: {
+    sampling?: string;
+    r2_series: HealthR2Point[];
+    incremental_block_r2_series: HealthIncrementalBlockR2Point[];
+    t_stat_hist: HealthHistogram;
+    pct_days_abs_t_gt_2: HealthFactorPctRow[];
+    bucket_breadth_series: HealthBucketBreadthPoint[];
+    bucket_breadth_summary: HealthBucketBreadthSummary;
+    portfolio_variance_split: HealthPortfolioVarianceSplit;
+  };
+  section2: {
+    as_of: string | null;
+    factor_stats: HealthExposureStats[];
+    factor_histograms: Record<string, HealthHistogram>;
+    exposure_corr: HealthCorrelationMatrix;
+    turnover_series: HealthTurnoverPoint[];
+  };
+  section3: {
+    factors: string[];
+    cumulative_returns: Record<string, SeriesPoint[]>;
+    rolling_vol_60d: Record<string, SeriesPoint[]>;
+    return_corr: HealthCorrelationMatrix;
+    return_dist: Record<string, HealthHistogram>;
+  };
+  section4: {
+    eigenvalues: number[];
+    condition_number: number;
+    forecast_vs_realized: HealthForecastRealizedRow[];
+    rolling_avg_factor_vol: SeriesPoint[];
+  };
+  _cached: boolean;
+}

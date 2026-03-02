@@ -137,9 +137,9 @@ const RENDERERS: Record<string, (ctx: CanvasRenderingContext2D, w: number, h: nu
   topo: drawTopo,
 };
 
-/* Parallax: render canvas 40% taller, shift at 30% of scroll speed */
-const PARALLAX_RATE = 0.45;
-const OVERSCAN = 0.55;
+/* Parallax: viewport-sized canvas (position:fixed), shifted via GPU transform */
+const PARALLAX_RATE = 0.18;
+const OVERSCAN = 0.7;
 
 export default function Neo2DotBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);

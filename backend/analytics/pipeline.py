@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 import config
+from analytics.health import compute_health_diagnostics
 from barra.covariance import build_factor_covariance_from_cache
 from barra.daily_factor_returns import compute_daily_factor_returns
 from barra.descriptors import FULL_STYLE_ORTH_RULES, canonicalize_style_scores
@@ -596,19 +597,28 @@ def run_refresh() -> dict[str, Any]:
         coverage_date=coverage_date,
     )
 
-    # 11. Build covariance matrix for frontend (correlation)
+    # 11. Build covariance matrix for frontend (correlation) — style factors only
+    STYLE_FACTOR_NAMES = {
+        "Size", "Nonlinear Size", "Liquidity", "Beta",
+        "Book-to-Price", "Earnings Yield", "Value", "Leverage",
+        "Growth", "Profitability", "Investment", "Dividend Yield",
+        "Momentum", "Short-Term Reversal", "Residual Volatility",
+    }
     cov_matrix: dict[str, Any] = {}
     if not cov.empty:
-        factors = list(cov.columns)
-        # Convert to correlation
-        stds = np.sqrt(np.diag(cov.to_numpy()))
-        stds[stds == 0] = 1.0
-        corr = cov.to_numpy() / np.outer(stds, stds)
-        corr = np.clip(corr, -1.0, 1.0)
-        cov_matrix = {
-            "factors": factors,
-            "correlation": [[round(float(v), 4) for v in row] for row in corr],
-        }
+        all_factors = list(cov.columns)
+        style_idx = [i for i, f in enumerate(all_factors) if f in STYLE_FACTOR_NAMES]
+        if style_idx:
+            style_factors = [all_factors[i] for i in style_idx]
+            sub_cov = cov.to_numpy()[np.ix_(style_idx, style_idx)]
+            stds = np.sqrt(np.diag(sub_cov))
+            stds[stds == 0] = 1.0
+            corr = sub_cov / np.outer(stds, stds)
+            corr = np.clip(corr, -1.0, 1.0)
+            cov_matrix = {
+                "factors": style_factors,
+                "correlation": [[round(float(v), 4) for v in row] for row in corr],
+            }
 
     # 12. Sanitize non-finite floats (NaN/Inf break JSON serialization)
     def _safe(v):
@@ -655,7 +665,7 @@ def run_refresh() -> dict[str, Any]:
         },
     )
     sqlite.cache_set("exposures", exposure_modes)
-    sqlite.cache_set("source_dates", source_dates)
+    sqlite.cache_set("health_diagnostics", compute_health_diagnostics(DATA_DB, CACHE_DB))
 
     logger.info("Refresh complete.")
     return {"status": "ok", "positions": len(positions), "total_value": round(total_value, 2)}

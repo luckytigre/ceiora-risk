@@ -9,6 +9,7 @@ import type {
   UniverseTickerData,
   UniverseSearchData,
   UniverseFactorsData,
+  HealthDiagnosticsData,
 } from "@/lib/types";
 
 const REQUEST_TIMEOUT_MS = 8000;
@@ -68,6 +69,10 @@ export function useUniverseSearch(query: string, limit = 8) {
 
 export function useUniverseFactors() {
   return useSWR<UniverseFactorsData>("/api/universe/factors", fetcher, SWR_OPTS);
+}
+
+export function useHealthDiagnostics() {
+  return useSWR<HealthDiagnosticsData>("/api/health/diagnostics", fetcher, SWR_OPTS);
 }
 
 export async function triggerRefresh(): Promise<{ status: string }> {

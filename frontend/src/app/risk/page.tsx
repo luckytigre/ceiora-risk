@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRisk } from "@/hooks/useApi";
 import CovarianceHeatmap from "@/components/CovarianceHeatmap";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
@@ -9,6 +9,88 @@ import type { FactorDetail } from "@/lib/types";
 
 type SortKey = keyof FactorDetail;
 const COLLAPSED_ROWS = 14;
+
+type Interpretability = {
+  lookFor: string;
+  good: string;
+  distribution?: string;
+};
+
+function HelpLabel({
+  label,
+  plain,
+  math,
+  interpret,
+}: {
+  label: string;
+  plain: string;
+  math: string;
+  interpret?: Interpretability;
+}) {
+  const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [bubbleStyle, setBubbleStyle] = useState<{ left: number; top: number; width: number; placeAbove: boolean }>({
+    left: 12,
+    top: 12,
+    width: 280,
+    placeAbove: false,
+  });
+
+  const placeBubble = () => {
+    const el = triggerRef.current;
+    if (!el || typeof window === "undefined") return;
+    const rect = el.getBoundingClientRect();
+    const margin = 12;
+    const width = Math.min(300, window.innerWidth - margin * 2);
+    let left = rect.left + rect.width * 0.5 - width * 0.5;
+    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+    const estimatedHeight = interpret ? 240 : 112;
+    const spaceBelow = window.innerHeight - rect.bottom - margin;
+    const placeAbove = spaceBelow < estimatedHeight && rect.top > estimatedHeight + margin;
+    const top = placeAbove ? rect.top - 8 : rect.bottom + 8;
+    setBubbleStyle({ left, top, width, placeAbove });
+    setOpen(true);
+  };
+
+  return (
+    <span
+      ref={triggerRef}
+      className="col-help-trigger"
+      tabIndex={0}
+      aria-label={`Explain ${label}`}
+      onMouseEnter={placeBubble}
+      onFocus={placeBubble}
+      onMouseLeave={() => setOpen(false)}
+      onBlur={() => setOpen(false)}
+    >
+      {label}
+      {open && (
+        <span
+          className={`col-help-bubble ${bubbleStyle.placeAbove ? "above" : ""}`}
+          style={{ left: bubbleStyle.left, top: bubbleStyle.top, width: bubbleStyle.width }}
+        >
+          <span className="col-help-bubble-plain">{plain}</span>
+          {interpret && (
+            <span className="col-help-bubble-interpret">
+              <span className="col-help-bubble-interpret-line">
+                <strong>Look for:</strong> {interpret.lookFor}
+              </span>
+              <span className="col-help-bubble-interpret-line">
+                <strong>Good:</strong> {interpret.good}
+              </span>
+              {interpret.distribution && (
+                <span className="col-help-bubble-interpret-line">
+                  <strong>Distribution:</strong> {interpret.distribution}
+                </span>
+              )}
+            </span>
+          )}
+          <span className="col-help-bubble-math">Math: {math}</span>
+        </span>
+      )}
+    </span>
+  );
+}
 
 export default function RiskPage() {
   const { data, isLoading } = useRisk();
@@ -51,13 +133,106 @@ export default function RiskPage() {
           <table>
             <thead>
               <tr>
-                <th onClick={() => handleSort("factor")}>Factor{arrow("factor")}</th>
-                <th onClick={() => handleSort("category")}>Category{arrow("category")}</th>
-                <th className="text-right" onClick={() => handleSort("exposure")}>Exposure{arrow("exposure")}</th>
-                <th className="text-right" onClick={() => handleSort("factor_vol")}>Factor Vol{arrow("factor_vol")}</th>
-                <th className="text-right" onClick={() => handleSort("sensitivity")}>Sensitivity{arrow("sensitivity")}</th>
-                <th className="text-right" onClick={() => handleSort("marginal_var_contrib")}>Marg. Var{arrow("marginal_var_contrib")}</th>
-                <th className="text-right" onClick={() => handleSort("pct_of_total")}>% Total{arrow("pct_of_total")}</th>
+                <th onClick={() => handleSort("factor")}>
+                  <span className="col-help-wrap">
+                    <HelpLabel
+                      label="Factor"
+                      plain="The named risk driver in your model."
+                      math="Each row is one factor f"
+                      interpret={{
+                        lookFor: "Which factors dominate your table.",
+                        good: "Risk is not unintentionally concentrated in one factor.",
+                      }}
+                    />
+                    {arrow("factor")}
+                  </span>
+                </th>
+                <th onClick={() => handleSort("category")}>
+                  <span className="col-help-wrap">
+                    <HelpLabel
+                      label="Category"
+                      plain="Whether the factor is industry-based or style-based."
+                      math="Category ∈ {industry, style}"
+                      interpret={{
+                        lookFor: "If one category overwhelmingly dominates.",
+                        good: "Mix aligns with your intended portfolio construction.",
+                      }}
+                    />
+                    {arrow("category")}
+                  </span>
+                </th>
+                <th className="text-right" onClick={() => handleSort("exposure")}>
+                  <span className="col-help-wrap">
+                    <HelpLabel
+                      label="Exposure"
+                      plain="Portfolio loading on that factor before volatility scaling."
+                      math="h_f = Σ (w_i × x_i,f)"
+                      interpret={{
+                        lookFor: "Large absolute exposures and sign concentration.",
+                        good: "Exposures are intentional and not accidental bets.",
+                      }}
+                    />
+                    {arrow("exposure")}
+                  </span>
+                </th>
+                <th className="text-right" onClick={() => handleSort("factor_vol")}>
+                  <span className="col-help-wrap">
+                    <HelpLabel
+                      label="Factor Vol"
+                      plain="Annualized volatility of that factor’s return."
+                      math="σ_f = sqrt(F_f,f)"
+                      interpret={{
+                        lookFor: "High-vol factors paired with high exposure.",
+                        good: "Highest vol factors are controlled unless intentionally targeted.",
+                      }}
+                    />
+                    {arrow("factor_vol")}
+                  </span>
+                </th>
+                <th className="text-right" onClick={() => handleSort("sensitivity")}>
+                  <span className="col-help-wrap">
+                    <HelpLabel
+                      label="Sensitivity"
+                      plain="Exposure scaled by factor volatility."
+                      math="Sensitivity_f = h_f × σ_f"
+                      interpret={{
+                        lookFor: "Large signed values; this is first-pass risk direction.",
+                        good: "Top sensitivities match your intended factor bets/hedges.",
+                      }}
+                    />
+                    {arrow("sensitivity")}
+                  </span>
+                </th>
+                <th className="text-right" onClick={() => handleSort("marginal_var_contrib")}>
+                  <span className="col-help-wrap">
+                    <HelpLabel
+                      label="Marg. Var"
+                      plain="Raw contribution of this factor to portfolio variance, including covariance effects."
+                      math="MVC_f = h_f × (Fh)_f"
+                      interpret={{
+                        lookFor: "Very large positives and unexpected negatives.",
+                        good: "Signs and magnitude are consistent with your covariance structure.",
+                        distribution: "Can be negative for hedging factors due to correlations.",
+                      }}
+                    />
+                    {arrow("marginal_var_contrib")}
+                  </span>
+                </th>
+                <th className="text-right" onClick={() => handleSort("pct_of_total")}>
+                  <span className="col-help-wrap">
+                    <HelpLabel
+                      label="% Total"
+                      plain="Share of total portfolio variance attributed to this factor."
+                      math="%_f = MVC_f / total variance"
+                      interpret={{
+                        lookFor: "Top contributors and whether negatives are true hedges.",
+                        good: "No unintended single-factor dominance unless by design.",
+                        distribution: "A balanced spread usually indicates better diversification.",
+                      }}
+                    />
+                    {arrow("pct_of_total")}
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -95,7 +270,18 @@ export default function RiskPage() {
       </div>
 
       <div className="chart-card">
-        <h3>Factor Correlation Heatmap</h3>
+        <h3>
+          <HelpLabel
+            label="Factor Correlation Heatmap"
+            plain="Shows how factor returns move together."
+            math="corr(factor_return_i, factor_return_j)"
+            interpret={{
+              lookFor: "Large blocks of very high positive or negative correlation.",
+              good: "Mostly moderate correlations with intuitive clusters.",
+              distribution: "A broad spread around 0 usually means better diversification potential.",
+            }}
+          />
+        </h3>
         <CovarianceHeatmap data={cov} />
       </div>
     </div>

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routes.portfolio import router as portfolio_router
 from routes.exposures import router as exposures_router
+from routes.health import router as health_router
 from routes.risk import router as risk_router
 from routes.refresh import router as refresh_router
 from routes.universe import router as universe_router
@@ -20,6 +21,7 @@ app.add_middleware(
 
 app.include_router(portfolio_router, prefix="/api")
 app.include_router(exposures_router, prefix="/api")
+app.include_router(health_router, prefix="/api")
 app.include_router(risk_router, prefix="/api")
 app.include_router(refresh_router, prefix="/api")
 app.include_router(universe_router, prefix="/api")
