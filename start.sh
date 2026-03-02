@@ -73,18 +73,31 @@ FRONTEND_PID=$!
 
 # --- Wait for backend, then refresh ---
 echo "Waiting for backend..."
+BACKEND_READY=0
 for i in $(seq 1 30); do
   if curl -s "http://localhost:$BACKEND_PORT/api/health" >/dev/null 2>&1; then
+    BACKEND_READY=1
     echo "Backend ready. Triggering data refresh..."
-    curl -s -X POST "http://localhost:$BACKEND_PORT/api/refresh" | python3 -m json.tool 2>/dev/null || true
+    if ! curl -sf -X POST "http://localhost:$BACKEND_PORT/api/refresh" | python3 -m json.tool 2>/dev/null; then
+      echo "ERROR: Refresh failed."
+      exit 1
+    fi
     break
   fi
   sleep 1
 done
 
+if [ "$BACKEND_READY" -ne 1 ]; then
+  echo "ERROR: Backend did not become ready on :$BACKEND_PORT"
+  exit 1
+fi
+
 # --- Validate refresh/cache state ---
 echo "Checking cached portfolio payload..."
-curl -sf "http://localhost:$BACKEND_PORT/api/portfolio" >/dev/null
+if ! curl -sf "http://localhost:$BACKEND_PORT/api/portfolio" >/dev/null; then
+  echo "ERROR: Portfolio endpoint unavailable after refresh."
+  exit 1
+fi
 
 echo ""
 echo "==================================="
