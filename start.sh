@@ -77,9 +77,9 @@ BACKEND_READY=0
 for i in $(seq 1 30); do
   if curl -s "http://localhost:$BACKEND_PORT/api/health" >/dev/null 2>&1; then
     BACKEND_READY=1
-    echo "Backend ready. Triggering data refresh..."
-    if ! curl -sf -X POST "http://localhost:$BACKEND_PORT/api/refresh" | python3 -m json.tool 2>/dev/null; then
-      echo "ERROR: Refresh failed."
+    echo "Backend ready. Triggering light refresh..."
+    if ! curl -sf -X POST "http://localhost:$BACKEND_PORT/api/refresh?mode=light" | python3 -m json.tool 2>/dev/null; then
+      echo "ERROR: Light refresh failed."
       exit 1
     fi
     break

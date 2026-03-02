@@ -77,7 +77,7 @@ export function useHealthDiagnostics() {
   return useSWR<HealthDiagnosticsData>("/api/health/diagnostics", fetcher, SWR_OPTS);
 }
 
-export async function triggerRefresh(): Promise<{ status: string }> {
-  const res = await fetch("/api/refresh", { method: "POST" });
+export async function triggerRefresh(mode: "full" | "light" = "full"): Promise<{ status: string }> {
+  const res = await fetch(`/api/refresh?mode=${mode}`, { method: "POST" });
   return res.json();
 }

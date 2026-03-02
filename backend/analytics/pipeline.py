@@ -724,9 +724,21 @@ def _compute_position_risk_mix(
     return out
 
 
-def run_refresh(*, force_risk_recompute: bool = False) -> dict[str, Any]:
-    """Full pipeline: weekly risk-engine recompute + daily loadings/cache refresh."""
+def run_refresh(
+    *,
+    force_risk_recompute: bool = False,
+    mode: str = "full",
+) -> dict[str, Any]:
+    """Pipeline refresh with two modes:
+    - full: weekly-gated risk engine + all downstream caches (including health diagnostics)
+    - light: fast cache refresh path; skips health diagnostics and avoids risk recompute
+      unless core risk caches are missing.
+    """
     logger.info("Starting refresh pipeline...")
+    refresh_mode = str(mode or "full").strip().lower()
+    if refresh_mode not in {"full", "light"}:
+        refresh_mode = "full"
+    light_mode = refresh_mode == "light"
 
     refresh_started_at = datetime.now(timezone.utc).isoformat()
     today_utc = datetime.now(timezone.utc).date()
@@ -744,6 +756,9 @@ def run_refresh(*, force_risk_recompute: bool = False) -> dict[str, Any]:
     # 2. Weekly risk-engine recompute gate.
     risk_engine_meta = sqlite.cache_get("risk_engine_meta") or {}
     should_recompute, recompute_reason = _risk_recompute_due(risk_engine_meta, today_utc=today_utc)
+    if light_mode:
+        should_recompute = False
+        recompute_reason = "light_mode_skip"
     if force_risk_recompute:
         should_recompute = True
         recompute_reason = "force_risk_recompute"
@@ -753,10 +768,10 @@ def run_refresh(*, force_risk_recompute: bool = False) -> dict[str, Any]:
     specific_risk_by_ticker = cached_specific if isinstance(cached_specific, dict) else {}
     latest_r2 = _finite_float(risk_engine_meta.get("latest_r2"), 0.0)
 
-    if not should_recompute and cov.empty:
+    if cov.empty:
         should_recompute = True
         recompute_reason = "missing_covariance_cache"
-    if not should_recompute and not isinstance(cached_specific, dict):
+    if not isinstance(cached_specific, dict):
         should_recompute = True
         recompute_reason = "missing_specific_risk_cache"
 
@@ -795,7 +810,7 @@ def run_refresh(*, force_risk_recompute: bool = False) -> dict[str, Any]:
         recomputed_this_refresh = True
     else:
         logger.info(
-            "Skipping risk-engine recompute (%s). Reusing weekly cached covariance/specific risk.",
+            "Skipping risk-engine recompute (%s). Reusing cached covariance/specific risk.",
             recompute_reason,
         )
 
@@ -958,15 +973,20 @@ def run_refresh(*, force_risk_recompute: bool = False) -> dict[str, Any]:
         eligibility_summary=eligibility_summary,
     )
     sqlite.cache_set("model_sanity", sanity)
-    sqlite.cache_set("health_diagnostics", compute_health_diagnostics(DATA_DB, CACHE_DB))
+    health_refreshed = False
+    if not light_mode:
+        sqlite.cache_set("health_diagnostics", compute_health_diagnostics(DATA_DB, CACHE_DB))
+        health_refreshed = True
     sqlite.cache_set(
         "refresh_meta",
         {
             "status": "ok",
+            "mode": refresh_mode,
             "refresh_started_at": refresh_started_at,
             "source_dates": source_dates,
             "risk_engine": risk_engine_state,
             "model_sanity_status": sanity.get("status"),
+            "health_refreshed": bool(health_refreshed),
         },
     )
 
@@ -975,6 +995,8 @@ def run_refresh(*, force_risk_recompute: bool = False) -> dict[str, Any]:
         "status": "ok",
         "positions": len(positions),
         "total_value": round(total_value, 2),
+        "mode": refresh_mode,
         "risk_engine": risk_engine_state,
         "model_sanity": sanity,
+        "health_refreshed": bool(health_refreshed),
     }
