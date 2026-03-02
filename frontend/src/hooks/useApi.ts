@@ -12,7 +12,7 @@ import type {
   HealthDiagnosticsData,
 } from "@/lib/types";
 
-const REQUEST_TIMEOUT_MS = 8000;
+const REQUEST_TIMEOUT_MS = 30000;
 
 const fetcher = async (url: string) => {
   const controller = new AbortController();
@@ -29,9 +29,11 @@ const fetcher = async (url: string) => {
 };
 
 const SWR_OPTS = {
-  revalidateOnFocus: false,
-  shouldRetryOnError: false,
-  errorRetryCount: 0,
+  revalidateOnFocus: true,
+  shouldRetryOnError: true,
+  errorRetryCount: 3,
+  errorRetryInterval: 5000,
+  refreshInterval: 15000,
 };
 
 export function usePortfolio() {

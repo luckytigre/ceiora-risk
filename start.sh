@@ -17,6 +17,23 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+kill_port_listener() {
+  local port="$1"
+  local pids
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  if [ -n "$pids" ]; then
+    echo "Port $port in use by PID(s): $pids. Stopping stale listener(s)..."
+    kill $pids 2>/dev/null || true
+    sleep 1
+    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+    if [ -n "$pids" ]; then
+      echo "Force stopping PID(s) on port $port: $pids"
+      kill -9 $pids 2>/dev/null || true
+      sleep 1
+    fi
+  fi
+}
+
 # --- Check .env ---
 if [ ! -f "$DIR/backend/.env" ]; then
   if [ -f "$DIR/.env" ]; then
@@ -40,11 +57,9 @@ if ! python3 -c "import fastapi; import psycopg; import pydantic" 2>/dev/null; t
   (cd "$DIR/backend" && pip install -e ".[dev]" -q)
 fi
 
-# --- Check port conflict ---
-if lsof -i :"$BACKEND_PORT" >/dev/null 2>&1; then
-  echo "ERROR: Port $BACKEND_PORT already in use. Stop the other process first."
-  exit 1
-fi
+# --- Clear stale listeners on target ports ---
+kill_port_listener "$BACKEND_PORT"
+kill_port_listener "$FRONTEND_PORT"
 
 # --- Start backend ---
 echo "Starting backend on :$BACKEND_PORT..."
@@ -66,6 +81,10 @@ for i in $(seq 1 30); do
   fi
   sleep 1
 done
+
+# --- Validate refresh/cache state ---
+echo "Checking cached portfolio payload..."
+curl -sf "http://localhost:$BACKEND_PORT/api/portfolio" >/dev/null
 
 echo ""
 echo "==================================="
