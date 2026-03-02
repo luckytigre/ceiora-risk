@@ -19,6 +19,9 @@ SQLITE_PATH = os.getenv("SQLITE_CACHE_PATH", "cache.db")
 # Analytics
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "504"))  # ~2 years trading days
 ANNUALIZATION_FACTOR = 252
+RISK_RECOMPUTE_INTERVAL_DAYS = int(os.getenv("RISK_RECOMPUTE_INTERVAL_DAYS", "7"))
+# Minimum calendar age of exposure snapshot used for cross-sectional regressions.
+CROSS_SECTION_MIN_AGE_DAYS = int(os.getenv("CROSS_SECTION_MIN_AGE_DAYS", "7"))
 
 
 def pg_dsn() -> str:

@@ -151,14 +151,6 @@ def resolve_ric_map(
 
         unresolved = [t for t in ticker_list if t not in resolved]
 
-    # fallback for remaining names so downstream pulls still run
-    fallback_suffix = probe_suffixes[0] if probe_suffixes else ".O"
-    for t in unresolved:
-        ric = t if "." in t else f"{t}{fallback_suffix}"
-        ric = ric.strip().upper()
-        resolved[t] = ric
-        upserts.append((t, ric, f"fallback:{fallback_suffix or 'plain'}", 0, as_of_date, source, updated_at))
-
     _upsert_ric_map(conn, upserts)
     conn.commit()
     return resolved

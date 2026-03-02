@@ -35,7 +35,7 @@ STYLE_SCORE_COLS = list(STYLE_COLUMN_TO_LABEL.keys())
 RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v8_strict_eligibility_2026_03_02"
+CACHE_METHOD_VERSION = "v9_strict_eligibility_weekly_lagged_2026_03_02"
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
@@ -106,6 +106,16 @@ def _winsorize_cross_section(values: np.ndarray, pct: float) -> np.ndarray:
     hi = float(np.nanpercentile(out[finite], (1.0 - pct) * 100.0))
     out[finite] = np.clip(out[finite], lo, hi)
     return out
+
+
+def _shift_date_by_days(date_key: str, days: int) -> str:
+    shift = max(0, int(days))
+    if shift <= 0:
+        return str(date_key)
+    ts = pd.to_datetime(str(date_key), errors="coerce")
+    if pd.isna(ts):
+        return str(date_key)
+    return str((ts - pd.Timedelta(days=shift)).date())
 
 
 def _load_prices(data_db: Path) -> pd.DataFrame:
@@ -291,6 +301,8 @@ def compute_daily_factor_returns(
     data_db: Path,
     cache_db: Path,
     lookback_days: int = 0,
+    *,
+    min_cross_section_age_days: int = 7,
 ) -> pd.DataFrame:
     """Compute daily factor returns via cross-sectional WLS for every trading day.
 
@@ -298,6 +310,8 @@ def compute_daily_factor_returns(
         data_db: Path to data.db with prices, exposures, fundamentals.
         cache_db: Path to cache.db for incremental storage.
         lookback_days: If >0, only compute the last N trading days. 0 = all.
+        min_cross_section_age_days: Minimum age (calendar days) of exposure
+            snapshots used for each regression date.
 
     Returns:
         DataFrame with columns: date, factor_name, factor_return, r_squared, residual_vol
@@ -337,7 +351,9 @@ def compute_daily_factor_returns(
     )
 
     # Centralized structural-eligibility context for all daily cross-sections.
-    eligibility_ctx = build_eligibility_context(data_db, dates=trading_dates)
+    lag_days = max(0, int(min_cross_section_age_days))
+    eligibility_dates = [_shift_date_by_days(d, lag_days) for d in trading_dates]
+    eligibility_ctx = build_eligibility_context(data_db, dates=eligibility_dates)
     if not eligibility_ctx.exposure_dates:
         logger.warning("No exposure snapshots available — cannot compute daily factor returns")
         return pd.DataFrame(columns=["date", "factor_name", "factor_return", "r_squared", "residual_vol"])
@@ -358,7 +374,9 @@ def compute_daily_factor_returns(
         ret_row = ret_row[np.isfinite(ret_row.to_numpy(dtype=float))]
 
         # 2. Structural eligibility for this date from centralized context.
-        exp_date, eligibility = structural_eligibility_for_date(eligibility_ctx, date)
+        # Enforce minimum cross-section age by resolving eligibility at (date - lag_days).
+        eligibility_date = _shift_date_by_days(date, lag_days)
+        exp_date, eligibility = structural_eligibility_for_date(eligibility_ctx, eligibility_date)
         if exp_date is None or eligibility.empty:
             batch_eligibility.append({
                 "date": date,

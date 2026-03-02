@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 DATA_DB = Path(__file__).resolve().parent.parent / "data.db"
 CACHE_DB = Path(config.SQLITE_PATH)
+RISK_ENGINE_METHOD_VERSION = "v1_weekly_recompute_lagged_cross_section_2026_03_02"
 
 
 def _finite_float(value: Any, default: float = 0.0) -> float:
@@ -38,6 +40,121 @@ def _finite_float(value: Any, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return float(default)
     return out if np.isfinite(out) else float(default)
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _serialize_covariance(cov: pd.DataFrame) -> dict[str, Any]:
+    if cov is None or cov.empty:
+        return {"factors": [], "matrix": []}
+    factors = [str(c) for c in cov.columns]
+    mat = cov.reindex(index=factors, columns=factors).to_numpy(dtype=float)
+    return {
+        "factors": factors,
+        "matrix": [[_finite_float(v, 0.0) for v in row] for row in mat.tolist()],
+    }
+
+
+def _deserialize_covariance(payload: Any) -> pd.DataFrame:
+    if not isinstance(payload, dict):
+        return pd.DataFrame()
+    factors = [str(f) for f in (payload.get("factors") or []) if str(f).strip()]
+    matrix = payload.get("matrix") or []
+    if not factors or not isinstance(matrix, list):
+        return pd.DataFrame()
+    try:
+        arr = np.asarray(matrix, dtype=float)
+    except Exception:
+        return pd.DataFrame()
+    if arr.ndim != 2 or arr.shape[0] != len(factors) or arr.shape[1] != len(factors):
+        return pd.DataFrame()
+    return pd.DataFrame(arr, index=factors, columns=factors)
+
+
+def _latest_factor_return_date(cache_db: Path) -> str | None:
+    conn = sqlite3.connect(str(cache_db))
+    try:
+        row = conn.execute("SELECT MAX(date) FROM daily_factor_returns").fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return None
+    return str(row[0])
+
+
+def _risk_recompute_due(meta: dict[str, Any], *, today_utc: date) -> tuple[bool, str]:
+    if not meta:
+        return True, "missing_meta"
+    if str(meta.get("method_version") or "") != RISK_ENGINE_METHOD_VERSION:
+        return True, "method_version_change"
+    last_recompute = _parse_iso_date(meta.get("last_recompute_date"))
+    if last_recompute is None:
+        return True, "missing_last_recompute_date"
+    interval = max(1, int(config.RISK_RECOMPUTE_INTERVAL_DAYS))
+    if (today_utc - last_recompute).days >= interval:
+        return True, f"interval_elapsed_{interval}d"
+    return False, "within_interval"
+
+
+def _build_model_sanity_report(
+    *,
+    risk_shares: dict[str, float],
+    factor_details: list[dict[str, Any]],
+    eligibility_summary: dict[str, Any],
+) -> dict[str, Any]:
+    warnings: list[str] = []
+
+    regression_cov = _finite_float(eligibility_summary.get("regression_coverage"), 0.0)
+    if regression_cov < 0.20:
+        warnings.append(
+            f"Low regression coverage on latest usable date: {regression_cov * 100.0:.1f}%."
+        )
+
+    drop_pct = _finite_float(eligibility_summary.get("drop_pct_from_prev"), 0.0)
+    if drop_pct > 0.10:
+        warnings.append(
+            f"Eligible universe dropped {drop_pct * 100.0:.1f}% vs previous cross-section."
+        )
+
+    industry_pct = _finite_float(risk_shares.get("industry"), 0.0)
+    style_pct = _finite_float(risk_shares.get("style"), 0.0)
+    if industry_pct > 90.0:
+        warnings.append(f"Industry risk share is highly concentrated at {industry_pct:.1f}% of total risk.")
+    if style_pct > 90.0:
+        warnings.append(f"Style risk share is highly concentrated at {style_pct:.1f}% of total risk.")
+
+    sign_mismatch = 0
+    for row in factor_details:
+        exp = _finite_float(row.get("exposure"), 0.0)
+        sens = _finite_float(row.get("sensitivity"), 0.0)
+        if abs(exp) > 1e-12 and abs(sens) > 1e-12 and (exp * sens) < 0:
+            sign_mismatch += 1
+    if sign_mismatch > 0:
+        warnings.append(
+            f"{sign_mismatch} factors have exposure/sensitivity sign mismatch; expected same sign."
+        )
+
+    return {
+        "status": "warn" if warnings else "ok",
+        "warnings": warnings,
+        "checks": {
+            "factor_sign_mismatch_count": int(sign_mismatch),
+            "latest_regression_coverage_pct": round(regression_cov * 100.0, 2),
+            "latest_structural_eligible_n": int(eligibility_summary.get("structural_eligible_n", 0) or 0),
+            "industry_risk_share_pct": round(industry_pct, 2),
+            "style_risk_share_pct": round(style_pct, 2),
+            "idio_risk_share_pct": round(_finite_float(risk_shares.get("idio"), 0.0), 2),
+        },
+    }
 
 
 def _build_universe_ticker_loadings(
@@ -107,19 +224,6 @@ def _build_universe_ticker_loadings(
     if latest_asof:
         elig_ctx = build_eligibility_context(DATA_DB, dates=[latest_asof])
         _, eligibility_df = structural_eligibility_for_date(elig_ctx, latest_asof)
-    if eligibility_df.empty and not exposures_df.empty:
-        # If eligibility context has no dates yet, treat everyone as ineligible.
-        fallback_idx = pd.Index(exposures_df["ticker"].astype(str).str.upper().unique(), name="ticker")
-        eligibility_df = pd.DataFrame(
-            {
-                "is_structural_eligible": False,
-                "exclusion_reason": "eligibility_unavailable",
-                "market_cap": np.nan,
-                "trbc_sector": "",
-                "trbc_industry_group": "",
-            },
-            index=fallback_idx,
-        )
 
     eligible_mask = eligibility_df.get("is_structural_eligible", pd.Series(dtype=bool)).astype(bool)
     eligible_tickers = set(eligibility_df.index[eligible_mask].astype(str))
@@ -359,10 +463,21 @@ def _load_latest_eligibility_summary(cache_db: Path) -> dict[str, Any]:
             SELECT date, exp_date, exposure_n, structural_eligible_n, regression_member_n,
                    structural_coverage, regression_coverage, drop_pct_from_prev, alert_level
             FROM daily_universe_eligibility_summary
+            WHERE regression_member_n > 0
             ORDER BY date DESC
             LIMIT 1
             """
         ).fetchone()
+        if row is None:
+            row = conn.execute(
+                """
+                SELECT date, exp_date, exposure_n, structural_eligible_n, regression_member_n,
+                       structural_coverage, regression_coverage, drop_pct_from_prev, alert_level
+                FROM daily_universe_eligibility_summary
+                ORDER BY date DESC
+                LIMIT 1
+                """
+            ).fetchone()
     except sqlite3.OperationalError:
         row = None
     finally:
@@ -609,15 +724,14 @@ def _compute_position_risk_mix(
     return out
 
 
-def run_refresh() -> dict[str, Any]:
-    """Full pipeline: compute daily factor returns → covariance → risk → cache."""
+def run_refresh(*, force_risk_recompute: bool = False) -> dict[str, Any]:
+    """Full pipeline: weekly risk-engine recompute + daily loadings/cache refresh."""
     logger.info("Starting refresh pipeline...")
 
-    # 1. Ensure daily factor returns are computed (incremental)
-    logger.info("Computing daily factor returns (incremental)...")
-    compute_daily_factor_returns(DATA_DB, CACHE_DB)
+    refresh_started_at = datetime.now(timezone.utc).isoformat()
+    today_utc = datetime.now(timezone.utc).date()
 
-    # 2. Fetch full-universe data from local data.db
+    # 1. Fetch full-universe data from local data.db
     logger.info("Fetching data from local database...")
     source_dates = postgres.load_source_dates()
     fundamentals_asof = source_dates.get("exposures_asof")
@@ -627,18 +741,65 @@ def run_refresh() -> dict[str, Any]:
     )
     exposures_universe_df = postgres.load_barra_exposures()
 
-    # 4. Build factor covariance from daily factor returns (504-day lookback)
-    logger.info("Computing factor covariance from daily returns...")
-    cov, latest_r2 = build_factor_covariance_from_cache(
-        CACHE_DB, lookback_days=config.LOOKBACK_DAYS
-    )
-    logger.info("Computing stock-level specific risk from residual history...")
-    specific_risk_by_ticker = build_specific_risk_from_cache(
-        CACHE_DB,
-        lookback_days=config.LOOKBACK_DAYS,
-    )
+    # 2. Weekly risk-engine recompute gate.
+    risk_engine_meta = sqlite.cache_get("risk_engine_meta") or {}
+    should_recompute, recompute_reason = _risk_recompute_due(risk_engine_meta, today_utc=today_utc)
+    if force_risk_recompute:
+        should_recompute = True
+        recompute_reason = "force_risk_recompute"
 
-    # 5. Build/cached full-universe loadings first (portfolio is a final projection only).
+    cov = _deserialize_covariance(sqlite.cache_get("risk_engine_cov"))
+    cached_specific = sqlite.cache_get("risk_engine_specific_risk")
+    specific_risk_by_ticker = cached_specific if isinstance(cached_specific, dict) else {}
+    latest_r2 = _finite_float(risk_engine_meta.get("latest_r2"), 0.0)
+
+    if not should_recompute and cov.empty:
+        should_recompute = True
+        recompute_reason = "missing_covariance_cache"
+    if not should_recompute and not isinstance(cached_specific, dict):
+        should_recompute = True
+        recompute_reason = "missing_specific_risk_cache"
+
+    recomputed_this_refresh = False
+    if should_recompute:
+        logger.info(
+            "Recomputing risk engine (%s): daily factor returns -> covariance -> specific risk",
+            recompute_reason,
+        )
+        compute_daily_factor_returns(
+            DATA_DB,
+            CACHE_DB,
+            min_cross_section_age_days=config.CROSS_SECTION_MIN_AGE_DAYS,
+        )
+        cov, latest_r2 = build_factor_covariance_from_cache(
+            CACHE_DB, lookback_days=config.LOOKBACK_DAYS
+        )
+        specific_risk_by_ticker = build_specific_risk_from_cache(
+            CACHE_DB,
+            lookback_days=config.LOOKBACK_DAYS,
+        )
+        risk_engine_meta = {
+            "status": "ok",
+            "method_version": RISK_ENGINE_METHOD_VERSION,
+            "last_recompute_date": today_utc.isoformat(),
+            "factor_returns_latest_date": _latest_factor_return_date(CACHE_DB),
+            "lookback_days": int(config.LOOKBACK_DAYS),
+            "cross_section_min_age_days": int(config.CROSS_SECTION_MIN_AGE_DAYS),
+            "recompute_interval_days": int(config.RISK_RECOMPUTE_INTERVAL_DAYS),
+            "latest_r2": float(latest_r2),
+            "specific_risk_ticker_count": int(len(specific_risk_by_ticker)),
+        }
+        sqlite.cache_set("risk_engine_cov", _serialize_covariance(cov))
+        sqlite.cache_set("risk_engine_specific_risk", specific_risk_by_ticker)
+        sqlite.cache_set("risk_engine_meta", risk_engine_meta)
+        recomputed_this_refresh = True
+    else:
+        logger.info(
+            "Skipping risk-engine recompute (%s). Reusing weekly cached covariance/specific risk.",
+            recompute_reason,
+        )
+
+    # 3. Build/cached full-universe loadings first (portfolio is a final projection only).
     logger.info("Building full-universe ticker loadings...")
     universe_loadings = _build_universe_ticker_loadings(
         exposures_universe_df,
@@ -648,11 +809,11 @@ def run_refresh() -> dict[str, Any]:
         specific_risk_by_ticker=specific_risk_by_ticker,
     )
 
-    # 6. Project held positions from full-universe cache
+    # 4. Project held positions from full-universe cache
     logger.info("Projecting held positions from full-universe cache...")
     positions, total_value = _build_positions_from_universe(universe_loadings["by_ticker"])
 
-    # 7. Risk decomposition
+    # 5. Risk decomposition
     logger.info("Computing risk decomposition...")
     risk_shares, component_shares, factor_details = risk_decomposition(
         cov=cov,
@@ -665,7 +826,7 @@ def run_refresh() -> dict[str, Any]:
         specific_risk_by_ticker=specific_risk_by_ticker,
     )
 
-    # 8. Compute per-position risk contributions
+    # 6. Compute per-position risk contributions
     for pos in positions:
         exps = pos.get("exposures", {})
         risk_score = sum(
@@ -679,7 +840,7 @@ def run_refresh() -> dict[str, Any]:
             "idio": 0.0,
         }))
 
-    # 9. Compute condition number from cov matrix
+    # 7. Compute condition number from cov matrix
     condition_number = 0.0
     if not cov.empty:
         try:
@@ -688,7 +849,7 @@ def run_refresh() -> dict[str, Any]:
         except Exception:
             pass
 
-    # 10. Compute exposure modes
+    # 8. Compute exposure modes
     logger.info("Computing exposure modes...")
     coverage_date, factor_coverage = _load_latest_factor_coverage(CACHE_DB)
     exposure_modes = _compute_exposures_modes(
@@ -699,7 +860,7 @@ def run_refresh() -> dict[str, Any]:
         coverage_date=coverage_date,
     )
 
-    # 11. Build covariance matrix for frontend (correlation) — style factors only
+    # 9. Build covariance matrix for frontend (correlation) — style factors only
     STYLE_FACTOR_NAMES = {
         "Size", "Nonlinear Size", "Liquidity", "Beta",
         "Book-to-Price", "Earnings Yield", "Value", "Leverage",
@@ -722,7 +883,7 @@ def run_refresh() -> dict[str, Any]:
                 "correlation": [[round(float(v), 4) for v in row] for row in corr],
             }
 
-    # 12. Sanitize non-finite floats (NaN/Inf break JSON serialization)
+    # 10. Sanitize non-finite floats (NaN/Inf break JSON serialization)
     def _safe(v):
         if isinstance(v, float) and not np.isfinite(v):
             return 0.0
@@ -736,12 +897,26 @@ def run_refresh() -> dict[str, Any]:
     for k in component_shares:
         component_shares[k] = _safe(component_shares[k])
 
-    # 13. Cache everything
+    # 11. Cache everything
     logger.info("Caching results...")
+    risk_engine_state = {
+        "status": str(risk_engine_meta.get("status") or "unknown"),
+        "method_version": str(risk_engine_meta.get("method_version") or ""),
+        "last_recompute_date": str(risk_engine_meta.get("last_recompute_date") or ""),
+        "factor_returns_latest_date": risk_engine_meta.get("factor_returns_latest_date"),
+        "cross_section_min_age_days": int(risk_engine_meta.get("cross_section_min_age_days") or 0),
+        "recompute_interval_days": int(risk_engine_meta.get("recompute_interval_days") or 0),
+        "lookback_days": int(risk_engine_meta.get("lookback_days") or 0),
+        "specific_risk_ticker_count": int(risk_engine_meta.get("specific_risk_ticker_count") or 0),
+        "recomputed_this_refresh": bool(recomputed_this_refresh),
+        "recompute_reason": str(recompute_reason),
+    }
     portfolio_data = {
         "positions": positions,
         "total_value": round(total_value, 2),
         "position_count": len(positions),
+        "refresh_started_at": refresh_started_at,
+        "source_dates": source_dates,
     }
     sqlite.cache_set("portfolio", portfolio_data)
 
@@ -752,9 +927,14 @@ def run_refresh() -> dict[str, Any]:
         "cov_matrix": cov_matrix,
         "r_squared": round(latest_r2, 4),
         "condition_number": round(condition_number, 2),
+        "risk_engine": risk_engine_state,
+        "refresh_started_at": refresh_started_at,
     }
     sqlite.cache_set("risk", risk_data)
 
+    universe_loadings["risk_engine"] = risk_engine_state
+    universe_loadings["refresh_started_at"] = refresh_started_at
+    universe_loadings["source_dates"] = source_dates
     sqlite.cache_set("universe_loadings", universe_loadings)
     sqlite.cache_set(
         "universe_factors",
@@ -765,11 +945,36 @@ def run_refresh() -> dict[str, Any]:
             "condition_number": round(condition_number, 2),
             "ticker_count": universe_loadings.get("ticker_count", 0),
             "eligible_ticker_count": universe_loadings.get("eligible_ticker_count", 0),
+            "risk_engine": risk_engine_state,
+            "refresh_started_at": refresh_started_at,
         },
     )
     sqlite.cache_set("exposures", exposure_modes)
-    sqlite.cache_set("eligibility", _load_latest_eligibility_summary(CACHE_DB))
+    eligibility_summary = _load_latest_eligibility_summary(CACHE_DB)
+    sqlite.cache_set("eligibility", eligibility_summary)
+    sanity = _build_model_sanity_report(
+        risk_shares=risk_shares,
+        factor_details=factor_details,
+        eligibility_summary=eligibility_summary,
+    )
+    sqlite.cache_set("model_sanity", sanity)
     sqlite.cache_set("health_diagnostics", compute_health_diagnostics(DATA_DB, CACHE_DB))
+    sqlite.cache_set(
+        "refresh_meta",
+        {
+            "status": "ok",
+            "refresh_started_at": refresh_started_at,
+            "source_dates": source_dates,
+            "risk_engine": risk_engine_state,
+            "model_sanity_status": sanity.get("status"),
+        },
+    )
 
     logger.info("Refresh complete.")
-    return {"status": "ok", "positions": len(positions), "total_value": round(total_value, 2)}
+    return {
+        "status": "ok",
+        "positions": len(positions),
+        "total_value": round(total_value, 2),
+        "risk_engine": risk_engine_state,
+        "model_sanity": sanity,
+    }

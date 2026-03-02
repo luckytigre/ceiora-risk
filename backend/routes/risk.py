@@ -17,6 +17,8 @@ async def get_risk():
             "cov_matrix": {},
             "r_squared": 0.0,
             "condition_number": 0.0,
+            "model_sanity": {"status": "no-data", "warnings": [], "checks": {}},
             "_cached": False,
         }
-    return {**data, "_cached": True}
+    sanity = cache_get("model_sanity") or {"status": "no-data", "warnings": [], "checks": {}}
+    return {**data, "model_sanity": sanity, "_cached": True}

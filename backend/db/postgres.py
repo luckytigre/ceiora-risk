@@ -1,6 +1,6 @@
 """Data queries for Barra dashboard.
 
-Reads from local data.db maintained by scripts/download_data.py
+Reads from local data.db maintained by scripts/download_data_lseg.py
 (LSEG gatherer by default; legacy Postgres snapshot optional).
 """
 

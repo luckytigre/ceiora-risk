@@ -31,7 +31,7 @@ Ensure every cross-section (`ticker`, `as_of_date`) has a point-in-time LSEG TRB
    - `python -c "from analytics.pipeline import run_refresh; print(run_refresh())"` (from `backend/`)
 
 ## Modeling Behavior
-- `daily_factor_returns.py` prefers `trbc_industry_history` by exact `as_of_date` when building each exposure snapshot.
-- If history is absent for a date/ticker, it falls back to `barra_exposures.trbc_industry_group`, then `Unmapped`.
-- `run_refresh()` loads fundamentals aligned to `exposures_asof` and overlays latest TRBC history up to that same date.
+- Structural eligibility is strict: a name is included only when style fields, market cap, TRBC sector, and TRBC industry are all present at that date.
+- `daily_factor_returns.py` uses a minimum 7-day cross-section age (`date - 7d`) for regressions and does not use `Unmapped` fallback.
+- `run_refresh()` updates loadings daily from latest snapshots but recomputes risk-engine internals (factor returns/covariance/specific risk) on a weekly cadence by default.
 - `fundamental_snapshots.trbc_sector` and `fundamental_snapshots.trbc_industry_group` are convenience copies for UI/search and should not be treated as the canonical PIT source for regressions.
