@@ -96,6 +96,23 @@ export interface RiskData {
   cov_matrix: CovMatrix;
   r_squared: number;
   condition_number: number;
+  risk_engine?: {
+    status?: string;
+    method_version?: string;
+    last_recompute_date?: string;
+    factor_returns_latest_date?: string;
+    cross_section_min_age_days?: number;
+    recompute_interval_days?: number;
+    lookback_days?: number;
+    specific_risk_ticker_count?: number;
+    recomputed_this_refresh?: boolean;
+    recompute_reason?: string;
+  };
+  model_sanity?: {
+    status?: string;
+    warnings?: string[];
+    checks?: Record<string, number>;
+  };
   _cached: boolean;
 }
 

@@ -15,6 +15,13 @@ function fmt(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+function fmtAsOfDate(isoDate?: string): string {
+  if (!isoDate) return "N/A";
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" });
+}
+
 export default function OverviewPage() {
   const { data: portfolio, isLoading: pLoading } = usePortfolio();
   const { data: risk, isLoading: rLoading } = useRisk();
@@ -30,6 +37,8 @@ export default function OverviewPage() {
   const rSquared = risk?.r_squared ?? 0;
   const condNum = risk?.condition_number ?? 0;
   const riskShares = risk?.risk_shares ?? { industry: 0, style: 0, idio: 100 };
+  const modelAsOf = risk?.risk_engine?.factor_returns_latest_date;
+  const lagDays = risk?.risk_engine?.cross_section_min_age_days;
 
   const holdings = [...positions].sort((a, b) => b.market_value - a.market_value);
   const visibleHoldings = showAllHoldings ? holdings : holdings.slice(0, COLLAPSED_ROWS);
@@ -46,8 +55,8 @@ export default function OverviewPage() {
         />
         <KpiCard
           label="Data Age"
-          value={portfolio?._cached ? "Cached" : "Live"}
-          subtitle="From SQLite cache"
+          value={fmtAsOfDate(modelAsOf)}
+          subtitle={modelAsOf ? `Barra model as-of (${lagDays ?? 7}d lag)` : "Barra model as-of"}
         />
         <KpiCard
           label="Condition #"
