@@ -5,14 +5,14 @@ setup:
 	cd frontend && npm install
 
 backend:
-	cd backend && uvicorn main:app --reload --port 8000
+	cd backend && uvicorn main:app --reload --port 8001
 
 frontend:
-	cd frontend && npm run dev
+	cd frontend && npm run dev -- --port 3002
 
 dev:
 	@echo "Starting backend and frontend..."
 	$(MAKE) backend & $(MAKE) frontend & wait
 
 refresh:
-	curl -X POST http://localhost:8000/api/refresh
+	curl -X POST http://localhost:8001/api/refresh
