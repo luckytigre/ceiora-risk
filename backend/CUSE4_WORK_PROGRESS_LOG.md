@@ -147,3 +147,27 @@
   - canonical row counts: `security_master=2871`, `security_prices_eod=4967121`, `security_fundamentals_pit=11484`, `security_classification_pit=11484`
   - duplicate key checks: zero on all canonical time-series PKs
   - ESTU build on latest backfilled date (`2026-02-27`) succeeded (`estu_count=1930`)
+
+### Entry 11 - Rollback Extension to 2012 + Price Recovery
+- Executed PIT backfill extension (quarterly) for full universe to include pre-2016 history:
+  - date range loaded: `2012-03-30` through `2016-12-30`
+  - table outcomes:
+    - `security_fundamentals_pit = 66,033` rows (`2,871 x 23`)
+    - `security_classification_pit = 66,033` rows (`2,871 x 23`)
+- Executed daily price backfill extension:
+  - initial run range: `2012-01-01` through `2016-02-15`
+  - produced expected 2012-2016 coverage but surfaced a script-side truncation bug.
+- Root cause identified:
+  - `backfill_prices_range_lseg.py` used a global cleanup step deleting all rows with `date > end_date` at the end of the run.
+  - when run with `end_date=2016-02-15`, it unintentionally removed post-2016 prices.
+- Implemented fix in script:
+  - removed global post-run delete behavior.
+  - added per-row date bound filter so only in-range rows are upserted.
+- Performed full recovery by re-pulling from LSEG directly in manageable windows:
+  - recovery range: `2016-02-13` through `2026-03-03`
+  - `rows_upserted=5,398,488`, `failed_batches=0`
+- Final canonical audit after recovery and cleanup:
+  - `security_prices_eod`: `6,847,526` rows, `2,871` distinct SIDs, date range `2012-01-03` to `2026-03-03`
+  - `security_fundamentals_pit`: `66,033` rows, date range `2012-03-30` to `2026-02-27`
+  - `security_classification_pit`: `66,033` rows, date range `2012-03-30` to `2026-02-27`
+  - removed spillover rows before `2012-01-01` from prices (`10` rows deleted).
