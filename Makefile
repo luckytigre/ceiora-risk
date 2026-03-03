@@ -1,4 +1,4 @@
-.PHONY: dev backend frontend refresh setup universe rebuild-source cuse4-bootstrap cuse4-estu
+.PHONY: dev backend frontend refresh setup universe rebuild-source cuse4-bootstrap cuse4-estu universe-sync-xlsx
 
 setup:
 	cd backend && pip install -e ".[dev]"
@@ -28,3 +28,6 @@ cuse4-bootstrap:
 
 cuse4-estu:
 	python3 backend/scripts/build_cuse4_estu_membership.py --db-path backend/data.db
+
+universe-sync-xlsx:
+	python3 backend/scripts/sync_universe_from_holdings_xlsx.py --db-path backend/data.db --holdings-dir "Universe Candidates"

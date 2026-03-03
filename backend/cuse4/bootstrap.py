@@ -14,6 +14,8 @@ from cuse4.schema import (
     ensure_cuse4_schema,
 )
 
+UNIVERSE_CANDIDATE_TABLE = "universe_candidate_holdings"
+
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     row = conn.execute(
@@ -70,6 +72,20 @@ def _distinct_tickers(conn: sqlite3.Connection, table: str) -> set[str]:
         SELECT DISTINCT UPPER(ticker)
         FROM {table}
         WHERE ticker IS NOT NULL AND TRIM(ticker) <> ''
+        """
+    ).fetchall()
+    return {str(r[0]).upper() for r in rows if r and r[0]}
+
+
+def _candidate_universe_tickers(conn: sqlite3.Connection) -> set[str]:
+    if not _table_exists(conn, UNIVERSE_CANDIDATE_TABLE):
+        return set()
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT UPPER(TRIM(ticker)) AS ticker
+        FROM {UNIVERSE_CANDIDATE_TABLE}
+        WHERE ticker IS NOT NULL
+          AND TRIM(ticker) <> ''
         """
     ).fetchall()
     return {str(r[0]).upper() for r in rows if r and r[0]}
@@ -157,15 +173,16 @@ def _replace_rows(
 
 
 def _build_security_master_rows(conn: sqlite3.Connection, *, now_iso: str, job_run_id: str) -> list[tuple[Any, ...]]:
-    tickers = set()
-    for table in [
-        "ticker_ric_map",
-        "universe_eligibility_summary",
-        "fundamental_snapshots",
-        "trbc_industry_history",
-        "prices_daily",
-    ]:
-        tickers.update(_distinct_tickers(conn, table))
+    tickers = _candidate_universe_tickers(conn)
+    if not tickers:
+        for table in [
+            "ticker_ric_map",
+            "universe_eligibility_summary",
+            "fundamental_snapshots",
+            "trbc_industry_history",
+            "prices_daily",
+        ]:
+            tickers.update(_distinct_tickers(conn, table))
 
     universe_rows = _load_latest_universe_rows(conn)
     ric_rows = _load_ric_map_rows(conn)

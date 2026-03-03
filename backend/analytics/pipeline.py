@@ -795,7 +795,7 @@ def run_refresh(
             if bool(config.CUSE4_AUTO_BOOTSTRAP):
                 cuse4_bootstrap = bootstrap_cuse4_source_tables(
                     db_path=DATA_DB,
-                    replace_all=False,
+                    replace_all=True,
                 )
             estu_asof = (
                 source_dates.get("fundamentals_asof")

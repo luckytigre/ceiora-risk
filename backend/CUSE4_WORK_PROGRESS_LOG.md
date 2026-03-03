@@ -72,3 +72,21 @@
 - End-to-end refresh validation run:
   - `run_refresh(mode='light')`
   - Returned `status='ok'`, `cuse4_foundation_status='ok'`, and preserved normal portfolio/risk cache generation.
+
+### Entry 06 - Universe Constrained to User Holdings XLSX
+- Added strict universe sync script:
+  - `backend/scripts/sync_universe_from_holdings_xlsx.py`
+- Added `backend/data.db` raw candidate table:
+  - `universe_candidate_holdings`
+- Synced from `/Users/shaun/Dropbox (Personal)/040 - Creating/barra-dashboard/Universe Candidates` and enforced universe-only scope:
+  - `ticker_ric_map` replaced from candidate set
+  - `universe_eligibility_summary` replaced from candidate set
+  - `universe_constituent_snapshots` replaced from candidate set
+- Updated cUSE4 bootstrap behavior:
+  - if `universe_candidate_holdings` is present, `security_master` is built from those tickers only.
+- Rebuilt cUSE4 source + ESTU after sync.
+- Resulting constrained counts:
+  - `security_master`: 2,871
+  - `ticker_ric_map`: 2,871
+  - `universe_eligibility_summary` distinct tickers: 2,871
+  - `estu_membership_daily` latest date rows: 2,871

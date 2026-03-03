@@ -18,6 +18,8 @@
   - `python backend/scripts/bootstrap_cuse4_source_tables.py --db-path backend/data.db`
 - Build cUSE4 ESTU audit snapshot:
   - `python backend/scripts/build_cuse4_estu_membership.py --db-path backend/data.db`
+- Force universe scope from user-supplied holdings XLSX files:
+  - `python backend/scripts/sync_universe_from_holdings_xlsx.py --db-path backend/data.db --holdings-dir "Universe Candidates"`
 - Reset universe + source tables and rebuild current source-of-truth snapshot:
   - `python backend/scripts/reset_and_rebuild_source_of_truth.py --db-path backend/data.db --current-chain-ric .dMIUS000I0PUS --historical-index-ric .dMIUS000I0PUS --historical-date 2019-03-02`
 - TRBC historical backfill in 4 shards:
