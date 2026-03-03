@@ -34,6 +34,7 @@ def run_backfill(
     shard_count: int,
     max_retries: int,
     sleep_seconds: float,
+    rics_csv: str | None = None,
 ) -> dict[str, int | str]:
     dates = _quarterly_dates(start_date, end_date)
     if not dates:
@@ -53,6 +54,7 @@ def run_backfill(
                     out = download_from_lseg(
                         db_path=db_path,
                         as_of_date=d,
+                        rics_csv=rics_csv,
                         shard_count=int(shard_count),
                         shard_index=int(shard_idx),
                         skip_common_name_backfill=True,
@@ -111,6 +113,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--shard-count", type=int, default=6, help="Number of shards per date")
     p.add_argument("--max-retries", type=int, default=1, help="Retries per shard on failure")
     p.add_argument("--sleep-seconds", type=float, default=2.0, help="Sleep between retries")
+    p.add_argument("--rics", default=None, help="Optional comma-separated RIC subset")
     return p.parse_args()
 
 
@@ -123,5 +126,6 @@ if __name__ == "__main__":
         shard_count=max(1, int(args.shard_count)),
         max_retries=max(0, int(args.max_retries)),
         sleep_seconds=max(0.0, float(args.sleep_seconds)),
+        rics_csv=(str(args.rics).strip() if args.rics else None),
     )
     print(result)

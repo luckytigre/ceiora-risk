@@ -83,21 +83,34 @@ def backfill_prices(
     days_per_window: int,
     max_retries: int,
     sleep_seconds: float,
+    rics_csv: str | None = None,
 ) -> dict[str, int | str]:
     conn = _connect_db(db_path)
     ensure_cuse4_schema(conn)
 
     try:
+        where = [
+            "COALESCE(classification_ok, 0) = 1",
+            "COALESCE(is_equity_eligible, 0) = 1",
+            "ric IS NOT NULL",
+            "TRIM(ric) <> ''",
+        ]
+        params: list[Any] = []
+        if rics_csv:
+            req = [str(r).strip().upper() for r in str(rics_csv).split(",") if str(r).strip()]
+            if req:
+                placeholders = ",".join("?" for _ in req)
+                where.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
+                params.extend(req)
+
         universe = conn.execute(
             f"""
             SELECT sid, UPPER(TRIM(ric)) AS ric
             FROM {SECURITY_MASTER_TABLE}
-            WHERE COALESCE(classification_ok, 0) = 1
-              AND COALESCE(is_equity_eligible, 0) = 1
-              AND ric IS NOT NULL
-              AND TRIM(ric) <> ''
+            WHERE {' AND '.join(where)}
             ORDER BY ric
-            """
+            """,
+            params,
         ).fetchall()
         ric_to_sid = {str(r[1]): str(r[0]) for r in universe if r and r[0] and r[1]}
         rics = sorted(ric_to_sid.keys())
@@ -228,6 +241,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--days-per-window", type=int, default=180, help="Date window size in days")
     p.add_argument("--max-retries", type=int, default=1, help="Retries per failed batch")
     p.add_argument("--sleep-seconds", type=float, default=2.0, help="Sleep between retries")
+    p.add_argument("--rics", default=None, help="Optional comma-separated RIC subset")
     return p.parse_args()
 
 
@@ -241,5 +255,6 @@ if __name__ == "__main__":
         days_per_window=max(1, int(args.days_per_window)),
         max_retries=max(0, int(args.max_retries)),
         sleep_seconds=max(0.0, float(args.sleep_seconds)),
+        rics_csv=(str(args.rics).strip() if args.rics else None),
     )
     print(out)

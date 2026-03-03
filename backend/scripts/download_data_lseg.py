@@ -190,6 +190,7 @@ def _load_universe_from_security_master(
     conn: sqlite3.Connection,
     *,
     tickers: list[str] | None,
+    rics: list[str] | None,
 ) -> list[dict[str, str]]:
     where = [
         "ticker IS NOT NULL",
@@ -204,6 +205,10 @@ def _load_universe_from_security_master(
         placeholders = ",".join("?" for _ in tickers)
         where.append(f"UPPER(TRIM(ticker)) IN ({placeholders})")
         params.extend([str(t).strip().upper() for t in tickers])
+    if rics:
+        placeholders = ",".join("?" for _ in rics)
+        where.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
+        params.extend([str(r).strip().upper() for r in rics])
 
     rows = conn.execute(
         f"""
@@ -237,6 +242,7 @@ def download_from_lseg(
     db_path: Path = DEFAULT_DB,
     index: str | None = None,
     tickers_csv: str | None = None,
+    rics_csv: str | None = None,
     ric_suffix: str = ".O",  # kept for CLI compatibility (unused in canonical path)
     as_of_date: str | None = None,
     shard_count: int = 1,
@@ -255,7 +261,16 @@ def download_from_lseg(
     ensure_cuse4_schema(conn)
 
     requested_tickers = _resolve_requested_tickers(tickers_csv=tickers_csv, index=index)
-    universe_rows = _load_universe_from_security_master(conn, tickers=requested_tickers)
+    requested_rics = (
+        [r.strip().upper() for r in str(rics_csv).split(",") if str(r).strip()]
+        if rics_csv
+        else None
+    )
+    universe_rows = _load_universe_from_security_master(
+        conn,
+        tickers=requested_tickers,
+        rics=requested_rics,
+    )
 
     shard_count = max(1, int(shard_count))
     shard_index = int(shard_index)
@@ -489,6 +504,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--db-path", default=str(DEFAULT_DB), help="Path to target SQLite DB")
     p.add_argument("--index", default=None, help="Index code (e.g. SPX, NDX). Constituents are filtered to security_master")
     p.add_argument("--tickers", default=None, help="Comma-separated tickers to ingest (must exist in security_master)")
+    p.add_argument("--rics", default=None, help="Comma-separated RICs to ingest (must exist in security_master)")
     p.add_argument("--ric-suffix", default=".O", help="Deprecated (kept for CLI compatibility)")
     p.add_argument("--as-of-date", default=None, help="Override as-of date (YYYY-MM-DD)")
     p.add_argument("--shard-count", type=int, default=1, help="Total number of ticker shards")
@@ -503,6 +519,7 @@ if __name__ == "__main__":
         db_path=Path(args.db_path),
         index=args.index,
         tickers_csv=args.tickers,
+        rics_csv=args.rics,
         ric_suffix=args.ric_suffix,
         as_of_date=args.as_of_date,
         shard_count=args.shard_count,

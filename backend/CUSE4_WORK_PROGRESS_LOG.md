@@ -171,3 +171,23 @@
   - `security_fundamentals_pit`: `66,033` rows, date range `2012-03-30` to `2026-02-27`
   - `security_classification_pit`: `66,033` rows, date range `2012-03-30` to `2026-02-27`
   - removed spillover rows before `2012-01-01` from prices (`10` rows deleted).
+
+### Entry 12 - Universe Extension from 2026-03-03 Holdings + Targeted Backfill
+- Ingested `/Users/shaun/Downloads/Derived Holdings 2026-03-03.xlsx` (`RIC` column), normalized and deduped.
+- Universe merge outcome:
+  - workbook unique RICs: `365`
+  - new vs existing `security_master`: `148`
+  - inserted into `security_master`: `148`
+  - eligible universe size: `3,019` (was `2,871`)
+- Added targeted RIC-subset support to ingest/backfill tooling:
+  - `download_data_lseg.py`: added `--rics` filter (subset by canonical `security_master.ric`)
+  - `backfill_pit_history_lseg.py`: added `--rics` passthrough
+  - `backfill_prices_range_lseg.py`: added `--rics` subset filter
+- Backfill execution for newly added RICs only:
+  - PIT dates backfilled: all existing `23` snapshot dates (`2012-03-30` ... `2026-02-27`) with zero failures
+  - daily prices backfilled range: `2012-01-01` ... `2026-03-03`
+  - `price_rows_upserted`: `359,331`, `failed_batches`: `0`
+- Post-run validation for new 148 names:
+  - fundamentals/classification PIT coverage: `148/148` on all 23 dates
+  - prices coverage range: `2012-01-03` ... `2026-03-03` across all 148 SIDs
+  - random spot checks completed across mixed RIC patterns (including suffix/caret variants).

@@ -94,3 +94,17 @@ Deprecated persisted tables to remove:
   - `security_prices_eod`: 6,847,526 rows
   - distinct SIDs: 2,871
   - date range: `2012-01-03` to `2026-03-03`
+
+### 2026-03-03 23:35 ET
+- Extended coverage universe from `/Users/shaun/Downloads/Derived Holdings 2026-03-03.xlsx`:
+  - workbook unique RICs: `365`
+  - newly added to canonical `security_master`: `148`
+  - total eligible universe: `3,019`
+- Implemented targeted RIC-subset backfill controls:
+  - `download_data_lseg.py` supports `--rics`
+  - `backfill_pit_history_lseg.py` supports `--rics`
+  - `backfill_prices_range_lseg.py` supports `--rics`
+- Backfilled newly added RIC subset to align with existing historical coverage:
+  - PIT snapshots: all `23` canonical dates backfilled successfully
+  - prices: `2012-01-03` to `2026-03-03` for added subset
+  - price subset upserts: `359,331` (0 failed batches)
