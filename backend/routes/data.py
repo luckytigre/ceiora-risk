@@ -188,6 +188,18 @@ async def get_data_diagnostics(include_paths: bool = Query(False)):
             "barra_raw_cross_section_history": _table_stats(data_conn, "barra_raw_cross_section_history")
             if _table_exists(data_conn, "barra_raw_cross_section_history")
             else None,
+            "security_master": _table_stats(data_conn, "security_master")
+            if _table_exists(data_conn, "security_master")
+            else None,
+            "fundamentals_history": _table_stats(data_conn, "fundamentals_history")
+            if _table_exists(data_conn, "fundamentals_history")
+            else None,
+            "trbc_industry_country_history": _table_stats(data_conn, "trbc_industry_country_history")
+            if _table_exists(data_conn, "trbc_industry_country_history")
+            else None,
+            "estu_membership_daily": _table_stats(data_conn, "estu_membership_daily")
+            if _table_exists(data_conn, "estu_membership_daily")
+            else None,
         }
 
         exposure_source_table = _resolve_exposure_source_table(data_conn)
@@ -278,6 +290,7 @@ async def get_data_diagnostics(include_paths: bool = Query(False)):
                 "factor_cross_section": factor_cross_section,
             },
             "risk_engine_meta": cache_get("risk_engine_meta") or {},
+            "cuse4_foundation": cache_get("cuse4_foundation") or {},
             "cache_outputs": _cache_rows(),
         }
         if include_paths:

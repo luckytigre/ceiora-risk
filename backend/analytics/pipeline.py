@@ -24,6 +24,8 @@ from barra.risk_attribution import (
 )
 from barra.specific_risk import build_specific_risk_from_cache
 from analytics.trbc_economic_sector_short import abbreviate_trbc_economic_sector_short
+from cuse4.bootstrap import bootstrap_cuse4_source_tables
+from cuse4.estu import build_and_persist_estu_membership
 from db import postgres, sqlite
 from db.cross_section_snapshot import rebuild_cross_section_snapshot
 from portfolio.positions_store import get_position_meta, get_shares, get_tickers
@@ -784,6 +786,40 @@ def run_refresh(
     )
     exposures_universe_df = postgres.load_raw_cross_section_latest()
 
+    # Optional cUSE4 foundation maintenance (additive, non-breaking).
+    cuse4_foundation: dict[str, Any] = {"status": "disabled"}
+    if bool(config.CUSE4_ENABLE_ESTU_AUDIT):
+        cuse4_bootstrap: dict[str, Any] | None = None
+        cuse4_estu: dict[str, Any] | None = None
+        try:
+            if bool(config.CUSE4_AUTO_BOOTSTRAP):
+                cuse4_bootstrap = bootstrap_cuse4_source_tables(
+                    db_path=DATA_DB,
+                    replace_all=False,
+                )
+            estu_asof = (
+                source_dates.get("fundamentals_asof")
+                or source_dates.get("exposures_asof")
+                or today_utc.isoformat()
+            )
+            cuse4_estu = build_and_persist_estu_membership(
+                db_path=DATA_DB,
+                as_of_date=str(estu_asof),
+            )
+            cuse4_foundation = {
+                "status": "ok",
+                "bootstrap": cuse4_bootstrap,
+                "estu": cuse4_estu,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("cUSE4 foundation update failed")
+            cuse4_foundation = {
+                "status": "error",
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+                "bootstrap": cuse4_bootstrap,
+                "estu": cuse4_estu,
+            }
+
     # 2. Weekly risk-engine recompute gate.
     risk_engine_meta = sqlite.cache_get("risk_engine_meta") or {}
     should_recompute, recompute_reason = _risk_recompute_due(risk_engine_meta, today_utc=today_utc)
@@ -1004,6 +1040,7 @@ def run_refresh(
         eligibility_summary=eligibility_summary,
     )
     sqlite.cache_set("model_sanity", sanity)
+    sqlite.cache_set("cuse4_foundation", cuse4_foundation)
     health_refreshed = False
     existing_health = sqlite.cache_get("health_diagnostics")
     light_mode_health_missing = (
@@ -1030,6 +1067,7 @@ def run_refresh(
             "cross_section_snapshot": snapshot_build,
             "risk_engine": risk_engine_state,
             "model_sanity_status": sanity.get("status"),
+            "cuse4_foundation": cuse4_foundation,
             "health_refreshed": bool(health_refreshed),
         },
     )
@@ -1043,5 +1081,6 @@ def run_refresh(
         "cross_section_snapshot": snapshot_build,
         "risk_engine": risk_engine_state,
         "model_sanity": sanity,
+        "cuse4_foundation": cuse4_foundation,
         "health_refreshed": bool(health_refreshed),
     }

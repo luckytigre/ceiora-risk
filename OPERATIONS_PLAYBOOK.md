@@ -14,6 +14,10 @@
   - `python backend/scripts/download_data_lseg.py --db-path backend/data.db`
 - Build canonical universe eligibility (PermID keyed):
   - `python backend/scripts/build_universe_eligibility_lseg.py --db-path backend/data.db`
+- Bootstrap cUSE4 canonical source tables:
+  - `python backend/scripts/bootstrap_cuse4_source_tables.py --db-path backend/data.db`
+- Build cUSE4 ESTU audit snapshot:
+  - `python backend/scripts/build_cuse4_estu_membership.py --db-path backend/data.db`
 - Reset universe + source tables and rebuild current source-of-truth snapshot:
   - `python backend/scripts/reset_and_rebuild_source_of_truth.py --db-path backend/data.db --current-chain-ric .dMIUS000I0PUS --historical-index-ric .dMIUS000I0PUS --historical-date 2019-03-02`
 - TRBC historical backfill in 4 shards:
@@ -26,6 +30,7 @@
 - `risk_engine_meta`: recompute metadata (method version, last recompute date, latest factor-return date, settings).
 - `risk_engine_cov`: serialized factor covariance matrix (weekly cache).
 - `risk_engine_specific_risk`: stock-level specific risk map (weekly cache).
+- `cuse4_foundation`: bootstrap + latest ESTU audit summary for cUSE4 transition layer.
 - `portfolio`, `risk`, `exposures`, `universe_loadings`, `universe_factors`, `health_diagnostics`, `eligibility`, `refresh_meta`: refreshed on each `/api/refresh` call.
 
 ## Validation Checklist
