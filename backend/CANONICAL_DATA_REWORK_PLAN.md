@@ -77,3 +77,20 @@ Deprecated persisted tables to remove:
 - Validation:
   - Duplicate key checks: zero across all canonical time-series tables.
   - ESTU run successful for `2026-02-27` with `estu_count=1930`.
+
+### 2026-03-03 22:45 ET
+- Extended canonical PIT history backward to `2012-03-30` through `2016-12-30` for full universe (2,871 SIDs):
+  - `security_fundamentals_pit`: now 66,033 rows (23 as-of snapshots x 2,871)
+  - `security_classification_pit`: now 66,033 rows (23 as-of snapshots x 2,871)
+- Extended daily price history backward to `2012-01-03`.
+- Identified and fixed price backfill script safety bug:
+  - previous version could globally delete rows `> end_date` during a range run.
+  - patched `backfill_prices_range_lseg.py` to hard-filter returned rows to requested bounds and remove global truncation delete.
+- Recovered accidentally truncated post-2016 segment by direct LSEG re-pull in manageable windows:
+  - recovery window: `2016-02-13` to `2026-03-03`
+  - `rows_upserted`: 5,398,488
+  - `failed_batches`: 0
+- Final post-recovery prices status:
+  - `security_prices_eod`: 6,847,526 rows
+  - distinct SIDs: 2,871
+  - date range: `2012-01-03` to `2026-03-03`
