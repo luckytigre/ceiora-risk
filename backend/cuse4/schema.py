@@ -6,8 +6,9 @@ import sqlite3
 
 
 SECURITY_MASTER_TABLE = "security_master"
-FUNDAMENTALS_HISTORY_TABLE = "fundamentals_history"
-TRBC_HISTORY_TABLE = "trbc_industry_country_history"
+FUNDAMENTALS_HISTORY_TABLE = "security_fundamentals_pit"
+TRBC_HISTORY_TABLE = "security_classification_pit"
+PRICES_TABLE = "security_prices_eod"
 ESTU_MEMBERSHIP_TABLE = "estu_membership_daily"
 
 
@@ -111,6 +112,32 @@ def ensure_cuse4_schema(conn: sqlite3.Connection) -> dict[str, str]:
 
     conn.execute(
         f"""
+        CREATE TABLE IF NOT EXISTS {PRICES_TABLE} (
+            sid TEXT NOT NULL,
+            date TEXT NOT NULL,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL,
+            adj_close REAL,
+            volume REAL,
+            currency TEXT,
+            exchange TEXT,
+            source TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (sid, date)
+        )
+        """
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{PRICES_TABLE}_sid_date ON {PRICES_TABLE}(sid, date)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{PRICES_TABLE}_date ON {PRICES_TABLE}(date)"
+    )
+
+    conn.execute(
+        f"""
         CREATE TABLE IF NOT EXISTS {ESTU_MEMBERSHIP_TABLE} (
             date TEXT NOT NULL,
             sid TEXT NOT NULL,
@@ -139,7 +166,11 @@ def ensure_cuse4_schema(conn: sqlite3.Connection) -> dict[str, str]:
 
     return {
         "security_master": SECURITY_MASTER_TABLE,
+        "security_fundamentals_pit": FUNDAMENTALS_HISTORY_TABLE,
+        "security_classification_pit": TRBC_HISTORY_TABLE,
+        "security_prices_eod": PRICES_TABLE,
+        "estu_membership_daily": ESTU_MEMBERSHIP_TABLE,
+        # Backward-compat mapping keys for callers not yet migrated.
         "fundamentals_history": FUNDAMENTALS_HISTORY_TABLE,
         "trbc_industry_country_history": TRBC_HISTORY_TABLE,
-        "estu_membership_daily": ESTU_MEMBERSHIP_TABLE,
     }

@@ -13,6 +13,7 @@ import pandas as pd
 from cuse4.schema import (
     ESTU_MEMBERSHIP_TABLE,
     FUNDAMENTALS_HISTORY_TABLE,
+    PRICES_TABLE,
     SECURITY_MASTER_TABLE,
     TRBC_HISTORY_TABLE,
     ensure_cuse4_schema,
@@ -84,7 +85,7 @@ def _load_price_features(
     as_of_date: str,
     min_history_days: int,
 ) -> pd.DataFrame:
-    if not _table_exists(conn, "prices_daily"):
+    if not _table_exists(conn, PRICES_TABLE):
         return pd.DataFrame()
 
     lookback_days = max(120, int(min_history_days * 2.2))
@@ -97,9 +98,9 @@ def _load_price_features(
             p.date,
             CAST(p.close AS REAL) AS close,
             CAST(p.volume AS REAL) AS volume
-        FROM prices_daily p
+        FROM {PRICES_TABLE} p
         JOIN {SECURITY_MASTER_TABLE} sm
-          ON UPPER(TRIM(p.ticker)) = sm.ticker
+          ON p.sid = sm.sid
         WHERE p.date >= ?
           AND p.date <= ?
         ORDER BY sm.sid, p.date
