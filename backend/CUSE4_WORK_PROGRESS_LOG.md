@@ -74,8 +74,6 @@
   - Returned `status='ok'`, `cuse4_foundation_status='ok'`, and preserved normal portfolio/risk cache generation.
 
 ### Entry 06 - Universe Constrained to User Holdings XLSX
-- Added strict universe sync script:
-  - `backend/scripts/sync_universe_from_holdings_xlsx.py`
 - Added `backend/data.db` raw candidate table:
   - `universe_candidate_holdings`
 - Synced from `/Users/shaun/Dropbox (Personal)/040 - Creating/barra-dashboard/Universe Candidates` and enforced universe-only scope:
@@ -90,3 +88,12 @@
   - `ticker_ric_map`: 2,871
   - `universe_eligibility_summary` distinct tickers: 2,871
   - `estu_membership_daily` latest date rows: 2,871
+
+### Entry 07 - Universe Creation Tooling Removed (Per User Request)
+- Deleted universe-construction scripts and schema helpers:
+  - `backend/scripts/build_universe_eligibility_lseg.py`
+  - `backend/scripts/reset_and_rebuild_source_of_truth.py`
+  - `backend/scripts/sync_universe_from_holdings_xlsx.py`
+  - `backend/db/universe_schema.py`
+  - `backend/universe_eligibility_summary_sanity.csv`
+- Removed Makefile targets and playbook references tied to universe creation/rebuild flows.
