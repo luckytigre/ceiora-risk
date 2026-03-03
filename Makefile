@@ -1,4 +1,4 @@
-.PHONY: dev backend frontend refresh setup universe rebuild-source
+.PHONY: dev backend frontend refresh setup universe rebuild-source cuse4-bootstrap cuse4-estu
 
 setup:
 	cd backend && pip install -e ".[dev]"
@@ -22,3 +22,9 @@ universe:
 
 rebuild-source:
 	python3 backend/scripts/reset_and_rebuild_source_of_truth.py --db-path backend/data.db
+
+cuse4-bootstrap:
+	python3 backend/scripts/bootstrap_cuse4_source_tables.py --db-path backend/data.db
+
+cuse4-estu:
+	python3 backend/scripts/build_cuse4_estu_membership.py --db-path backend/data.db
