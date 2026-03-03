@@ -1,0 +1,79 @@
+# Canonical Data Rework Plan
+
+Date: 2026-03-03
+Owner: Codex
+
+## Objective
+Refactor ingest/backfill to a non-redundant relational model with:
+- `security_master` (universe + identity only)
+- `security_prices_eod` (canonical prices time-series)
+- `security_fundamentals_pit` (canonical fundamentals time-series)
+- `security_classification_pit` (canonical TRBC/country time-series)
+
+Deprecated persisted tables to remove:
+- `ticker_ric_map`
+- `fundamental_snapshots`
+- `trbc_industry_history`
+- `prices_daily` (replaced by `security_prices_eod`)
+- `fundamentals_history` (replaced by `security_fundamentals_pit`)
+- `trbc_industry_country_history` (replaced by `security_classification_pit`)
+- `universe_candidate_holdings`
+
+## Execution Phases
+
+### Phase 1 - Schema + Pipeline Refactor
+- [x] Define target canonical table names and constraints.
+- [x] Update cUSE4 schema constants to canonical names.
+- [x] Update LSEG ingest to write directly to canonical time-series tables.
+- [x] Remove runtime dependency on deprecated write paths.
+
+### Phase 2 - Full Backfill (Clear + Reload)
+- [x] Create migration/backfill runner with managed batching.
+- [x] Clear target canonical time-series tables.
+- [x] Backfill fundamentals (`security_fundamentals_pit`) from eligible `security_master` names.
+- [x] Backfill classifications (`security_classification_pit`) from eligible `security_master` names.
+- [x] Backfill prices (`security_prices_eod`) from eligible `security_master` names in manageable chunks.
+
+### Phase 3 - Deprecation Cleanup
+- [x] Drop deprecated tables.
+- [x] Create compatibility views (read-only) for legacy readers where needed.
+- [x] Verify no data duplication remains in persisted tables.
+
+### Phase 4 - Validation
+- [x] Row-count and coverage checks by date for all canonical time-series tables.
+- [x] Validate ESTU build on latest backfilled date.
+- [x] Confirm identity mapping sourced only from `security_master`.
+
+## Progress Log
+
+### 2026-03-03 18:10 ET
+- Plan initialized.
+- Current baseline verified:
+  - `security_master`: 2,871 names, all equity-eligible.
+  - `prices_daily`: 7,300,863 rows across 2,555 dates.
+  - `fundamental_snapshots`: 11,484 rows (4 as-of dates).
+  - `trbc_industry_history`: 11,484 rows (4 as-of dates).
+
+### 2026-03-03 18:38 ET
+- Refactored schema constants to canonical table names:
+  - `security_fundamentals_pit`
+  - `security_classification_pit`
+  - `security_prices_eod`
+- Rewrote `download_data_lseg.py` to ingest directly into canonical SID-keyed tables from `security_master`.
+- Added `backend/scripts/migrate_to_canonical_timeseries.py`:
+  - clears canonical time-series tables,
+  - backfills in date chunks (`--date-chunk-size`),
+  - drops deprecated physical tables,
+  - recreates legacy names as read-only compatibility views.
+- Executed full canonical backfill with cleanup:
+  - `fundamentals_rows_backfilled`: 11,484
+  - `classification_rows_backfilled`: 11,484
+  - `prices_rows_backfilled`: 4,967,121
+- Post-migration canonical row counts:
+  - `security_master`: 2,871
+  - `security_fundamentals_pit`: 11,484
+  - `security_classification_pit`: 11,484
+  - `security_prices_eod`: 4,967,121
+- Validation:
+  - Duplicate key checks: zero across all canonical time-series tables.
+  - ESTU run successful for `2026-02-27` with `estu_count=1930`.

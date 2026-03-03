@@ -123,3 +123,27 @@
 - Added HQ country label compatibility for LSEG response (`Country ISO Code of Headquarters`).
 - Confirmed with sample run (`AAPL, MSFT`) that canonical sync reports `trbc_rows_synced_canonical = 2` and no universe expansion occurred.
 - Re-confirmed `ticker_ric_map` remains constrained to holdings universe (`2,871` rows/tickers/RICs).
+
+### Entry 10 - Canonical Non-Redundant Schema Migration Executed
+- Implemented canonical table naming and write-path refactor:
+  - `security_prices_eod`
+  - `security_fundamentals_pit`
+  - `security_classification_pit`
+- Updated cUSE4 schema constants and ESTU read path to use canonical tables.
+- Rewrote LSEG ingest (`backend/scripts/download_data_lseg.py`) to:
+  - derive ingest universe from `security_master` only,
+  - use `sid` identity directly,
+  - write directly into canonical time-series tables,
+  - remove dependency on `ticker_ric_map` and legacy staging writes.
+- Added migration/backfill runner (`backend/scripts/migrate_to_canonical_timeseries.py`) with date-chunk batching and transaction boundaries to avoid long stuck operations.
+- Ran full backfill with `--drop-deprecated`:
+  - fundamentals backfilled: 11,484 rows
+  - classification backfilled: 11,484 rows
+  - prices backfilled: 4,967,121 rows
+- Dropped deprecated physical tables:
+  - `ticker_ric_map`, `fundamental_snapshots`, `trbc_industry_history`, `prices_daily`, `fundamentals_history`, `trbc_industry_country_history`, `universe_candidate_holdings`
+- Recreated legacy names as read-only compatibility views (no duplicate persisted storage).
+- Post-migration validation:
+  - canonical row counts: `security_master=2871`, `security_prices_eod=4967121`, `security_fundamentals_pit=11484`, `security_classification_pit=11484`
+  - duplicate key checks: zero on all canonical time-series PKs
+  - ESTU build on latest backfilled date (`2026-02-27`) succeeded (`estu_count=1930`)
