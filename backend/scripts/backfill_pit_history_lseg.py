@@ -17,11 +17,11 @@ from scripts.download_data_lseg import download_from_lseg
 from trading_calendar import previous_or_same_xnys_session
 
 
-def _quarterly_dates(start_date: str, end_date: str) -> list[str]:
+def _pit_dates(start_date: str, end_date: str, *, frequency: str) -> list[str]:
     start = pd.Timestamp(start_date)
     end = pd.Timestamp(end_date)
-    # Quarter-end anchors, normalized to previous/same XNYS session.
-    anchors = pd.date_range(start=start, end=end, freq="QE")
+    freq = "QE" if str(frequency).strip().lower() == "quarterly" else "ME"
+    anchors = pd.date_range(start=start, end=end, freq=freq)
     out = sorted({previous_or_same_xnys_session(d.date().isoformat()) for d in anchors})
     return out
 
@@ -35,8 +35,12 @@ def run_backfill(
     max_retries: int,
     sleep_seconds: float,
     rics_csv: str | None = None,
+    frequency: str = "quarterly",
+    write_fundamentals: bool = True,
+    write_prices: bool = True,
+    write_classification: bool = True,
 ) -> dict[str, int | str]:
-    dates = _quarterly_dates(start_date, end_date)
+    dates = _pit_dates(start_date, end_date, frequency=frequency)
     if not dates:
         return {"status": "no-dates", "start_date": start_date, "end_date": end_date}
 
@@ -58,6 +62,9 @@ def run_backfill(
                         shard_count=int(shard_count),
                         shard_index=int(shard_idx),
                         skip_common_name_backfill=True,
+                        write_fundamentals=bool(write_fundamentals),
+                        write_prices=bool(write_prices),
+                        write_classification=bool(write_classification),
                     )
                     print(
                         {
@@ -100,6 +107,7 @@ def run_backfill(
         "dates_completed": int(dates_done),
         "shards_completed": int(shards_done),
         "shard_failures": int(failed),
+        "frequency": str(frequency),
         "start_date": start_date,
         "end_date": end_date,
     }
@@ -114,6 +122,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--max-retries", type=int, default=1, help="Retries per shard on failure")
     p.add_argument("--sleep-seconds", type=float, default=2.0, help="Sleep between retries")
     p.add_argument("--rics", default=None, help="Optional comma-separated RIC subset")
+    p.add_argument("--frequency", choices=["quarterly", "monthly"], default="quarterly", help="PIT schedule frequency")
+    p.add_argument("--skip-fundamentals", action="store_true", help="Skip fundamentals writes")
+    p.add_argument("--skip-prices", action="store_true", help="Skip prices writes")
+    p.add_argument("--skip-classification", action="store_true", help="Skip classification writes")
     return p.parse_args()
 
 
@@ -127,5 +139,9 @@ if __name__ == "__main__":
         max_retries=max(0, int(args.max_retries)),
         sleep_seconds=max(0.0, float(args.sleep_seconds)),
         rics_csv=(str(args.rics).strip() if args.rics else None),
+        frequency=str(args.frequency),
+        write_fundamentals=not bool(args.skip_fundamentals),
+        write_prices=not bool(args.skip_prices),
+        write_classification=not bool(args.skip_classification),
     )
     print(result)

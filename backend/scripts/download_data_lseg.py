@@ -248,6 +248,9 @@ def download_from_lseg(
     shard_count: int = 1,
     shard_index: int = 0,
     skip_common_name_backfill: bool = False,  # kept for CLI compatibility (unused)
+    write_fundamentals: bool = True,
+    write_prices: bool = True,
+    write_classification: bool = True,
 ) -> dict[str, Any]:
     del ric_suffix, skip_common_name_backfill
 
@@ -473,13 +476,19 @@ def download_from_lseg(
             }
         )
 
+    n_f = 0
+    n_p = 0
+    n_c = 0
     try:
-        n_f = _insert_rows(conn, FUNDAMENTALS_HISTORY_TABLE, fundamentals_rows, replace=True)
-        conn.commit()
-        n_p = _insert_rows(conn, PRICES_TABLE, prices_rows, replace=True)
-        conn.commit()
-        n_c = _insert_rows(conn, TRBC_HISTORY_TABLE, classification_rows, replace=True)
-        conn.commit()
+        if write_fundamentals:
+            n_f = _insert_rows(conn, FUNDAMENTALS_HISTORY_TABLE, fundamentals_rows, replace=True)
+            conn.commit()
+        if write_prices:
+            n_p = _insert_rows(conn, PRICES_TABLE, prices_rows, replace=True)
+            conn.commit()
+        if write_classification:
+            n_c = _insert_rows(conn, TRBC_HISTORY_TABLE, classification_rows, replace=True)
+            conn.commit()
     finally:
         conn.close()
 
@@ -510,6 +519,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--shard-count", type=int, default=1, help="Total number of ticker shards")
     p.add_argument("--shard-index", type=int, default=0, help="Zero-based shard index to process")
     p.add_argument("--skip-common-name-backfill", action="store_true", help="Deprecated (kept for CLI compatibility)")
+    p.add_argument("--skip-fundamentals", action="store_true", help="Skip writing fundamentals table")
+    p.add_argument("--skip-prices", action="store_true", help="Skip writing prices table")
+    p.add_argument("--skip-classification", action="store_true", help="Skip writing classification table")
     return p.parse_args()
 
 
@@ -525,4 +537,7 @@ if __name__ == "__main__":
         shard_count=args.shard_count,
         shard_index=args.shard_index,
         skip_common_name_backfill=bool(args.skip_common_name_backfill),
+        write_fundamentals=not bool(args.skip_fundamentals),
+        write_prices=not bool(args.skip_prices),
+        write_classification=not bool(args.skip_classification),
     )
