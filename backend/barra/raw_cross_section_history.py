@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -10,10 +11,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from barra.descriptors import FULL_STYLE_ORTH_RULES, assemble_full_style_scores
+from barra.descriptors import assemble_full_style_scores
 from barra.risk_attribution import STYLE_COLUMN_TO_LABEL
 from db.trbc_schema import ensure_trbc_naming, pick_trbc_industry_column
 from trading_calendar import filter_xnys_sessions
+
+logger = logging.getLogger(__name__)
 
 TABLE = "barra_raw_cross_section_history"
 SECURITY_MASTER_TABLE = "security_master"
@@ -46,7 +49,6 @@ _RAW_DESCRIPTOR_COLS = [
     "sales_growth_raw",
     "eps_growth_raw",
     "roe_raw",
-    "roa_raw",
     "gross_profitability_raw",
     "asset_growth_raw",
     "dividend_yield_raw",
@@ -73,10 +75,11 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(r[1]) for r in rows}
 
 
-def ensure_raw_cross_section_history_table(conn: sqlite3.Connection) -> None:
+def _create_raw_cross_section_history_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {TABLE} (
+            ric TEXT NOT NULL,
             ticker TEXT NOT NULL,
             as_of_date TEXT NOT NULL,
             market_cap REAL,
@@ -104,7 +107,6 @@ def ensure_raw_cross_section_history_table(conn: sqlite3.Connection) -> None:
             sales_growth_raw REAL,
             eps_growth_raw REAL,
             roe_raw REAL,
-            roa_raw REAL,
             gross_profitability_raw REAL,
             asset_growth_raw REAL,
             dividend_yield_raw REAL,
@@ -133,18 +135,45 @@ def ensure_raw_cross_section_history_table(conn: sqlite3.Connection) -> None:
             source TEXT,
             job_run_id TEXT,
             updated_at TEXT,
-            PRIMARY KEY (ticker, as_of_date)
+            PRIMARY KEY (ric, as_of_date)
         )
         """
     )
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_asof ON {TABLE}(as_of_date)")
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_ticker ON {TABLE}(ticker)")
+    conn.execute(f"DROP INDEX IF EXISTS idx_{TABLE}_ric")
+
+
+def ensure_raw_cross_section_history_table(conn: sqlite3.Connection) -> None:
+    if not _table_exists(conn, TABLE):
+        _create_raw_cross_section_history_table(conn)
+        return
+    cols = _table_columns(conn, TABLE)
+    expected = {"ric", "ticker", "as_of_date"}
+    pk_cols = [
+        str(r[1])
+        for r in conn.execute(f"PRAGMA table_info({TABLE})").fetchall()
+        if int(r[5] or 0) > 0
+    ]
+    if expected.issubset(cols) and pk_cols == ["ric", "as_of_date"]:
+        _create_raw_cross_section_history_table(conn)
+        conn.execute(f"DROP INDEX IF EXISTS idx_{TABLE}_ric")
+        return
+
+    logger.warning(
+        "Recreating %s due to schema mismatch (expected PK=(ric, as_of_date), found=%s)",
+        TABLE,
+        pk_cols,
+    )
+    conn.execute(f"DROP TABLE IF EXISTS {TABLE}")
+    _create_raw_cross_section_history_table(conn)
 
 
 def _dedupe_prices(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     out = df.copy()
+    out["ric"] = out["ric"].astype(str).str.upper()
     out["ticker"] = out["ticker"].astype(str).str.upper()
     out["date"] = out["date"].astype(str)
     out["close"] = pd.to_numeric(out["close"], errors="coerce")
@@ -153,14 +182,14 @@ def _dedupe_prices(df: pd.DataFrame) -> pd.DataFrame:
     out["source"] = out.get("source", pd.Series(index=out.index, dtype="object")).astype(str).str.lower()
     out["source_priority"] = np.where(out["source"] == "lseg_toolkit", 1, 0)
     out = out.sort_values(
-        ["ticker", "date", "source_priority", "updated_at"],
+        ["ric", "date", "source_priority", "updated_at"],
         ascending=[True, True, False, False],
     )
-    out = out.drop_duplicates(subset=["ticker", "date"], keep="first")
-    return out[["ticker", "date", "close", "volume"]]
+    out = out.drop_duplicates(subset=["ric", "date"], keep="first")
+    return out[["ric", "ticker", "date", "close", "volume"]]
 
 
-def _merge_asof_by_ticker(
+def _merge_asof_by_ric(
     base: pd.DataFrame,
     events: pd.DataFrame,
     *,
@@ -170,15 +199,15 @@ def _merge_asof_by_ticker(
     if base.empty or events.empty:
         return base
     merged_parts: list[pd.DataFrame] = []
-    events_by_ticker = {str(t): grp.copy() for t, grp in events.groupby("ticker", sort=False)}
-    for ticker, left_grp in base.groupby("ticker", sort=False):
+    events_by_ric = {str(ric): grp.copy() for ric, grp in events.groupby("ric", sort=False)}
+    for ric, left_grp in base.groupby("ric", sort=False):
         left_sorted = left_grp.sort_values(left_date_col).reset_index(drop=True)
-        right_grp = events_by_ticker.get(str(ticker))
+        right_grp = events_by_ric.get(str(ric))
         if right_grp is None or right_grp.empty:
             merged_parts.append(left_sorted)
             continue
         right_sorted = right_grp.sort_values(right_date_col).reset_index(drop=True)
-        right_sorted = right_sorted.drop(columns=["ticker"], errors="ignore")
+        right_sorted = right_sorted.drop(columns=["ric", "ticker"], errors="ignore")
         out = pd.merge_asof(
             left_sorted,
             right_sorted,
@@ -196,8 +225,8 @@ def _merge_asof_by_ticker(
 def _compute_price_features(prices: pd.DataFrame) -> pd.DataFrame:
     if prices.empty:
         return prices
-    out = prices.copy().sort_values(["ticker", "date"])
-    g = out.groupby("ticker", sort=False)
+    out = prices.copy().sort_values(["ric", "date"])
+    g = out.groupby("ric", sort=False)
     close = pd.to_numeric(out["close"], errors="coerce")
     shift_21 = g["close"].shift(21)
     shift_252 = g["close"].shift(252)
@@ -227,7 +256,7 @@ def _compute_price_features(prices: pd.DataFrame) -> pd.DataFrame:
         return beta
 
     out["beta_raw"] = (
-        out.groupby("ticker", sort=False, group_keys=False)[["ret_1d", "market_ret"]]
+        out.groupby("ric", sort=False, group_keys=False)[["ret_1d", "market_ret"]]
         .apply(_rolling_beta)
     )
     out["log_avg_dollar_volume_20d_raw"] = np.log(np.clip(out["avg_dollar_volume_20d"], 0.0, None) + 1.0)
@@ -321,12 +350,12 @@ def rebuild_raw_cross_section_history(
 
         prices_raw = pd.read_sql_query(
             f"""
-            SELECT UPPER(sm.ticker) AS ticker, p.date, p.close, p.volume, p.source, p.updated_at
+            SELECT UPPER(p.ric) AS ric, UPPER(sm.ticker) AS ticker, p.date, p.close, p.volume, p.source, p.updated_at
             FROM {PRICES_TABLE} p
             JOIN {SECURITY_MASTER_TABLE} sm
-              ON sm.sid = p.sid
+              ON sm.ric = p.ric
             WHERE p.date >= ? AND p.date <= ?
-            ORDER BY UPPER(sm.ticker), p.date
+            ORDER BY UPPER(p.ric), p.date
             """,
             conn,
             params=(min_for_roll, max_date),
@@ -355,7 +384,6 @@ def rebuild_raw_cross_section_history(
             "total_debt",
             "operating_cashflow",
             "revenue",
-            "roa_pct",
             "total_assets",
             "roe_pct",
             "operating_margin_pct",
@@ -369,17 +397,18 @@ def rebuild_raw_cross_section_history(
             fselect_cols = ", ".join(f"f.{c}" for c in fkeep)
             fundamentals = pd.read_sql_query(
                 f"""
-                SELECT UPPER(sm.ticker) AS ticker, f.as_of_date AS fetch_date, {fselect_cols}
+                SELECT UPPER(f.ric) AS ric, UPPER(sm.ticker) AS ticker, f.as_of_date AS fetch_date, {fselect_cols}
                 FROM {FUNDAMENTALS_TABLE} f
                 JOIN {SECURITY_MASTER_TABLE} sm
-                  ON sm.sid = f.sid
+                  ON sm.ric = f.ric
                 WHERE f.as_of_date <= ?
-                ORDER BY UPPER(sm.ticker), f.as_of_date
+                ORDER BY UPPER(f.ric), f.as_of_date
                 """,
                 conn,
                 params=(max_date,),
             )
         if not fundamentals.empty:
+            fundamentals["ric"] = fundamentals["ric"].astype(str).str.upper()
             fundamentals["ticker"] = fundamentals["ticker"].astype(str).str.upper()
             fundamentals["fetch_date"] = fundamentals["fetch_date"].astype(str)
             fundamentals["fetch_date_dt"] = pd.to_datetime(fundamentals["fetch_date"], errors="coerce")
@@ -392,17 +421,12 @@ def rebuild_raw_cross_section_history(
                 fundamentals["return_on_equity"] = fundamentals["roe_pct"]
             if "operating_margin_pct" in fundamentals.columns:
                 fundamentals["operating_margins"] = fundamentals["operating_margin_pct"]
-            if "roa_pct" in fundamentals.columns:
-                fundamentals["net_income"] = fundamentals["roa_pct"] * pd.to_numeric(
-                    fundamentals.get("total_assets"),
-                    errors="coerce",
-                )
-            fundamentals = fundamentals.sort_values(["ticker", "fetch_date"]).drop_duplicates(
-                subset=["ticker", "fetch_date"], keep="last"
+            fundamentals = fundamentals.sort_values(["ric", "fetch_date"]).drop_duplicates(
+                subset=["ric", "fetch_date"], keep="last"
             )
-            fundamentals["sales_growth_raw"] = fundamentals.groupby("ticker", sort=False)["revenue"].pct_change(4, fill_method=None)
-            fundamentals["eps_growth_raw"] = fundamentals.groupby("ticker", sort=False)["trailing_eps"].pct_change(4, fill_method=None)
-            fundamentals["asset_growth_raw"] = fundamentals.groupby("ticker", sort=False)["total_assets"].pct_change(4, fill_method=None)
+            fundamentals["sales_growth_raw"] = fundamentals.groupby("ric", sort=False)["revenue"].pct_change(4, fill_method=None)
+            fundamentals["eps_growth_raw"] = fundamentals.groupby("ric", sort=False)["trailing_eps"].pct_change(4, fill_method=None)
+            fundamentals["asset_growth_raw"] = fundamentals.groupby("ric", sort=False)["total_assets"].pct_change(4, fill_method=None)
 
         trbc_cols = _table_columns(conn, CLASSIFICATION_TABLE)
         trbc_ind_col = pick_trbc_industry_column(trbc_cols)
@@ -412,33 +436,36 @@ def rebuild_raw_cross_section_history(
             trbc = pd.read_sql_query(
                 f"""
                 SELECT
+                    UPPER(c.ric) AS ric,
                     UPPER(sm.ticker) AS ticker,
                     c.as_of_date,
                     c.{trbc_sec_col} AS trbc_economic_sector_short,
                     c.{trbc_ind_col} AS trbc_industry_group
                 FROM {CLASSIFICATION_TABLE} c
                 JOIN {SECURITY_MASTER_TABLE} sm
-                  ON sm.sid = c.sid
+                  ON sm.ric = c.ric
                 WHERE c.as_of_date <= ?
-                ORDER BY UPPER(sm.ticker), c.as_of_date
+                ORDER BY UPPER(c.ric), c.as_of_date
                 """,
                 conn,
                 params=(max_date,),
             )
             if not trbc.empty:
+                trbc["ric"] = trbc["ric"].astype(str).str.upper()
                 trbc["ticker"] = trbc["ticker"].astype(str).str.upper()
                 trbc["as_of_date"] = trbc["as_of_date"].astype(str)
                 trbc["as_of_date_dt"] = pd.to_datetime(trbc["as_of_date"], errors="coerce")
                 trbc = trbc.dropna(subset=["as_of_date_dt"])
                 trbc["trbc_economic_sector_short"] = _normalize_text(trbc["trbc_economic_sector_short"])
                 trbc["trbc_industry_group"] = _normalize_text(trbc["trbc_industry_group"])
-                trbc = trbc.sort_values(["ticker", "as_of_date"]).drop_duplicates(
-                    subset=["ticker", "as_of_date"], keep="last"
+                trbc = trbc.sort_values(["ric", "as_of_date"]).drop_duplicates(
+                    subset=["ric", "as_of_date"], keep="last"
                 )
 
         out = base.copy()
         if not fundamentals.empty:
             fmerge_cols = [
+                "ric",
                 "ticker",
                 "fetch_date_dt",
                 "market_cap",
@@ -460,20 +487,21 @@ def rebuild_raw_cross_section_history(
                 "asset_growth_raw",
             ]
             fmerge_cols = [c for c in fmerge_cols if c in fundamentals.columns]
-            out = _merge_asof_by_ticker(
+            out = _merge_asof_by_ric(
                 out,
                 fundamentals[fmerge_cols],
                 left_date_col="as_of_date_dt",
                 right_date_col="fetch_date_dt",
             )
         if not trbc.empty:
-            out = _merge_asof_by_ticker(
+            out = _merge_asof_by_ric(
                 out,
-                trbc[["ticker", "as_of_date_dt", "trbc_economic_sector_short", "trbc_industry_group"]],
+                trbc[["ric", "ticker", "as_of_date_dt", "trbc_economic_sector_short", "trbc_industry_group"]],
                 left_date_col="as_of_date_dt",
                 right_date_col="as_of_date_dt",
             )
 
+        out["ric"] = out["ric"].astype(str).str.upper()
         out["ticker"] = out["ticker"].astype(str).str.upper()
         out["trbc_economic_sector_short"] = _normalize_text(out.get("trbc_economic_sector_short", pd.Series(index=out.index)))
         out["trbc_industry_group"] = _normalize_text(out.get("trbc_industry_group", pd.Series(index=out.index)))
@@ -485,7 +513,6 @@ def rebuild_raw_cross_section_history(
         total_debt = pd.to_numeric(out.get("total_debt"), errors="coerce")
         operating_cashflow = pd.to_numeric(out.get("operating_cashflow"), errors="coerce")
         total_assets = pd.to_numeric(out.get("total_assets"), errors="coerce")
-        net_income = pd.to_numeric(out.get("net_income"), errors="coerce")
         gross_profit = pd.to_numeric(out.get("gross_profit"), errors="coerce")
         operating_margins = pd.to_numeric(out.get("operating_margins"), errors="coerce")
         dividend_yield = pd.to_numeric(out.get("dividend_yield"), errors="coerce")
@@ -507,7 +534,6 @@ def rebuild_raw_cross_section_history(
         out["debt_to_assets_raw"] = total_debt / total_assets.replace(0.0, np.nan)
         out["book_leverage_raw"] = total_assets / book_equity
         out["roe_raw"] = return_on_equity
-        out["roa_raw"] = net_income / total_assets.replace(0.0, np.nan)
         gross_profitability = gross_profit / total_assets.replace(0.0, np.nan)
         out["gross_profitability_raw"] = gross_profitability.where(
             gross_profitability.notna(),
@@ -530,7 +556,7 @@ def rebuild_raw_cross_section_history(
             out[sc] = np.nan
 
         # Compute style scores cross-sectionally by as_of_date.
-        out = out.sort_values(["as_of_date", "ticker"]).reset_index(drop=True)
+        out = out.sort_values(["as_of_date", "ric"]).reset_index(drop=True)
         for as_of, idx in out.groupby("as_of_date", sort=False).groups.items():
             loc = list(idx)
             grp = out.loc[loc].copy()
@@ -540,30 +566,26 @@ def rebuild_raw_cross_section_history(
             )
             if int(valid.sum()) < 30:
                 continue
-            sub = grp.loc[valid, ["ticker", "market_cap", "trbc_industry_group", *required_desc]].copy()
+            sub = grp.loc[valid, ["ric", "market_cap", "trbc_industry_group", *required_desc]].copy()
             for col in required_desc:
                 sub[col] = pd.to_numeric(sub[col], errors="coerce")
                 med = float(sub[col].median()) if sub[col].notna().any() else 0.0
                 if not np.isfinite(med):
                     med = 0.0
                 sub[col] = sub[col].fillna(med)
-            raw = sub.set_index("ticker")[["market_cap", *required_desc]]
-            industries = sub.set_index("ticker")["trbc_industry_group"].astype(str)
+            raw = sub.set_index("ric")[["market_cap", *required_desc]]
+            industries = sub.set_index("ric")["trbc_industry_group"].astype(str)
             ind_dummies = pd.get_dummies(industries, dtype=float)
-            try:
-                scores = assemble_full_style_scores(
-                    raw_descriptors=raw,
-                    orth_rules=FULL_STYLE_ORTH_RULES,
-                    industry_exposures=ind_dummies,
-                )
-            except Exception:
-                continue
+            scores = assemble_full_style_scores(
+                raw_descriptors=raw,
+                industry_exposures=ind_dummies,
+            )
             for factor_name, score_col in _FACTOR_TO_SCORE_COL.items():
                 if factor_name in scores.columns and score_col in out.columns:
                     fill_series = scores[factor_name].rename("v")
-                    merged = grp[["ticker"]].merge(
+                    merged = grp[["ric"]].merge(
                         fill_series.reset_index(),
-                        on="ticker",
+                        on="ric",
                         how="left",
                     )["v"]
                     out.loc[loc, score_col] = merged.to_numpy()
@@ -587,6 +609,7 @@ def rebuild_raw_cross_section_history(
         out["updated_at"] = now_iso
 
         target_cols = [
+            "ric",
             "ticker",
             "as_of_date",
             "market_cap",

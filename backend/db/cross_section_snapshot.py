@@ -1,4 +1,4 @@
-"""Canonical cross-section snapshot builder keyed by (ticker, as_of_date)."""
+"""Canonical cross-section snapshot builder keyed by (ric, as_of_date)."""
 
 from __future__ import annotations
 
@@ -41,6 +41,17 @@ def _table_column_list(conn: sqlite3.Connection, table: str) -> list[str]:
     return [str(r[1]) for r in rows]
 
 
+def _pk_cols(conn: sqlite3.Connection, table: str) -> list[str]:
+    if not _table_exists(conn, table):
+        return []
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    ranked = sorted(
+        [(int(r[5] or 0), str(r[1])) for r in rows if int(r[5] or 0) > 0],
+        key=lambda x: x[0],
+    )
+    return [name for _, name in ranked]
+
+
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
     cols = _table_columns(conn, table)
     if column in cols:
@@ -52,7 +63,8 @@ def _create_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {TABLE} (
-            ticker TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            ticker TEXT,
             as_of_date TEXT NOT NULL,
             fundamental_fetch_date TEXT,
             fundamental_period_end_date TEXT,
@@ -102,7 +114,7 @@ def _create_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
             trbc_job_run_id TEXT,
             snapshot_job_run_id TEXT,
             updated_at TEXT,
-            PRIMARY KEY (ticker, as_of_date)
+            PRIMARY KEY (ric, as_of_date)
         )
         """
     )
@@ -110,23 +122,49 @@ def _create_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_ticker ON {TABLE}(ticker)")
 
 
-def _migrate_drop_price_exchange(conn: sqlite3.Connection) -> None:
-    if "price_exchange" not in _table_columns(conn, TABLE):
-        return
-    legacy = f"{TABLE}__legacy_pre_no_price_exchange"
+def _rebuild_snapshot_table(conn: sqlite3.Connection, legacy_suffix: str) -> None:
+    legacy = f"{TABLE}__legacy_{legacy_suffix}"
     conn.execute(f"DROP TABLE IF EXISTS {legacy}")
     conn.execute(f"ALTER TABLE {TABLE} RENAME TO {legacy}")
     _create_cross_section_snapshot_table(conn)
     new_cols = _table_column_list(conn, TABLE)
     legacy_cols = set(_table_column_list(conn, legacy))
-    keep_cols = [c for c in new_cols if c in legacy_cols]
-    if keep_cols:
-        cols_csv = ", ".join(keep_cols)
+    keep_cols = [c for c in new_cols if c in legacy_cols and c not in {"ric", "as_of_date"}]
+    ric_expr = "UPPER(TRIM(ric))"
+    if "ric" not in legacy_cols:
+        ric_expr = "NULL"
+    asof_expr = "TRIM(as_of_date)"
+    if "as_of_date" not in legacy_cols:
+        asof_expr = "NULL"
+    updated_sort = "datetime('now')"
+    if "updated_at" in legacy_cols:
+        updated_sort = "COALESCE(NULLIF(TRIM(updated_at), ''), datetime('now'))"
+    if "ric" in legacy_cols and "as_of_date" in legacy_cols:
+        projected_cols = ",\n                ".join([f"{c}" for c in keep_cols])
+        selected_cols = ",\n                ".join([f"{c}" for c in keep_cols])
+        if projected_cols:
+            projected_cols = ",\n                " + projected_cols
+            selected_cols = ",\n                " + selected_cols
         conn.execute(
             f"""
-            INSERT OR REPLACE INTO {TABLE} ({cols_csv})
-            SELECT {cols_csv}
-            FROM {legacy}
+            INSERT OR REPLACE INTO {TABLE} (
+                ric, as_of_date{projected_cols}
+            )
+            SELECT
+                ric, as_of_date{selected_cols}
+            FROM (
+                SELECT
+                    {ric_expr} AS ric,
+                    {asof_expr} AS as_of_date{selected_cols},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY {ric_expr}, {asof_expr}
+                        ORDER BY {updated_sort} DESC, rowid DESC
+                    ) AS rn
+                FROM {legacy}
+                WHERE {ric_expr} IS NOT NULL AND TRIM({ric_expr}) <> ''
+                  AND {asof_expr} IS NOT NULL AND TRIM({asof_expr}) <> ''
+            ) ranked
+            WHERE rn = 1
             """
         )
     conn.execute(f"DROP TABLE IF EXISTS {legacy}")
@@ -134,7 +172,13 @@ def _migrate_drop_price_exchange(conn: sqlite3.Connection) -> None:
 
 def ensure_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
     _create_cross_section_snapshot_table(conn)
+    cols = _table_columns(conn, TABLE)
+    pk = _pk_cols(conn, TABLE)
+    if "price_exchange" in cols or pk != ["ric", "as_of_date"]:
+        _rebuild_snapshot_table(conn, "canonical_keys")
+        cols = _table_columns(conn, TABLE)
     for col, ddl in [
+        ("ric", "TEXT"),
         ("cash_and_equivalents", "REAL"),
         ("long_term_debt", "REAL"),
         ("gross_profit", "REAL"),
@@ -151,7 +195,7 @@ def ensure_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
         ("trbc_economic_sector_short", "TEXT"),
     ]:
         _ensure_column(conn, TABLE, col, ddl)
-    _migrate_drop_price_exchange(conn)
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_ric ON {TABLE}(ric)")
 
 
 def _load_base_cross_sections(
@@ -164,8 +208,8 @@ def _load_base_cross_sections(
 ) -> pd.DataFrame:
     source_table = "barra_raw_cross_section_history"
     source_cols = _table_columns(conn, source_table)
-    if "ticker" not in source_cols or "as_of_date" not in source_cols:
-        return pd.DataFrame(columns=["ticker", "as_of_date"])
+    if "ric" not in source_cols or "as_of_date" not in source_cols:
+        return pd.DataFrame(columns=["ric", "ticker", "as_of_date"])
 
     clauses: list[str] = []
     params: list[Any] = []
@@ -179,26 +223,30 @@ def _load_base_cross_sections(
         clean = [str(t).upper().strip() for t in tickers if str(t).strip()]
         if clean:
             placeholders = ",".join("?" for _ in clean)
-            clauses.append(f"UPPER(e.ticker) IN ({placeholders})")
+            clauses.append(f"sm.ticker IN ({placeholders})")
             params.extend(clean)
 
     clauses.extend(
         [
-            "UPPER(sm.ticker) = UPPER(e.ticker)",
-            "COALESCE(sm.classification_ok, 0) = 1",
-            "COALESCE(sm.is_equity_eligible, 0) = 1",
+            "sm.ric = e.ric",
+            "sm.classification_ok = 1",
+            "sm.is_equity_eligible = 1",
+            "sm.ric IS NOT NULL",
+            "TRIM(sm.ric) <> ''",
+            "sm.ticker IS NOT NULL",
+            "TRIM(sm.ticker) <> ''",
         ]
     )
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     if str(mode).strip().lower() == "full":
         df = pd.read_sql_query(
             f"""
-            SELECT DISTINCT UPPER(e.ticker) AS ticker, e.as_of_date
+            SELECT DISTINCT UPPER(sm.ric) AS ric, UPPER(sm.ticker) AS ticker, e.as_of_date
             FROM {source_table} e
             JOIN security_master sm
-              ON UPPER(sm.ticker) = UPPER(e.ticker)
+              ON sm.ric = e.ric
             {where_sql}
-            ORDER BY UPPER(e.ticker), e.as_of_date
+            ORDER BY UPPER(sm.ric), e.as_of_date
             """,
             conn,
             params=params,
@@ -206,35 +254,29 @@ def _load_base_cross_sections(
     else:
         df = pd.read_sql_query(
             f"""
-            WITH ranked AS (
-                SELECT
-                    UPPER(e.ticker) AS ticker,
-                    e.as_of_date,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY UPPER(e.ticker)
-                        ORDER BY e.as_of_date DESC
-                    ) AS rn
-                FROM {source_table} e
-                JOIN security_master sm
-                  ON UPPER(sm.ticker) = UPPER(e.ticker)
-                {where_sql}
-            )
-            SELECT ticker, as_of_date
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY ticker, as_of_date
+            SELECT
+                UPPER(sm.ric) AS ric,
+                UPPER(sm.ticker) AS ticker,
+                MAX(e.as_of_date) AS as_of_date
+            FROM {source_table} e
+            JOIN security_master sm
+              ON sm.ric = e.ric
+            {where_sql}
+            GROUP BY UPPER(sm.ric), UPPER(sm.ticker)
+            ORDER BY UPPER(sm.ric), as_of_date
             """,
             conn,
             params=params,
         )
     if df.empty:
         return df
+    df["ric"] = df["ric"].astype(str).str.upper()
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["as_of_date"] = df["as_of_date"].astype(str)
     return df
 
 
-def _merge_asof_by_ticker(
+def _merge_asof_by_ric(
     base: pd.DataFrame,
     events: pd.DataFrame,
     *,
@@ -244,15 +286,15 @@ def _merge_asof_by_ticker(
     if events.empty:
         return base
     merged_parts: list[pd.DataFrame] = []
-    events_by_ticker = {str(t): grp.copy() for t, grp in events.groupby("ticker", sort=False)}
-    for ticker, left_grp in base.groupby("ticker", sort=False):
+    events_by_ric = {str(t): grp.copy() for t, grp in events.groupby("ric", sort=False)}
+    for ric, left_grp in base.groupby("ric", sort=False):
         left_sorted = left_grp.sort_values(left_date_col).reset_index(drop=True)
-        right_grp = events_by_ticker.get(str(ticker))
+        right_grp = events_by_ric.get(str(ric))
         if right_grp is None or right_grp.empty:
             merged_parts.append(left_sorted)
             continue
         right_sorted = right_grp.sort_values(right_date_col).reset_index(drop=True)
-        right_sorted = right_sorted.drop(columns=["ticker"], errors="ignore")
+        right_sorted = right_sorted.drop(columns=["ric", "ticker"], errors="ignore")
         out = pd.merge_asof(
             left_sorted,
             right_sorted,
@@ -323,14 +365,15 @@ def rebuild_cross_section_snapshot(
 
         max_asof = str(base["as_of_date"].max())
         base_tickers = sorted(set(base["ticker"].astype(str).str.upper().tolist()))
-        ticker_clause = ""
-        ticker_params: list[Any] = []
-        if base_tickers:
-            placeholders = ",".join("?" for _ in base_tickers)
-            ticker_clause = f" AND UPPER(sm.ticker) IN ({placeholders})"
-            ticker_params = base_tickers
+        base_rics = sorted(set(base["ric"].astype(str).str.upper().tolist()))
+        ric_clause = ""
+        ric_params: list[Any] = []
+        if base_rics:
+            placeholders = ",".join("?" for _ in base_rics)
+            ric_clause = f" AND sm.ric IN ({placeholders})"
+            ric_params = base_rics
 
-        # Fundamental events (canonical SID-keyed PIT source).
+        # Fundamental events (canonical RIC-keyed PIT source).
         fundamental_cols = [
             "market_cap",
             "shares_outstanding",
@@ -365,6 +408,7 @@ def rebuild_cross_section_snapshot(
         ]
         fsel = ", ".join(
             [
+                "UPPER(sm.ric) AS ric",
                 "UPPER(sm.ticker) AS ticker",
                 "f.as_of_date AS fetch_date",
                 "CAST(f.market_cap AS REAL) AS market_cap",
@@ -410,11 +454,11 @@ def rebuild_cross_section_snapshot(
                 JOIN security_master sm
                   ON sm.ric = f.ric
                 WHERE f.as_of_date <= ?
-                  {ticker_clause}
-                ORDER BY UPPER(sm.ticker), f.as_of_date, f.updated_at
+                  {ric_clause}
+                ORDER BY UPPER(sm.ric), f.as_of_date, f.updated_at
                 """,
                 conn,
-                params=[max_asof, *ticker_params],
+                params=[max_asof, *ric_params],
             )
         else:
             fundamentals = pd.read_sql_query(
@@ -429,7 +473,7 @@ def rebuild_cross_section_snapshot(
                     SELECT
                         {fsel},
                         ROW_NUMBER() OVER (
-                            PARTITION BY UPPER(sm.ticker)
+                            PARTITION BY UPPER(sm.ric)
                             ORDER BY f.stat_date DESC, f.updated_at DESC
                         ) AS rn
                     FROM security_fundamentals_pit f
@@ -439,23 +483,24 @@ def rebuild_cross_section_snapshot(
                     JOIN security_master sm
                       ON sm.ric = f.ric
                     WHERE 1=1
-                      {ticker_clause}
+                      {ric_clause}
                 )
                 SELECT *
                 FROM ranked
                 WHERE rn = 1
-                ORDER BY ticker ASC
+                ORDER BY ric ASC
                 """,
                 conn,
-                params=[max_asof, *ticker_params],
+                params=[max_asof, *ric_params],
             )
         if not fundamentals.empty:
+            fundamentals["ric"] = fundamentals["ric"].astype(str).str.upper()
             fundamentals["ticker"] = fundamentals["ticker"].astype(str).str.upper()
             fundamentals["fetch_date_dt"] = pd.to_datetime(fundamentals["fetch_date"], errors="coerce")
             fundamentals = fundamentals.dropna(subset=["fetch_date_dt"])
             fundamentals = (
-                fundamentals.sort_values(["ticker", "fetch_date", "updated_at"])
-                .drop_duplicates(subset=["ticker", "fetch_date"], keep="last")
+                fundamentals.sort_values(["ric", "fetch_date", "updated_at"])
+                .drop_duplicates(subset=["ric", "fetch_date"], keep="last")
             )
             fundamentals = fundamentals.rename(
                 columns={
@@ -474,6 +519,7 @@ def rebuild_cross_section_snapshot(
         ]
         hsel = ", ".join(
             [
+                "UPPER(sm.ric) AS ric",
                 "UPPER(sm.ticker) AS ticker",
                 "h.as_of_date",
                 *[f"h.{c}" for c in trbc_cols],
@@ -492,11 +538,11 @@ def rebuild_cross_section_snapshot(
                     JOIN security_master sm
                       ON sm.ric = h.ric
                     WHERE h.as_of_date <= ?
-                      {ticker_clause}
-                    ORDER BY UPPER(sm.ticker), h.as_of_date, h.updated_at
+                      {ric_clause}
+                    ORDER BY UPPER(sm.ric), h.as_of_date, h.updated_at
                     """,
                     conn,
-                    params=[max_asof, *ticker_params],
+                    params=[max_asof, *ric_params],
                 )
             else:
                 trbc_hist = pd.read_sql_query(
@@ -511,7 +557,7 @@ def rebuild_cross_section_snapshot(
                         SELECT
                             {hsel},
                             ROW_NUMBER() OVER (
-                                PARTITION BY UPPER(sm.ticker)
+                                PARTITION BY UPPER(sm.ric)
                                 ORDER BY h.updated_at DESC
                             ) AS rn
                         FROM security_classification_pit h
@@ -521,24 +567,25 @@ def rebuild_cross_section_snapshot(
                         JOIN security_master sm
                           ON sm.ric = h.ric
                         WHERE 1=1
-                          {ticker_clause}
+                          {ric_clause}
                     )
                     SELECT *
                     FROM ranked
                     WHERE rn = 1
-                    ORDER BY ticker ASC
+                    ORDER BY ric ASC
                     """,
                     conn,
-                    params=[max_asof, *ticker_params],
+                    params=[max_asof, *ric_params],
                 )
         if not trbc_hist.empty:
+            trbc_hist["ric"] = trbc_hist["ric"].astype(str).str.upper()
             trbc_hist["ticker"] = trbc_hist["ticker"].astype(str).str.upper()
             trbc_hist["trbc_effective_date"] = trbc_hist["as_of_date"].astype(str)
             trbc_hist["trbc_effective_date_dt"] = pd.to_datetime(trbc_hist["trbc_effective_date"], errors="coerce")
             trbc_hist = trbc_hist.dropna(subset=["trbc_effective_date_dt"])
             trbc_hist = (
-                trbc_hist.sort_values(["ticker", "trbc_effective_date", "updated_at"])
-                .drop_duplicates(subset=["ticker", "trbc_effective_date"], keep="last")
+                trbc_hist.sort_values(["ric", "trbc_effective_date", "updated_at"])
+                .drop_duplicates(subset=["ric", "trbc_effective_date"], keep="last")
             )
             trbc_hist = trbc_hist.rename(
                 columns={
@@ -552,6 +599,7 @@ def rebuild_cross_section_snapshot(
             prices = pd.read_sql_query(
                 f"""
                 SELECT
+                    UPPER(sm.ric) AS ric,
                     UPPER(sm.ticker) AS ticker,
                     p.date,
                     p.close,
@@ -562,11 +610,11 @@ def rebuild_cross_section_snapshot(
                 JOIN security_master sm
                   ON sm.ric = p.ric
                 WHERE p.date <= ?
-                  {ticker_clause}
-                ORDER BY UPPER(sm.ticker), p.date
+                  {ric_clause}
+                ORDER BY UPPER(sm.ric), p.date
                 """,
                 conn,
-                params=[max_asof, *ticker_params],
+                params=[max_asof, *ric_params],
             )
         else:
             prices = pd.read_sql_query(
@@ -579,6 +627,7 @@ def rebuild_cross_section_snapshot(
                 ),
                 ranked AS (
                     SELECT
+                        UPPER(sm.ric) AS ric,
                         UPPER(sm.ticker) AS ticker,
                         p.date,
                         p.close,
@@ -586,7 +635,7 @@ def rebuild_cross_section_snapshot(
                         p.source,
                         p.updated_at,
                         ROW_NUMBER() OVER (
-                            PARTITION BY UPPER(sm.ticker)
+                            PARTITION BY UPPER(sm.ric)
                             ORDER BY p.updated_at DESC
                         ) AS rn
                     FROM security_prices_eod p
@@ -596,24 +645,25 @@ def rebuild_cross_section_snapshot(
                     JOIN security_master sm
                       ON sm.ric = p.ric
                     WHERE 1=1
-                      {ticker_clause}
+                      {ric_clause}
                 )
-                SELECT ticker, date, close, currency, source, updated_at
+                SELECT ric, ticker, date, close, currency, source, updated_at
                 FROM ranked
                 WHERE rn = 1
-                ORDER BY ticker ASC
+                ORDER BY ric ASC
                 """,
                 conn,
-                params=[max_asof, *ticker_params],
+                params=[max_asof, *ric_params],
             )
         if not prices.empty:
+            prices["ric"] = prices["ric"].astype(str).str.upper()
             prices["ticker"] = prices["ticker"].astype(str).str.upper()
             prices["price_date"] = prices["date"].astype(str)
             prices["price_date_dt"] = pd.to_datetime(prices["price_date"], errors="coerce")
             prices = prices.dropna(subset=["price_date_dt"])
             prices = (
-                prices.sort_values(["ticker", "price_date", "updated_at"])
-                .drop_duplicates(subset=["ticker", "price_date"], keep="last")
+                prices.sort_values(["ric", "price_date", "updated_at"])
+                .drop_duplicates(subset=["ric", "price_date"], keep="last")
             )
             prices = prices.rename(
                 columns={
@@ -626,6 +676,7 @@ def rebuild_cross_section_snapshot(
         out = base.copy()
         if not fundamentals.empty:
             fmerge_cols = [
+                "ric",
                 "ticker",
                 "fetch_date",
                 "fetch_date_dt",
@@ -633,7 +684,7 @@ def rebuild_cross_section_snapshot(
                 "fundamental_source",
                 "fundamental_job_run_id",
             ]
-            out = _merge_asof_by_ticker(
+            out = _merge_asof_by_ric(
                 out,
                 fundamentals[fmerge_cols],
                 left_date_col="as_of_date_dt",
@@ -643,6 +694,7 @@ def rebuild_cross_section_snapshot(
 
         if not trbc_hist.empty:
             hmerge_cols = [
+                "ric",
                 "ticker",
                 "trbc_effective_date",
                 "trbc_effective_date_dt",
@@ -650,7 +702,7 @@ def rebuild_cross_section_snapshot(
                 "trbc_source",
                 "trbc_job_run_id",
             ]
-            out = _merge_asof_by_ticker(
+            out = _merge_asof_by_ric(
                 out,
                 trbc_hist[hmerge_cols],
                 left_date_col="as_of_date_dt",
@@ -659,6 +711,7 @@ def rebuild_cross_section_snapshot(
 
         if not prices.empty:
             pmerge_cols = [
+                "ric",
                 "ticker",
                 "price_date",
                 "price_date_dt",
@@ -666,7 +719,7 @@ def rebuild_cross_section_snapshot(
                 "price_currency",
                 "price_source",
             ]
-            out = _merge_asof_by_ticker(
+            out = _merge_asof_by_ric(
                 out,
                 prices[pmerge_cols],
                 left_date_col="as_of_date_dt",
@@ -741,6 +794,7 @@ def rebuild_cross_section_snapshot(
 
         target_cols = [
             "ticker",
+            "ric",
             "as_of_date",
             "fundamental_fetch_date",
             "fundamental_period_end_date",
