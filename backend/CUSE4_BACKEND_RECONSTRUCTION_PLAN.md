@@ -9,7 +9,7 @@ This plan replaces the backend data-collection + analytics engine while preservi
 - LSEG toolkit integration (`backend/vendor/lseg_toolkit`, `backend/scripts/download_data_lseg.py`)
 - Trading-day calendarization (`backend/trading_calendar.py`)
 
-The target state follows `cUSE4_engine_spec.md`.
+The target state follows `user notes/cUSE4_engine_spec.md`.
 
 ## 2) Audit Summary (Current State)
 

@@ -34,6 +34,13 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(r[1]) for r in rows}
 
 
+def _table_column_list(conn: sqlite3.Connection, table: str) -> list[str]:
+    if not _table_exists(conn, table):
+        return []
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return [str(r[1]) for r in rows]
+
+
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
     cols = _table_columns(conn, table)
     if column in cols:
@@ -41,7 +48,7 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) 
     conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
-def ensure_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
+def _create_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {TABLE} (
@@ -88,7 +95,6 @@ def ensure_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
             price_date TEXT,
             price_close REAL,
             price_currency TEXT,
-            price_exchange TEXT,
             fundamental_source TEXT,
             trbc_source TEXT,
             price_source TEXT,
@@ -102,6 +108,32 @@ def ensure_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
     )
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_asof ON {TABLE}(as_of_date)")
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_ticker ON {TABLE}(ticker)")
+
+
+def _migrate_drop_price_exchange(conn: sqlite3.Connection) -> None:
+    if "price_exchange" not in _table_columns(conn, TABLE):
+        return
+    legacy = f"{TABLE}__legacy_pre_no_price_exchange"
+    conn.execute(f"DROP TABLE IF EXISTS {legacy}")
+    conn.execute(f"ALTER TABLE {TABLE} RENAME TO {legacy}")
+    _create_cross_section_snapshot_table(conn)
+    new_cols = _table_column_list(conn, TABLE)
+    legacy_cols = set(_table_column_list(conn, legacy))
+    keep_cols = [c for c in new_cols if c in legacy_cols]
+    if keep_cols:
+        cols_csv = ", ".join(keep_cols)
+        conn.execute(
+            f"""
+            INSERT OR REPLACE INTO {TABLE} ({cols_csv})
+            SELECT {cols_csv}
+            FROM {legacy}
+            """
+        )
+    conn.execute(f"DROP TABLE IF EXISTS {legacy}")
+
+
+def ensure_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
+    _create_cross_section_snapshot_table(conn)
     for col, ddl in [
         ("cash_and_equivalents", "REAL"),
         ("long_term_debt", "REAL"),
@@ -119,6 +151,7 @@ def ensure_cross_section_snapshot_table(conn: sqlite3.Connection) -> None:
         ("trbc_economic_sector_short", "TEXT"),
     ]:
         _ensure_column(conn, TABLE, col, ddl)
+    _migrate_drop_price_exchange(conn)
 
 
 def _load_base_cross_sections(
@@ -346,8 +379,7 @@ def rebuild_cross_section_snapshot(
                 "CAST(f.long_term_debt AS REAL) AS long_term_debt",
                 "NULL AS free_cash_flow",
                 "NULL AS gross_profit",
-                "CASE WHEN f.roa_pct IS NOT NULL AND f.total_assets IS NOT NULL "
-                "THEN CAST(f.roa_pct AS REAL) * CAST(f.total_assets AS REAL) ELSE NULL END AS net_income",
+                "NULL AS net_income",
                 "CAST(f.operating_cashflow AS REAL) AS operating_cashflow",
                 "CAST(f.capital_expenditures AS REAL) AS capital_expenditures",
                 "NULL AS shares_basic",
@@ -376,7 +408,7 @@ def rebuild_cross_section_snapshot(
                 SELECT {fsel}
                 FROM security_fundamentals_pit f
                 JOIN security_master sm
-                  ON sm.sid = f.sid
+                  ON sm.ric = f.ric
                 WHERE f.as_of_date <= ?
                   {ticker_clause}
                 ORDER BY UPPER(sm.ticker), f.as_of_date, f.updated_at
@@ -387,17 +419,26 @@ def rebuild_cross_section_snapshot(
         else:
             fundamentals = pd.read_sql_query(
                 f"""
-                WITH ranked AS (
+                WITH latest_date AS (
+                    SELECT ric, MAX(as_of_date) AS max_as_of_date
+                    FROM security_fundamentals_pit
+                    WHERE as_of_date <= ?
+                    GROUP BY ric
+                ),
+                ranked AS (
                     SELECT
                         {fsel},
                         ROW_NUMBER() OVER (
                             PARTITION BY UPPER(sm.ticker)
-                            ORDER BY f.as_of_date DESC, f.stat_date DESC, f.updated_at DESC
+                            ORDER BY f.stat_date DESC, f.updated_at DESC
                         ) AS rn
                     FROM security_fundamentals_pit f
+                    JOIN latest_date ld
+                      ON ld.ric = f.ric
+                     AND ld.max_as_of_date = f.as_of_date
                     JOIN security_master sm
-                      ON sm.sid = f.sid
-                    WHERE f.as_of_date <= ?
+                      ON sm.ric = f.ric
+                    WHERE 1=1
                       {ticker_clause}
                 )
                 SELECT *
@@ -423,7 +464,7 @@ def rebuild_cross_section_snapshot(
                 }
             )
 
-        # TRBC point-in-time events (canonical SID-keyed PIT source).
+        # TRBC point-in-time events from canonical PIT source.
         trbc_cols = [
             "trbc_economic_sector",
             "trbc_business_sector",
@@ -449,7 +490,7 @@ def rebuild_cross_section_snapshot(
                     SELECT {hsel}
                     FROM security_classification_pit h
                     JOIN security_master sm
-                      ON sm.sid = h.sid
+                      ON sm.ric = h.ric
                     WHERE h.as_of_date <= ?
                       {ticker_clause}
                     ORDER BY UPPER(sm.ticker), h.as_of_date, h.updated_at
@@ -460,17 +501,26 @@ def rebuild_cross_section_snapshot(
             else:
                 trbc_hist = pd.read_sql_query(
                     f"""
-                    WITH ranked AS (
+                    WITH latest_date AS (
+                        SELECT ric, MAX(as_of_date) AS max_as_of_date
+                        FROM security_classification_pit
+                        WHERE as_of_date <= ?
+                        GROUP BY ric
+                    ),
+                    ranked AS (
                         SELECT
                             {hsel},
                             ROW_NUMBER() OVER (
                                 PARTITION BY UPPER(sm.ticker)
-                                ORDER BY h.as_of_date DESC, h.updated_at DESC
+                                ORDER BY h.updated_at DESC
                             ) AS rn
                         FROM security_classification_pit h
+                        JOIN latest_date ld
+                          ON ld.ric = h.ric
+                         AND ld.max_as_of_date = h.as_of_date
                         JOIN security_master sm
-                          ON sm.sid = h.sid
-                        WHERE h.as_of_date <= ?
+                          ON sm.ric = h.ric
+                        WHERE 1=1
                           {ticker_clause}
                     )
                     SELECT *
@@ -506,12 +556,11 @@ def rebuild_cross_section_snapshot(
                     p.date,
                     p.close,
                     p.currency,
-                    p.exchange,
                     p.source,
                     p.updated_at
                 FROM security_prices_eod p
                 JOIN security_master sm
-                  ON sm.sid = p.sid
+                  ON sm.ric = p.ric
                 WHERE p.date <= ?
                   {ticker_clause}
                 ORDER BY UPPER(sm.ticker), p.date
@@ -522,26 +571,34 @@ def rebuild_cross_section_snapshot(
         else:
             prices = pd.read_sql_query(
                 f"""
-                WITH ranked AS (
+                WITH latest_date AS (
+                    SELECT ric, MAX(date) AS max_date
+                    FROM security_prices_eod
+                    WHERE date <= ?
+                    GROUP BY ric
+                ),
+                ranked AS (
                     SELECT
                         UPPER(sm.ticker) AS ticker,
                         p.date,
                         p.close,
                         p.currency,
-                        p.exchange,
                         p.source,
                         p.updated_at,
                         ROW_NUMBER() OVER (
                             PARTITION BY UPPER(sm.ticker)
-                            ORDER BY p.date DESC, p.updated_at DESC
+                            ORDER BY p.updated_at DESC
                         ) AS rn
                     FROM security_prices_eod p
+                    JOIN latest_date ld
+                      ON ld.ric = p.ric
+                     AND ld.max_date = p.date
                     JOIN security_master sm
-                      ON sm.sid = p.sid
-                    WHERE p.date <= ?
+                      ON sm.ric = p.ric
+                    WHERE 1=1
                       {ticker_clause}
                 )
-                SELECT ticker, date, close, currency, exchange, source, updated_at
+                SELECT ticker, date, close, currency, source, updated_at
                 FROM ranked
                 WHERE rn = 1
                 ORDER BY ticker ASC
@@ -562,7 +619,6 @@ def rebuild_cross_section_snapshot(
                 columns={
                     "close": "price_close",
                     "currency": "price_currency",
-                    "exchange": "price_exchange",
                     "source": "price_source",
                 }
             )
@@ -608,7 +664,6 @@ def rebuild_cross_section_snapshot(
                 "price_date_dt",
                 "price_close",
                 "price_currency",
-                "price_exchange",
                 "price_source",
             ]
             out = _merge_asof_by_ticker(
@@ -728,7 +783,6 @@ def rebuild_cross_section_snapshot(
             "price_date",
             "price_close",
             "price_currency",
-            "price_exchange",
             "fundamental_source",
             "trbc_source",
             "price_source",

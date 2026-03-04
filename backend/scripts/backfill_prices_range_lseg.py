@@ -8,6 +8,7 @@ import os
 import sqlite3
 import sys
 import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,10 +23,25 @@ import lseg.data as rd
 from cuse4.schema import PRICES_TABLE, SECURITY_MASTER_TABLE, ensure_cuse4_schema
 from trading_calendar import filter_xnys_sessions, previous_or_same_xnys_session
 
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module=r"lseg\.data\._tools\._dataframe",
+)
+
 SQLITE_TIMEOUT_SECONDS = 120
 SQLITE_BUSY_TIMEOUT_MS = 120000
 SQLITE_MAX_RETRIES = 6
 SQLITE_RETRY_SLEEP_SECONDS = 1.5
+
+
+def _pick_col(df: pd.DataFrame, names: list[str]) -> str | None:
+    lookup = {str(c).strip().lower(): str(c) for c in df.columns}
+    for name in names:
+        key = str(name).strip().lower()
+        if key in lookup:
+            return lookup[key]
+    return None
 
 
 def _connect_db(db_path: Path) -> sqlite3.Connection:
@@ -105,15 +121,15 @@ def backfill_prices(
 
         universe = conn.execute(
             f"""
-            SELECT sid, UPPER(TRIM(ric)) AS ric
+            SELECT UPPER(TRIM(ric)) AS ric
             FROM {SECURITY_MASTER_TABLE}
             WHERE {' AND '.join(where)}
             ORDER BY ric
             """,
             params,
         ).fetchall()
-        ric_to_sid = {str(r[1]): str(r[0]) for r in universe if r and r[0] and r[1]}
-        rics = sorted(ric_to_sid.keys())
+        rics = sorted({str(r[0]) for r in universe if r and r[0]})
+        ric_set = set(rics)
 
         if not rics:
             return {"status": "no-universe"}
@@ -139,26 +155,53 @@ def backfill_prices(
                     ok = False
                     for attempt in range(max(1, int(max_retries)) + 1):
                         try:
-                            df = rd.get_data(
-                                universe=batch,
-                                fields=["TR.PriceClose.date", "TR.PriceClose"],
-                                parameters={"SDate": w_start, "EDate": w_end},
-                            )
+                            field_sets = [
+                                [
+                                    "TR.PriceClose.date",
+                                    "TR.PriceOpen",
+                                    "TR.PriceHigh",
+                                    "TR.PriceLow",
+                                    "TR.PriceClose",
+                                    "TR.Volume",
+                                    "TR.PriceClose.currency",
+                                ],
+                                ["TR.PriceClose.date", "TR.PriceClose", "TR.Volume"],
+                                ["TR.PriceClose.date", "TR.PriceClose"],
+                            ]
+                            df = None
+                            last_field_error: Exception | None = None
+                            for fields in field_sets:
+                                try:
+                                    df = rd.get_data(
+                                        universe=batch,
+                                        fields=fields,
+                                        parameters={"SDate": w_start, "EDate": w_end},
+                                    )
+                                    break
+                                except Exception as exc:
+                                    last_field_error = exc
+                                    continue
+                            if df is None and last_field_error is not None:
+                                raise last_field_error
                             if df is None or df.empty:
                                 ok = True
                                 break
 
-                            inst_col = next((c for c in df.columns if str(c).lower() == "instrument"), None)
-                            date_col = next((c for c in df.columns if str(c).lower() in {"date", "calc date"}), None)
-                            price_col = next((c for c in df.columns if str(c).lower() == "price close"), None)
+                            inst_col = _pick_col(df, ["Instrument"])
+                            date_col = _pick_col(df, ["Date", "Calc Date"])
+                            price_col = _pick_col(df, ["Price Close"])
+                            open_col = _pick_col(df, ["Price Open"])
+                            high_col = _pick_col(df, ["Price High"])
+                            low_col = _pick_col(df, ["Price Low"])
+                            volume_col = _pick_col(df, ["Volume"])
+                            ccy_col = _pick_col(df, ["Price Close Currency", "Currency"])
                             if not inst_col or not date_col or not price_col:
                                 raise RuntimeError(f"unexpected columns: {list(df.columns)}")
 
                             rows: list[dict[str, Any]] = []
                             for _, row in df.iterrows():
                                 ric = str(row.get(inst_col) or "").strip().upper()
-                                sid = ric_to_sid.get(ric)
-                                if not sid:
+                                if ric not in ric_set:
                                     continue
                                 d = row.get(date_col)
                                 if pd.isna(d) or d is None:
@@ -168,18 +211,22 @@ def backfill_prices(
                                     continue
                                 close = row.get(price_col)
                                 close_val = None if pd.isna(close) else float(close)
+                                open_val = row.get(open_col) if open_col else None
+                                high_val = row.get(high_col) if high_col else None
+                                low_val = row.get(low_col) if low_col else None
+                                volume_val = row.get(volume_col) if volume_col else None
+                                ccy_val = str(row.get(ccy_col)).strip() if ccy_col and not pd.isna(row.get(ccy_col)) else None
                                 rows.append(
                                     {
-                                        "sid": sid,
+                                        "ric": ric,
                                         "date": ds,
-                                        "open": close_val,
-                                        "high": close_val,
-                                        "low": close_val,
+                                        "open": close_val if pd.isna(open_val) or open_val is None else float(open_val),
+                                        "high": close_val if pd.isna(high_val) or high_val is None else float(high_val),
+                                        "low": close_val if pd.isna(low_val) or low_val is None else float(low_val),
                                         "close": close_val,
                                         "adj_close": close_val,
-                                        "volume": None,
-                                        "currency": None,
-                                        "exchange": None,
+                                        "volume": None if pd.isna(volume_val) or volume_val is None else float(volume_val),
+                                        "currency": ccy_val or None,
                                         "source": "lseg_toolkit_history",
                                         "updated_at": now_iso,
                                     }

@@ -1,4 +1,4 @@
-"""Canonical LSEG ingest: direct writes into SID-keyed source-of-truth tables."""
+"""Canonical LSEG ingest: direct writes into RIC-keyed source-of-truth tables."""
 
 from __future__ import annotations
 
@@ -43,7 +43,12 @@ LSEG_FIELDS_ALL = [
     "TR.TRBCIndustry",
     "TR.TRBCActivity",
     "TR.HQCountryCode",
+    "TR.PriceOpen",
+    "TR.PriceHigh",
+    "TR.PriceLow",
     "TR.PriceClose",
+    "TR.Volume",
+    "TR.PriceClose.currency",
     "TR.CompanyMarketCap",
     "TR.SharesOutstanding",
     "TR.DividendYield",
@@ -107,7 +112,14 @@ CLASSIFICATION_FIELD_SET = {
     "TR.HQCountryCode",
 }
 
-PRICE_FIELD_SET = {"TR.PriceClose"}
+PRICE_FIELD_SET = {
+    "TR.PriceOpen",
+    "TR.PriceHigh",
+    "TR.PriceLow",
+    "TR.PriceClose",
+    "TR.Volume",
+    "TR.PriceClose.currency",
+}
 
 
 def _select_lseg_fields(
@@ -265,14 +277,14 @@ def _load_universe_from_security_master(
 
     rows = conn.execute(
         f"""
-        SELECT sid, UPPER(TRIM(ticker)) AS ticker, UPPER(TRIM(ric)) AS ric
+        SELECT UPPER(TRIM(ticker)) AS ticker, UPPER(TRIM(ric)) AS ric
         FROM {SECURITY_MASTER_TABLE}
         WHERE {' AND '.join(where)}
         ORDER BY ticker
         """,
         params,
     ).fetchall()
-    return [{"sid": str(r[0]), "ticker": str(r[1]), "ric": str(r[2])} for r in rows if r and r[0] and r[1] and r[2]]
+    return [{"ticker": str(r[0]), "ric": str(r[1])} for r in rows if r and r[0] and r[1]]
 
 
 def _resolve_requested_tickers(
@@ -361,8 +373,7 @@ def download_from_lseg(
             "shard_count": int(shard_count),
         }
 
-    ric_to_sid = {r["ric"]: r["sid"] for r in universe_rows}
-    ric_universe = sorted(ric_to_sid.keys())
+    ric_universe = sorted({r["ric"] for r in universe_rows})
 
     print(f"Fetching LSEG data for {len(ric_universe)} instruments...")
     company_parts: list[pd.DataFrame] = []
@@ -408,7 +419,12 @@ def download_from_lseg(
         raise RuntimeError("LSEG response missing Instrument column")
 
     col = {
+        "price_open": _pick_col(company, ["Price Open"]),
+        "price_high": _pick_col(company, ["Price High"]),
+        "price_low": _pick_col(company, ["Price Low"]),
         "price": _pick_col(company, ["Price Close"]),
+        "price_volume": _pick_col(company, ["Volume"]),
+        "price_currency": _pick_col(company, ["Price Close Currency", "Currency"]),
         "market_cap": _pick_col(company, ["Company Market Cap"]),
         "shares_outstanding": _pick_col(company, ["Outstanding Shares", "Shares Outstanding", "Shares Outstanding - Common Stock"]),
         "dividend_yield": _pick_col(company, ["Dividend yield", "Dividend Yield"]),
@@ -464,8 +480,7 @@ def download_from_lseg(
 
     for _, row in company.iterrows():
         ric = str(row.get(instrument_col) or "").strip().upper()
-        sid = ric_to_sid.get(ric)
-        if not sid:
+        if ric not in ric_universe:
             continue
 
         period_end_date = _iso_date(row.get(col["fundamental_period_end_date"]) if col["fundamental_period_end_date"] else None)
@@ -476,7 +491,7 @@ def download_from_lseg(
 
         fundamentals_rows.append(
             {
-                "sid": sid,
+                "ric": ric,
                 "as_of_date": as_of,
                 "stat_date": stat_date,
                 "period_end_date": period_end_date,
@@ -499,7 +514,6 @@ def download_from_lseg(
                 "ebitda": _float_or_none(row.get(col["ebitda"]) if col["ebitda"] else None),
                 "ebit": _float_or_none(row.get(col["ebit"]) if col["ebit"] else None),
                 "roe_pct": _float_or_none(row.get(col["return_on_equity"]) if col["return_on_equity"] else None),
-                "roa_pct": None,
                 "operating_margin_pct": _float_or_none(row.get(col["operating_margins"]) if col["operating_margins"] else None),
                 "common_name": _txt(row.get(col["common_name"]) if col["common_name"] else None),
                 "source": "lseg_toolkit",
@@ -509,18 +523,23 @@ def download_from_lseg(
         )
 
         close = _float_or_none(row.get(col["price"]) if col["price"] else None)
+        open_px = _float_or_none(row.get(col["price_open"]) if col["price_open"] else None)
+        high_px = _float_or_none(row.get(col["price_high"]) if col["price_high"] else None)
+        low_px = _float_or_none(row.get(col["price_low"]) if col["price_low"] else None)
+        volume_px = _float_or_none(row.get(col["price_volume"]) if col["price_volume"] else None)
+        price_ccy = _txt(row.get(col["price_currency"]) if col["price_currency"] else None)
+        report_ccy = _txt(row.get(col["report_currency"]) if col["report_currency"] else None)
         prices_rows.append(
             {
-                "sid": sid,
+                "ric": ric,
                 "date": as_of,
-                "open": close,
-                "high": close,
-                "low": close,
+                "open": open_px if open_px is not None else close,
+                "high": high_px if high_px is not None else close,
+                "low": low_px if low_px is not None else close,
                 "close": close,
                 "adj_close": close,
-                "volume": None,
-                "currency": None,
-                "exchange": None,
+                "volume": volume_px,
+                "currency": (price_ccy or report_ccy),
                 "source": "lseg_toolkit",
                 "updated_at": updated_at,
             }
@@ -528,7 +547,7 @@ def download_from_lseg(
 
         classification_rows.append(
             {
-                "sid": sid,
+                "ric": ric,
                 "as_of_date": as_of,
                 "trbc_economic_sector": _txt(row.get(col["trbc_economic_sector"]) if col["trbc_economic_sector"] else None),
                 "trbc_business_sector": _txt(row.get(col["trbc_business_sector"]) if col["trbc_business_sector"] else None),
@@ -575,7 +594,7 @@ def download_from_lseg(
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Canonical LSEG ingest into SID-keyed source-of-truth tables.")
+    p = argparse.ArgumentParser(description="Canonical LSEG ingest into RIC-keyed source-of-truth tables.")
     p.add_argument("--db-path", default=str(DEFAULT_DB), help="Path to target SQLite DB")
     p.add_argument("--index", default=None, help="Index code (e.g. SPX, NDX). Constituents are filtered to security_master")
     p.add_argument("--tickers", default=None, help="Comma-separated tickers to ingest (must exist in security_master)")
