@@ -108,3 +108,28 @@ Deprecated persisted tables to remove:
   - PIT snapshots: all `23` canonical dates backfilled successfully
   - prices: `2012-01-03` to `2026-03-03` for added subset
   - price subset upserts: `359,331` (0 failed batches)
+
+### 2026-03-04 01:20 ET
+- Refactored analytics read paths to canonical source tables (no legacy-view dependency in primary path):
+  - `backend/db/postgres.py` now loads from:
+    - `security_fundamentals_pit` + `security_classification_pit` + `security_master`
+    - `security_prices_eod` + `security_master`
+  - legacy compatibility views remain only as fallback.
+- Refactored factor cross-section builder input sources:
+  - `backend/barra/raw_cross_section_history.py` now reads canonical:
+    - prices from `security_prices_eod`
+    - fundamentals from `security_fundamentals_pit`
+    - classification from `security_classification_pit`
+    - ticker identity via `security_master`.
+- Refactored eligibility panel loaders to canonical tables first:
+  - `backend/barra/eligibility.py` now sources market cap and TRBC panels from canonical PIT tables and uses snapshot table only as fallback.
+- Implemented current-snapshot materialization policy for `universe_cross_section_snapshot`:
+  - `backend/db/cross_section_snapshot.py` supports:
+    - `mode=current` (default): latest row per eligible ticker only
+    - `mode=full`: historical rows by `(ticker, as_of_date)`
+  - base universe is constrained to `security_master` eligible names (`classification_ok=1`, `is_equity_eligible=1`).
+- Wired policy into refresh pipeline:
+  - `backend/config.py`: `CROSS_SECTION_SNAPSHOT_MODE` env (`current` default).
+  - `backend/analytics/pipeline.py`: passes configured mode into snapshot rebuild.
+- Updated diagnostics payload to foreground canonical source tables:
+  - `security_fundamentals_pit`, `security_classification_pit`, `security_prices_eod`.
