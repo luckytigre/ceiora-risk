@@ -127,6 +127,7 @@ def _load_base_cross_sections(
     start_date: str | None,
     end_date: str | None,
     tickers: list[str] | None,
+    mode: str,
 ) -> pd.DataFrame:
     source_table = "barra_raw_cross_section_history"
     source_cols = _table_columns(conn, source_table)
@@ -136,29 +137,63 @@ def _load_base_cross_sections(
     clauses: list[str] = []
     params: list[Any] = []
     if start_date:
-        clauses.append("as_of_date >= ?")
+        clauses.append("e.as_of_date >= ?")
         params.append(str(start_date))
     if end_date:
-        clauses.append("as_of_date <= ?")
+        clauses.append("e.as_of_date <= ?")
         params.append(str(end_date))
     if tickers:
         clean = [str(t).upper().strip() for t in tickers if str(t).strip()]
         if clean:
             placeholders = ",".join("?" for _ in clean)
-            clauses.append(f"ticker IN ({placeholders})")
+            clauses.append(f"UPPER(e.ticker) IN ({placeholders})")
             params.extend(clean)
 
-    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    df = pd.read_sql_query(
-        f"""
-        SELECT DISTINCT ticker, as_of_date
-        FROM {source_table}
-        {where_sql}
-        ORDER BY ticker, as_of_date
-        """,
-        conn,
-        params=params,
+    clauses.extend(
+        [
+            "UPPER(sm.ticker) = UPPER(e.ticker)",
+            "COALESCE(sm.classification_ok, 0) = 1",
+            "COALESCE(sm.is_equity_eligible, 0) = 1",
+        ]
     )
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    if str(mode).strip().lower() == "full":
+        df = pd.read_sql_query(
+            f"""
+            SELECT DISTINCT UPPER(e.ticker) AS ticker, e.as_of_date
+            FROM {source_table} e
+            JOIN security_master sm
+              ON UPPER(sm.ticker) = UPPER(e.ticker)
+            {where_sql}
+            ORDER BY UPPER(e.ticker), e.as_of_date
+            """,
+            conn,
+            params=params,
+        )
+    else:
+        df = pd.read_sql_query(
+            f"""
+            WITH ranked AS (
+                SELECT
+                    UPPER(e.ticker) AS ticker,
+                    e.as_of_date,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY UPPER(e.ticker)
+                        ORDER BY e.as_of_date DESC
+                    ) AS rn
+                FROM {source_table} e
+                JOIN security_master sm
+                  ON UPPER(sm.ticker) = UPPER(e.ticker)
+                {where_sql}
+            )
+            SELECT ticker, as_of_date
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY ticker, as_of_date
+            """,
+            conn,
+            params=params,
+        )
     if df.empty:
         return df
     df["ticker"] = df["ticker"].astype(str).str.upper()
@@ -225,11 +260,16 @@ def rebuild_cross_section_snapshot(
     start_date: str | None = None,
     end_date: str | None = None,
     tickers: list[str] | None = None,
+    mode: str = "current",
 ) -> dict[str, Any]:
     conn = sqlite3.connect(str(data_db))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     try:
+        mode_norm = str(mode or "current").strip().lower()
+        if mode_norm not in {"current", "full"}:
+            mode_norm = "current"
+
         ensure_trbc_naming(conn)
         ensure_cross_section_snapshot_table(conn)
 
@@ -238,6 +278,7 @@ def rebuild_cross_section_snapshot(
             start_date=start_date,
             end_date=end_date,
             tickers=tickers,
+            mode=mode_norm,
         )
         if base.empty:
             return {"status": "no-op", "rows_upserted": 0, "table": TABLE}
@@ -248,9 +289,15 @@ def rebuild_cross_section_snapshot(
             return {"status": "no-op", "rows_upserted": 0, "table": TABLE}
 
         max_asof = str(base["as_of_date"].max())
+        base_tickers = sorted(set(base["ticker"].astype(str).str.upper().tolist()))
+        ticker_clause = ""
+        ticker_params: list[Any] = []
+        if base_tickers:
+            placeholders = ",".join("?" for _ in base_tickers)
+            ticker_clause = f" AND UPPER(sm.ticker) IN ({placeholders})"
+            ticker_params = base_tickers
 
-        # Fundamental events
-        fcols = _table_columns(conn, "fundamental_snapshots")
+        # Fundamental events (canonical SID-keyed PIT source).
         fundamental_cols = [
             "market_cap",
             "shares_outstanding",
@@ -283,18 +330,84 @@ def rebuild_cross_section_snapshot(
             "fiscal_year",
             "period_type",
         ]
-        keep_fcols = [c for c in fundamental_cols if c in fcols]
-        fsel = ", ".join(["ticker", "fetch_date", *keep_fcols, "source", "job_run_id", "updated_at"])
-        fundamentals = pd.read_sql_query(
-            f"""
-            SELECT {fsel}
-            FROM fundamental_snapshots
-            WHERE fetch_date <= ?
-            ORDER BY ticker, fetch_date, updated_at
-            """,
-            conn,
-            params=(max_asof,),
+        fsel = ", ".join(
+            [
+                "UPPER(sm.ticker) AS ticker",
+                "f.as_of_date AS fetch_date",
+                "CAST(f.market_cap AS REAL) AS market_cap",
+                "CAST(f.shares_outstanding AS REAL) AS shares_outstanding",
+                "CAST(f.dividend_yield AS REAL) AS dividend_yield",
+                "f.common_name AS common_name",
+                "CAST(f.book_value_per_share AS REAL) AS book_value",
+                "CAST(f.forward_eps AS REAL) AS forward_eps",
+                "CAST(f.trailing_eps AS REAL) AS trailing_eps",
+                "CAST(f.total_debt AS REAL) AS total_debt",
+                "CAST(f.cash_and_equivalents AS REAL) AS cash_and_equivalents",
+                "CAST(f.long_term_debt AS REAL) AS long_term_debt",
+                "NULL AS free_cash_flow",
+                "NULL AS gross_profit",
+                "CASE WHEN f.roa_pct IS NOT NULL AND f.total_assets IS NOT NULL "
+                "THEN CAST(f.roa_pct AS REAL) * CAST(f.total_assets AS REAL) ELSE NULL END AS net_income",
+                "CAST(f.operating_cashflow AS REAL) AS operating_cashflow",
+                "CAST(f.capital_expenditures AS REAL) AS capital_expenditures",
+                "NULL AS shares_basic",
+                "NULL AS shares_diluted",
+                "NULL AS free_float_shares",
+                "NULL AS free_float_percent",
+                "CAST(f.revenue AS REAL) AS revenue",
+                "CAST(f.ebitda AS REAL) AS ebitda",
+                "CAST(f.ebit AS REAL) AS ebit",
+                "CAST(f.total_assets AS REAL) AS total_assets",
+                "NULL AS total_liabilities",
+                "CAST(f.roe_pct AS REAL) AS return_on_equity",
+                "CAST(f.operating_margin_pct AS REAL) AS operating_margins",
+                "f.period_end_date AS fundamental_period_end_date",
+                "f.report_currency AS report_currency",
+                "f.fiscal_year AS fiscal_year",
+                "f.period_type AS period_type",
+                "f.source AS source",
+                "f.job_run_id AS job_run_id",
+                "f.updated_at AS updated_at",
+            ]
         )
+        if mode_norm == "full":
+            fundamentals = pd.read_sql_query(
+                f"""
+                SELECT {fsel}
+                FROM security_fundamentals_pit f
+                JOIN security_master sm
+                  ON sm.sid = f.sid
+                WHERE f.as_of_date <= ?
+                  {ticker_clause}
+                ORDER BY UPPER(sm.ticker), f.as_of_date, f.updated_at
+                """,
+                conn,
+                params=[max_asof, *ticker_params],
+            )
+        else:
+            fundamentals = pd.read_sql_query(
+                f"""
+                WITH ranked AS (
+                    SELECT
+                        {fsel},
+                        ROW_NUMBER() OVER (
+                            PARTITION BY UPPER(sm.ticker)
+                            ORDER BY f.as_of_date DESC, f.stat_date DESC, f.updated_at DESC
+                        ) AS rn
+                    FROM security_fundamentals_pit f
+                    JOIN security_master sm
+                      ON sm.sid = f.sid
+                    WHERE f.as_of_date <= ?
+                      {ticker_clause}
+                )
+                SELECT *
+                FROM ranked
+                WHERE rn = 1
+                ORDER BY ticker ASC
+                """,
+                conn,
+                params=[max_asof, *ticker_params],
+            )
         if not fundamentals.empty:
             fundamentals["ticker"] = fundamentals["ticker"].astype(str).str.upper()
             fundamentals["fetch_date_dt"] = pd.to_datetime(fundamentals["fetch_date"], errors="coerce")
@@ -310,29 +423,64 @@ def rebuild_cross_section_snapshot(
                 }
             )
 
-        # TRBC point-in-time events
-        hcols = _table_columns(conn, "trbc_industry_history")
+        # TRBC point-in-time events (canonical SID-keyed PIT source).
         trbc_cols = [
-            c for c in [
-                "trbc_economic_sector",
-                "trbc_business_sector",
-                "trbc_industry_group",
-                "trbc_industry",
-                "trbc_activity",
-            ]
-            if c in hcols
+            "trbc_economic_sector",
+            "trbc_business_sector",
+            "trbc_industry_group",
+            "trbc_industry",
+            "trbc_activity",
         ]
-        hsel = ", ".join(["ticker", "as_of_date", *trbc_cols, "source", "job_run_id", "updated_at"])
-        trbc_hist = pd.read_sql_query(
-            f"""
-            SELECT {hsel}
-            FROM trbc_industry_history
-            WHERE as_of_date <= ?
-            ORDER BY ticker, as_of_date, updated_at
-            """,
-            conn,
-            params=(max_asof,),
-        ) if _table_exists(conn, "trbc_industry_history") else pd.DataFrame()
+        hsel = ", ".join(
+            [
+                "UPPER(sm.ticker) AS ticker",
+                "h.as_of_date",
+                *[f"h.{c}" for c in trbc_cols],
+                "h.source AS source",
+                "h.job_run_id AS job_run_id",
+                "h.updated_at AS updated_at",
+            ]
+        )
+        trbc_hist = pd.DataFrame()
+        if _table_exists(conn, "security_classification_pit"):
+            if mode_norm == "full":
+                trbc_hist = pd.read_sql_query(
+                    f"""
+                    SELECT {hsel}
+                    FROM security_classification_pit h
+                    JOIN security_master sm
+                      ON sm.sid = h.sid
+                    WHERE h.as_of_date <= ?
+                      {ticker_clause}
+                    ORDER BY UPPER(sm.ticker), h.as_of_date, h.updated_at
+                    """,
+                    conn,
+                    params=[max_asof, *ticker_params],
+                )
+            else:
+                trbc_hist = pd.read_sql_query(
+                    f"""
+                    WITH ranked AS (
+                        SELECT
+                            {hsel},
+                            ROW_NUMBER() OVER (
+                                PARTITION BY UPPER(sm.ticker)
+                                ORDER BY h.as_of_date DESC, h.updated_at DESC
+                            ) AS rn
+                        FROM security_classification_pit h
+                        JOIN security_master sm
+                          ON sm.sid = h.sid
+                        WHERE h.as_of_date <= ?
+                          {ticker_clause}
+                    )
+                    SELECT *
+                    FROM ranked
+                    WHERE rn = 1
+                    ORDER BY ticker ASC
+                    """,
+                    conn,
+                    params=[max_asof, *ticker_params],
+                )
         if not trbc_hist.empty:
             trbc_hist["ticker"] = trbc_hist["ticker"].astype(str).str.upper()
             trbc_hist["trbc_effective_date"] = trbc_hist["as_of_date"].astype(str)
@@ -350,16 +498,57 @@ def rebuild_cross_section_snapshot(
             )
 
         # Price events
-        prices = pd.read_sql_query(
-            """
-            SELECT ticker, date, close, currency, exchange, source, updated_at
-            FROM prices_daily
-            WHERE date <= ?
-            ORDER BY ticker, date
-            """,
-            conn,
-            params=(max_asof,),
-        )
+        if mode_norm == "full":
+            prices = pd.read_sql_query(
+                f"""
+                SELECT
+                    UPPER(sm.ticker) AS ticker,
+                    p.date,
+                    p.close,
+                    p.currency,
+                    p.exchange,
+                    p.source,
+                    p.updated_at
+                FROM security_prices_eod p
+                JOIN security_master sm
+                  ON sm.sid = p.sid
+                WHERE p.date <= ?
+                  {ticker_clause}
+                ORDER BY UPPER(sm.ticker), p.date
+                """,
+                conn,
+                params=[max_asof, *ticker_params],
+            )
+        else:
+            prices = pd.read_sql_query(
+                f"""
+                WITH ranked AS (
+                    SELECT
+                        UPPER(sm.ticker) AS ticker,
+                        p.date,
+                        p.close,
+                        p.currency,
+                        p.exchange,
+                        p.source,
+                        p.updated_at,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY UPPER(sm.ticker)
+                            ORDER BY p.date DESC, p.updated_at DESC
+                        ) AS rn
+                    FROM security_prices_eod p
+                    JOIN security_master sm
+                      ON sm.sid = p.sid
+                    WHERE p.date <= ?
+                      {ticker_clause}
+                )
+                SELECT ticker, date, close, currency, exchange, source, updated_at
+                FROM ranked
+                WHERE rn = 1
+                ORDER BY ticker ASC
+                """,
+                conn,
+                params=[max_asof, *ticker_params],
+            )
         if not prices.empty:
             prices["ticker"] = prices["ticker"].astype(str).str.upper()
             prices["price_date"] = prices["date"].astype(str)
@@ -384,7 +573,7 @@ def rebuild_cross_section_snapshot(
                 "ticker",
                 "fetch_date",
                 "fetch_date_dt",
-                *[c for c in keep_fcols if c in fundamentals.columns],
+                *[c for c in fundamental_cols if c in fundamentals.columns],
                 "fundamental_source",
                 "fundamental_job_run_id",
             ]
@@ -553,6 +742,15 @@ def rebuild_cross_section_snapshot(
                 out[col] = None
 
         payload = out[target_cols].where(pd.notna(out[target_cols]), None)
+        if mode_norm != "full":
+            if tickers:
+                placeholders = ",".join("?" for _ in base_tickers)
+                conn.execute(
+                    f"DELETE FROM {TABLE} WHERE UPPER(ticker) IN ({placeholders})",
+                    base_tickers,
+                )
+            else:
+                conn.execute(f"DELETE FROM {TABLE}")
         conn.executemany(
             f"""
             INSERT OR REPLACE INTO {TABLE}
@@ -568,6 +766,7 @@ def rebuild_cross_section_snapshot(
             "rows_upserted": int(len(payload)),
             "job_run_id": job_run_id,
             "max_asof": max_asof,
+            "mode": mode_norm,
         }
     finally:
         conn.close()

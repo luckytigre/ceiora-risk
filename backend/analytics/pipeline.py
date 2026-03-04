@@ -774,7 +774,10 @@ def run_refresh(
     ).date()
 
     logger.info("Rebuilding canonical cross-section snapshot...")
-    snapshot_build = rebuild_cross_section_snapshot(DATA_DB)
+    snapshot_build = rebuild_cross_section_snapshot(
+        DATA_DB,
+        mode=str(config.CROSS_SECTION_SNAPSHOT_MODE or "current"),
+    )
 
     # 1. Fetch full-universe data from local data.db
     logger.info("Fetching data from local database...")

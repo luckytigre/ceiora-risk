@@ -89,7 +89,7 @@ def load_trading_dates(data_db: Path) -> list[str]:
         rows = conn.execute(
             """
             SELECT DISTINCT date
-            FROM prices_daily
+            FROM security_prices_eod
             WHERE date IS NOT NULL
             ORDER BY date
             """
@@ -148,10 +148,12 @@ def _load_market_cap_panel(data_db: Path, dates: list[str]) -> pd.DataFrame:
     try:
         df = pd.read_sql_query(
             """
-            SELECT ticker, fetch_date, market_cap
-            FROM fundamental_snapshots
-            WHERE fetch_date <= ?
-            ORDER BY fetch_date, ticker
+            SELECT UPPER(sm.ticker) AS ticker, f.as_of_date AS fetch_date, f.market_cap
+            FROM security_fundamentals_pit f
+            JOIN security_master sm
+              ON sm.sid = f.sid
+            WHERE f.as_of_date <= ?
+            ORDER BY f.as_of_date, UPPER(sm.ticker)
             """,
             conn,
             params=(dates[-1],),
@@ -184,19 +186,21 @@ def _load_trbc_classification_panel(data_db: Path, dates: list[str]) -> tuple[pd
         parts: list[pd.DataFrame] = []
 
         # Historical TRBC table (single source of truth for point-in-time classes).
-        if _table_exists(conn, "trbc_industry_history"):
-            hcols = _table_columns(conn, "trbc_industry_history")
+        if _table_exists(conn, "security_classification_pit"):
+            hcols = _table_columns(conn, "security_classification_pit")
             h_ind_col = pick_trbc_industry_column(hcols)
             h_sec_col = _pick_trbc_economic_sector_short_column(hcols)
             if h_ind_col and h_sec_col:
                 hist = pd.read_sql_query(
                     f"""
-                    SELECT ticker,
-                           as_of_date AS ref_date,
-                           {h_sec_col} AS trbc_economic_sector_short,
-                           {h_ind_col} AS trbc_industry_group
-                    FROM trbc_industry_history
-                    WHERE as_of_date <= ?
+                    SELECT UPPER(sm.ticker) AS ticker,
+                           h.as_of_date AS ref_date,
+                           h.{h_sec_col} AS trbc_economic_sector_short,
+                           h.{h_ind_col} AS trbc_industry_group
+                    FROM security_classification_pit h
+                    JOIN security_master sm
+                      ON sm.sid = h.sid
+                    WHERE h.as_of_date <= ?
                     """,
                     conn,
                     params=(dates[-1],),
@@ -325,14 +329,19 @@ def build_eligibility_context(
     else:
         merged_dates = sorted(set(str(d) for d in dates).union(exposure_dates))
 
-    market_cap_panel, sector_panel, industry_panel = _load_panels_from_cross_section_snapshot(
-        data_db,
-        merged_dates,
-    )
-    if market_cap_panel.empty:
-        market_cap_panel = _load_market_cap_panel(data_db, merged_dates)
-    if sector_panel.empty or industry_panel.empty:
-        sector_panel, industry_panel = _load_trbc_classification_panel(data_db, merged_dates)
+    market_cap_panel = _load_market_cap_panel(data_db, merged_dates)
+    sector_panel, industry_panel = _load_trbc_classification_panel(data_db, merged_dates)
+    if market_cap_panel.empty or sector_panel.empty or industry_panel.empty:
+        snap_market, snap_sector, snap_industry = _load_panels_from_cross_section_snapshot(
+            data_db,
+            merged_dates,
+        )
+        if market_cap_panel.empty:
+            market_cap_panel = snap_market
+        if sector_panel.empty:
+            sector_panel = snap_sector
+        if industry_panel.empty:
+            industry_panel = snap_industry
     return EligibilityContext(
         exposure_dates=exposure_dates,
         exposure_snapshots=snapshots,

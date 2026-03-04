@@ -191,3 +191,25 @@
   - fundamentals/classification PIT coverage: `148/148` on all 23 dates
   - prices coverage range: `2012-01-03` ... `2026-03-03` across all 148 SIDs
   - random spot checks completed across mixed RIC patterns (including suffix/caret variants).
+
+### Entry 13 - Canonical Analytics Read Refactor + Current Snapshot Policy
+- Rewired primary analytics reads away from legacy compatibility views:
+  - `backend/db/postgres.py` now loads latest fundamentals from `security_fundamentals_pit` joined to `security_master`, with TRBC overlay from `security_classification_pit`.
+  - latest prices now load from `security_prices_eod` joined to `security_master`.
+  - source-date resolver now uses canonical PIT max date.
+- Rewired raw factor cross-section builder to canonical source-of-truth:
+  - `backend/barra/raw_cross_section_history.py` reads prices/fundamentals/classification from `security_*` tables only.
+  - retained expected downstream column names (`book_value`, `return_on_equity`, etc.) via canonical->model mapping.
+  - added operating-margin fallback for profitability raw descriptor when gross profit is unavailable.
+- Rewired eligibility market-cap/TRBC panels to canonical tables first:
+  - `backend/barra/eligibility.py` now pulls market cap + TRBC panels from `security_fundamentals_pit` / `security_classification_pit` and uses `universe_cross_section_snapshot` only as fallback.
+- Implemented snapshot table policy to prevent unnecessary historical bloat:
+  - `backend/db/cross_section_snapshot.py` now supports `mode=current|full`.
+  - `mode=current` keeps latest row per eligible `security_master` ticker; `mode=full` retains historical rows.
+  - refresh pipeline now uses configurable `CROSS_SECTION_SNAPSHOT_MODE` (default `current`).
+- Updated diagnostics endpoint to foreground canonical source tables:
+  - `security_fundamentals_pit`, `security_classification_pit`, `security_prices_eod`.
+- Validation:
+  - static compile checks passed for all touched modules.
+  - canonical read-path smoke test passed (`load_source_dates`, `load_fundamental_snapshots`, `load_latest_prices`).
+  - write-path smoke tests for snapshot rebuild were partially blocked by concurrent long-running monthly fundamentals backfill lock contention; no destructive action taken.

@@ -179,9 +179,15 @@ async def get_data_diagnostics(include_paths: bool = Query(False)):
             "universe_constituent_snapshots": _table_stats(data_conn, "universe_constituent_snapshots")
             if _table_exists(data_conn, "universe_constituent_snapshots")
             else None,
-            "fundamental_history": _table_stats(data_conn, "fundamental_snapshots"),
-            "trbc_history": _table_stats(data_conn, "trbc_industry_history"),
-            "price_history": _table_stats(data_conn, "prices_daily"),
+            "security_fundamentals_pit": _table_stats(data_conn, "security_fundamentals_pit")
+            if _table_exists(data_conn, "security_fundamentals_pit")
+            else None,
+            "security_classification_pit": _table_stats(data_conn, "security_classification_pit")
+            if _table_exists(data_conn, "security_classification_pit")
+            else None,
+            "security_prices_eod": _table_stats(data_conn, "security_prices_eod")
+            if _table_exists(data_conn, "security_prices_eod")
+            else None,
             "pit_cross_section_snapshot": _table_stats(data_conn, "universe_cross_section_snapshot")
             if _table_exists(data_conn, "universe_cross_section_snapshot")
             else None,
@@ -190,12 +196,6 @@ async def get_data_diagnostics(include_paths: bool = Query(False)):
             else None,
             "security_master": _table_stats(data_conn, "security_master")
             if _table_exists(data_conn, "security_master")
-            else None,
-            "fundamentals_history": _table_stats(data_conn, "fundamentals_history")
-            if _table_exists(data_conn, "fundamentals_history")
-            else None,
-            "trbc_industry_country_history": _table_stats(data_conn, "trbc_industry_country_history")
-            if _table_exists(data_conn, "trbc_industry_country_history")
             else None,
             "estu_membership_daily": _table_stats(data_conn, "estu_membership_daily")
             if _table_exists(data_conn, "estu_membership_daily")

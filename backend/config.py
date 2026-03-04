@@ -42,6 +42,9 @@ ANNUALIZATION_FACTOR = 252
 RISK_RECOMPUTE_INTERVAL_DAYS = int(os.getenv("RISK_RECOMPUTE_INTERVAL_DAYS", "7"))
 # Minimum calendar age of exposure snapshot used for cross-sectional regressions.
 CROSS_SECTION_MIN_AGE_DAYS = int(os.getenv("CROSS_SECTION_MIN_AGE_DAYS", "7"))
+# Snapshot materialization policy for universe_cross_section_snapshot.
+# "current": latest row per ticker (default); "full": historical rows by as_of_date.
+CROSS_SECTION_SNAPSHOT_MODE = str(os.getenv("CROSS_SECTION_SNAPSHOT_MODE", "current")).strip().lower()
 
 
 def _env_bool(name: str, default: bool) -> bool:

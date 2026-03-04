@@ -16,6 +16,10 @@ from db.trbc_schema import ensure_trbc_naming, pick_trbc_industry_column
 from trading_calendar import filter_xnys_sessions
 
 TABLE = "barra_raw_cross_section_history"
+SECURITY_MASTER_TABLE = "security_master"
+PRICES_TABLE = "security_prices_eod"
+FUNDAMENTALS_TABLE = "security_fundamentals_pit"
+CLASSIFICATION_TABLE = "security_classification_pit"
 MODEL_VERSION = "inproj-v1"
 DESCRIPTOR_VERSION = "raw-cross-section-v1"
 
@@ -243,7 +247,7 @@ def _load_dates(conn: sqlite3.Connection, *, start_date: str | None, end_date: s
     rows = conn.execute(
         f"""
         SELECT DISTINCT date
-        FROM prices_daily
+        FROM {PRICES_TABLE}
         {where_sql}
         ORDER BY date
         """,
@@ -316,11 +320,13 @@ def rebuild_raw_cross_section_history(
         max_date = dates[-1]
 
         prices_raw = pd.read_sql_query(
-            """
-            SELECT ticker, date, close, volume, source, updated_at
-            FROM prices_daily
-            WHERE date >= ? AND date <= ?
-            ORDER BY ticker, date
+            f"""
+            SELECT UPPER(sm.ticker) AS ticker, p.date, p.close, p.volume, p.source, p.updated_at
+            FROM {PRICES_TABLE} p
+            JOIN {SECURITY_MASTER_TABLE} sm
+              ON sm.sid = p.sid
+            WHERE p.date >= ? AND p.date <= ?
+            ORDER BY UPPER(sm.ticker), p.date
             """,
             conn,
             params=(min_for_roll, max_date),
@@ -338,41 +344,59 @@ def rebuild_raw_cross_section_history(
         if base.empty:
             return {"status": "no-base", "rows_upserted": 0, "table": TABLE}
 
-        fcols = _table_columns(conn, "fundamental_snapshots")
+        fcols = _table_columns(conn, FUNDAMENTALS_TABLE)
         fkeep = [
             "market_cap",
             "shares_outstanding",
             "dividend_yield",
-            "book_value",
+            "book_value_per_share",
             "forward_eps",
             "trailing_eps",
             "total_debt",
             "operating_cashflow",
             "revenue",
-            "gross_profit",
-            "net_income",
+            "roa_pct",
             "total_assets",
-            "return_on_equity",
+            "roe_pct",
+            "operating_margin_pct",
             "common_name",
         ]
         fkeep = [c for c in fkeep if c in fcols]
-        fundamentals = pd.read_sql_query(
-            f"""
-            SELECT ticker, fetch_date, {", ".join(fkeep)}
-            FROM fundamental_snapshots
-            WHERE fetch_date <= ?
-            ORDER BY ticker, fetch_date
-            """,
-            conn,
-            params=(max_date,),
-        )
+        fnum_cols = [c for c in fkeep if c != "common_name"]
+        if not fkeep:
+            fundamentals = pd.DataFrame()
+        else:
+            fselect_cols = ", ".join(f"f.{c}" for c in fkeep)
+            fundamentals = pd.read_sql_query(
+                f"""
+                SELECT UPPER(sm.ticker) AS ticker, f.as_of_date AS fetch_date, {fselect_cols}
+                FROM {FUNDAMENTALS_TABLE} f
+                JOIN {SECURITY_MASTER_TABLE} sm
+                  ON sm.sid = f.sid
+                WHERE f.as_of_date <= ?
+                ORDER BY UPPER(sm.ticker), f.as_of_date
+                """,
+                conn,
+                params=(max_date,),
+            )
         if not fundamentals.empty:
             fundamentals["ticker"] = fundamentals["ticker"].astype(str).str.upper()
             fundamentals["fetch_date"] = fundamentals["fetch_date"].astype(str)
             fundamentals["fetch_date_dt"] = pd.to_datetime(fundamentals["fetch_date"], errors="coerce")
             fundamentals = fundamentals.dropna(subset=["fetch_date_dt"])
-            for col in fkeep:
+            for col in fnum_cols:
                 fundamentals[col] = pd.to_numeric(fundamentals[col], errors="coerce")
+            if "book_value_per_share" in fundamentals.columns:
+                fundamentals["book_value"] = fundamentals["book_value_per_share"]
+            if "roe_pct" in fundamentals.columns:
+                fundamentals["return_on_equity"] = fundamentals["roe_pct"]
+            if "operating_margin_pct" in fundamentals.columns:
+                fundamentals["operating_margins"] = fundamentals["operating_margin_pct"]
+            if "roa_pct" in fundamentals.columns:
+                fundamentals["net_income"] = fundamentals["roa_pct"] * pd.to_numeric(
+                    fundamentals.get("total_assets"),
+                    errors="coerce",
+                )
             fundamentals = fundamentals.sort_values(["ticker", "fetch_date"]).drop_duplicates(
                 subset=["ticker", "fetch_date"], keep="last"
             )
@@ -380,18 +404,23 @@ def rebuild_raw_cross_section_history(
             fundamentals["eps_growth_raw"] = fundamentals.groupby("ticker", sort=False)["trailing_eps"].pct_change(4, fill_method=None)
             fundamentals["asset_growth_raw"] = fundamentals.groupby("ticker", sort=False)["total_assets"].pct_change(4, fill_method=None)
 
-        trbc_cols = _table_columns(conn, "trbc_industry_history")
+        trbc_cols = _table_columns(conn, CLASSIFICATION_TABLE)
         trbc_ind_col = pick_trbc_industry_column(trbc_cols)
         trbc_sec_col = "trbc_economic_sector"
         trbc = pd.DataFrame()
         if trbc_ind_col and trbc_sec_col in trbc_cols:
             trbc = pd.read_sql_query(
                 f"""
-                SELECT ticker, as_of_date, {trbc_sec_col} AS trbc_economic_sector_short,
-                       {trbc_ind_col} AS trbc_industry_group
-                FROM trbc_industry_history
-                WHERE as_of_date <= ?
-                ORDER BY ticker, as_of_date
+                SELECT
+                    UPPER(sm.ticker) AS ticker,
+                    c.as_of_date,
+                    c.{trbc_sec_col} AS trbc_economic_sector_short,
+                    c.{trbc_ind_col} AS trbc_industry_group
+                FROM {CLASSIFICATION_TABLE} c
+                JOIN {SECURITY_MASTER_TABLE} sm
+                  ON sm.sid = c.sid
+                WHERE c.as_of_date <= ?
+                ORDER BY UPPER(sm.ticker), c.as_of_date
                 """,
                 conn,
                 params=(max_date,),
@@ -412,11 +441,25 @@ def rebuild_raw_cross_section_history(
             fmerge_cols = [
                 "ticker",
                 "fetch_date_dt",
-                *[c for c in fkeep if c in fundamentals.columns],
+                "market_cap",
+                "shares_outstanding",
+                "dividend_yield",
+                "book_value",
+                "forward_eps",
+                "trailing_eps",
+                "total_debt",
+                "operating_cashflow",
+                "revenue",
+                "total_assets",
+                "return_on_equity",
+                "operating_margins",
+                "net_income",
+                "common_name",
                 "sales_growth_raw",
                 "eps_growth_raw",
                 "asset_growth_raw",
             ]
+            fmerge_cols = [c for c in fmerge_cols if c in fundamentals.columns]
             out = _merge_asof_by_ticker(
                 out,
                 fundamentals[fmerge_cols],
@@ -444,6 +487,7 @@ def rebuild_raw_cross_section_history(
         total_assets = pd.to_numeric(out.get("total_assets"), errors="coerce")
         net_income = pd.to_numeric(out.get("net_income"), errors="coerce")
         gross_profit = pd.to_numeric(out.get("gross_profit"), errors="coerce")
+        operating_margins = pd.to_numeric(out.get("operating_margins"), errors="coerce")
         dividend_yield = pd.to_numeric(out.get("dividend_yield"), errors="coerce")
         return_on_equity = pd.to_numeric(out.get("return_on_equity"), errors="coerce")
         avg_volume_21d = pd.to_numeric(out.get("avg_volume_21d"), errors="coerce")
@@ -464,7 +508,11 @@ def rebuild_raw_cross_section_history(
         out["book_leverage_raw"] = total_assets / book_equity
         out["roe_raw"] = return_on_equity
         out["roa_raw"] = net_income / total_assets.replace(0.0, np.nan)
-        out["gross_profitability_raw"] = gross_profit / total_assets.replace(0.0, np.nan)
+        gross_profitability = gross_profit / total_assets.replace(0.0, np.nan)
+        out["gross_profitability_raw"] = gross_profitability.where(
+            gross_profitability.notna(),
+            operating_margins,
+        )
         out["dividend_yield_raw"] = dividend_yield
         out["turnover_1m_raw"] = avg_volume_21d / shares_out.replace(0.0, np.nan)
         out["turnover_12m_raw"] = avg_volume_252d / shares_out.replace(0.0, np.nan)
