@@ -9,6 +9,7 @@ import pytest
 from barra.daily_factor_returns import load_specific_residuals
 from barra.raw_cross_section_history import ensure_raw_cross_section_history_table
 from cuse4.schema import ensure_cuse4_schema
+from db.cross_section_snapshot import ensure_cross_section_snapshot_table
 from db.model_outputs import persist_model_outputs
 from jobs import run_model_pipeline
 
@@ -46,6 +47,16 @@ def test_security_master_migrates_to_ric_pk_and_cleans_synthetic_ids(tmp_path: P
     ).fetchone()
     assert sid is None
     assert permid is None
+    assert conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='security_master__legacy_pre_ric_pk'"
+    ).fetchone()[0] == 0
+    idx_rows = conn.execute(
+        "SELECT name, tbl_name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_security_master_%'"
+    ).fetchall()
+    idx_by_name = {str(r[0]): str(r[1]) for r in idx_rows}
+    assert idx_by_name.get("idx_security_master_ticker") == "security_master"
+    assert idx_by_name.get("idx_security_master_permid") == "security_master"
+    assert idx_by_name.get("idx_security_master_sid") == "security_master"
     conn.close()
 
 
@@ -67,6 +78,37 @@ def test_raw_cross_section_schema_rekeys_to_ric(tmp_path: Path) -> None:
     cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(barra_raw_cross_section_history)").fetchall()}
     assert "ric" in cols
     assert _pk_cols(conn, "barra_raw_cross_section_history") == ["ric", "as_of_date"]
+    conn.close()
+
+
+def test_snapshot_schema_rekeys_to_ric(tmp_path: Path) -> None:
+    db = tmp_path / "snapshot.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        """
+        CREATE TABLE universe_cross_section_snapshot (
+            ticker TEXT NOT NULL,
+            as_of_date TEXT NOT NULL,
+            market_cap REAL,
+            price_exchange TEXT,
+            updated_at TEXT,
+            PRIMARY KEY (ticker, as_of_date)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO universe_cross_section_snapshot (ticker, as_of_date, market_cap, price_exchange, updated_at)
+        VALUES ('AAPL', '2026-03-03', 1000.0, 'NASDAQ', '2026-03-04T00:00:00Z')
+        """
+    )
+
+    ensure_cross_section_snapshot_table(conn)
+
+    cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(universe_cross_section_snapshot)").fetchall()}
+    assert "ric" in cols
+    assert "price_exchange" not in cols
+    assert _pk_cols(conn, "universe_cross_section_snapshot") == ["ric", "as_of_date"]
     conn.close()
 
 
@@ -151,6 +193,107 @@ def test_model_outputs_quality_gate_fails_on_empty_payload(tmp_path: Path) -> No
     assert "ric" in resid_cols
     assert "ric" in spec_cols
     conn.close()
+
+
+def test_model_outputs_persist_incremental_rows_only(tmp_path: Path) -> None:
+    data_db = tmp_path / "data.db"
+    cache_db = tmp_path / "cache.db"
+
+    cache_conn = sqlite3.connect(str(cache_db))
+    cache_conn.execute(
+        """
+        CREATE TABLE daily_factor_returns (
+            date TEXT NOT NULL,
+            factor_name TEXT NOT NULL,
+            factor_return REAL NOT NULL,
+            r_squared REAL NOT NULL,
+            residual_vol REAL NOT NULL,
+            cross_section_n INTEGER,
+            eligible_n INTEGER,
+            coverage REAL,
+            PRIMARY KEY (date, factor_name)
+        )
+        """
+    )
+    cache_conn.execute(
+        """
+        CREATE TABLE daily_specific_residuals (
+            date TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            ticker TEXT,
+            residual REAL NOT NULL,
+            market_cap REAL NOT NULL,
+            trbc_industry_group TEXT,
+            PRIMARY KEY (date, ric)
+        )
+        """
+    )
+    for d in ("2026-03-02", "2026-03-03"):
+        cache_conn.execute(
+            """
+            INSERT INTO daily_factor_returns (
+                date, factor_name, factor_return, r_squared, residual_vol, cross_section_n, eligible_n, coverage
+            ) VALUES (?, 'Beta', 0.01, 0.3, 0.2, 100, 95, 0.95)
+            """,
+            (d,),
+        )
+        cache_conn.execute(
+            """
+            INSERT INTO daily_specific_residuals (
+                date, ric, ticker, residual, market_cap, trbc_industry_group
+            ) VALUES (?, 'AAPL.OQ', 'AAPL', 0.01, 1000000000, 'Tech')
+            """,
+            (d,),
+        )
+    cache_conn.commit()
+    cache_conn.close()
+
+    cov = pd.DataFrame([[1.0]], index=["Beta"], columns=["Beta"])
+    spec = {
+        "AAPL.OQ": {
+            "ric": "AAPL.OQ",
+            "ticker": "AAPL",
+            "specific_var": 0.02,
+            "specific_vol": 0.14,
+            "obs": 60,
+            "trbc_industry_group": "Tech",
+        }
+    }
+
+    first = persist_model_outputs(
+        data_db=data_db,
+        cache_db=cache_db,
+        run_id="run_1",
+        refresh_mode="full",
+        status="ok",
+        started_at="2026-03-04T00:00:00Z",
+        completed_at="2026-03-04T00:01:00Z",
+        source_dates={"exposures_asof": "2026-03-03", "fundamentals_asof": "2026-03-03"},
+        params={},
+        risk_engine_state={"factor_returns_latest_date": "2026-03-03"},
+        cov=cov,
+        specific_risk_by_ticker=spec,
+    )
+    assert first["row_counts"]["model_factor_returns_daily"] == 2
+    assert first["row_counts"]["model_specific_residuals_daily"] == 2
+
+    second = persist_model_outputs(
+        data_db=data_db,
+        cache_db=cache_db,
+        run_id="run_2",
+        refresh_mode="full",
+        status="ok",
+        started_at="2026-03-04T00:02:00Z",
+        completed_at="2026-03-04T00:03:00Z",
+        source_dates={"exposures_asof": "2026-03-03", "fundamentals_asof": "2026-03-03"},
+        params={},
+        risk_engine_state={"factor_returns_latest_date": "2026-03-03"},
+        cov=cov,
+        specific_risk_by_ticker=spec,
+    )
+    # Second write should only re-upsert the latest date slice.
+    assert second["row_counts"]["model_factor_returns_daily"] == 1
+    assert second["row_counts"]["model_specific_residuals_daily"] == 1
 
 
 def test_ingest_stage_is_not_hardcoded_skip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

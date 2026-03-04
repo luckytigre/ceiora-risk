@@ -4,7 +4,7 @@ Date: 2026-03-04
 Owner: Shaun + Codex
 Scope: Clean, modular backend refactor now; cloud DB cutover readiness in ~1 week.
 
-## 0) Execution Status (2026-03-04)
+## 0) Execution Status (2026-03-04, latest)
 
 Completed in current refactor pass:
 - Runtime readers moved to canonical-only paths (no legacy view SQL fallbacks in `analytics/barra/db/cuse4` runtime modules).
@@ -19,14 +19,24 @@ Completed in current refactor pass:
 - Legacy migration/resolver scripts moved to `backend/scripts/_archive/`.
 - Ops hardening/cleanup scripts repointed to canonical tables.
 
-Remaining high-priority work:
-- RIC-key physical migration completed in `backend/data.db` (row parity validated across canonical tables).
-- Active runtime and ingest/backfill scripts now read/write canonical time-series tables by `ric`.
-- Phase 2 setup completed: relational `model_*` output tables + `model_run_metadata` added and wired from refresh pipeline (cache retained as secondary acceleration path).
-- Phase 3 setup implemented: profile-driven orchestrator + stage checkpoints + CLI entrypoint.
-- One-time migration script removed from active scripts after execution.
-- `/api/refresh` + `refresh_manager` now route to orchestrator profiles (backward-compatible `mode` mapping retained).
-- Remaining cleanup is final full-run parity QA, docs/historical note alignment, and optional permanent deletion of `_archive` scripts.
+Completed in latest optimization sweep:
+- `universe_cross_section_snapshot` physical key migrated to `(ric, as_of_date)` and legacy `price_exchange` removed.
+- Redundant large SQLite indexes dropped from canonical/source tables:
+  - `idx_security_prices_eod_ric_date`
+  - `idx_security_fundamentals_pit_ric_asof`
+  - `idx_security_classification_pit_ric_asof`
+  - `idx_barra_raw_cross_section_history_ric`
+- `security_master` index ownership normalized on active table and migration artifact table removed.
+- Cross-section snapshot builder refactored to RIC-native joins/filters (removed `UPPER(...)` join path and ticker-window partitions).
+- Relational model output writes made incremental (write latest date slice instead of full-history rewrites each refresh).
+- Data diagnostics endpoint reduced to canonical table set only (legacy table probes removed).
+- Full DB compaction completed:
+  - `data.db` reclaimed `1,471,516,672` bytes
+  - `cache.db` reclaimed `8,192` bytes
+
+Current remaining work (non-blocking):
+- Optional archival cleanup under `backend/scripts/_archive/` if you want those files physically deleted instead of retained as history.
+- Cloud migration preparation (Postgres DDL parity + repository wiring) when you are ready next week.
 
 ## 1) What "Clean and Organized" Means for This Project
 

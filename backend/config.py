@@ -56,7 +56,11 @@ def _env_bool(name: str, default: bool) -> bool:
 
 # cUSE4 foundation toggles (non-breaking additive path).
 CUSE4_ENABLE_ESTU_AUDIT = _env_bool("CUSE4_ENABLE_ESTU_AUDIT", True)
-CUSE4_AUTO_BOOTSTRAP = _env_bool("CUSE4_AUTO_BOOTSTRAP", True)
+CUSE4_AUTO_BOOTSTRAP = _env_bool("CUSE4_AUTO_BOOTSTRAP", False)
+
+# Orchestrator ingest stage controls.
+ORCHESTRATOR_ENABLE_INGEST = _env_bool("ORCHESTRATOR_ENABLE_INGEST", False)
+ORCHESTRATOR_INGEST_SHARD_COUNT = max(1, int(os.getenv("ORCHESTRATOR_INGEST_SHARD_COUNT", "1")))
 
 
 def pg_dsn() -> str:

@@ -34,6 +34,15 @@ def _pk_cols(conn: sqlite3.Connection, table: str) -> list[str]:
     return [str(r[1]) for r in rows if int(r[5] or 0) > 0]
 
 
+def _drop_table_if_exists(conn: sqlite3.Connection, table: str) -> None:
+    if _table_exists(conn, table):
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+
+def _drop_index_if_exists(conn: sqlite3.Connection, index_name: str) -> None:
+    conn.execute(f"DROP INDEX IF EXISTS {index_name}")
+
+
 def _create_security_master_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         f"""
@@ -88,6 +97,9 @@ def _ensure_security_master_schema(conn: sqlite3.Connection) -> None:
         "updated_at",
     }
     if pk_cols == ["ric"] and expected_cols.issubset(cols):
+        _create_security_master_table(conn)
+        # Remove stale migration artifacts so index names can be reused on active table.
+        _drop_table_if_exists(conn, f"{SECURITY_MASTER_TABLE}__legacy_pre_ric_pk")
         _create_security_master_table(conn)
         # Normalize synthetic placeholder values even in already-migrated schemas.
         conn.execute(
@@ -204,6 +216,8 @@ def _ensure_security_master_schema(conn: sqlite3.Connection) -> None:
         WHERE rn = 1
         """
     )
+    _drop_table_if_exists(conn, legacy)
+    _create_security_master_table(conn)
 
 
 def _create_prices_table(conn: sqlite3.Connection) -> None:
@@ -224,9 +238,6 @@ def _create_prices_table(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (ric, date)
         )
         """
-    )
-    conn.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{PRICES_TABLE}_ric_date ON {PRICES_TABLE}(ric, date)"
     )
     conn.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{PRICES_TABLE}_date ON {PRICES_TABLE}(date)"
@@ -354,9 +365,6 @@ def ensure_cuse4_schema(conn: sqlite3.Connection) -> dict[str, str]:
         """
     )
     conn.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{FUNDAMENTALS_HISTORY_TABLE}_ric_asof ON {FUNDAMENTALS_HISTORY_TABLE}(ric, as_of_date)"
-    )
-    conn.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{FUNDAMENTALS_HISTORY_TABLE}_asof ON {FUNDAMENTALS_HISTORY_TABLE}(as_of_date)"
     )
 
@@ -377,9 +385,6 @@ def ensure_cuse4_schema(conn: sqlite3.Connection) -> dict[str, str]:
             PRIMARY KEY (ric, as_of_date)
         )
         """
-    )
-    conn.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{TRBC_HISTORY_TABLE}_ric_asof ON {TRBC_HISTORY_TABLE}(ric, as_of_date)"
     )
     conn.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{TRBC_HISTORY_TABLE}_asof ON {TRBC_HISTORY_TABLE}(as_of_date)"
@@ -414,6 +419,12 @@ def ensure_cuse4_schema(conn: sqlite3.Connection) -> dict[str, str]:
     conn.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{ESTU_MEMBERSHIP_TABLE}_ric_date ON {ESTU_MEMBERSHIP_TABLE}(ric, date)"
     )
+
+    # Drop redundant indexes where PRIMARY KEY already covers the same key pattern.
+    _drop_index_if_exists(conn, "idx_security_prices_eod_ric_date")
+    _drop_index_if_exists(conn, "idx_security_fundamentals_pit_ric_asof")
+    _drop_index_if_exists(conn, "idx_security_classification_pit_ric_asof")
+    _drop_index_if_exists(conn, "idx_barra_raw_cross_section_history_ric")
 
     return {
         "security_master": SECURITY_MASTER_TABLE,

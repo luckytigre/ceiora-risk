@@ -3,6 +3,9 @@
 Date: 2026-03-03  
 Branch: refactor/cuse4-backend-master-plan
 
+> Historical baseline plan. The actively maintained execution status/next actions now live in:
+> `user notes/cUSE4_Backend_Execution_Plan_2026-03-04.md`.
+
 ## 1) Context and Constraints
 
 This plan replaces the backend data-collection + analytics engine while preserving:

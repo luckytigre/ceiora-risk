@@ -466,3 +466,56 @@ Post-overwrite table state (`security_prices_eod`):
     - `specific_risk_ticker_count=2578`
     - relational write status `ok` for model output tables.
 - Marked previously terminated long-running attempt as aborted in `job_run_status` for audit clarity.
+
+### Entry 22 - Full Optimization Sweep + Hardening (2026-03-04)
+- Conducted a full professional optimization audit across schema, runtime paths, storage footprint, and orchestration flow.
+
+Changes implemented:
+- `backend/db/cross_section_snapshot.py`
+  - migrated physical key of `universe_cross_section_snapshot` to `(ric, as_of_date)`.
+  - removed migration ordering bug where `idx_universe_cross_section_snapshot_ric` could be created before `ric` existed on legacy tables.
+  - hard migration rebuild now deduplicates by `(ric, as_of_date)`.
+- `backend/cuse4/schema.py` and `backend/barra/raw_cross_section_history.py`
+  - enforced redundant index cleanup and migration artifact cleanup.
+- `backend/routes/data.py`
+  - diagnostics source table list is now canonical-only.
+- `backend/db/model_outputs.py`
+  - kept incremental relational write behavior (latest-date slice only).
+- `backend/tests/test_audit_fixes.py`
+  - added snapshot migration regression test; test suite now `8 passed`.
+
+Live DB migration + validation:
+- Applied canonical schema ensure on `backend/data.db`.
+- Verified:
+  - `security_master__legacy_pre_ric_pk` absent.
+  - active `security_master` indexes exist on `ticker`, `permid`, `sid`.
+  - redundant indexes removed (`idx_security_prices_eod_ric_date`, `idx_security_fundamentals_pit_ric_asof`, `idx_security_classification_pit_ric_asof`, `idx_barra_raw_cross_section_history_ric`).
+  - `universe_cross_section_snapshot` PK now `ric, as_of_date`.
+
+Performance/refresh checks:
+- Snapshot rebuild benchmark (`mode=current`):
+  - `rows_upserted=3019`, elapsed `~8.85s`.
+- Weekly-core orchestration (`feature_build -> serving_refresh`):
+  - completed `status=ok`.
+  - stage timings from job rows:
+    - feature_build: `~9.24s`
+    - estu_audit: `~7.35s`
+    - factor_returns: `~56.75s`
+    - risk_model: `~4.96s`
+    - serving_refresh: `~221.72s`
+- Daily-fast orchestration (`feature_build -> serving_refresh`):
+  - completed `status=ok`.
+  - total wall time `~45.4s`.
+
+Storage optimization:
+- Ran compaction script:
+  - `python3 backend/scripts/compact_sqlite_databases.py backend/data.db backend/cache.db`
+- Reclaimed:
+  - `data.db`: `1,471,516,672` bytes
+  - `cache.db`: `8,192` bytes
+- Integrity checks:
+  - `PRAGMA quick_check` = `ok` for both DBs.
+
+Documentation updates:
+- Added audit report: `backend/OPTIMIZATION_AUDIT_2026-03-04.md`.
+- Updated execution plan status in `user notes/cUSE4_Backend_Execution_Plan_2026-03-04.md`.

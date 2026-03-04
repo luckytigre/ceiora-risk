@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +56,7 @@ def _table_stats(conn: sqlite3.Connection, table: str) -> dict[str, Any]:
 
     row_count = int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] or 0)
     ticker_count = (
-        int(conn.execute(f"SELECT COUNT(DISTINCT UPPER({ticker_col})) FROM {table}").fetchone()[0] or 0)
+        int(conn.execute(f"SELECT COUNT(DISTINCT {ticker_col}) FROM {table}").fetchone()[0] or 0)
         if ticker_col
         else None
     )
@@ -115,9 +116,9 @@ def _exposure_duplicate_stats(conn: sqlite3.Connection, table: str) -> dict[str,
         f"""
         SELECT COUNT(*), COALESCE(SUM(cnt - 1), 0)
         FROM (
-            SELECT UPPER(ticker) AS ticker, as_of_date, COUNT(*) AS cnt
+            SELECT ticker, as_of_date, COUNT(*) AS cnt
             FROM {table}
-            GROUP BY UPPER(ticker), as_of_date
+            GROUP BY ticker, as_of_date
             HAVING COUNT(*) > 1
         )
         """
@@ -148,11 +149,7 @@ def _cache_rows() -> list[dict[str, Any]]:
     for key, ts in rows:
         iso = None
         if ts is not None:
-            c = sqlite3.connect(":memory:")
-            try:
-                iso = c.execute("SELECT datetime(?, 'unixepoch')", (float(ts),)).fetchone()[0]
-            finally:
-                c.close()
+            iso = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
         out.append(
             {
                 "key": str(key),
@@ -172,34 +169,18 @@ async def get_data_diagnostics(include_paths: bool = Query(False)):
     data_conn = sqlite3.connect(str(DATA_DB))
     cache_conn = sqlite3.connect(str(CACHE_DB))
     try:
+        canonical_tables = {
+            "security_master": "security_master",
+            "security_fundamentals_pit": "security_fundamentals_pit",
+            "security_classification_pit": "security_classification_pit",
+            "security_prices_eod": "security_prices_eod",
+            "estu_membership_daily": "estu_membership_daily",
+            "barra_raw_cross_section_history": "barra_raw_cross_section_history",
+            "universe_cross_section_snapshot": "universe_cross_section_snapshot",
+        }
         source_tables = {
-            "universe_eligibility_summary": _table_stats(data_conn, "universe_eligibility_summary")
-            if _table_exists(data_conn, "universe_eligibility_summary")
-            else None,
-            "universe_constituent_snapshots": _table_stats(data_conn, "universe_constituent_snapshots")
-            if _table_exists(data_conn, "universe_constituent_snapshots")
-            else None,
-            "security_fundamentals_pit": _table_stats(data_conn, "security_fundamentals_pit")
-            if _table_exists(data_conn, "security_fundamentals_pit")
-            else None,
-            "security_classification_pit": _table_stats(data_conn, "security_classification_pit")
-            if _table_exists(data_conn, "security_classification_pit")
-            else None,
-            "security_prices_eod": _table_stats(data_conn, "security_prices_eod")
-            if _table_exists(data_conn, "security_prices_eod")
-            else None,
-            "pit_cross_section_snapshot": _table_stats(data_conn, "universe_cross_section_snapshot")
-            if _table_exists(data_conn, "universe_cross_section_snapshot")
-            else None,
-            "barra_raw_cross_section_history": _table_stats(data_conn, "barra_raw_cross_section_history")
-            if _table_exists(data_conn, "barra_raw_cross_section_history")
-            else None,
-            "security_master": _table_stats(data_conn, "security_master")
-            if _table_exists(data_conn, "security_master")
-            else None,
-            "estu_membership_daily": _table_stats(data_conn, "estu_membership_daily")
-            if _table_exists(data_conn, "estu_membership_daily")
-            else None,
+            label: _table_stats(data_conn, table) if _table_exists(data_conn, table) else None
+            for label, table in canonical_tables.items()
         }
 
         exposure_source_table = _resolve_exposure_source_table(data_conn)
