@@ -1,4 +1,4 @@
-.PHONY: dev backend frontend refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu
+.PHONY: dev backend backend-prod frontend refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu
 
 setup:
 	cd backend && python3 -m pip install -e ".[dev]"
@@ -6,6 +6,9 @@ setup:
 
 backend:
 	uvicorn backend.main:app --reload --port 8000
+
+backend-prod:
+	uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers $${BACKEND_WORKERS:-1}
 
 frontend:
 	cd frontend && npm run dev -- --port 3000

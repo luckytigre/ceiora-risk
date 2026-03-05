@@ -16,6 +16,9 @@
 - Set a non-empty `REFRESH_API_TOKEN` before exposing the app online.
 - Prefer manual or low-frequency refreshes (`daily-fast` most days).
 - Keep daily file backups of `data.db` and `cache.db`.
+- Production backend command:
+  - `BACKEND_WORKERS=1 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 1`
+  - or `make backend-prod`
 
 ## Volume Pull Policy
 - Canonical daily OHLCV ingest (`download_data_lseg.py`) maps `volume` from `TR.Volume`.
