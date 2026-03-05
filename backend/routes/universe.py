@@ -47,6 +47,22 @@ def _normalize_search_row(row: dict) -> dict:
     }
 
 
+def _search_rank(row: dict, needle: str) -> tuple[int, int, str]:
+    """Rank search hits with ticker intent first, then company-name intent."""
+    ticker = str(row.get("ticker", "")).upper()
+    name = str(row.get("name", "")).upper()
+
+    if ticker == needle:
+        return (0, 0, ticker)  # exact ticker
+    if ticker.startswith(needle):
+        return (1, len(ticker), ticker)  # ticker prefix
+    if needle in ticker:
+        return (2, ticker.find(needle), ticker)  # ticker contains
+    if name.startswith(needle):
+        return (3, len(name), ticker)  # company prefix
+    return (4, name.find(needle), ticker)  # company contains
+
+
 @router.get("/universe/ticker/{ticker}")
 async def get_universe_ticker(ticker: str):
     data = cache_get("universe_loadings")
@@ -81,14 +97,15 @@ async def search_universe(
         return {"query": q, "results": [], "total": 0, "_cached": True}
 
     index = data.get("index") or []
-    hits = []
+    ranked: list[tuple[tuple[int, int, str], dict]] = []
     for row in index:
         ticker = str(row.get("ticker", "")).upper()
         name = str(row.get("name", "")).upper()
         if needle in ticker or needle in name:
-            hits.append(_normalize_search_row(row))
-            if len(hits) >= limit:
-                break
+            ranked.append((_search_rank(row, needle), _normalize_search_row(row)))
+
+    ranked.sort(key=lambda item: item[0])
+    hits = [row for _, row in ranked[:limit]]
     return {"query": q, "results": hits, "total": len(hits), "_cached": True}
 
 
