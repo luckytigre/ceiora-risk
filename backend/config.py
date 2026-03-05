@@ -54,6 +54,14 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _env_csv(name: str, default: list[str]) -> list[str]:
+    raw = os.getenv(name)
+    if raw is None:
+        return list(default)
+    parts = [p.strip() for p in str(raw).split(",")]
+    return [p for p in parts if p]
+
+
 # cUSE4 foundation toggles (non-breaking additive path).
 CUSE4_ENABLE_ESTU_AUDIT = _env_bool("CUSE4_ENABLE_ESTU_AUDIT", True)
 CUSE4_AUTO_BOOTSTRAP = _env_bool("CUSE4_AUTO_BOOTSTRAP", False)
@@ -61,6 +69,15 @@ CUSE4_AUTO_BOOTSTRAP = _env_bool("CUSE4_AUTO_BOOTSTRAP", False)
 # Orchestrator ingest stage controls.
 ORCHESTRATOR_ENABLE_INGEST = _env_bool("ORCHESTRATOR_ENABLE_INGEST", False)
 ORCHESTRATOR_INGEST_SHARD_COUNT = max(1, int(os.getenv("ORCHESTRATOR_INGEST_SHARD_COUNT", "1")))
+
+# CORS
+CORS_ALLOW_ORIGINS = _env_csv(
+    "CORS_ALLOW_ORIGINS",
+    ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+)
+
+# Optional protection for refresh endpoints.
+REFRESH_API_TOKEN = str(os.getenv("REFRESH_API_TOKEN", "")).strip()
 
 
 def pg_dsn() -> str:

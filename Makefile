@@ -15,7 +15,11 @@ dev:
 	$(MAKE) backend & $(MAKE) frontend & wait
 
 refresh:
-	curl -X POST http://localhost:8000/api/refresh
+	@if [ -n "$$REFRESH_API_TOKEN" ]; then \
+		curl -X POST -H "X-Refresh-Token: $$REFRESH_API_TOKEN" "http://localhost:8000/api/refresh"; \
+	else \
+		curl -X POST "http://localhost:8000/api/refresh"; \
+	fi
 
 cuse4-bootstrap:
 	python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/data.db
