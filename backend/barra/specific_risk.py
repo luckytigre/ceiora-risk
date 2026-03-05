@@ -37,6 +37,7 @@ def build_specific_risk_from_cache(
     if resid_df.empty:
         return {}
 
+    resid_df["ric"] = resid_df["ric"].astype(str).str.upper()
     resid_df["ticker"] = resid_df["ticker"].astype(str).str.upper()
     resid_df["residual"] = pd.to_numeric(resid_df["residual"], errors="coerce")
     resid_df["trbc_industry_group"] = (
@@ -45,17 +46,22 @@ def build_specific_risk_from_cache(
         .astype(str)
         .str.strip()
     )
-    resid_df = resid_df.dropna(subset=["ticker", "residual"])
+    resid_df = resid_df.dropna(subset=["ric", "residual"])
     if resid_df.empty:
         return {}
 
     rows: list[dict[str, float | int | str]] = []
-    for ticker, grp in resid_df.groupby("ticker", sort=False):
+    for ric, grp in resid_df.groupby("ric", sort=False):
         g = grp.sort_values("date")
         values = g["residual"].to_numpy(dtype=float)
         obs = int(np.isfinite(values).sum())
         if obs < 2:
             continue
+        ticker = (
+            str(g["ticker"].dropna().iloc[-1]).upper()
+            if not g["ticker"].dropna().empty
+            else ""
+        )
         raw_daily_var = _ewma_variance(values, half_life=half_life)
         raw_var = max(0.0, raw_daily_var * ANNUALIZATION)
         industry = (
@@ -64,6 +70,7 @@ def build_specific_risk_from_cache(
             else ""
         )
         rows.append({
+            "ric": str(ric),
             "ticker": str(ticker),
             "trbc_industry_group": industry,
             "obs": obs,
@@ -89,6 +96,7 @@ def build_specific_risk_from_cache(
 
     out: dict[str, dict[str, float | int | str]] = {}
     for _, row in stats.iterrows():
+        ric = str(row["ric"]).upper()
         ticker = str(row["ticker"])
         industry = str(row["trbc_industry_group"])
         obs = int(row["obs"])
@@ -102,7 +110,9 @@ def build_specific_risk_from_cache(
         specific_var = confidence * raw_var + (1.0 - confidence) * target
         specific_var = max(1e-8, specific_var if np.isfinite(specific_var) else target)
 
-        out[ticker] = {
+        out[ric] = {
+            "ric": ric,
+            "ticker": ticker,
             "specific_var": float(specific_var),
             "specific_vol": float(np.sqrt(specific_var)),
             "obs": obs,

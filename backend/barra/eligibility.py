@@ -100,22 +100,22 @@ def load_trading_dates(data_db: Path) -> list[str]:
 
 
 def load_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, pd.DataFrame]]:
-    """Load exposure snapshots keyed by as_of_date (ticker-indexed)."""
+    """Load exposure snapshots keyed by as_of_date (RIC-indexed)."""
     conn = sqlite3.connect(str(data_db))
     try:
         ensure_trbc_naming(conn)
         source_table = "barra_raw_cross_section_history"
         cols = _table_columns(conn, source_table)
-        if not {"ticker", "as_of_date"}.issubset(cols):
+        if not {"ric", "as_of_date"}.issubset(cols):
             return [], {}
         style_cols = [c for c in STYLE_COLUMN_TO_LABEL.keys() if c in cols]
         industry_col = pick_trbc_industry_column(cols)
         industry_select = f"{industry_col} AS trbc_industry_group" if industry_col else "NULL AS trbc_industry_group"
         df = pd.read_sql_query(
             f"""
-            SELECT ticker, as_of_date, {", ".join(style_cols)}, {industry_select}
+            SELECT UPPER(ric) AS ric, UPPER(ticker) AS ticker, as_of_date, {", ".join(style_cols)}, {industry_select}
             FROM {source_table}
-            ORDER BY as_of_date, ticker
+            ORDER BY as_of_date, ric
             """,
             conn,
         )
@@ -124,6 +124,7 @@ def load_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, pd.Data
     if df.empty:
         return [], {}
 
+    df["ric"] = df["ric"].astype(str).str.upper()
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["as_of_date"] = df["as_of_date"].astype(str)
     if "trbc_industry_group" in df.columns:
@@ -133,8 +134,10 @@ def load_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, pd.Data
 
     snapshots: dict[str, pd.DataFrame] = {}
     for as_of, grp in df.groupby("as_of_date", sort=True):
-        snap = grp.drop_duplicates(subset=["ticker"], keep="last").set_index("ticker")
+        snap = grp.drop_duplicates(subset=["ric"], keep="last").set_index("ric")
         keep_cols = [*style_cols]
+        if "ticker" in snap.columns:
+            keep_cols.append("ticker")
         if "trbc_industry_group" in snap.columns:
             keep_cols.append("trbc_industry_group")
         snapshots[str(as_of)] = snap[keep_cols].copy()
@@ -148,12 +151,10 @@ def _load_market_cap_panel(data_db: Path, dates: list[str]) -> pd.DataFrame:
     try:
         df = pd.read_sql_query(
             """
-            SELECT UPPER(sm.ticker) AS ticker, f.as_of_date AS fetch_date, f.market_cap
+            SELECT UPPER(f.ric) AS ric, f.as_of_date AS fetch_date, f.market_cap
             FROM security_fundamentals_pit f
-            JOIN security_master sm
-              ON sm.sid = f.sid
             WHERE f.as_of_date <= ?
-            ORDER BY f.as_of_date, UPPER(sm.ticker)
+            ORDER BY f.as_of_date, UPPER(f.ric)
             """,
             conn,
             params=(dates[-1],),
@@ -162,13 +163,13 @@ def _load_market_cap_panel(data_db: Path, dates: list[str]) -> pd.DataFrame:
         conn.close()
     if df.empty:
         return pd.DataFrame(index=dates)
-    df["ticker"] = df["ticker"].astype(str).str.upper()
+    df["ric"] = df["ric"].astype(str).str.upper()
     df["fetch_date"] = df["fetch_date"].astype(str)
     df["market_cap"] = pd.to_numeric(df["market_cap"], errors="coerce")
     wide = (
-        df.dropna(subset=["ticker", "fetch_date"])
-        .drop_duplicates(subset=["ticker", "fetch_date"], keep="last")
-        .pivot(index="fetch_date", columns="ticker", values="market_cap")
+        df.dropna(subset=["ric", "fetch_date"])
+        .drop_duplicates(subset=["ric", "fetch_date"], keep="last")
+        .pivot(index="fetch_date", columns="ric", values="market_cap")
         .sort_index()
     )
     full_index = sorted(set(wide.index.astype(str)).union(set(dates)))
@@ -193,13 +194,11 @@ def _load_trbc_classification_panel(data_db: Path, dates: list[str]) -> tuple[pd
             if h_ind_col and h_sec_col:
                 hist = pd.read_sql_query(
                     f"""
-                    SELECT UPPER(sm.ticker) AS ticker,
+                    SELECT UPPER(h.ric) AS ric,
                            h.as_of_date AS ref_date,
                            h.{h_sec_col} AS trbc_economic_sector_short,
                            h.{h_ind_col} AS trbc_industry_group
                     FROM security_classification_pit h
-                    JOIN security_master sm
-                      ON sm.sid = h.sid
                     WHERE h.as_of_date <= ?
                     """,
                     conn,
@@ -216,24 +215,24 @@ def _load_trbc_classification_panel(data_db: Path, dates: list[str]) -> tuple[pd
         return empty, empty.copy()
 
     df = pd.concat(parts, ignore_index=True)
-    df["ticker"] = df["ticker"].astype(str).str.upper()
+    df["ric"] = df["ric"].astype(str).str.upper()
     df["ref_date"] = df["ref_date"].astype(str)
     df["trbc_economic_sector_short"] = _normalize_text_series(df["trbc_economic_sector_short"])
     df["trbc_industry_group"] = _normalize_text_series(df["trbc_industry_group"])
     df["trbc_economic_sector_short"] = df["trbc_economic_sector_short"].replace({"": np.nan})
     df["trbc_industry_group"] = df["trbc_industry_group"].replace({"": np.nan})
-    df = df.dropna(subset=["ticker", "ref_date"])
+    df = df.dropna(subset=["ric", "ref_date"])
     df = (
         df.sort_values(["ref_date", "priority"])
-        .drop_duplicates(subset=["ticker", "ref_date"], keep="last")
+        .drop_duplicates(subset=["ric", "ref_date"], keep="last")
     )
 
     sec = (
-        df.pivot(index="ref_date", columns="ticker", values="trbc_economic_sector_short")
+        df.pivot(index="ref_date", columns="ric", values="trbc_economic_sector_short")
         .sort_index()
     )
     ind = (
-        df.pivot(index="ref_date", columns="ticker", values="trbc_industry_group")
+        df.pivot(index="ref_date", columns="ric", values="trbc_industry_group")
         .sort_index()
     )
     sec = sec.astype("string")
@@ -372,13 +371,13 @@ def structural_eligibility_for_snapshot(
     required_style_cols: list[str] | None = None,
     non_equity_sectors: set[str] | None = None,
 ) -> pd.DataFrame:
-    """Return per-ticker structural eligibility booleans and reasons."""
+    """Return per-security structural eligibility booleans and reasons."""
     if exposure_snapshot is None or exposure_snapshot.empty:
         return pd.DataFrame()
 
     non_equity = set(non_equity_sectors or NON_EQUITY_ECONOMIC_SECTORS)
     style_cols = required_style_cols or list(STYLE_COLUMN_TO_LABEL.keys())
-    idx = pd.Index(exposure_snapshot.index.astype(str).str.upper(), name="ticker")
+    idx = pd.Index(exposure_snapshot.index.astype(str).str.upper(), name="ric")
     frame = pd.DataFrame(index=idx)
 
     if style_cols and all(c in exposure_snapshot.columns for c in style_cols):

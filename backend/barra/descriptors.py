@@ -57,9 +57,8 @@ FULL_STYLE_FACTORS: dict[str, dict[str, float]] = {
         "eps_growth_raw": 0.5,
     },
     "Profitability": {
-        "roe_raw": 0.4,
-        "roa_raw": 0.3,
-        "gross_profitability_raw": 0.3,
+        "roe_raw": 0.5,
+        "gross_profitability_raw": 0.5,
     },
     "Investment": {"asset_growth_raw": 1.0},
     "Dividend Yield": {"dividend_yield_raw": 1.0},

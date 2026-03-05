@@ -31,12 +31,12 @@ from trading_calendar import filter_xnys_sessions, non_xnys_dates, previous_or_s
 
 logger = logging.getLogger(__name__)
 
-# Style score columns in the raw cross-section table
+# Style score columns in the raw cross-section table.
 STYLE_SCORE_COLS = list(STYLE_COLUMN_TO_LABEL.keys())
 RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v10_trbc_economic_sector_short_rename_2026_03_02"
+CACHE_METHOD_VERSION = "v11_ric_keyed_residuals_2026_03_04"
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
@@ -62,11 +62,12 @@ CREATE TABLE IF NOT EXISTS daily_factor_returns_meta (
 _DAILY_RESIDUALS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_specific_residuals (
     date TEXT NOT NULL,
+    ric TEXT NOT NULL,
     ticker TEXT NOT NULL,
     residual REAL NOT NULL,
     market_cap REAL NOT NULL DEFAULT 0.0,
     trbc_industry_group TEXT,
-    PRIMARY KEY (date, ticker)
+    PRIMARY KEY (date, ric)
 );
 """
 
@@ -146,24 +147,31 @@ def _purge_non_session_rows(
 
 
 def _load_prices(data_db: Path) -> pd.DataFrame:
-    """Load all daily close prices."""
+    """Load all daily close prices keyed by RIC."""
     conn = sqlite3.connect(str(data_db))
     df = pd.read_sql_query(
-        "SELECT ticker, date, close, source, updated_at FROM prices_daily ORDER BY ticker, date",
+        """
+        SELECT UPPER(p.ric) AS ric, UPPER(sm.ticker) AS ticker, p.date, p.close, p.source, p.updated_at
+        FROM security_prices_eod p
+        JOIN security_master sm
+          ON sm.ric = p.ric
+        ORDER BY UPPER(p.ric), p.date
+        """,
         conn,
     )
     conn.close()
+    df["ric"] = df["ric"].astype(str).str.upper()
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date.astype("string")
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
     df["source"] = df.get("source", pd.Series(index=df.index, dtype="string")).astype("string")
     df["updated_at"] = pd.to_datetime(df.get("updated_at"), errors="coerce")
-    df = df.dropna(subset=["ticker", "date", "close"])
-    # Deduplicate repeated ingests by taking preferred source + latest update per (ticker, date).
+    df = df.dropna(subset=["ric", "date", "close"])
+    # Deduplicate repeated ingests by taking preferred source + latest update per (RIC, date).
     df["source_priority"] = np.where(df["source"].str.lower() == "lseg_toolkit", 1, 0)
-    df = df.sort_values(["ticker", "date", "source_priority", "updated_at"], ascending=[True, True, False, False])
-    df = df.drop_duplicates(subset=["ticker", "date"], keep="first")
-    return df[["ticker", "date", "close"]]
+    df = df.sort_values(["ric", "date", "source_priority", "updated_at"], ascending=[True, True, False, False])
+    df = df.drop_duplicates(subset=["ric", "date"], keep="first")
+    return df[["ric", "ticker", "date", "close"]]
 
 
 def _load_cached_dates(cache_db: Path) -> set[str]:
@@ -333,11 +341,12 @@ def _save_daily_residuals(cache_db: Path, rows: list[dict]):
     conn.execute(_DAILY_RESIDUALS_SCHEMA)
     conn.executemany(
         """INSERT OR REPLACE INTO daily_specific_residuals
-           (date, ticker, residual, market_cap, trbc_industry_group)
-           VALUES (?, ?, ?, ?, ?)""",
+           (date, ric, ticker, residual, market_cap, trbc_industry_group)
+           VALUES (?, ?, ?, ?, ?, ?)""",
         [
             (
                 r["date"],
+                r["ric"],
                 r["ticker"],
                 r["residual"],
                 r["market_cap"],
@@ -379,13 +388,22 @@ def compute_daily_factor_returns(
         return pd.DataFrame(columns=["date", "factor_name", "factor_return", "r_squared", "residual_vol"])
 
     # Build daily returns: pivot prices to wide, then compute pct_change
-    prices_wide = prices_df.pivot(index="date", columns="ticker", values="close")
+    prices_wide = prices_df.pivot(index="date", columns="ric", values="close")
     prices_wide = prices_wide.sort_index()
     daily_returns = prices_wide.pct_change(fill_method=None)  # r_i(t) = close(t)/close(t-1) - 1
     daily_returns = daily_returns.iloc[1:]  # drop first NaN row
     trading_dates = sorted(str(d) for d in daily_returns.index.tolist())
     trading_dates = filter_xnys_sessions(trading_dates)
     daily_returns.index = daily_returns.index.astype(str)
+    ric_ticker_map = (
+        prices_df.sort_values(["ric", "date"])
+        .dropna(subset=["ric"])
+        .drop_duplicates(subset=["ric"], keep="last")
+        .set_index("ric")["ticker"]
+        .astype(str)
+        .str.upper()
+        .to_dict()
+    )
 
     if lookback_days > 0:
         trading_dates = trading_dates[-lookback_days:]
@@ -575,19 +593,21 @@ def compute_daily_factor_returns(
 
         # 8. Store per-stock residual history for specific risk forecasting
         residuals = np.asarray(result.residuals, dtype=float)
-        for idx, ticker in enumerate(valid_idx):
+        for idx, ric in enumerate(valid_idx):
             if idx >= residuals.shape[0]:
                 break
             resid_val = float(residuals[idx])
             if not np.isfinite(resid_val):
                 continue
-            mcap_val = float(market_cap_series.loc[ticker])
+            mcap_val = float(market_cap_series.loc[ric])
             if not np.isfinite(mcap_val) or mcap_val <= 0:
                 continue
-            industry = str(industry_series.loc[ticker]) if ticker in industry_series.index else ""
+            industry = str(industry_series.loc[ric]) if ric in industry_series.index else ""
+            ric_key = str(ric).upper()
             batch_residuals.append({
                 "date": date,
-                "ticker": str(ticker),
+                "ric": ric_key,
+                "ticker": str(ric_ticker_map.get(ric_key, "")),
                 "residual": resid_val,
                 "market_cap": mcap_val,
                 "trbc_industry_group": industry,
@@ -671,11 +691,13 @@ def load_specific_residuals(
     industry_col = pick_trbc_industry_column(cols)
     if industry_col is None:
         conn.close()
-        return pd.DataFrame(columns=["date", "ticker", "residual", "market_cap", "trbc_industry_group"])
+        return pd.DataFrame(columns=["date", "ric", "ticker", "residual", "market_cap", "trbc_industry_group"])
+    ric_expr = "UPPER(ric)" if "ric" in cols else "UPPER(ticker)"
+    ticker_expr = "UPPER(ticker)" if "ticker" in cols else "UPPER(ric)"
     if lookback_days > 0:
         df = pd.read_sql_query(
             f"""
-            SELECT date, ticker, residual, market_cap, {industry_col} AS trbc_industry_group
+            SELECT date, {ric_expr} AS ric, {ticker_expr} AS ticker, residual, market_cap, {industry_col} AS trbc_industry_group
             FROM daily_specific_residuals
             WHERE date IN (
                 SELECT date
@@ -694,11 +716,15 @@ def load_specific_residuals(
     else:
         df = pd.read_sql_query(
             f"""
-            SELECT date, ticker, residual, market_cap, {industry_col} AS trbc_industry_group
+            SELECT date, {ric_expr} AS ric, {ticker_expr} AS ticker, residual, market_cap, {industry_col} AS trbc_industry_group
             FROM daily_specific_residuals
-            ORDER BY date, ticker
+            ORDER BY date, ric
             """,
             conn,
         )
     conn.close()
+    if df.empty:
+        return df
+    df["ric"] = df["ric"].astype(str).str.upper()
+    df["ticker"] = df["ticker"].astype(str).str.upper()
     return df
