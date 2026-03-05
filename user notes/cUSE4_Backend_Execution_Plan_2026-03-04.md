@@ -150,8 +150,8 @@ Current state: no compatibility views remain in active runtime DB.
 - Action: repoint to canonical tables only
 
 5. `backend/scripts/sync_universe_lifecycle_dates.py`
-- Reads `prices_daily`
-- Action: repoint to `security_prices_eod`
+- Legacy dependency: `universe_eligibility_summary`
+- Action: retired/deleted after legacy universe tables were removed
 
 ### 4.3 Migration/one-time utilities (P2)
 
