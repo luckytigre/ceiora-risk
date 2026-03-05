@@ -195,6 +195,9 @@ Metrics columns:
 
 Policy:
 - LSEG-only canonical history after migration validation.
+- Standard daily ingest maps `volume` from `TR.AvgDailyVolume3Month`.
+- Targeted historical volume-repair mode uses the same metric
+  (`backfill_prices_range_lseg.py --volume-only`).
 - Primary key: `(ric, date)`.
 
 ## 4.5 `estu_membership_daily` (new audit table)
@@ -428,7 +431,7 @@ Comparison rule (all else equal):
 The following implementation defects were closed and verified:
 - Style-score construction now executes correctly (no invalid argument path, no silent swallow).
 - Refresh/model-output writes fail hard on empty required outputs.
-- Price ingest/backfill now requests richer OHLCV/currency fields (with fallback behavior for vendor field availability).
+- Price ingest/backfill requests richer OHLCV/currency fields, and volume-repair mode uses `TR.AvgDailyVolume3Month`.
 - Raw cross-section + residual/specific-risk relational persistence now use `ric` physical keys.
 - `security_master` now uses `ric` as primary key; synthetic `sid/permid` placeholders are normalized out.
 - Orchestrator ingest stage is active (`bootstrap_only` baseline, opt-in live ingest).

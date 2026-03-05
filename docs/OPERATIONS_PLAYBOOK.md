@@ -8,6 +8,20 @@
   - `daily-fast`
   - `daily-with-core-if-due`
   - `weekly-core`
+  - `cold-core` (full historical rebuild path)
+
+## Volume Pull Policy
+- Canonical daily OHLCV ingest (`download_data_lseg.py`) maps `volume` from `TR.AvgDailyVolume3Month`.
+- Historical volume-repair path (`backfill_prices_range_lseg.py --volume-only`) maps `volume` from `TR.AvgDailyVolume3Month`.
+- Use `--only-null-volume` for targeted repairs so existing populated rows are not rewritten.
+- After a broad historical volume repair, run `cold-core` refresh to rebuild raw cross-sections and risk caches from the updated volume series.
+
+## Refresh Paths (When To Use)
+- `daily-fast`: quick serving refresh; no core recompute.
+- `daily-with-core-if-due`: default full refresh mode; recomputes core only when cadence/version says due.
+- `weekly-core`: force core recompute without rebuilding full raw history.
+- `cold-core`: full historical reset for structural data changes (new/changed historical prices, volume, fundamentals, classification, or factor methodology).
+  - This path rebuilds `barra_raw_cross_section_history` over full history and clears core cache tables before recomputing factor returns/risk.
 
 ## Key Commands
 - Orchestrated refresh via API (default profile from `mode=full` mapping):
@@ -16,16 +30,24 @@
   - `curl -X POST "http://localhost:8000/api/refresh?profile=daily-fast"`
 - API refresh explicit weekly core recompute:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=weekly-core&force_core=true"`
+- API refresh explicit cold-core rebuild:
+  - `curl -X POST "http://localhost:8000/api/refresh?profile=cold-core"`
+- API refresh cold mode shortcut:
+  - `curl -X POST "http://localhost:8000/api/refresh?mode=cold"`
 - API refresh partial stage run:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=daily-fast&from_stage=ingest&to_stage=estu_audit"`
 - Orchestrated refresh via CLI module:
   - `PYTHONPATH=backend python3 -m jobs.run_model_pipeline --profile daily-fast`
 - Orchestrated refresh via script wrapper:
   - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due`
+- Cold-core refresh via script wrapper:
+  - `python3 -m backend.scripts.run_model_pipeline --profile cold-core`
 - Resume a previous run id:
   - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due --resume-run-id <run_id>`
 - Refresh data from LSEG:
   - `python3 -m backend.scripts.download_data_lseg --db-path backend/data.db`
+- Repair historical volume coverage only (writes `TR.AvgDailyVolume3Month` into `security_prices_eod.volume`):
+  - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/data.db --start-date 2012-01-03 --end-date 2026-03-04 --volume-only --only-null-volume`
 - Bootstrap cUSE4 canonical source tables:
   - `python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/data.db`
 - Build cUSE4 ESTU audit snapshot:
@@ -80,11 +102,10 @@
 ### Maintenance Commands
 - Compact DB files:
   - `python3 -m backend.scripts.compact_sqlite_databases backend/data.db backend/cache.db`
-- Rebuild raw cross-section history:
+- Rebuild raw cross-section history (targeted/incremental):
   - `python3 -m backend.scripts.build_barra_raw_cross_section_history --db-path backend/data.db --frequency weekly`
-- Force clean core recompute:
-  - `sqlite3 backend/cache.db "DELETE FROM daily_factor_returns; DELETE FROM daily_specific_residuals; DELETE FROM daily_universe_eligibility_summary;"`
-  - `python3 -m backend.scripts.run_model_pipeline --profile weekly-core --from-stage factor_returns --to-stage risk_model --force-core`
+- Force clean core recompute + full historical raw rebuild (preferred cold path):
+  - `python3 -m backend.scripts.run_model_pipeline --profile cold-core`
 
 ### Quick Health Checks
 - Style-score completeness (recent):

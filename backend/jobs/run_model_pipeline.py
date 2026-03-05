@@ -15,6 +15,7 @@ from backend import config
 from backend.analytics.pipeline import RISK_ENGINE_METHOD_VERSION, run_refresh
 from backend.barra.covariance import build_factor_covariance_from_cache
 from backend.barra.daily_factor_returns import compute_daily_factor_returns
+from backend.barra.raw_cross_section_history import rebuild_raw_cross_section_history
 from backend.barra.specific_risk import build_specific_risk_from_cache
 from backend.cuse4.bootstrap import bootstrap_cuse4_source_tables
 from backend.cuse4.estu import build_and_persist_estu_membership
@@ -29,6 +30,7 @@ CACHE_DB = Path(config.SQLITE_PATH)
 
 STAGES = [
     "ingest",
+    "raw_history",
     "feature_build",
     "estu_audit",
     "factor_returns",
@@ -36,10 +38,31 @@ STAGES = [
     "serving_refresh",
 ]
 
-PROFILE_CONFIG: dict[str, dict[str, str]] = {
-    "daily-fast": {"core_policy": "never", "serving_mode": "light"},
-    "daily-with-core-if-due": {"core_policy": "due", "serving_mode": "light"},
-    "weekly-core": {"core_policy": "always", "serving_mode": "full"},
+PROFILE_CONFIG: dict[str, dict[str, Any]] = {
+    "daily-fast": {
+        "core_policy": "never",
+        "serving_mode": "light",
+        "raw_history_policy": "none",
+        "reset_core_cache": False,
+    },
+    "daily-with-core-if-due": {
+        "core_policy": "due",
+        "serving_mode": "light",
+        "raw_history_policy": "none",
+        "reset_core_cache": False,
+    },
+    "weekly-core": {
+        "core_policy": "always",
+        "serving_mode": "full",
+        "raw_history_policy": "none",
+        "reset_core_cache": False,
+    },
+    "cold-core": {
+        "core_policy": "always",
+        "serving_mode": "full",
+        "raw_history_policy": "full-daily",
+        "reset_core_cache": True,
+    },
 }
 
 
@@ -119,6 +142,52 @@ def _resolved_as_of_date(user_as_of_date: str | None) -> str:
     )
 
 
+def _reset_core_caches(cache_db: Path) -> dict[str, int]:
+    conn = sqlite3.connect(str(cache_db))
+    cleared: dict[str, int] = {}
+    try:
+        for table in ("daily_factor_returns", "daily_specific_residuals", "daily_universe_eligibility_summary"):
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+                (table,),
+            ).fetchone()
+            if not exists:
+                cleared[table] = 0
+                continue
+            before = conn.total_changes
+            conn.execute(f"DELETE FROM {table}")
+            cleared[table] = int(conn.total_changes - before)
+
+        meta_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='daily_factor_returns_meta' LIMIT 1"
+        ).fetchone()
+        if meta_exists:
+            before = conn.total_changes
+            conn.execute("DELETE FROM daily_factor_returns_meta")
+            cleared["daily_factor_returns_meta"] = int(conn.total_changes - before)
+        else:
+            cleared["daily_factor_returns_meta"] = 0
+
+        cache_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='cache' LIMIT 1"
+        ).fetchone()
+        if cache_exists:
+            before = conn.total_changes
+            conn.execute(
+                """
+                DELETE FROM cache
+                WHERE key IN ('risk_engine_cov', 'risk_engine_specific_risk', 'risk_engine_meta')
+                """
+            )
+            cleared["cache_risk_engine_keys"] = int(conn.total_changes - before)
+        else:
+            cleared["cache_risk_engine_keys"] = 0
+        conn.commit()
+    finally:
+        conn.close()
+    return cleared
+
+
 def _stage_window(from_stage: str | None, to_stage: str | None) -> list[str]:
     start = STAGES.index(from_stage) if from_stage else 0
     end = STAGES.index(to_stage) if to_stage else len(STAGES) - 1
@@ -135,6 +204,8 @@ def _run_stage(
     serving_mode: str,
     force_core: bool,
     core_reason: str,
+    raw_history_policy: str = "none",
+    reset_core_cache: bool = False,
 ) -> dict[str, Any]:
     if stage == "ingest":
         bootstrap = bootstrap_cuse4_source_tables(
@@ -164,6 +235,27 @@ def _run_stage(
             "ingest": ingest,
         }
 
+    if stage == "raw_history":
+        if str(raw_history_policy or "none") == "none":
+            return {
+                "status": "skipped",
+                "reason": "profile_skip_raw_history_rebuild",
+            }
+        frequency = "daily" if str(raw_history_policy) == "full-daily" else "weekly"
+        out = rebuild_raw_cross_section_history(
+            DATA_DB,
+            frequency=frequency,
+        )
+        if str(out.get("status") or "") != "ok":
+            raise RuntimeError(f"raw_history stage failed: {out}")
+        if int(out.get("rows_upserted") or 0) <= 0:
+            raise RuntimeError("raw_history stage produced zero rows")
+        return {
+            "status": "ok",
+            "raw_history_policy": str(raw_history_policy),
+            "raw_history": out,
+        }
+
     if stage == "feature_build":
         out = rebuild_cross_section_snapshot(
             DATA_DB,
@@ -190,6 +282,7 @@ def _run_stage(
                 "status": "skipped",
                 "reason": f"core_policy_skip_{core_reason}",
             }
+        reset_summary = _reset_core_caches(CACHE_DB) if reset_core_cache else {}
         df = compute_daily_factor_returns(
             DATA_DB,
             CACHE_DB,
@@ -200,6 +293,8 @@ def _run_stage(
         return {
             "status": "ok",
             "factor_return_rows_loaded": int(len(df)),
+            "core_cache_reset": bool(reset_core_cache),
+            "cache_rows_cleared": reset_summary,
         }
 
     if stage == "risk_model":
@@ -293,6 +388,8 @@ def run_model_pipeline(
     today_utc = datetime.fromisoformat(previous_or_same_xnys_session(datetime.now(timezone.utc).date().isoformat())).date()
     due, due_reason = _risk_recompute_due(sqlite.cache_get("risk_engine_meta") or {}, today_utc=today_utc)
     core_policy = str(cfg["core_policy"])
+    raw_history_policy = str(cfg.get("raw_history_policy") or "none")
+    reset_core_cache = bool(cfg.get("reset_core_cache"))
     should_run_core = bool(force_core or core_policy == "always" or (core_policy == "due" and due))
     core_reason = "force_core" if force_core else ("due" if should_run_core else due_reason)
 
@@ -325,6 +422,8 @@ def run_model_pipeline(
                 serving_mode=str(cfg["serving_mode"]),
                 force_core=bool(force_core),
                 core_reason=str(core_reason),
+                raw_history_policy=raw_history_policy,
+                reset_core_cache=reset_core_cache,
             )
             stage_status = "skipped" if str(out.get("status")) == "skipped" else "completed"
             job_runs.finish_stage(
@@ -370,6 +469,8 @@ def run_model_pipeline(
         "core_due": bool(due),
         "core_reason": core_reason,
         "core_will_run": bool(should_run_core),
+        "raw_history_policy": raw_history_policy,
+        "reset_core_cache": bool(reset_core_cache),
         "selected_stages": selected,
         "stage_results": stage_results,
         "run_rows": job_runs.run_rows(db_path=DATA_DB, run_id=effective_run_id),

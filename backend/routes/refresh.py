@@ -43,7 +43,7 @@ async def refresh(
     if not _refresh_authorized(x_refresh_token, authorization):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     clean_mode = str(mode or "full").strip().lower()
-    if clean_mode not in {"full", "light"}:
+    if clean_mode not in {"full", "light", "cold"}:
         clean_mode = "full"
     try:
         started, state = start_refresh(

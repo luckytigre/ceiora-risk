@@ -121,7 +121,7 @@ export function useDataDiagnostics() {
   return useSWR<DataDiagnosticsData>("/api/data/diagnostics", fetcher, SWR_OPTS);
 }
 
-export async function triggerRefresh(mode: "full" | "light" = "full"): Promise<{ status: string }> {
+export async function triggerRefresh(mode: "full" | "light" | "cold" = "full"): Promise<{ status: string }> {
   const res = await fetch(`/api/refresh?mode=${mode}`, { method: "POST" });
   if (!res.ok) {
     const detail = await parseErrorDetail(res);

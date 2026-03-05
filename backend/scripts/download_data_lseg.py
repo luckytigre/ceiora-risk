@@ -1,4 +1,10 @@
-"""Canonical LSEG ingest: direct writes into RIC-keyed source-of-truth tables."""
+"""Canonical LSEG ingest: direct writes into RIC-keyed source-of-truth tables.
+
+Volume policy:
+- Ingest writes `security_prices_eod.volume` from `TR.AvgDailyVolume3Month`.
+- Historical volume-repair runs use the same metric via
+  `backfill_prices_range_lseg.py --volume-only`.
+"""
 
 from __future__ import annotations
 
@@ -31,6 +37,7 @@ SQLITE_TIMEOUT_SECONDS = 120
 SQLITE_BUSY_TIMEOUT_MS = 120000
 SQLITE_MAX_RETRIES = 6
 SQLITE_RETRY_SLEEP_SECONDS = 2.0
+PRICE_VOLUME_FIELD = "TR.AvgDailyVolume3Month"
 
 LSEG_FIELDS_ALL = [
     "TR.CommonName",
@@ -44,7 +51,7 @@ LSEG_FIELDS_ALL = [
     "TR.PriceHigh",
     "TR.PriceLow",
     "TR.PriceClose",
-    "TR.Volume",
+    PRICE_VOLUME_FIELD,
     "TR.PriceClose.currency",
     "TR.CompanyMarketCap",
     "TR.SharesOutstanding",
@@ -114,7 +121,7 @@ PRICE_FIELD_SET = {
     "TR.PriceHigh",
     "TR.PriceLow",
     "TR.PriceClose",
-    "TR.Volume",
+    PRICE_VOLUME_FIELD,
     "TR.PriceClose.currency",
 }
 
@@ -158,6 +165,14 @@ def _pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
 
 
 def _iso_date(value: Any) -> str | None:
+    if isinstance(value, pd.Series):
+        for item in value.tolist():
+            if item is None or pd.isna(item):
+                continue
+            value = item
+            break
+        else:
+            return None
     if value is None:
         return None
     if isinstance(value, pd.Timestamp):
@@ -171,6 +186,14 @@ def _iso_date(value: Any) -> str | None:
 
 
 def _float_or_none(value: Any) -> float | None:
+    if isinstance(value, pd.Series):
+        for item in value.tolist():
+            if item is None or pd.isna(item):
+                continue
+            value = item
+            break
+        else:
+            return None
     if value is None or pd.isna(value):
         return None
     try:
@@ -420,7 +443,17 @@ def download_from_lseg(
         "price_high": _pick_col(company, ["Price High"]),
         "price_low": _pick_col(company, ["Price Low"]),
         "price": _pick_col(company, ["Price Close"]),
-        "price_volume": _pick_col(company, ["Volume"]),
+        "price_volume": _pick_col(
+            company,
+            [
+                "Average Daily Volume, Three Month",
+                "Average Daily Volume, 3 Month",
+                "Average Daily Volume Three Month",
+                "Average Daily Volume 3 Month",
+                "TR.AvgDailyVolume3Month",
+                "Volume",
+            ],
+        ),
         "price_currency": _pick_col(company, ["Price Close Currency", "Currency"]),
         "market_cap": _pick_col(company, ["Company Market Cap"]),
         "shares_outstanding": _pick_col(company, ["Outstanding Shares", "Shares Outstanding", "Shares Outstanding - Common Stock"]),
@@ -468,6 +501,14 @@ def download_from_lseg(
     classification_rows: list[dict[str, Any]] = []
 
     def _txt(v: Any) -> str | None:
+        if isinstance(v, pd.Series):
+            for item in v.tolist():
+                if item is None or pd.isna(item):
+                    continue
+                v = item
+                break
+            else:
+                return None
         if v is None or pd.isna(v):
             return None
         s = str(v).strip()
@@ -578,6 +619,7 @@ def download_from_lseg(
         "status": "ok",
         "as_of": as_of,
         "universe": len(universe_rows),
+        "price_volume_metric": PRICE_VOLUME_FIELD,
         "fundamental_rows_inserted": int(n_f),
         "price_rows_inserted": int(n_p),
         "classification_rows_inserted": int(n_c),

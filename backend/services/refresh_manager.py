@@ -94,9 +94,11 @@ def _resolve_profile(profile: str | None, mode: str | None) -> str:
     clean_mode = str(mode or "full").strip().lower()
     if clean_mode == "light":
         return "daily-fast"
+    if clean_mode == "cold":
+        return "cold-core"
     if clean_mode == "full":
         return "daily-with-core-if-due"
-    raise ValueError("Invalid mode. Expected 'full' or 'light' when profile is omitted.")
+    raise ValueError("Invalid mode. Expected 'full', 'light', or 'cold' when profile is omitted.")
 
 
 def _normalize_stage(name: str | None) -> str | None:
