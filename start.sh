@@ -136,7 +136,16 @@ fi
 
 # --- Trigger non-blocking light refresh ---
 echo "Triggering background light refresh..."
-if ! curl -sf -X POST "http://localhost:$BACKEND_PORT/api/refresh?mode=light" >/dev/null; then
+REFRESH_TOKEN="${REFRESH_API_TOKEN:-}"
+if [ -z "$REFRESH_TOKEN" ] && [ -f "$DIR/backend/.env" ]; then
+  REFRESH_TOKEN="$(grep -E '^REFRESH_API_TOKEN=' "$DIR/backend/.env" | tail -n1 | cut -d= -f2- | tr -d '\r' || true)"
+fi
+if [ -n "$REFRESH_TOKEN" ]; then
+  CURL_REFRESH_HEADERS=(-H "X-Refresh-Token: $REFRESH_TOKEN")
+else
+  CURL_REFRESH_HEADERS=()
+fi
+if ! curl -sf -X POST "${CURL_REFRESH_HEADERS[@]}" "http://localhost:$BACKEND_PORT/api/refresh?mode=light" >/dev/null; then
   echo "WARNING: Could not trigger background refresh. App is running, but data may be stale."
 fi
 

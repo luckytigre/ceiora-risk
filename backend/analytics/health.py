@@ -599,9 +599,7 @@ def _compute_table_field_coverage(
             "fields": [],
         }
 
-    date_den_all = df.groupby(date_col).size()
     ticker_den_all = df.groupby(ticker_col).size()
-    all_dates = [str(d) for d in date_den_all.index.tolist()]
     all_tickers = [str(t) for t in ticker_den_all.index.tolist()]
 
     fields_out: list[dict[str, Any]] = []

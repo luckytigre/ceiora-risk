@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend import config
 from backend.routes.portfolio import router as portfolio_router
 from backend.routes.exposures import router as exposures_router
 from backend.routes.health import router as health_router
@@ -15,7 +16,7 @@ app = FastAPI(title="Barra Factor Risk Dashboard", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+    allow_origins=config.CORS_ALLOW_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

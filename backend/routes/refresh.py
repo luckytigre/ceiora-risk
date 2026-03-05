@@ -1,12 +1,30 @@
 """POST /api/refresh — profile-driven orchestrated refresh."""
 
+import secrets
+
 from fastapi import APIRouter
+from fastapi import Header
+from fastapi import HTTPException
 from fastapi import Query
+from fastapi import status
 from fastapi.responses import JSONResponse
 
+from backend import config
 from backend.services.refresh_manager import get_refresh_status, start_refresh
 
 router = APIRouter()
+
+
+def _refresh_authorized(x_refresh_token: str | None, authorization: str | None) -> bool:
+    expected = config.REFRESH_API_TOKEN
+    if not expected:
+        return True
+    candidates: list[str] = []
+    if x_refresh_token:
+        candidates.append(str(x_refresh_token).strip())
+    if authorization and str(authorization).lower().startswith("bearer "):
+        candidates.append(str(authorization)[7:].strip())
+    return any(c and secrets.compare_digest(expected, c) for c in candidates)
 
 
 @router.post("/refresh", status_code=202)
@@ -19,7 +37,11 @@ async def refresh(
     resume_run_id: str | None = Query(None),
     from_stage: str | None = Query(None),
     to_stage: str | None = Query(None),
+    x_refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+    authorization: str | None = Header(default=None),
 ):
+    if not _refresh_authorized(x_refresh_token, authorization):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     clean_mode = str(mode or "full").strip().lower()
     if clean_mode not in {"full", "light"}:
         clean_mode = "full"
@@ -59,7 +81,12 @@ async def refresh(
 
 
 @router.get("/refresh/status")
-async def refresh_status():
+async def refresh_status(
+    x_refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+    authorization: str | None = Header(default=None),
+):
+    if not _refresh_authorized(x_refresh_token, authorization):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     return {
         "status": "ok",
         "refresh": get_refresh_status(),
