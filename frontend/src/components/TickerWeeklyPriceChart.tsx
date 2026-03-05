@@ -137,7 +137,7 @@ export default function TickerWeeklyPriceChart({ ticker, points }: TickerWeeklyP
   };
 
   return (
-    <div className="detail-history-chart">
+    <div className="detail-history-chart ticker-weekly-history-chart">
       <Line data={data} options={options} />
     </div>
   );

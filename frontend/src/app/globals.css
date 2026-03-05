@@ -79,9 +79,23 @@ main {
 
 /* Layout */
 .dash-main {
-  padding: 45px 22px 16px;
+  padding: 45px 55px 16px;
   max-width: 1720px;
   margin: 0 auto;
+}
+
+@media (max-width: 1200px) {
+  .dash-main {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dash-main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 
 /* Tab navigation */
@@ -1041,6 +1055,10 @@ main {
 .detail-history-chart {
   height: 200px;
   position: relative;
+}
+
+.ticker-weekly-history-chart {
+  height: 280px;
 }
 
 .detail-history-stats {

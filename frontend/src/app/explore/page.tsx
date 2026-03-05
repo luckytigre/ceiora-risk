@@ -212,9 +212,10 @@ export default function ExplorePage() {
 
   const weeklyHistoryCard = item ? (
     <div className="chart-card">
+      <h3 style={{ marginBottom: 25 }}>{item.ticker} Weekly Price</h3>
       <div className="detail-history" style={{ marginTop: 0, marginBottom: 0 }}>
         <div className="detail-history-header">
-          <h5>5Y Weekly Close — {item.ticker}</h5>
+          <h5>5Y Weekly Close</h5>
           {!historyLoading && !historyError && historySummary && (
             <div className="detail-history-stats">
               {historySummary.totalReturnPct != null && (
@@ -421,7 +422,10 @@ export default function ExplorePage() {
           {item.eligible_for_model !== false ? (
             <>
               <div className="explore-detail-grid">
-                {weeklyHistoryCard}
+                <div className="chart-card">
+                  <h3>Style Factor Profile</h3>
+                  <FactorRadarChart exposures={item.exposures ?? {}} />
+                </div>
 
                 <div className="chart-card">
                   <h3>{item.ticker} Factor Exposures</h3>
@@ -430,11 +434,7 @@ export default function ExplorePage() {
               </div>
 
               <div className="explore-detail-grid">
-                {/* Left: Radar Chart */}
-                <div className="chart-card">
-                  <h3>Style Factor Profile</h3>
-                  <FactorRadarChart exposures={item.exposures ?? {}} />
-                </div>
+                {weeklyHistoryCard}
 
                 {/* Right: Factor Loadings Table */}
                 <div className="chart-card">
