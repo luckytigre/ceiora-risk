@@ -563,3 +563,13 @@ Documentation updates:
   - batched writes now commit in one transaction to avoid partial-state holes after interruptions.
 - Added regression test coverage:
   - verifies cached-date completeness requires both factor and residual rows.
+
+### Entry 26 - Legacy Universe Table Cleanup (2026-03-04)
+- Removed deprecated legacy universe tables from `backend/data.db`:
+  - `universe_eligibility_summary`
+  - `universe_constituent_snapshots`
+- Removed deprecated utility script that depended on legacy universe table:
+  - `backend/scripts/sync_universe_lifecycle_dates.py`
+- Validation:
+  - both tables absent from schema post-drop.
+  - DB integrity check remained `ok`.
