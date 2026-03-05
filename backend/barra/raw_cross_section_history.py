@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,11 @@ import pandas as pd
 
 from backend.barra.descriptors import assemble_full_style_scores
 from backend.barra.risk_attribution import STYLE_COLUMN_TO_LABEL
-from backend.db.trbc_schema import ensure_trbc_naming, pick_trbc_industry_column
+from backend.db.trbc_schema import (
+    ensure_trbc_naming,
+    pick_trbc_business_sector_column,
+    pick_trbc_industry_column,
+)
 from backend.trading_calendar import filter_xnys_sessions
 
 logger = logging.getLogger(__name__)
@@ -327,6 +332,7 @@ def rebuild_raw_cross_section_history(
     frequency: str = "weekly",
 ) -> dict[str, Any]:
     """Rebuild in-project raw/scores table from source-of-truth datasets."""
+    stage_t0 = time.perf_counter()
     conn = sqlite3.connect(str(data_db))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
@@ -339,6 +345,13 @@ def rebuild_raw_cross_section_history(
             start_date=start_date,
             end_date=end_date,
             frequency=frequency,
+        )
+        logger.info(
+            "Raw cross-section rebuild target dates resolved: frequency=%s count=%s start=%s end=%s",
+            frequency,
+            len(dates),
+            dates[0] if dates else None,
+            dates[-1] if dates else None,
         )
         if not dates:
             return {"status": "no-dates", "rows_upserted": 0, "table": TABLE}
@@ -362,6 +375,11 @@ def rebuild_raw_cross_section_history(
         )
         prices = _dedupe_prices(prices_raw)
         prices = _compute_price_features(prices)
+        logger.info(
+            "Loaded price history for raw cross-section: rows=%s rics=%s",
+            len(prices),
+            prices["ric"].nunique() if not prices.empty else 0,
+        )
         if prices.empty:
             return {"status": "no-prices", "rows_upserted": 0, "table": TABLE}
 
@@ -427,12 +445,18 @@ def rebuild_raw_cross_section_history(
             fundamentals["sales_growth_raw"] = fundamentals.groupby("ric", sort=False)["revenue"].pct_change(4, fill_method=None)
             fundamentals["eps_growth_raw"] = fundamentals.groupby("ric", sort=False)["trailing_eps"].pct_change(4, fill_method=None)
             fundamentals["asset_growth_raw"] = fundamentals.groupby("ric", sort=False)["total_assets"].pct_change(4, fill_method=None)
+        logger.info(
+            "Loaded fundamentals for raw cross-section: rows=%s rics=%s",
+            len(fundamentals),
+            fundamentals["ric"].nunique() if not fundamentals.empty else 0,
+        )
 
         trbc_cols = _table_columns(conn, CLASSIFICATION_TABLE)
         trbc_ind_col = pick_trbc_industry_column(trbc_cols)
+        trbc_biz_col = pick_trbc_business_sector_column(trbc_cols)
         trbc_sec_col = "trbc_economic_sector"
         trbc = pd.DataFrame()
-        if trbc_ind_col and trbc_sec_col in trbc_cols:
+        if trbc_biz_col and trbc_sec_col in trbc_cols:
             trbc = pd.read_sql_query(
                 f"""
                 SELECT
@@ -440,7 +464,8 @@ def rebuild_raw_cross_section_history(
                     UPPER(sm.ticker) AS ticker,
                     c.as_of_date,
                     c.{trbc_sec_col} AS trbc_economic_sector_short,
-                    c.{trbc_ind_col} AS trbc_industry_group
+                    c.{trbc_biz_col} AS trbc_industry_group,
+                    {f"c.{trbc_ind_col}" if trbc_ind_col else "NULL"} AS trbc_industry_group_l3
                 FROM {CLASSIFICATION_TABLE} c
                 JOIN {SECURITY_MASTER_TABLE} sm
                   ON sm.ric = c.ric
@@ -457,10 +482,18 @@ def rebuild_raw_cross_section_history(
                 trbc["as_of_date_dt"] = pd.to_datetime(trbc["as_of_date"], errors="coerce")
                 trbc = trbc.dropna(subset=["as_of_date_dt"])
                 trbc["trbc_economic_sector_short"] = _normalize_text(trbc["trbc_economic_sector_short"])
+                trbc["trbc_industry_group_l3"] = _normalize_text(trbc.get("trbc_industry_group_l3"))
                 trbc["trbc_industry_group"] = _normalize_text(trbc["trbc_industry_group"])
                 trbc = trbc.sort_values(["ric", "as_of_date"]).drop_duplicates(
                     subset=["ric", "as_of_date"], keep="last"
                 )
+        logger.info(
+            "Loaded TRBC PIT classification for raw cross-section: rows=%s rics=%s biz_col=%s ind_col=%s",
+            len(trbc),
+            trbc["ric"].nunique() if not trbc.empty else 0,
+            trbc_biz_col,
+            trbc_ind_col,
+        )
 
         out = base.copy()
         if not fundamentals.empty:
@@ -557,7 +590,10 @@ def rebuild_raw_cross_section_history(
 
         # Compute style scores cross-sectionally by as_of_date.
         out = out.sort_values(["as_of_date", "ric"]).reset_index(drop=True)
-        for as_of, idx in out.groupby("as_of_date", sort=False).groups.items():
+        date_groups = list(out.groupby("as_of_date", sort=False).groups.items())
+        total_groups = len(date_groups)
+        logger.info("Computing style scores across %s cross-sections", total_groups)
+        for group_i, (as_of, idx) in enumerate(date_groups, start=1):
             loc = list(idx)
             grp = out.loc[loc].copy()
             valid = (
@@ -589,6 +625,13 @@ def rebuild_raw_cross_section_history(
                         how="left",
                     )["v"]
                     out.loc[loc, score_col] = merged.to_numpy()
+            if group_i % 250 == 0 or group_i == total_groups:
+                logger.info(
+                    "Style-score progress %s/%s cross-sections (as_of=%s)",
+                    group_i,
+                    total_groups,
+                    as_of,
+                )
 
         # Quality metadata
         present = out[required_desc].notna().sum(axis=1).astype(float)
@@ -633,6 +676,11 @@ def rebuild_raw_cross_section_history(
         ]
         payload = out[target_cols].where(pd.notna(out[target_cols]), None).copy()
         delete_dates = sorted(set(payload["as_of_date"].astype(str).tolist()))
+        logger.info(
+            "Persisting raw cross-section payload: rows=%s dates=%s",
+            len(payload),
+            len(delete_dates),
+        )
         for d in delete_dates:
             conn.execute(f"DELETE FROM {TABLE} WHERE as_of_date = ?", (d,))
         conn.executemany(
@@ -644,6 +692,8 @@ def rebuild_raw_cross_section_history(
             payload.itertuples(index=False, name=None),
         )
         conn.commit()
+        elapsed = time.perf_counter() - stage_t0
+        logger.info("Raw cross-section rebuild completed in %.1fs", elapsed)
         return {
             "status": "ok",
             "table": TABLE,

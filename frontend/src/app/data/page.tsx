@@ -3,6 +3,7 @@
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ApiErrorState from "@/components/ApiErrorState";
 import { useDataDiagnostics } from "@/hooks/useApi";
+import type { DataTableStats } from "@/lib/types";
 
 function fmtInt(n?: number | null): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return "—";
@@ -37,12 +38,14 @@ export default function DataPage() {
   const elig = data?.cross_section_usage?.eligibility_summary;
   const cross = data?.cross_section_usage?.factor_cross_section;
   const cacheRows = data?.cache_outputs ?? [];
-  const refreshRows: Array<{ label: string; table: any }> = [
-    { label: "Fundamental History", table: src?.fundamental_history },
-    { label: "TRBC History", table: src?.trbc_history },
-    { label: "Price History", table: src?.price_history },
-    { label: "PIT Cross-Section Feeder", table: src?.pit_cross_section_snapshot },
-    { label: "In-Project Raw Cross-Section", table: src?.barra_raw_cross_section_history },
+  const refreshRows: Array<{ label: string; table: DataTableStats | null | undefined }> = [
+    { label: "Security Master", table: src?.security_master },
+    { label: "Fundamentals PIT", table: src?.security_fundamentals_pit },
+    { label: "Classification PIT", table: src?.security_classification_pit },
+    { label: "Prices EOD", table: src?.security_prices_eod },
+    { label: "ESTU Membership Daily", table: src?.estu_membership_daily },
+    { label: "Raw Cross-Section History", table: src?.barra_raw_cross_section_history },
+    { label: "Cross-Section Snapshot", table: src?.universe_cross_section_snapshot },
   ];
 
   return (
@@ -90,11 +93,11 @@ export default function DataPage() {
               {refreshRows.map(({ label, table }) => (
                 <tr key={label}>
                   <td>{label}</td>
-                  <td className="text-right">{fmtInt((table as any)?.row_count)}</td>
-                  <td className="text-right">{fmtInt((table as any)?.ticker_count)}</td>
-                  <td>{(table as any)?.min_date && (table as any)?.max_date ? `${(table as any).min_date} → ${(table as any).max_date}` : "—"}</td>
-                  <td>{fmtTs((table as any)?.last_updated_at)}</td>
-                  <td>{(table as any)?.last_job_run_id || "—"}</td>
+                  <td className="text-right">{fmtInt(table?.row_count)}</td>
+                  <td className="text-right">{fmtInt(table?.ticker_count)}</td>
+                  <td>{table?.min_date && table?.max_date ? `${table.min_date} → ${table.max_date}` : "—"}</td>
+                  <td>{fmtTs(table?.last_updated_at)}</td>
+                  <td>{table?.last_job_run_id || "—"}</td>
                 </tr>
               ))}
             </tbody>

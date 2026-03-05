@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 DATA_DB = Path(config.DATA_DB_PATH)
 CACHE_DB = Path(config.SQLITE_PATH)
-RISK_ENGINE_METHOD_VERSION = "v1_weekly_recompute_lagged_cross_section_2026_03_02"
+RISK_ENGINE_METHOD_VERSION = "v2_trbc_l2_business_sector_2026_03_05"
 
 
 def _finite_float(value: Any, default: float = 0.0) -> float:
@@ -241,6 +241,7 @@ def _build_universe_ticker_loadings(
     # Fundamentals maps for whole universe
     mcap_map: dict[str, float] = {}
     trbc_economic_sector_short_map: dict[str, str] = {}
+    trbc_business_sector_map: dict[str, str] = {}
     trbc_industry_map: dict[str, str] = {}
     name_map: dict[str, str] = {}
     if not fundamentals_df.empty:
@@ -264,6 +265,9 @@ def _build_universe_ticker_loadings(
             ).strip()
             if trbc_economic_sector_short:
                 trbc_economic_sector_short_map[ticker] = trbc_economic_sector_short
+            trbc_business_sector = str(row.get("trbc_business_sector") or "").strip()
+            if trbc_business_sector:
+                trbc_business_sector_map[ticker] = trbc_business_sector
             trbc_industry = str(row.get("trbc_industry_group") or "").strip()
             if trbc_industry:
                 trbc_industry_map[ticker] = trbc_industry
@@ -276,7 +280,29 @@ def _build_universe_ticker_loadings(
 
     latest_asof = ""
     if "as_of_date" in exposures_df.columns and not exposures_df.empty:
-        latest_asof = str(exposures_df["as_of_date"].astype(str).max())
+        asof_series = exposures_df["as_of_date"].astype(str).str.strip()
+        asof_counts = asof_series.value_counts()
+        if not asof_counts.empty:
+            max_count = int(asof_counts.max())
+            # Guard against thin end-of-day snapshots (for example, incomplete latest date).
+            min_coverage = max(100, int(0.50 * max_count))
+            well_covered_dates = sorted(
+                str(dt) for dt, cnt in asof_counts.items()
+                if int(cnt) >= min_coverage
+            )
+            if well_covered_dates:
+                latest_asof = well_covered_dates[-1]
+            else:
+                latest_asof = str(asof_series.max())
+            if latest_asof != str(asof_series.max()):
+                logger.warning(
+                    "Using well-covered exposure as-of date %s instead of sparse latest %s "
+                    "(coverage threshold=%s, max_count=%s)",
+                    latest_asof,
+                    str(asof_series.max()),
+                    min_coverage,
+                    max_count,
+                )
 
     eligibility_df = pd.DataFrame()
     if latest_asof:
@@ -310,7 +336,7 @@ def _build_universe_ticker_loadings(
                 errors="coerce",
             )
             industries_from_elig = (
-                eligibility_df.reindex(style_scores.index)["trbc_industry_group"]
+                eligibility_df.reindex(style_scores.index)["trbc_business_sector"]
                 .fillna("")
                 .astype(str)
             )
@@ -376,6 +402,10 @@ def _build_universe_ticker_loadings(
             (eligibility_df.loc[ric, "trbc_industry_group"] if ric in eligibility_df.index else "")
             or trbc_industry_map.get(ticker, "")
         )
+        trbc_business_sector = str(
+            (eligibility_df.loc[ric, "trbc_business_sector"] if ric in eligibility_df.index else "")
+            or trbc_business_sector_map.get(ticker, "")
+        )
         market_cap = _finite_float(
             eligibility_df.loc[ric, "market_cap"] if ric in eligibility_df.index else mcap_map.get(ticker),
             np.nan,
@@ -384,8 +414,8 @@ def _build_universe_ticker_loadings(
         exposures: dict[str, float] = {}
         if eligible and ticker in canonical_style_map:
             exposures.update(canonical_style_map[ticker])
-            if trbc_industry_group:
-                exposures[trbc_industry_group] = 1.0
+            if trbc_business_sector:
+                exposures[trbc_business_sector] = 1.0
 
         sensitivities = {
             factor: round(_finite_float(exposures.get(factor), 0.0) * _finite_float(vol, 0.0), 6)
@@ -404,6 +434,7 @@ def _build_universe_ticker_loadings(
             "name": name_map.get(ticker, ""),
             "trbc_economic_sector_short": trbc_economic_sector_short,
             "trbc_economic_sector_short_abbr": abbreviate_trbc_economic_sector_short(trbc_economic_sector_short),
+            "trbc_business_sector": trbc_business_sector,
             "trbc_industry_group": trbc_industry_group,
             "market_cap": round(float(market_cap), 2) if np.isfinite(market_cap) else None,
             "price": round(_finite_float(price_map.get(ticker), 0.0), 4),
@@ -428,6 +459,7 @@ def _build_universe_ticker_loadings(
                 "trbc_economic_sector_short_abbr",
                 d.get("trbc_sector_abbr", ""),
             ),
+            "trbc_business_sector": d.get("trbc_business_sector", ""),
             "trbc_industry_group": d.get("trbc_industry_group", ""),
             "risk_loading": d.get("risk_loading", 0.0),
             "specific_vol": d.get("specific_vol", None),
@@ -959,9 +991,6 @@ def run_refresh(
             "latest_r2": float(latest_r2),
             "specific_risk_ticker_count": int(len(specific_risk_by_security)),
         }
-        sqlite.cache_set("risk_engine_cov", _serialize_covariance(cov))
-        sqlite.cache_set("risk_engine_specific_risk", specific_risk_by_security)
-        sqlite.cache_set("risk_engine_meta", risk_engine_meta)
         recomputed_this_refresh = True
     else:
         logger.info(
@@ -1071,6 +1100,11 @@ def run_refresh(
 
     # 11. Cache everything
     logger.info("Caching results...")
+    snapshot_id = run_id
+
+    def _stage_cache(key: str, value: Any) -> None:
+        sqlite.cache_set(key, value, snapshot_id=snapshot_id)
+
     risk_engine_state = {
         "status": str(risk_engine_meta.get("status") or "unknown"),
         "method_version": str(risk_engine_meta.get("method_version") or ""),
@@ -1083,6 +1117,9 @@ def run_refresh(
         "recomputed_this_refresh": bool(recomputed_this_refresh),
         "recompute_reason": str(recompute_reason),
     }
+    _stage_cache("risk_engine_cov", _serialize_covariance(cov))
+    _stage_cache("risk_engine_specific_risk", specific_risk_by_security)
+    _stage_cache("risk_engine_meta", risk_engine_meta)
     portfolio_data = {
         "positions": positions,
         "total_value": round(total_value, 2),
@@ -1090,7 +1127,7 @@ def run_refresh(
         "refresh_started_at": refresh_started_at,
         "source_dates": source_dates,
     }
-    sqlite.cache_set("portfolio", portfolio_data)
+    _stage_cache("portfolio", portfolio_data)
 
     risk_data = {
         "risk_shares": risk_shares,
@@ -1102,13 +1139,13 @@ def run_refresh(
         "risk_engine": risk_engine_state,
         "refresh_started_at": refresh_started_at,
     }
-    sqlite.cache_set("risk", risk_data)
+    _stage_cache("risk", risk_data)
 
     universe_loadings["risk_engine"] = risk_engine_state
     universe_loadings["refresh_started_at"] = refresh_started_at
     universe_loadings["source_dates"] = source_dates
-    sqlite.cache_set("universe_loadings", universe_loadings)
-    sqlite.cache_set(
+    _stage_cache("universe_loadings", universe_loadings)
+    _stage_cache(
         "universe_factors",
         {
             "factors": universe_loadings.get("factors", []),
@@ -1121,16 +1158,16 @@ def run_refresh(
             "refresh_started_at": refresh_started_at,
         },
     )
-    sqlite.cache_set("exposures", exposure_modes)
+    _stage_cache("exposures", exposure_modes)
     eligibility_summary = _load_latest_eligibility_summary(CACHE_DB)
-    sqlite.cache_set("eligibility", eligibility_summary)
+    _stage_cache("eligibility", eligibility_summary)
     sanity = _build_model_sanity_report(
         risk_shares=risk_shares,
         factor_details=factor_details,
         eligibility_summary=eligibility_summary,
     )
-    sqlite.cache_set("model_sanity", sanity)
-    sqlite.cache_set("cuse4_foundation", cuse4_foundation)
+    _stage_cache("model_sanity", sanity)
+    _stage_cache("cuse4_foundation", cuse4_foundation)
     health_refreshed = False
     existing_health = sqlite.cache_get("health_diagnostics")
     light_mode_health_missing = (
@@ -1145,14 +1182,15 @@ def run_refresh(
         )
     )
     if (not light_mode) or light_mode_health_missing:
-        sqlite.cache_set("health_diagnostics", compute_health_diagnostics(DATA_DB, CACHE_DB))
+        _stage_cache("health_diagnostics", compute_health_diagnostics(DATA_DB, CACHE_DB))
         health_refreshed = True
-    sqlite.cache_set(
+    _stage_cache(
         "refresh_meta",
         {
             "status": "ok",
             "mode": refresh_mode,
             "run_id": run_id,
+            "snapshot_id": snapshot_id,
             "refresh_started_at": refresh_started_at,
             "source_dates": source_dates,
             "cross_section_snapshot": snapshot_build,
@@ -1196,11 +1234,13 @@ def run_refresh(
         sqlite.cache_set("model_outputs_write", model_outputs_write)
         raise RuntimeError(f"Relational model output persistence failed: {type(exc).__name__}: {exc}") from exc
     sqlite.cache_set("model_outputs_write", model_outputs_write)
+    sqlite.cache_publish_snapshot(snapshot_id)
 
     logger.info("Refresh complete.")
     return {
         "status": "ok",
         "run_id": run_id,
+        "snapshot_id": snapshot_id,
         "positions": len(positions),
         "total_value": round(total_value, 2),
         "mode": refresh_mode,

@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from backend.db.trbc_schema import pick_trbc_industry_column
+from backend.db.trbc_schema import pick_trbc_business_sector_column, pick_trbc_industry_column
 from backend.barra.eligibility import (
     build_eligibility_context,
     structural_eligibility_for_date,
@@ -36,7 +36,7 @@ STYLE_SCORE_COLS = list(STYLE_COLUMN_TO_LABEL.keys())
 RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v11_ric_keyed_residuals_2026_03_04"
+CACHE_METHOD_VERSION = "v12_trbc_l2_business_sector_2026_03_05"
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
@@ -389,6 +389,12 @@ def compute_daily_factor_returns(
     if prices_df.empty:
         logger.warning("No prices data — cannot compute daily factor returns")
         return pd.DataFrame(columns=["date", "factor_name", "factor_return", "r_squared", "residual_vol"])
+    logger.info(
+        "Loaded prices for factor returns: rows=%s rics=%s trading_dates=%s",
+        len(prices_df),
+        prices_df["ric"].nunique(),
+        prices_df["date"].nunique(),
+    )
 
     # Build daily returns: pivot prices to wide, then compute pct_change
     prices_wide = prices_df.pivot(index="date", columns="ric", values="close")
@@ -410,6 +416,7 @@ def compute_daily_factor_returns(
 
     if lookback_days > 0:
         trading_dates = trading_dates[-lookback_days:]
+    logger.info("Resolved trading date window: total_dates=%s lookback_days=%s", len(trading_dates), lookback_days)
 
     # Invalidate stale cache rows if methodology changed, then check cached dates.
     _ensure_cache_version(cache_db)
@@ -432,17 +439,32 @@ def compute_daily_factor_returns(
     if not eligibility_ctx.exposure_dates:
         logger.warning("No exposure snapshots available — cannot compute daily factor returns")
         return pd.DataFrame(columns=["date", "factor_name", "factor_return", "r_squared", "residual_vol"])
+    logger.info(
+        "Eligibility context ready: snapshots=%s first_snapshot=%s last_snapshot=%s",
+        len(eligibility_ctx.exposure_dates),
+        eligibility_ctx.exposure_dates[0] if eligibility_ctx.exposure_dates else None,
+        eligibility_ctx.exposure_dates[-1] if eligibility_ctx.exposure_dates else None,
+    )
 
     # Process each trading day
     batch_results: list[dict] = []
     batch_residuals: list[dict] = []
     batch_eligibility: list[dict] = []
     n_computed = 0
+    skip_counts = {
+        "missing_return_row": 0,
+        "missing_eligibility": 0,
+        "small_cross_section": 0,
+        "low_coverage": 0,
+        "missing_l2_sector": 0,
+        "empty_dummies": 0,
+    }
     prev_structural_n = _load_latest_structural_count(cache_db)
 
     for i, date in enumerate(dates_to_compute):
         # 1. Daily stock returns for this date
         if date not in daily_returns.index:
+            skip_counts["missing_return_row"] += 1
             continue
         ret_row = daily_returns.loc[date]
         ret_row = pd.to_numeric(ret_row, errors="coerce")
@@ -453,6 +475,7 @@ def compute_daily_factor_returns(
         eligibility_date = _shift_date_by_days(date, lag_days)
         exp_date, eligibility = structural_eligibility_for_date(eligibility_ctx, eligibility_date)
         if exp_date is None or eligibility.empty:
+            skip_counts["missing_eligibility"] += 1
             batch_eligibility.append({
                 "date": date,
                 "exp_date": exp_date,
@@ -528,20 +551,23 @@ def compute_daily_factor_returns(
         })
 
         if structural_n < MIN_CROSS_SECTION_SIZE or regression_n < MIN_CROSS_SECTION_SIZE:
+            skip_counts["small_cross_section"] += 1
             continue
         if regression_coverage < MIN_ELIGIBLE_COVERAGE:
+            skip_counts["low_coverage"] += 1
             continue
 
         valid_idx = eligibility.index[regression_mask]
         returns_series = ret_row.loc[valid_idx].astype(float)
         market_cap_series = pd.to_numeric(eligibility.loc[valid_idx, "market_cap"], errors="coerce").astype(float)
         industry_series = (
-            eligibility.loc[valid_idx, "trbc_industry_group"]
+            eligibility.loc[valid_idx, "trbc_business_sector"]
             .fillna("")
             .astype(str)
             .str.strip()
         )
         if industry_series.eq("").all():
+            skip_counts["missing_l2_sector"] += 1
             continue
 
         returns = returns_series.to_numpy(dtype=float)
@@ -554,9 +580,10 @@ def compute_daily_factor_returns(
         style_scores = exp_snap.loc[valid_idx, style_cols_present].copy()
         style_scores.columns = style_names
 
-        # Industry exposures (one-hot from mapped TRBC industry groups only).
+        # Industry exposures (one-hot from TRBC L2 business-sector groups).
         industry_dummies = pd.get_dummies(industry_series, dtype=float)
         if industry_dummies.empty:
+            skip_counts["empty_dummies"] += 1
             continue
         ind_x = industry_dummies.to_numpy(dtype=float)
         ind_names = list(industry_dummies.columns)
@@ -594,7 +621,9 @@ def compute_daily_factor_returns(
                 "coverage": float(regression_coverage) if np.isfinite(regression_coverage) else 0.0,
             })
 
-        # 8. Store per-stock residual history for specific risk forecasting
+        # 8. Store per-stock residual history for specific risk forecasting.
+        # Column name remains legacy `trbc_industry_group` for cache compatibility,
+        # but values now carry TRBC L2 business-sector buckets.
         residuals = np.asarray(result.residuals, dtype=float)
         for idx, ric in enumerate(valid_idx):
             if idx >= residuals.shape[0]:
@@ -620,24 +649,61 @@ def compute_daily_factor_returns(
 
         # Batch save every 100 dates
         if len(batch_results) > 3000 or len(batch_residuals) > 25000:
+            pending_results = len(batch_results)
+            pending_residuals = len(batch_residuals)
             _save_daily_results_and_residuals(cache_db, batch_results, batch_residuals)
             batch_results = []
             batch_residuals = []
+            logger.info(
+                "Flushed factor-return cache batch: through_date=%s factor_rows=%s residual_rows=%s",
+                date,
+                pending_results,
+                pending_residuals,
+            )
         if len(batch_eligibility) > 500:
+            pending_eligibility = len(batch_eligibility)
             _save_daily_eligibility_summary(cache_db, batch_eligibility)
             batch_eligibility = []
+            logger.info(
+                "Flushed eligibility summary batch: through_date=%s rows=%s",
+                date,
+                pending_eligibility,
+            )
 
         if (i + 1) % 200 == 0:
             elapsed = time.time() - t0
             rate = (i + 1) / elapsed
-            logger.info(f"  {i + 1}/{len(dates_to_compute)} dates ({rate:.0f} dates/s)")
+            logger.info(
+                "Progress %s/%s dates (%.0f dates/s, computed=%s, skipped_small=%s, skipped_low_cov=%s)",
+                i + 1,
+                len(dates_to_compute),
+                rate,
+                n_computed,
+                skip_counts["small_cross_section"],
+                skip_counts["low_coverage"],
+            )
 
     # Save remaining
+    pending_results = len(batch_results)
+    pending_residuals = len(batch_residuals)
+    pending_eligibility = len(batch_eligibility)
     _save_daily_results_and_residuals(cache_db, batch_results, batch_residuals)
     _save_daily_eligibility_summary(cache_db, batch_eligibility)
+    if pending_results or pending_residuals or pending_eligibility:
+        logger.info(
+            "Flushed final cache batch: factor_rows=%s residual_rows=%s eligibility_rows=%s",
+            pending_results,
+            pending_residuals,
+            pending_eligibility,
+        )
 
     elapsed = time.time() - t0
-    logger.info(f"Computed {n_computed} daily cross-sections in {elapsed:.1f}s")
+    logger.info(
+        "Computed %s daily cross-sections in %.1fs (skip_counts=%s)",
+        n_computed,
+        elapsed,
+        skip_counts,
+    )
 
     return _load_all_from_cache(cache_db, lookback_days)
 
@@ -688,7 +754,7 @@ def load_specific_residuals(
     conn = sqlite3.connect(str(cache_db))
     conn.execute(_DAILY_RESIDUALS_SCHEMA)
     cols = _table_columns(conn, "daily_specific_residuals")
-    industry_col = pick_trbc_industry_column(cols)
+    industry_col = pick_trbc_business_sector_column(cols) or pick_trbc_industry_column(cols)
     if industry_col is None:
         conn.close()
         return pd.DataFrame(columns=["date", "ric", "ticker", "residual", "market_cap", "trbc_industry_group"])

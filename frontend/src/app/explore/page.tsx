@@ -361,7 +361,7 @@ export default function ExplorePage() {
                 <div className="explore-hero-stat">
                   <span className="label">Beta</span>
                   <span className="value">
-                    {typeof item.exposures?.Beta === "number" ? item.exposures.Beta.toFixed(2) : "—"}
+                    —
                   </span>
                 </div>
                 <div className="explore-hero-stat">

@@ -10,6 +10,13 @@
   - `weekly-core`
   - `cold-core` (full historical rebuild path)
 
+## Hobby Launch Profile (Low Cost, 1-2 Users)
+- Run a single backend process/worker only.
+- Keep SQLite local and persistent on disk (no shared multi-node writes).
+- Set a non-empty `REFRESH_API_TOKEN` before exposing the app online.
+- Prefer manual or low-frequency refreshes (`daily-fast` most days).
+- Keep daily file backups of `data.db` and `cache.db`.
+
 ## Volume Pull Policy
 - Canonical daily OHLCV ingest (`download_data_lseg.py`) maps `volume` from `TR.Volume`.
 - Historical volume-repair path (`backfill_prices_range_lseg.py --volume-only`) maps `volume` from `TR.Volume`.
@@ -54,6 +61,8 @@
   - `python3 -m backend.scripts.build_cuse4_estu_membership --db-path backend/data.db`
 
 ## What Gets Cached
+- Refresh outputs are staged under a run snapshot and become live only when the snapshot pointer is published.
+  - This prevents partial live state if refresh fails mid-run.
 - `risk_engine_meta`: recompute metadata (method version, last recompute date, latest factor-return date, settings).
 - `risk_engine_cov`: serialized factor covariance matrix (weekly cache).
 - `risk_engine_specific_risk`: stock-level specific risk map (weekly cache).

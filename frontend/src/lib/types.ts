@@ -345,11 +345,13 @@ export interface DataDiagnosticsData {
   cache_db_path: string;
   exposure_source_table: string;
   source_tables: {
-    fundamental_history: DataTableStats;
-    trbc_history: DataTableStats;
-    price_history: DataTableStats;
-    pit_cross_section_snapshot?: DataTableStats | null;
-    barra_raw_cross_section_history?: DataTableStats | null;
+    security_master: DataTableStats | null;
+    security_fundamentals_pit: DataTableStats | null;
+    security_classification_pit: DataTableStats | null;
+    security_prices_eod: DataTableStats | null;
+    estu_membership_daily: DataTableStats | null;
+    barra_raw_cross_section_history: DataTableStats | null;
+    universe_cross_section_snapshot: DataTableStats | null;
   };
   exposure_duplicates: {
     active_exposure_source: {

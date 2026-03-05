@@ -210,6 +210,7 @@ def load_latest_fundamentals(
             f.source AS source,
             f.job_run_id AS job_run_id,
             f.updated_at AS updated_at,
+            lc.trbc_business_sector AS trbc_business_sector,
             lc.trbc_industry_group AS trbc_industry_group,
             COALESCE(
                 NULLIF(lc.trbc_economic_sector, ''),

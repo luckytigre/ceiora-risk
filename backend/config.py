@@ -35,6 +35,15 @@ def _resolve_data_path(env_name: str, default_filename: str) -> str:
 # SQLite/cache + analytics source DB
 SQLITE_PATH = _resolve_data_path("SQLITE_CACHE_PATH", "cache.db")
 DATA_DB_PATH = _resolve_data_path("DATA_DB_PATH", "data.db")
+SQLITE_TIMEOUT_SECONDS = max(1.0, float(os.getenv("SQLITE_TIMEOUT_SECONDS", "30")))
+SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "5000")))
+SQLITE_CACHE_RETRY_ATTEMPTS = max(1, int(os.getenv("SQLITE_CACHE_RETRY_ATTEMPTS", "4")))
+SQLITE_CACHE_RETRY_DELAY_MS = max(10, int(os.getenv("SQLITE_CACHE_RETRY_DELAY_MS", "50")))
+
+# Data backend routing (Stage 1 Neon prep keeps runtime on SQLite by default).
+# Allowed values: "sqlite", "neon"
+DATA_BACKEND = str(os.getenv("DATA_BACKEND", "sqlite")).strip().lower()
+NEON_DATABASE_URL = str(os.getenv("NEON_DATABASE_URL", "")).strip()
 
 # Analytics
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "504"))  # ~2 years trading days
@@ -82,3 +91,7 @@ REFRESH_API_TOKEN = str(os.getenv("REFRESH_API_TOKEN", "")).strip()
 
 def pg_dsn() -> str:
     return f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DB}"
+
+
+def neon_dsn() -> str:
+    return NEON_DATABASE_URL

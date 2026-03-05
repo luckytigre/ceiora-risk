@@ -354,7 +354,7 @@ def _build_factor_exposure_matrix(
     style = style.rename(columns=STYLE_COLUMN_TO_LABEL)
     caps = pd.to_numeric(eligible.reindex(style.index)["market_cap"], errors="coerce")
     industries = (
-        eligible.reindex(style.index)["trbc_industry_group"]
+        eligible.reindex(style.index)["trbc_business_sector"]
         .fillna("")
         .astype(str)
         .str.strip()

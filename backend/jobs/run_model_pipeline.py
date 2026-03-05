@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sqlite3
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,7 @@ from backend.trading_calendar import previous_or_same_xnys_session
 
 DATA_DB = Path(config.DATA_DB_PATH)
 CACHE_DB = Path(config.SQLITE_PATH)
+logger = logging.getLogger(__name__)
 
 STAGES = [
     "ingest",
@@ -392,12 +395,32 @@ def run_model_pipeline(
     reset_core_cache = bool(cfg.get("reset_core_cache"))
     should_run_core = bool(force_core or core_policy == "always" or (core_policy == "due" and due))
     core_reason = "force_core" if force_core else ("due" if should_run_core else due_reason)
+    logger.info(
+        "Pipeline core-risk decision: profile=%s policy=%s should_run_core=%s reason=%s due=%s due_reason=%s",
+        profile_key,
+        core_policy,
+        should_run_core,
+        core_reason,
+        due,
+        due_reason,
+    )
 
     stage_results: list[dict[str, Any]] = []
     overall_status = "ok"
-    for stage in selected:
+    total_stages = len(selected)
+    for idx, stage in enumerate(selected, start=1):
+        stage_t0 = time.perf_counter()
+        logger.info("Starting stage %s/%s: %s", idx, total_stages, stage)
         stage_order = STAGES.index(stage) + 1
         if stage in completed:
+            elapsed = time.perf_counter() - stage_t0
+            logger.info(
+                "Skipping stage %s/%s: %s (already completed) in %.1fs",
+                idx,
+                total_stages,
+                stage,
+                elapsed,
+            )
             stage_results.append(
                 {
                     "stage": stage,
@@ -426,12 +449,21 @@ def run_model_pipeline(
                 reset_core_cache=reset_core_cache,
             )
             stage_status = "skipped" if str(out.get("status")) == "skipped" else "completed"
+            elapsed = time.perf_counter() - stage_t0
             job_runs.finish_stage(
                 db_path=DATA_DB,
                 run_id=effective_run_id,
                 stage_name=stage,
                 status=stage_status,
                 details=out,
+            )
+            logger.info(
+                "Finished stage %s/%s: %s (%s) in %.1fs",
+                idx,
+                total_stages,
+                stage,
+                stage_status,
+                elapsed,
             )
             stage_results.append(
                 {
@@ -443,6 +475,14 @@ def run_model_pipeline(
         except Exception as exc:  # noqa: BLE001
             overall_status = "failed"
             err = {"type": type(exc).__name__, "message": str(exc)}
+            elapsed = time.perf_counter() - stage_t0
+            logger.exception(
+                "Stage failed %s/%s: %s after %.1fs",
+                idx,
+                total_stages,
+                stage,
+                elapsed,
+            )
             job_runs.finish_stage(
                 db_path=DATA_DB,
                 run_id=effective_run_id,
@@ -495,11 +535,21 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force core factor-return/covariance/specific-risk recompute regardless of profile policy.",
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        help="Console log verbosity.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
+    logging.basicConfig(
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     print(
         run_model_pipeline(
             profile=args.profile,

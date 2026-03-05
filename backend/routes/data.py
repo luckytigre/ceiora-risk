@@ -16,6 +16,8 @@ router = APIRouter()
 
 DATA_DB = Path(config.DATA_DB_PATH)
 CACHE_DB = Path(config.SQLITE_PATH)
+_INTERNAL_CACHE_PREFIXES = ("__snap__:",)
+_INTERNAL_CACHE_KEYS = {"__cache_snapshot_active"}
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -147,12 +149,15 @@ def _cache_rows() -> list[dict[str, Any]]:
         conn.close()
     out: list[dict[str, Any]] = []
     for key, ts in rows:
+        key_txt = str(key)
+        if key_txt in _INTERNAL_CACHE_KEYS or key_txt.startswith(_INTERNAL_CACHE_PREFIXES):
+            continue
         iso = None
         if ts is not None:
             iso = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
         out.append(
             {
-                "key": str(key),
+                "key": key_txt,
                 "updated_at_unix": float(ts) if ts is not None else None,
                 "updated_at_utc": str(iso) if iso is not None else None,
             }
