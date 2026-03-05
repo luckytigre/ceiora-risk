@@ -66,6 +66,7 @@
 ## What Gets Cached
 - Refresh outputs are staged under a run snapshot and become live only when the snapshot pointer is published.
   - This prevents partial live state if refresh fails mid-run.
+  - Old staged snapshots are pruned automatically; tune with `SQLITE_CACHE_SNAPSHOT_RETENTION` (default `3`).
 - `risk_engine_meta`: recompute metadata (method version, last recompute date, latest factor-return date, settings).
 - `risk_engine_cov`: serialized factor covariance matrix (weekly cache).
 - `risk_engine_specific_risk`: stock-level specific risk map (weekly cache).

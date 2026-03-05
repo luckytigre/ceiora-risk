@@ -54,6 +54,18 @@ def _snapshot_key(snapshot_id: str, key: str) -> str:
     return f"{_SNAPSHOT_KEY_PREFIX}{snapshot_id}:{key}"
 
 
+def _snapshot_id_from_key(raw_key: str) -> str | None:
+    key = str(raw_key or "")
+    if not key.startswith(_SNAPSHOT_KEY_PREFIX):
+        return None
+    rest = key[len(_SNAPSHOT_KEY_PREFIX):]
+    if ":" not in rest:
+        return None
+    snap_id, _ = rest.split(":", 1)
+    snap_id = snap_id.strip()
+    return snap_id or None
+
+
 def _decode_active_snapshot(raw: Any) -> str | None:
     if isinstance(raw, str) and raw.strip():
         return raw.strip()
@@ -165,11 +177,57 @@ def cache_publish_snapshot(snapshot_id: str) -> None:
                 "INSERT OR REPLACE INTO cache (key, value, updated_at) VALUES (?, ?, ?)",
                 (_SNAPSHOT_POINTER_KEY, json.dumps(payload, default=str), time.time()),
             )
+            _prune_old_snapshots(conn, active_snapshot_id=clean)
             conn.commit()
         finally:
             conn.close()
 
     _run_with_lock_retry(_work)
+
+
+def _prune_old_snapshots(conn: sqlite3.Connection, *, active_snapshot_id: str | None) -> int:
+    retain = int(config.SQLITE_CACHE_SNAPSHOT_RETENTION)
+    if retain < 1:
+        retain = 1
+
+    rows = conn.execute(
+        "SELECT key, updated_at FROM cache WHERE key LIKE ?",
+        (f"{_SNAPSHOT_KEY_PREFIX}%",),
+    ).fetchall()
+    if not rows:
+        return 0
+
+    latest_ts_by_snapshot: dict[str, float] = {}
+    for key, ts in rows:
+        snap_id = _snapshot_id_from_key(str(key))
+        if not snap_id:
+            continue
+        cur = float(ts or 0.0)
+        prev = latest_ts_by_snapshot.get(snap_id)
+        if prev is None or cur > prev:
+            latest_ts_by_snapshot[snap_id] = cur
+
+    if not latest_ts_by_snapshot:
+        return 0
+
+    ordered = sorted(
+        latest_ts_by_snapshot.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    keep = {sid for sid, _ in ordered[:retain]}
+    if active_snapshot_id:
+        keep.add(str(active_snapshot_id).strip())
+
+    deleted = 0
+    for sid in latest_ts_by_snapshot:
+        if sid in keep:
+            continue
+        prefix = _snapshot_key(sid, "")
+        before = conn.total_changes
+        conn.execute("DELETE FROM cache WHERE key LIKE ?", (f"{prefix}%",))
+        deleted += int(conn.total_changes - before)
+    return deleted
 
 
 def get_cache_age() -> float | None:

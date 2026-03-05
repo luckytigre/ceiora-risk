@@ -39,6 +39,7 @@ SQLITE_TIMEOUT_SECONDS = max(1.0, float(os.getenv("SQLITE_TIMEOUT_SECONDS", "30"
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "5000")))
 SQLITE_CACHE_RETRY_ATTEMPTS = max(1, int(os.getenv("SQLITE_CACHE_RETRY_ATTEMPTS", "4")))
 SQLITE_CACHE_RETRY_DELAY_MS = max(10, int(os.getenv("SQLITE_CACHE_RETRY_DELAY_MS", "50")))
+SQLITE_CACHE_SNAPSHOT_RETENTION = max(1, int(os.getenv("SQLITE_CACHE_SNAPSHOT_RETENTION", "3")))
 
 # Data backend routing (Stage 1 Neon prep keeps runtime on SQLite by default).
 # Allowed values: "sqlite", "neon"
