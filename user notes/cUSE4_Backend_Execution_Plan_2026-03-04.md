@@ -301,7 +301,7 @@ Implemented:
 - Stage status table: `job_run_status` (in `backend/data.db`)
 - CLI entrypoint:
   - `PYTHONPATH=backend python3 -m jobs.run_model_pipeline ...`
-  - `python3 backend/scripts/run_model_pipeline.py ...`
+  - `python3 -m backend.scripts.run_model_pipeline ...`
 - Profile model (single framework, multiple cadences):
   - `daily-fast`: no core recompute; serving refresh path
   - `daily-with-core-if-due`: core recompute only when interval/method gate says due

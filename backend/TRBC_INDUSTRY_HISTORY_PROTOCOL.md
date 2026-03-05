@@ -19,7 +19,7 @@ Ensure every cross-section (`ticker`, `as_of_date`) has a point-in-time LSEG TRB
 
 ## Operational Flow
 1. Run historical backfill once (or when universe coverage changes):
-   - `python backend/scripts/backfill_trbc_history_lseg.py --db-path backend/data.db`
+   - `python -m backend.scripts.backfill_trbc_history_lseg --db-path backend/data.db`
 2. This script:
    - Resolves ticker->RIC using multi-suffix probing and caches in `ticker_ric_map`
    - Upserts `trbc_industry_history` from LSEG `TRBCIndustryGroup` at each `barra_raw_cross_section_history.as_of_date`

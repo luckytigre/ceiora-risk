@@ -21,15 +21,15 @@
 - Orchestrated refresh via CLI module:
   - `PYTHONPATH=backend python3 -m jobs.run_model_pipeline --profile daily-fast`
 - Orchestrated refresh via script wrapper:
-  - `python3 backend/scripts/run_model_pipeline.py --profile daily-with-core-if-due`
+  - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due`
 - Resume a previous run id:
-  - `python3 backend/scripts/run_model_pipeline.py --profile daily-with-core-if-due --resume-run-id <run_id>`
+  - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due --resume-run-id <run_id>`
 - Refresh data from LSEG:
-  - `python3 backend/scripts/download_data_lseg.py --db-path backend/data.db`
+  - `python3 -m backend.scripts.download_data_lseg --db-path backend/data.db`
 - Bootstrap cUSE4 canonical source tables:
-  - `python3 backend/scripts/bootstrap_cuse4_source_tables.py --db-path backend/data.db`
+  - `python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/data.db`
 - Build cUSE4 ESTU audit snapshot:
-  - `python3 backend/scripts/build_cuse4_estu_membership.py --db-path backend/data.db`
+  - `python3 -m backend.scripts.build_cuse4_estu_membership --db-path backend/data.db`
 
 ## What Gets Cached
 - `risk_engine_meta`: recompute metadata (method version, last recompute date, latest factor-return date, settings).
@@ -79,12 +79,12 @@
 
 ### Maintenance Commands
 - Compact DB files:
-  - `python3 backend/scripts/compact_sqlite_databases.py backend/data.db backend/cache.db`
+  - `python3 -m backend.scripts.compact_sqlite_databases backend/data.db backend/cache.db`
 - Rebuild raw cross-section history:
-  - `python3 backend/scripts/build_barra_raw_cross_section_history.py --db-path backend/data.db --frequency weekly`
+  - `python3 -m backend.scripts.build_barra_raw_cross_section_history --db-path backend/data.db --frequency weekly`
 - Force clean core recompute:
   - `sqlite3 backend/cache.db "DELETE FROM daily_factor_returns; DELETE FROM daily_specific_residuals; DELETE FROM daily_universe_eligibility_summary;"`
-  - `python3 backend/scripts/run_model_pipeline.py --profile weekly-core --from-stage factor_returns --to-stage risk_model --force-core`
+  - `python3 -m backend.scripts.run_model_pipeline --profile weekly-core --from-stage factor_returns --to-stage risk_model --force-core`
 
 ### Quick Health Checks
 - Style-score completeness (recent):
