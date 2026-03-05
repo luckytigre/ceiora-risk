@@ -33,6 +33,10 @@ Completed in latest optimization sweep:
 - Full DB compaction completed:
   - `data.db` reclaimed `1,471,516,672` bytes
   - `cache.db` reclaimed `8,192` bytes
+- Universe baseline updated after coverage-universe augmentation:
+  - `security_master` eligible RICs: `5,819`
+  - distinct tickers in `security_master`: `4,956`
+  - PIT monthly backfill for fundamentals/classification completed through `2026-02-27`.
 
 Current remaining work (non-blocking):
 - Optional archival cleanup under `backend/scripts/_archive/` if you want those files physically deleted instead of retained as history.

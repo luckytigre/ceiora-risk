@@ -3,6 +3,10 @@
 Date: 2026-03-03
 Owner: Codex
 
+Latest baseline update (2026-03-04 ET):
+- `security_master` now contains `5,819` eligible RICs (all `classification_ok=1` and `is_equity_eligible=1`).
+- `security_fundamentals_pit` and `security_classification_pit` are monthly-complete for this universe through `2026-02-27`.
+
 ## Objective
 Refactor ingest/backfill to a non-redundant relational model with:
 - `security_master` (universe + identity only)

@@ -36,7 +36,7 @@ Current implemented state:
 - Eligible investable set is controlled by:
   - `classification_ok = 1`
   - `is_equity_eligible = 1`
-- As of this spec revision, the active eligible universe is approximately 3,000 names (current DB run: 3,019 RICs).
+- As of this spec revision, the active eligible universe is 5,819 names (current DB run: 5,819 eligible RICs in `security_master`).
 - Distinct tickers can be lower than distinct RICs due to share classes/listing aliases.
 
 Data-model state:

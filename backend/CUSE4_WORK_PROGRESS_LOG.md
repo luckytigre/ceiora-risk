@@ -519,3 +519,20 @@ Storage optimization:
 Documentation updates:
 - Added audit report: `backend/OPTIMIZATION_AUDIT_2026-03-04.md`.
 - Updated execution plan status in `user notes/cUSE4_Backend_Execution_Plan_2026-03-04.md`.
+
+### Entry 23 - Universe Expansion Baseline Update + Monthly PIT Completion (2026-03-04)
+- Expanded/merged coverage universe from `Coverage Universe -6K.xlsx` into canonical `security_master`.
+- Current canonical universe baseline:
+  - `security_master` total rows: `5,819`
+  - eligible rows (`classification_ok=1`, `is_equity_eligible=1`): `5,819`
+  - distinct tickers: `4,956`
+  - distinct RICs: `5,819`
+- Completed monthly PIT backfill for the full 5,819-RIC universe:
+  - `security_fundamentals_pit`: `989,230` rows
+  - `security_classification_pit`: `989,230` rows
+  - date range: `2012-01-31` to `2026-02-27`
+  - distinct RICs present in both tables: `5,819`
+- Current prices state (unchanged by this PIT-only completion step):
+  - `security_prices_eod`: `7,070,167` rows
+  - distinct priced RICs: `2,675`
+  - date range: `2012-01-03` to `2026-03-03`
