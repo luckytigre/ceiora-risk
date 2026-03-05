@@ -532,6 +532,24 @@ main {
   background: linear-gradient(to right, rgb(14, 19, 33), rgb(59, 169, 225));
 }
 
+.heatmap-centered-70 {
+  width: 70%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 1200px) {
+  .heatmap-centered-70 {
+    width: 82%;
+  }
+}
+
+@media (max-width: 900px) {
+  .heatmap-centered-70 {
+    width: 100%;
+  }
+}
+
 /* Explore */
 .explore-search-row {
   display: flex;

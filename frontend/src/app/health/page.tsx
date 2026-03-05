@@ -788,7 +788,9 @@ export default function HealthPage() {
             }}
           />
         </h4>
-        <CovarianceHeatmap data={data.section2.exposure_corr} />
+        <div className="heatmap-centered-70">
+          <CovarianceHeatmap data={data.section2.exposure_corr} />
+        </div>
 
         <div className="dash-table health-table">
           <table>

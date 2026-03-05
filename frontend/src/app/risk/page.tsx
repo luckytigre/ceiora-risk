@@ -205,7 +205,9 @@ export default function RiskPage() {
             }}
           />
         </h3>
-        <CovarianceHeatmap data={cov} />
+        <div className="heatmap-centered-70">
+          <CovarianceHeatmap data={cov} />
+        </div>
       </div>
     </div>
   );
