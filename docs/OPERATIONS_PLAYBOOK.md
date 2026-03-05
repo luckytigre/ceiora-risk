@@ -11,8 +11,8 @@
   - `cold-core` (full historical rebuild path)
 
 ## Volume Pull Policy
-- Canonical daily OHLCV ingest (`download_data_lseg.py`) maps `volume` from `TR.AvgDailyVolume3Month`.
-- Historical volume-repair path (`backfill_prices_range_lseg.py --volume-only`) maps `volume` from `TR.AvgDailyVolume3Month`.
+- Canonical daily OHLCV ingest (`download_data_lseg.py`) maps `volume` from `TR.Volume`.
+- Historical volume-repair path (`backfill_prices_range_lseg.py --volume-only`) maps `volume` from `TR.Volume`.
 - Use `--only-null-volume` for targeted repairs so existing populated rows are not rewritten.
 - After a broad historical volume repair, run `cold-core` refresh to rebuild raw cross-sections and risk caches from the updated volume series.
 
@@ -46,7 +46,7 @@
   - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due --resume-run-id <run_id>`
 - Refresh data from LSEG:
   - `python3 -m backend.scripts.download_data_lseg --db-path backend/data.db`
-- Repair historical volume coverage only (writes `TR.AvgDailyVolume3Month` into `security_prices_eod.volume`):
+- Repair historical volume coverage only (writes `TR.Volume` into `security_prices_eod.volume`):
   - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/data.db --start-date 2012-01-03 --end-date 2026-03-04 --volume-only --only-null-volume`
 - Bootstrap cUSE4 canonical source tables:
   - `python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/data.db`

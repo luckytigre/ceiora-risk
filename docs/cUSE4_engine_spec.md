@@ -195,7 +195,7 @@ Metrics columns:
 
 Policy:
 - LSEG-only canonical history after migration validation.
-- Standard daily ingest maps `volume` from `TR.AvgDailyVolume3Month`.
+- Standard daily ingest maps `volume` from `TR.Volume`.
 - Targeted historical volume-repair mode uses the same metric
   (`backfill_prices_range_lseg.py --volume-only`).
 - Primary key: `(ric, date)`.
@@ -241,6 +241,7 @@ Style factors:
 - Short-term Reversal: 1M reversal proxy
 - Residual Volatility: EWMA volatility of residual returns
 - Liquidity: equal-weight composite of turnover horizons
+  - built from daily `security_prices_eod.volume` (`TR.Volume`) via rolling turnover and ADV transforms
 - Value: `book_to_price = BVPS / Price`
 - Earnings Yield: 50/50 blend of trailing E/P and forward E/P
 - Leverage: `debt_to_assets`
@@ -431,7 +432,7 @@ Comparison rule (all else equal):
 The following implementation defects were closed and verified:
 - Style-score construction now executes correctly (no invalid argument path, no silent swallow).
 - Refresh/model-output writes fail hard on empty required outputs.
-- Price ingest/backfill requests richer OHLCV/currency fields, and volume-repair mode uses `TR.AvgDailyVolume3Month`.
+- Price ingest/backfill requests richer OHLCV/currency fields, and volume-repair mode uses `TR.Volume`.
 - Raw cross-section + residual/specific-risk relational persistence now use `ric` physical keys.
 - `security_master` now uses `ric` as primary key; synthetic `sid/permid` placeholders are normalized out.
 - Orchestrator ingest stage is active (`bootstrap_only` baseline, opt-in live ingest).

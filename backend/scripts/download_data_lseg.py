@@ -1,7 +1,7 @@
 """Canonical LSEG ingest: direct writes into RIC-keyed source-of-truth tables.
 
 Volume policy:
-- Ingest writes `security_prices_eod.volume` from `TR.AvgDailyVolume3Month`.
+- Ingest writes `security_prices_eod.volume` from `TR.Volume`.
 - Historical volume-repair runs use the same metric via
   `backfill_prices_range_lseg.py --volume-only`.
 """
@@ -37,7 +37,7 @@ SQLITE_TIMEOUT_SECONDS = 120
 SQLITE_BUSY_TIMEOUT_MS = 120000
 SQLITE_MAX_RETRIES = 6
 SQLITE_RETRY_SLEEP_SECONDS = 2.0
-PRICE_VOLUME_FIELD = "TR.AvgDailyVolume3Month"
+PRICE_VOLUME_FIELD = "TR.Volume"
 
 LSEG_FIELDS_ALL = [
     "TR.CommonName",
@@ -446,12 +446,8 @@ def download_from_lseg(
         "price_volume": _pick_col(
             company,
             [
-                "Average Daily Volume, Three Month",
-                "Average Daily Volume, 3 Month",
-                "Average Daily Volume Three Month",
-                "Average Daily Volume 3 Month",
-                "TR.AvgDailyVolume3Month",
                 "Volume",
+                "TR.Volume",
             ],
         ),
         "price_currency": _pick_col(company, ["Price Close Currency", "Currency"]),
