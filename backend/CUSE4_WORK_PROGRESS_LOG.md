@@ -58,13 +58,13 @@
 
 ### Entry 05 - Validation Results
 - Bootstrap command run:
-  - `python3 backend/scripts/bootstrap_cuse4_source_tables.py --db-path backend/data.db`
+  - `python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/data.db`
   - Result:
     - `security_master_rows=4113`
     - `fundamentals_history_rows=283492`
     - `trbc_industry_country_history_rows=147036`
 - ESTU build command run:
-  - `python3 backend/scripts/build_cuse4_estu_membership.py --db-path backend/data.db`
+  - `python3 -m backend.scripts.build_cuse4_estu_membership --db-path backend/data.db`
   - Result:
     - `rows_written=4113`
     - `estu_count=2292`
@@ -425,7 +425,7 @@
 - Actions:
   - Cleared existing `security_prices_eod`.
   - Ran full-history backfill with batch/window controls:
-    - `python3 backend/scripts/backfill_prices_range_lseg.py --db-path backend/data.db --start-date 2012-01-03 --end-date 2026-03-03 --ticker-batch-size 500 --days-per-window 365 --max-retries 3 --sleep-seconds 2.0`
+    - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/data.db --start-date 2012-01-03 --end-date 2026-03-03 --ticker-batch-size 500 --days-per-window 365 --max-retries 3 --sleep-seconds 2.0`
 - Run result:
   - `status=ok`
   - `rows_upserted=7,279,119`
@@ -454,12 +454,12 @@ Post-overwrite table state (`security_prices_eod`):
 
 ### Entry 21 - Clean Refresh + Snapshot Rebuild Completion (2026-03-04)
 - Executed orchestrator ingest stage cleanly:
-  - `python3 backend/scripts/run_model_pipeline.py --profile weekly-core --from-stage ingest --to-stage ingest --force-core`
+  - `python3 -m backend.scripts.run_model_pipeline --profile weekly-core --from-stage ingest --to-stage ingest --force-core`
   - Result: `status=ok`, `bootstrap_only`, canonical table counts validated.
 - Rebuilt `universe_cross_section_snapshot` for latest cross section (`as_of_date=2026-03-03`) using a deterministic fast one-pass path keyed off latest PIT rows per base universe RIC.
   - Result: `rows_written=2530`, snapshot date range `2026-03-03` only.
 - Executed remaining orchestrator stages:
-  - `python3 backend/scripts/run_model_pipeline.py --profile weekly-core --from-stage estu_audit --to-stage serving_refresh --force-core`
+  - `python3 -m backend.scripts.run_model_pipeline --profile weekly-core --from-stage estu_audit --to-stage serving_refresh --force-core`
   - Result: `status=ok`
     - `factor_return_rows_loaded=253145`
     - `factor_count=73`
@@ -509,7 +509,7 @@ Performance/refresh checks:
 
 Storage optimization:
 - Ran compaction script:
-  - `python3 backend/scripts/compact_sqlite_databases.py backend/data.db backend/cache.db`
+  - `python3 -m backend.scripts.compact_sqlite_databases backend/data.db backend/cache.db`
 - Reclaimed:
   - `data.db`: `1,471,516,672` bytes
   - `cache.db`: `8,192` bytes

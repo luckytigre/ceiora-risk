@@ -5,7 +5,7 @@ setup:
 	cd frontend && npm install
 
 backend:
-	cd backend && uvicorn main:app --reload --port 8000
+	uvicorn backend.main:app --reload --port 8000
 
 frontend:
 	cd frontend && npm run dev -- --port 3000
@@ -18,7 +18,7 @@ refresh:
 	curl -X POST http://localhost:8000/api/refresh
 
 cuse4-bootstrap:
-	python3 backend/scripts/bootstrap_cuse4_source_tables.py --db-path backend/data.db
+	python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/data.db
 
 cuse4-estu:
-	python3 backend/scripts/build_cuse4_estu_membership.py --db-path backend/data.db
+	python3 -m backend.scripts.build_cuse4_estu_membership --db-path backend/data.db

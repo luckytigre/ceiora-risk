@@ -95,7 +95,7 @@ Validation:
 
 ### Weekly-core orchestration (`feature_build -> serving_refresh`)
 Command:
-- `python3 backend/scripts/run_model_pipeline.py --profile weekly-core --from-stage feature_build --to-stage serving_refresh --force-core`
+- `python3 -m backend.scripts.run_model_pipeline --profile weekly-core --from-stage feature_build --to-stage serving_refresh --force-core`
 
 Result:
 - `status=ok`
@@ -108,7 +108,7 @@ Result:
 
 ### Daily-fast orchestration (`feature_build -> serving_refresh`)
 Command:
-- `python3 backend/scripts/run_model_pipeline.py --profile daily-fast --from-stage feature_build --to-stage serving_refresh`
+- `python3 -m backend.scripts.run_model_pipeline --profile daily-fast --from-stage feature_build --to-stage serving_refresh`
 
 Result:
 - `status=ok`

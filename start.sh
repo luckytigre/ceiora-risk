@@ -95,7 +95,7 @@ ensure_port_available "$FRONTEND_PORT"
 
 # --- Start backend ---
 echo "Starting backend on :$BACKEND_PORT..."
-(cd "$DIR/backend" && uvicorn main:app --reload --port "$BACKEND_PORT") &
+(cd "$DIR" && uvicorn backend.main:app --reload --port "$BACKEND_PORT") &
 BACKEND_PID=$!
 
 # --- Start frontend ---
