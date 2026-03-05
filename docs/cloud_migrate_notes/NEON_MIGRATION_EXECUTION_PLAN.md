@@ -3,80 +3,97 @@
 Date: 2026-03-05
 Owner: Codex
 
-## Goals
-- Keep local SQLite as LSEG ingest authority for now.
-- Establish Neon as parity mirror for canonical source-of-truth tables.
-- Keep runtime read path on SQLite until parity is stable.
-- Add Neon-native holdings store with locked import behavior.
+## Objective
+Move canonical source-of-truth and holdings workflows to Neon in a controlled way:
+- local SQLite remains LSEG ingest authority for now,
+- Neon becomes parity mirror first,
+- read cutover happens only after repeated parity pass,
+- holdings become Neon-backed with deterministic import/edit behavior.
 
-## Current Project State (2026-03-05 scan)
-- Canonical source table row counts in local `backend/data.db`:
-  - `security_master`: 5,828 total rows, 5,820 eligible.
-  - `security_prices_eod`: 10,681,457 rows (`2012-01-03` to `2026-03-04`).
-  - `security_fundamentals_pit`: 990,600 rows (`2012-01-31` to `2026-03-04`).
-  - `security_classification_pit`: 990,600 rows (`2012-01-31` to `2026-03-04`).
-  - `barra_raw_cross_section_history`: 10,681,457 rows (`2012-01-03` to `2026-03-04`).
-- Integrity shape checks (fast structural):
-  - duplicate canonical key groups: `0` across all 5 canonical tables.
-  - orphan RIC rows vs `security_master`: `0` across all canonical time-series tables.
-- Drift detected:
-  - Latest date `2026-03-04` is sparse (`10` distinct RICs) in prices/fund/classification/barra.
-  - Prior recent dates (`2026-03-03` to `2026-02-20`) are around `3,688`-`3,694` distinct RICs.
-  - Monthly PIT anchors remain broad (`5,827` distinct RICs on `2026-02-27` and prior monthly anchors).
+## Revised Codebase Snapshot (latest audit)
 
-## Key Implication
-- Migration should not assume "latest date == complete date".
-- Parity checks and runtime gating should use broad-coverage dates, not blindly `MAX(date)`.
+### Architecture shifts now present
+- Analytics pipeline was refactored into service modules:
+  - `backend/analytics/services/cache_publisher.py`
+  - `backend/analytics/services/risk_views.py`
+  - `backend/analytics/services/universe_loadings.py`
+- API route shaping/query split added:
+  - `backend/routes/presenters.py`
+  - `backend/db/history_queries.py`
+- Retention tooling added:
+  - `backend/db/retention.py`
+  - `backend/scripts/prune_history_by_lookback.py`
+- CI workflow present:
+  - `.github/workflows/ci.yml`
 
-## Phase Plan
+### Test status
+- `pytest -q backend/tests` -> **37 passed**.
 
-### Phase A - Baseline and Guardrails
-- [x] Stage-1 preflight/audit tooling exists.
-- [x] Stage-1 prep bundle workflow exists.
-- [x] Document sparse-latest-date reality and include in migration gates.
+### Canonical DB profile (local `backend/data.db`)
+- `security_master`: 5,828 total / 5,820 eligible.
+- `security_prices_eod`: 10,681,457 rows (`2012-01-03` -> `2026-03-04`).
+- `security_fundamentals_pit`: 990,600 rows (`2012-01-31` -> `2026-03-04`).
+- `security_classification_pit`: 990,600 rows (`2012-01-31` -> `2026-03-04`).
+- `barra_raw_cross_section_history`: 10,681,457 rows (`2012-01-03` -> `2026-03-04`).
+- Duplicate-key groups on canonical PKs: **0**.
+- Orphan RIC rows vs `security_master`: **0**.
+- Latest-date sparsity remains:
+  - `2026-03-04` has only 10 distinct RICs in daily canonical tables.
+  - recent complete-ish dates are around 3,688-3,694 RICs.
 
-### Phase B - Stage-2 Neon Mirror (Implement now)
-- [x] Add canonical Neon DDL for the 5 source tables.
-- [x] Add sync tooling (full + incremental overlap reload).
-- [x] Add parity audit tooling (counts/date windows/latest distinct coverage/duplicates/orphans).
-- [x] Add operator runbook commands for Stage-2 execution.
+## Migration Readiness Status
 
-### Phase C - Holdings in Neon (Implement now)
-- [x] Keep dedicated holdings schema in Neon.
-- [x] Add import engine with locked modes:
-  - `replace_account`
-  - `upsert_absolute`
-  - `increment_delta`
-- [x] Enforce rules:
-  - account_id required/validated
-  - 6-decimal quantity storage
-  - negative quantities allowed
-  - zero resulting positions removed
-  - unknown RIC rejected
-  - ticker-only deterministic `ticker -> RIC` resolver with warnings
-- [x] Add mock holdings seed tool for initial Neon population.
+### Phase A - Baseline and guardrails
+- [x] Stage-1 preflight/audit tooling implemented.
+- [x] Stage-1 prep bundle tooling implemented.
+- [x] Sparse-latest-date caveat documented and reflected in gating policy.
 
-### Phase D - Cutover Prep (next)
-- [ ] Script local run -> Neon sync as one operator command.
-- [ ] Add post-sync parity gate to block read cutover on mismatch.
-- [ ] Implement backend read-routing switch (`sqlite` vs `neon`) only after repeated parity pass.
-- [ ] Add API-backed holdings endpoints/UI edits (currently still file-backed mock positions).
+### Phase B - Stage-2 Neon mirror tooling
+- [x] Canonical Neon DDL implemented.
+- [x] Full + incremental overlap sync scripts implemented.
+- [x] SQLite vs Neon parity-audit script implemented.
+- [x] Operator runbook commands documented.
 
-## Stage-2 Canonical Execution Sequence
-1. Apply Neon canonical schema:
+### Phase C - Holdings in Neon
+- [x] Holdings schema + constraints implemented.
+- [x] CSV import engine implemented (`replace_account`, `upsert_absolute`, `increment_delta`).
+- [x] Deterministic ticker->RIC resolver implemented.
+- [x] Mock holdings seeding script implemented.
+
+### Phase D - Integration/cutover plumbing (pending)
+- [ ] Add one-command "post-refresh sync + parity gate" operator entrypoint.
+- [ ] Wire backend holdings runtime off `positions_store` to Neon tables (API-backed reads/writes).
+- [ ] Add backend read-routing switch (`sqlite` vs `neon`) with hard parity gate.
+
+### Phase E - Controlled read cutover (pending)
+- [ ] Run first full Neon load.
+- [ ] Run parity audits and resolve any mismatches.
+- [ ] Run repeated incremental sync + parity cycles after local refresh runs.
+- [ ] Flip read routing to Neon only after parity is stable.
+
+## Operator Sequence (current expected flow)
+1. Set `NEON_DATABASE_URL`.
+2. Preflight:
+   - `python3 -m backend.scripts.neon_preflight_check --json`
+3. Apply schema:
    - `python3 -m backend.scripts.neon_apply_schema --include-holdings --json`
-2. Run first full mirror load:
+4. Initial full mirror:
    - `python3 -m backend.scripts.neon_sync_from_sqlite --mode full --json`
-3. Run parity audit:
+5. Parity gate:
    - `python3 -m backend.scripts.neon_parity_audit --json`
-4. For regular operation after local refresh:
+6. Seed mock holdings (optional initial data):
+   - `python3 -m backend.scripts.neon_holdings_seed_mock --account-id main_mock --json`
+7. Ongoing cycle after local refresh:
    - `python3 -m backend.scripts.neon_sync_from_sqlite --mode incremental --json`
    - `python3 -m backend.scripts.neon_parity_audit --json`
 
-## Progress Log
+## Current Risks / Notes
+- Latest date in source tables can be partial; parity checks should include broad-coverage dates, not only `MAX(date)`.
+- Runtime holdings still come from in-repo mock store (`backend/portfolio/positions_store.py`) until Phase D wiring is done.
+- Worktree currently has additional uncommitted refactor changes; migration cutover should be done only from a clean, committed baseline.
 
-### 2026-03-05 11:xx ET
-- Re-audited current repository and database state.
-- Added migration-aware plan with concrete row/date baseline.
-- Added Stage-2 Neon migration toolkit and holdings import toolkit.
-- Updated operator documentation to reflect new scripts and gates.
+## Plan Refresh Log
+### 2026-03-05 (latest)
+- Re-audited revised codebase structure, tests, and canonical DB profile.
+- Updated plan phases to align with new service-layer architecture and retention tooling.
+- Preserved Neon execution sequence and clarified remaining cutover tasks.
