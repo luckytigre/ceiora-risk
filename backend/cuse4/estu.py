@@ -59,24 +59,24 @@ def _load_security_frame(conn: sqlite3.Connection) -> pd.DataFrame:
     df = pd.read_sql_query(
         f"""
         SELECT
-            sid,
+            UPPER(TRIM(ric)) AS ric,
             UPPER(TRIM(ticker)) AS ticker,
             COALESCE(permid, '') AS permid,
-            COALESCE(ric, '') AS ric,
             COALESCE(classification_ok, 0) AS classification_ok,
             COALESCE(is_equity_eligible, 0) AS is_equity_eligible
         FROM {SECURITY_MASTER_TABLE}
+        WHERE ric IS NOT NULL
+          AND TRIM(ric) <> ''
         """,
         conn,
     )
     if df.empty:
         return df
-    df["sid"] = df["sid"].astype(str)
+    df["ric"] = df["ric"].astype(str).str.upper()
     df["ticker"] = df["ticker"].astype(str).str.upper()
-    df["real_permid"] = ~df["permid"].astype(str).str.upper().str.startswith("RIC::")
     df["classification_ok"] = pd.to_numeric(df["classification_ok"], errors="coerce").fillna(0).astype(int)
     df["is_equity_eligible"] = pd.to_numeric(df["is_equity_eligible"], errors="coerce").fillna(0).astype(int)
-    return df.drop_duplicates(subset=["sid"], keep="last")
+    return df.drop_duplicates(subset=["ric"], keep="last")
 
 
 def _load_price_features(
@@ -94,38 +94,36 @@ def _load_price_features(
     prices = pd.read_sql_query(
         f"""
         SELECT
-            sm.sid,
+            UPPER(TRIM(p.ric)) AS ric,
             p.date,
             CAST(p.close AS REAL) AS close,
             CAST(p.volume AS REAL) AS volume
         FROM {PRICES_TABLE} p
-        JOIN {SECURITY_MASTER_TABLE} sm
-          ON p.sid = sm.sid
         WHERE p.date >= ?
           AND p.date <= ?
-        ORDER BY sm.sid, p.date
+        ORDER BY UPPER(TRIM(p.ric)), p.date
         """,
         conn,
         params=(start_date, as_of_date),
     )
     if prices.empty:
-        return pd.DataFrame(columns=["sid", "price_close", "adv_20d", "price_obs"])
+        return pd.DataFrame(columns=["ric", "price_close", "adv_20d", "price_obs"])
 
     prices["close"] = pd.to_numeric(prices["close"], errors="coerce")
     prices["volume"] = pd.to_numeric(prices["volume"], errors="coerce")
-    prices = prices.dropna(subset=["sid", "date", "close"])
+    prices = prices.dropna(subset=["ric", "date", "close"])
     if prices.empty:
-        return pd.DataFrame(columns=["sid", "price_close", "adv_20d", "price_obs"])
+        return pd.DataFrame(columns=["ric", "price_close", "adv_20d", "price_obs"])
 
-    prices = prices.sort_values(["sid", "date"])
+    prices = prices.sort_values(["ric", "date"])
     prices["dollar_volume"] = prices["close"] * prices["volume"].fillna(0.0)
 
-    latest = prices.groupby("sid", sort=False).tail(1).set_index("sid")
-    obs = prices.groupby("sid", sort=False)["close"].count().rename("price_obs")
+    latest = prices.groupby("ric", sort=False).tail(1).set_index("ric")
+    obs = prices.groupby("ric", sort=False)["close"].count().rename("price_obs")
     adv20 = (
-        prices.groupby("sid", sort=False)
+        prices.groupby("ric", sort=False)
         .tail(20)
-        .groupby("sid", sort=False)["dollar_volume"]
+        .groupby("ric", sort=False)["dollar_volume"]
         .mean()
         .rename("adv_20d")
     )
@@ -151,17 +149,17 @@ def _load_latest_fundamentals(conn: sqlite3.Connection, *, as_of_date: str) -> p
         f"""
         WITH ranked AS (
             SELECT
-                sid,
+                ric,
                 as_of_date,
                 market_cap,
                 ROW_NUMBER() OVER (
-                    PARTITION BY sid
+                    PARTITION BY ric
                     ORDER BY as_of_date DESC, stat_date DESC
                 ) AS rn
             FROM {FUNDAMENTALS_HISTORY_TABLE}
             WHERE as_of_date <= ?
         )
-        SELECT sid, as_of_date, CAST(market_cap AS REAL) AS market_cap
+        SELECT ric, as_of_date, CAST(market_cap AS REAL) AS market_cap
         FROM ranked
         WHERE rn = 1
         """,
@@ -169,10 +167,10 @@ def _load_latest_fundamentals(conn: sqlite3.Connection, *, as_of_date: str) -> p
         params=(as_of_date,),
     )
     if df.empty:
-        return pd.DataFrame(columns=["sid", "market_cap", "has_required_fundamentals"])
+        return pd.DataFrame(columns=["ric", "market_cap", "has_required_fundamentals"])
     df["market_cap"] = pd.to_numeric(df["market_cap"], errors="coerce")
     df["has_required_fundamentals"] = np.isfinite(df["market_cap"]) & (df["market_cap"] > 0.0)
-    return df[["sid", "market_cap", "has_required_fundamentals"]]
+    return df[["ric", "market_cap", "has_required_fundamentals"]]
 
 
 def _load_latest_trbc(conn: sqlite3.Connection, *, as_of_date: str) -> pd.DataFrame:
@@ -182,18 +180,18 @@ def _load_latest_trbc(conn: sqlite3.Connection, *, as_of_date: str) -> pd.DataFr
         f"""
         WITH ranked AS (
             SELECT
-                sid,
+                ric,
                 as_of_date,
                 COALESCE(trbc_industry_group, '') AS trbc_industry_group,
                 COALESCE(hq_country_code, '') AS hq_country_code,
                 ROW_NUMBER() OVER (
-                    PARTITION BY sid
+                    PARTITION BY ric
                     ORDER BY as_of_date DESC
                 ) AS rn
             FROM {TRBC_HISTORY_TABLE}
             WHERE as_of_date <= ?
         )
-        SELECT sid, trbc_industry_group, hq_country_code
+        SELECT ric, trbc_industry_group, hq_country_code
         FROM ranked
         WHERE rn = 1
         """,
@@ -201,20 +199,18 @@ def _load_latest_trbc(conn: sqlite3.Connection, *, as_of_date: str) -> pd.DataFr
         params=(as_of_date,),
     )
     if df.empty:
-        return pd.DataFrame(columns=["sid", "trbc_industry_group", "hq_country_code", "has_required_trbc"])
+        return pd.DataFrame(columns=["ric", "trbc_industry_group", "hq_country_code", "has_required_trbc"])
     df["trbc_industry_group"] = df["trbc_industry_group"].fillna("").astype(str).str.strip()
     df["hq_country_code"] = df["hq_country_code"].fillna("").astype(str).str.strip().str.upper()
     df["has_required_trbc"] = (
         df["trbc_industry_group"].str.len().gt(0) & df["hq_country_code"].str.len().gt(0)
     )
-    return df[["sid", "trbc_industry_group", "hq_country_code", "has_required_trbc"]]
+    return df[["ric", "trbc_industry_group", "hq_country_code", "has_required_trbc"]]
 
 
 def _drop_reason(row: pd.Series) -> tuple[str, str]:
     if not bool(row.get("is_equity_eligible", False)):
         return "not_equity_eligible", "security_master.is_equity_eligible != 1"
-    if not bool(row.get("real_permid", False)):
-        return "missing_real_permid", "permid unresolved or synthetic"
     if not bool(row.get("has_required_price_history", False)):
         return "missing_price_history", "insufficient trailing price observations"
     if not bool(row.get("has_required_fundamentals", False)):
@@ -263,9 +259,9 @@ def build_and_persist_estu_membership(
         trbc = _load_latest_trbc(conn, as_of_date=selected_date)
 
         frame = security.copy()
-        frame = frame.merge(prices, on="sid", how="left")
-        frame = frame.merge(fundamentals, on="sid", how="left")
-        frame = frame.merge(trbc, on="sid", how="left")
+        frame = frame.merge(prices, on="ric", how="left")
+        frame = frame.merge(fundamentals, on="ric", how="left")
+        frame = frame.merge(trbc, on="ric", how="left")
 
         frame["hq_country_code"] = frame.get("hq_country_code", "").fillna("").astype(str).str.strip().str.upper()
         frame["hq_country_code"] = np.where(
@@ -297,7 +293,6 @@ def build_and_persist_estu_membership(
 
         eligibility_conditions = (
             frame["is_equity_eligible"].astype(int).eq(1)
-            & frame["real_permid"].astype(bool)
             & frame["has_required_price_history"].astype(bool)
             & frame["has_required_fundamentals"].astype(bool)
             & frame["has_required_trbc"].astype(bool)
@@ -318,7 +313,7 @@ def build_and_persist_estu_membership(
         payload = [
             (
                 selected_date,
-                str(row.sid),
+                str(row.ric),
                 int(row.estu_flag),
                 _norm_text(row.drop_reason) or None,
                 _norm_text(row.drop_reason_detail) or None,
@@ -338,7 +333,7 @@ def build_and_persist_estu_membership(
             f"""
             INSERT OR REPLACE INTO {ESTU_MEMBERSHIP_TABLE} (
                 date,
-                sid,
+                ric,
                 estu_flag,
                 drop_reason,
                 drop_reason_detail,

@@ -45,7 +45,7 @@ def _eligible_universe_count(db_path: Path) -> int:
         conn.close()
 
 
-def _sid_count_for_date(
+def _ric_count_for_date(
     conn: sqlite3.Connection,
     *,
     table: str,
@@ -54,7 +54,7 @@ def _sid_count_for_date(
 ) -> int:
     row = conn.execute(
         f"""
-        SELECT COUNT(DISTINCT sid)
+        SELECT COUNT(DISTINCT ric)
         FROM {table}
         WHERE {date_col} = ?
         """,
@@ -75,7 +75,7 @@ def _is_date_complete(
     checks: list[bool] = []
     if write_fundamentals:
         checks.append(
-            _sid_count_for_date(
+            _ric_count_for_date(
                 conn,
                 table="security_fundamentals_pit",
                 date_col="as_of_date",
@@ -85,7 +85,7 @@ def _is_date_complete(
         )
     if write_prices:
         checks.append(
-            _sid_count_for_date(
+            _ric_count_for_date(
                 conn,
                 table="security_prices_eod",
                 date_col="date",
@@ -95,7 +95,7 @@ def _is_date_complete(
         )
     if write_classification:
         checks.append(
-            _sid_count_for_date(
+            _ric_count_for_date(
                 conn,
                 table="security_classification_pit",
                 date_col="as_of_date",

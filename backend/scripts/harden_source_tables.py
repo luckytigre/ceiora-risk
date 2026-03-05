@@ -9,19 +9,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from db.fundamental_schema import ensure_fundamental_snapshots_schema
-from db.prices_schema import ensure_prices_daily_schema
+from cuse4.schema import (
+    FUNDAMENTALS_HISTORY_TABLE,
+    PRICES_TABLE,
+    TRBC_HISTORY_TABLE,
+    ensure_cuse4_schema,
+)
 from db.trbc_schema import ensure_trbc_naming
 
 
-def _dup_count(conn: sqlite3.Connection, table: str, date_col: str) -> int:
+def _dup_count(conn: sqlite3.Connection, table: str, key_cols: list[str]) -> int:
+    select_cols = ", ".join(key_cols)
+    group_cols = ", ".join(key_cols)
     row = conn.execute(
         f"""
         SELECT COUNT(*)
         FROM (
-            SELECT ticker, {date_col}, COUNT(*) AS c
+            SELECT {select_cols}, COUNT(*) AS c
             FROM {table}
-            GROUP BY ticker, {date_col}
+            GROUP BY {group_cols}
             HAVING COUNT(*) > 1
         )
         """
@@ -34,29 +40,33 @@ def harden(db_path: Path) -> dict[str, object]:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     try:
-        pre_f = _dup_count(conn, "fundamental_snapshots", "fetch_date")
-        pre_p = _dup_count(conn, "prices_daily", "date")
+        pre_f = _dup_count(conn, FUNDAMENTALS_HISTORY_TABLE, ["ric", "as_of_date", "stat_date"])
+        pre_p = _dup_count(conn, PRICES_TABLE, ["ric", "date"])
+        pre_c = _dup_count(conn, TRBC_HISTORY_TABLE, ["ric", "as_of_date"])
         ensure_trbc_naming(conn)
-        f_res = ensure_fundamental_snapshots_schema(conn, prune_extra_columns=True)
-        p_res = ensure_prices_daily_schema(conn)
+        schema_res = ensure_cuse4_schema(conn)
         conn.commit()
-        post_f = _dup_count(conn, "fundamental_snapshots", "fetch_date")
-        post_p = _dup_count(conn, "prices_daily", "date")
+        post_f = _dup_count(conn, FUNDAMENTALS_HISTORY_TABLE, ["ric", "as_of_date", "stat_date"])
+        post_p = _dup_count(conn, PRICES_TABLE, ["ric", "date"])
+        post_c = _dup_count(conn, TRBC_HISTORY_TABLE, ["ric", "as_of_date"])
     finally:
         conn.close()
     return {
         "db_path": str(db_path),
-        "fundamental_pre_dup_groups": pre_f,
-        "fundamental_post_dup_groups": post_f,
+        "fundamentals_pre_dup_groups": pre_f,
+        "fundamentals_post_dup_groups": post_f,
         "prices_pre_dup_groups": pre_p,
         "prices_post_dup_groups": post_p,
-        "fundamental_schema": f_res,
-        "prices_schema": p_res,
+        "classification_pre_dup_groups": pre_c,
+        "classification_post_dup_groups": post_c,
+        "canonical_schema_tables": schema_res,
     }
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Harden source tables and enforce unique stock/date keys.")
+    p = argparse.ArgumentParser(
+        description="Harden canonical source tables and enforce unique canonical keys."
+    )
     p.add_argument("--db-path", default="backend/data.db", help="Path to data SQLite DB")
     return p.parse_args()
 

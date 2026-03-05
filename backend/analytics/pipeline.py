@@ -26,7 +26,7 @@ from barra.specific_risk import build_specific_risk_from_cache
 from analytics.trbc_economic_sector_short import abbreviate_trbc_economic_sector_short
 from cuse4.bootstrap import bootstrap_cuse4_source_tables
 from cuse4.estu import build_and_persist_estu_membership
-from db import postgres, sqlite
+from db import model_outputs, postgres, sqlite
 from db.cross_section_snapshot import rebuild_cross_section_snapshot
 from portfolio.positions_store import get_position_meta, get_shares, get_tickers
 from trading_calendar import previous_or_same_xnys_session
@@ -161,6 +161,31 @@ def _build_model_sanity_report(
     }
 
 
+def _specific_risk_by_ticker_view(
+    specific_risk_by_security: dict[str, dict[str, float | int | str]] | None,
+) -> dict[str, dict[str, float | int | str]]:
+    """Create a ticker-keyed view from a canonical security-keyed specific-risk map."""
+    out: dict[str, dict[str, float | int | str]] = {}
+    for key, row in (specific_risk_by_security or {}).items():
+        key_txt = str(key or "").upper().strip()
+        ticker = str(row.get("ticker") or (key_txt if "." not in key_txt else "")).upper().strip()
+        if not ticker:
+            continue
+        ric = str(row.get("ric") or (key_txt if "." in key_txt else "")).upper().strip()
+        candidate = dict(row)
+        candidate["ticker"] = ticker
+        candidate["ric"] = ric
+        prev = out.get(ticker)
+        if prev is None:
+            out[ticker] = candidate
+            continue
+        prev_obs = int(prev.get("obs") or 0)
+        cand_obs = int(candidate.get("obs") or 0)
+        if cand_obs >= prev_obs:
+            out[ticker] = candidate
+    return out
+
+
 def _build_universe_ticker_loadings(
     exposures_df: pd.DataFrame,
     fundamentals_df: pd.DataFrame,
@@ -175,10 +200,35 @@ def _build_universe_ticker_loadings(
 
     if not exposures_df.empty:
         exposures_df["ticker"] = exposures_df["ticker"].astype(str).str.upper()
+        if "ric" in exposures_df.columns:
+            exposures_df["ric"] = exposures_df["ric"].astype(str).str.upper()
     if not fundamentals_df.empty:
         fundamentals_df["ticker"] = fundamentals_df["ticker"].astype(str).str.upper()
+        if "ric" in fundamentals_df.columns:
+            fundamentals_df["ric"] = fundamentals_df["ric"].astype(str).str.upper()
     if not prices_df.empty:
         prices_df["ticker"] = prices_df["ticker"].astype(str).str.upper()
+        if "ric" in prices_df.columns:
+            prices_df["ric"] = prices_df["ric"].astype(str).str.upper()
+
+    ric_by_ticker: dict[str, str] = {}
+    ticker_by_ric: dict[str, str] = {}
+
+    def _collect_maps(df: pd.DataFrame) -> None:
+        if df.empty or "ric" not in df.columns or "ticker" not in df.columns:
+            return
+        for _, row in df.iterrows():
+            ric = str(row.get("ric") or "").upper().strip()
+            ticker = str(row.get("ticker") or "").upper().strip()
+            if not ric or not ticker:
+                continue
+            ric_by_ticker[ticker] = ric
+            if ric not in ticker_by_ric:
+                ticker_by_ric[ric] = ticker
+
+    _collect_maps(exposures_df)
+    _collect_maps(fundamentals_df)
+    _collect_maps(prices_df)
 
     # Latest price map for whole universe
     price_map: dict[str, float] = {}
@@ -234,21 +284,25 @@ def _build_universe_ticker_loadings(
         _, eligibility_df = structural_eligibility_for_date(elig_ctx, latest_asof)
 
     eligible_mask = eligibility_df.get("is_structural_eligible", pd.Series(dtype=bool)).astype(bool)
-    eligible_tickers = set(eligibility_df.index[eligible_mask].astype(str))
-    ineligible_reason = {
-        str(t): str(eligibility_df.loc[t, "exclusion_reason"] or "")
-        for t in eligibility_df.index
+    eligible_rics = set(eligibility_df.index[eligible_mask].astype(str).str.upper())
+    eligible_tickers = {
+        ticker for ticker, ric in ric_by_ticker.items()
+        if ric in eligible_rics
     }
+    ineligible_reason: dict[str, str] = {}
+    for ticker, ric in ric_by_ticker.items():
+        if ric in eligibility_df.index:
+            ineligible_reason[ticker] = str(eligibility_df.loc[ric, "exclusion_reason"] or "")
 
     # Canonicalize style scores on the structurally eligible cross-section only.
     canonical_style_map: dict[str, dict[str, float]] = {}
     style_cols_present = [c for c in STYLE_COLUMN_TO_LABEL if c in exposures_df.columns] if not exposures_df.empty else []
-    if not exposures_df.empty and style_cols_present and eligible_tickers:
+    if not exposures_df.empty and style_cols_present and eligible_rics and "ric" in exposures_df.columns:
         style_names = [STYLE_COLUMN_TO_LABEL[c] for c in style_cols_present]
-        style_scores = exposures_df[["ticker", *style_cols_present]].copy()
-        style_scores["ticker"] = style_scores["ticker"].astype(str).str.upper()
-        style_scores = style_scores[style_scores["ticker"].isin(eligible_tickers)]
-        style_scores = style_scores.drop_duplicates(subset=["ticker"], keep="last").set_index("ticker")
+        style_scores = exposures_df[["ric", *style_cols_present]].copy()
+        style_scores["ric"] = style_scores["ric"].astype(str).str.upper()
+        style_scores = style_scores[style_scores["ric"].isin(eligible_rics)]
+        style_scores = style_scores.drop_duplicates(subset=["ric"], keep="last").set_index("ric")
         style_scores.columns = style_names
         if not style_scores.empty:
             caps_from_elig = pd.to_numeric(
@@ -279,8 +333,9 @@ def _build_universe_ticker_loadings(
                     orth_rules=FULL_STYLE_ORTH_RULES,
                     industry_exposures=industry_dummies,
                 )
-                for ticker, row in canonical_scores.iterrows():
-                    canonical_style_map[str(ticker).upper()] = {
+                for ric, row in canonical_scores.iterrows():
+                    ticker = ticker_by_ric.get(str(ric).upper(), str(ric).upper())
+                    canonical_style_map[ticker] = {
                         factor: _finite_float(row.get(factor), 0.0)
                         for factor in canonical_scores.columns
                     }
@@ -303,25 +358,26 @@ def _build_universe_ticker_loadings(
         if not ticker:
             continue
 
-        eligible = bool(ticker in eligible_tickers)
+        ric = str(ric_by_ticker.get(ticker, "")).upper()
+        eligible = bool(ric in eligible_rics) if ric else bool(ticker in eligible_tickers)
         trbc_economic_sector_short = str(
             (
-                eligibility_df.loc[ticker, "trbc_economic_sector_short"]
-                if ticker in eligibility_df.index and "trbc_economic_sector_short" in eligibility_df.columns
+                eligibility_df.loc[ric, "trbc_economic_sector_short"]
+                if ric in eligibility_df.index and "trbc_economic_sector_short" in eligibility_df.columns
                 else (
-                    eligibility_df.loc[ticker, "trbc_sector"]
-                    if ticker in eligibility_df.index and "trbc_sector" in eligibility_df.columns
+                    eligibility_df.loc[ric, "trbc_sector"]
+                    if ric in eligibility_df.index and "trbc_sector" in eligibility_df.columns
                     else ""
                 )
             )
             or trbc_economic_sector_short_map.get(ticker, "")
         )
         trbc_industry_group = str(
-            (eligibility_df.loc[ticker, "trbc_industry_group"] if ticker in eligibility_df.index else "")
+            (eligibility_df.loc[ric, "trbc_industry_group"] if ric in eligibility_df.index else "")
             or trbc_industry_map.get(ticker, "")
         )
         market_cap = _finite_float(
-            eligibility_df.loc[ticker, "market_cap"] if ticker in eligibility_df.index else mcap_map.get(ticker),
+            eligibility_df.loc[ric, "market_cap"] if ric in eligibility_df.index else mcap_map.get(ticker),
             np.nan,
         )
 
@@ -336,12 +392,15 @@ def _build_universe_ticker_loadings(
             for factor, vol in factor_vol_map.items()
         }
         risk_loading = round(float(sum(abs(v) for v in sensitivities.values())), 6) if eligible else None
-        spec = (specific_risk_by_ticker or {}).get(ticker, {})
+        spec = (specific_risk_by_ticker or {}).get(ric, {}) if ric else {}
+        if not spec:
+            spec = (specific_risk_by_ticker or {}).get(ticker, {})
         spec_var = _finite_float(spec.get("specific_var"), np.nan) if eligible else np.nan
         spec_vol = _finite_float(spec.get("specific_vol"), np.nan) if eligible else np.nan
 
         universe_by_ticker[ticker] = {
             "ticker": ticker,
+            "ric": ric or None,
             "name": name_map.get(ticker, ""),
             "trbc_economic_sector_short": trbc_economic_sector_short,
             "trbc_economic_sector_short_abbr": abbreviate_trbc_economic_sector_short(trbc_economic_sector_short),
@@ -756,6 +815,9 @@ def run_refresh(
     *,
     force_risk_recompute: bool = False,
     mode: str = "full",
+    skip_snapshot_rebuild: bool = False,
+    skip_cuse4_foundation: bool = False,
+    skip_risk_engine: bool = False,
 ) -> dict[str, Any]:
     """Pipeline refresh with two modes:
     - full: weekly-gated risk engine + all downstream caches (including health diagnostics)
@@ -769,29 +831,42 @@ def run_refresh(
     light_mode = refresh_mode == "light"
 
     refresh_started_at = datetime.now(timezone.utc).isoformat()
+    run_id = f"model_run_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     today_utc = datetime.fromisoformat(
         previous_or_same_xnys_session(datetime.now(timezone.utc).date().isoformat())
     ).date()
 
-    logger.info("Rebuilding canonical cross-section snapshot...")
-    snapshot_build = rebuild_cross_section_snapshot(
-        DATA_DB,
-        mode=str(config.CROSS_SECTION_SNAPSHOT_MODE or "current"),
-    )
+    if skip_snapshot_rebuild:
+        snapshot_build = {
+            "status": "skipped",
+            "reason": "orchestrator_precomputed",
+            "mode": str(config.CROSS_SECTION_SNAPSHOT_MODE or "current"),
+        }
+    else:
+        logger.info("Rebuilding canonical cross-section snapshot...")
+        snapshot_build = rebuild_cross_section_snapshot(
+            DATA_DB,
+            mode=str(config.CROSS_SECTION_SNAPSHOT_MODE or "current"),
+        )
 
     # 1. Fetch full-universe data from local data.db
     logger.info("Fetching data from local database...")
     source_dates = postgres.load_source_dates()
     fundamentals_asof = source_dates.get("exposures_asof")
     prices_universe_df = postgres.load_latest_prices()
-    fundamentals_universe_df = postgres.load_fundamental_snapshots(
+    fundamentals_universe_df = postgres.load_latest_fundamentals(
         as_of_date=str(fundamentals_asof) if fundamentals_asof else None,
     )
     exposures_universe_df = postgres.load_raw_cross_section_latest()
 
     # Optional cUSE4 foundation maintenance (additive, non-breaking).
     cuse4_foundation: dict[str, Any] = {"status": "disabled"}
-    if bool(config.CUSE4_ENABLE_ESTU_AUDIT):
+    if skip_cuse4_foundation:
+        cuse4_foundation = {
+            "status": "skipped",
+            "reason": "orchestrator_precomputed",
+        }
+    elif bool(config.CUSE4_ENABLE_ESTU_AUDIT):
         cuse4_bootstrap: dict[str, Any] | None = None
         cuse4_estu: dict[str, Any] | None = None
         try:
@@ -826,24 +901,34 @@ def run_refresh(
     # 2. Weekly risk-engine recompute gate.
     risk_engine_meta = sqlite.cache_get("risk_engine_meta") or {}
     should_recompute, recompute_reason = _risk_recompute_due(risk_engine_meta, today_utc=today_utc)
-    if light_mode:
+    if skip_risk_engine:
+        should_recompute = False
+        recompute_reason = "orchestrator_precomputed"
+    elif light_mode:
         should_recompute = False
         recompute_reason = "light_mode_skip"
-    if force_risk_recompute:
+    if force_risk_recompute and not skip_risk_engine:
         should_recompute = True
         recompute_reason = "force_risk_recompute"
 
     cov = _deserialize_covariance(sqlite.cache_get("risk_engine_cov"))
     cached_specific = sqlite.cache_get("risk_engine_specific_risk")
-    specific_risk_by_ticker = cached_specific if isinstance(cached_specific, dict) else {}
+    specific_risk_by_security = cached_specific if isinstance(cached_specific, dict) else {}
     latest_r2 = _finite_float(risk_engine_meta.get("latest_r2"), 0.0)
 
-    if cov.empty:
-        should_recompute = True
-        recompute_reason = "missing_covariance_cache"
-    if not isinstance(cached_specific, dict):
-        should_recompute = True
-        recompute_reason = "missing_specific_risk_cache"
+    if skip_risk_engine:
+        if cov.empty or not isinstance(cached_specific, dict):
+            raise RuntimeError(
+                "skip_risk_engine requested but risk-engine cache is missing; "
+                "run orchestrator core stages first or disable skip_risk_engine."
+            )
+    else:
+        if cov.empty:
+            should_recompute = True
+            recompute_reason = "missing_covariance_cache"
+        if not isinstance(cached_specific, dict):
+            should_recompute = True
+            recompute_reason = "missing_specific_risk_cache"
 
     recomputed_this_refresh = False
     if should_recompute:
@@ -859,7 +944,7 @@ def run_refresh(
         cov, latest_r2 = build_factor_covariance_from_cache(
             CACHE_DB, lookback_days=config.LOOKBACK_DAYS
         )
-        specific_risk_by_ticker = build_specific_risk_from_cache(
+        specific_risk_by_security = build_specific_risk_from_cache(
             CACHE_DB,
             lookback_days=config.LOOKBACK_DAYS,
         )
@@ -872,10 +957,10 @@ def run_refresh(
             "cross_section_min_age_days": int(config.CROSS_SECTION_MIN_AGE_DAYS),
             "recompute_interval_days": int(config.RISK_RECOMPUTE_INTERVAL_DAYS),
             "latest_r2": float(latest_r2),
-            "specific_risk_ticker_count": int(len(specific_risk_by_ticker)),
+            "specific_risk_ticker_count": int(len(specific_risk_by_security)),
         }
         sqlite.cache_set("risk_engine_cov", _serialize_covariance(cov))
-        sqlite.cache_set("risk_engine_specific_risk", specific_risk_by_ticker)
+        sqlite.cache_set("risk_engine_specific_risk", specific_risk_by_security)
         sqlite.cache_set("risk_engine_meta", risk_engine_meta)
         recomputed_this_refresh = True
     else:
@@ -883,6 +968,8 @@ def run_refresh(
             "Skipping risk-engine recompute (%s). Reusing cached covariance/specific risk.",
             recompute_reason,
         )
+
+    specific_risk_by_ticker = _specific_risk_by_ticker_view(specific_risk_by_security)
 
     # 3. Build/cached full-universe loadings first (portfolio is a final projection only).
     logger.info("Building full-universe ticker loadings...")
@@ -1065,6 +1152,7 @@ def run_refresh(
         {
             "status": "ok",
             "mode": refresh_mode,
+            "run_id": run_id,
             "refresh_started_at": refresh_started_at,
             "source_dates": source_dates,
             "cross_section_snapshot": snapshot_build,
@@ -1075,9 +1163,44 @@ def run_refresh(
         },
     )
 
+    model_outputs_write: dict[str, Any] = {"status": "skipped"}
+    try:
+        model_outputs_write = model_outputs.persist_model_outputs(
+            data_db=DATA_DB,
+            cache_db=CACHE_DB,
+            run_id=run_id,
+            refresh_mode=refresh_mode,
+            status="ok",
+            started_at=refresh_started_at,
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            source_dates=source_dates,
+            params={
+                "force_risk_recompute": bool(force_risk_recompute),
+                "mode": refresh_mode,
+                "lookback_days": int(config.LOOKBACK_DAYS),
+                "cross_section_min_age_days": int(config.CROSS_SECTION_MIN_AGE_DAYS),
+                "risk_recompute_interval_days": int(config.RISK_RECOMPUTE_INTERVAL_DAYS),
+                "cross_section_snapshot_mode": str(config.CROSS_SECTION_SNAPSHOT_MODE or "current"),
+            },
+            risk_engine_state=risk_engine_state,
+            cov=cov,
+            specific_risk_by_ticker=specific_risk_by_security,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to persist relational model outputs")
+        model_outputs_write = {
+            "status": "error",
+            "run_id": run_id,
+            "error": {"type": type(exc).__name__, "message": str(exc)},
+        }
+        sqlite.cache_set("model_outputs_write", model_outputs_write)
+        raise RuntimeError(f"Relational model output persistence failed: {type(exc).__name__}: {exc}") from exc
+    sqlite.cache_set("model_outputs_write", model_outputs_write)
+
     logger.info("Refresh complete.")
     return {
         "status": "ok",
+        "run_id": run_id,
         "positions": len(positions),
         "total_value": round(total_value, 2),
         "mode": refresh_mode,
@@ -1086,4 +1209,5 @@ def run_refresh(
         "model_sanity": sanity,
         "cuse4_foundation": cuse4_foundation,
         "health_refreshed": bool(health_refreshed),
+        "model_outputs_write": model_outputs_write,
     }

@@ -104,7 +104,7 @@ def _backfill_fundamentals(conn: sqlite3.Connection, *, date_chunk_size: int) ->
                 market_cap, shares_outstanding, dividend_yield, book_value_per_share,
                 total_assets, total_debt, cash_and_equivalents, long_term_debt,
                 operating_cashflow, capital_expenditures, trailing_eps, forward_eps,
-                revenue, ebitda, ebit, roe_pct, roa_pct, operating_margin_pct,
+                revenue, ebitda, ebit, roe_pct, operating_margin_pct,
                 common_name, source, job_run_id, updated_at
             )
             SELECT
@@ -131,11 +131,6 @@ def _backfill_fundamentals(conn: sqlite3.Connection, *, date_chunk_size: int) ->
                 CAST(f.ebitda AS REAL),
                 CAST(f.ebit AS REAL),
                 CAST(f.return_on_equity AS REAL),
-                CASE
-                    WHEN f.total_assets IS NOT NULL AND ABS(CAST(f.total_assets AS REAL)) > 1e-12 AND f.net_income IS NOT NULL
-                    THEN CAST(f.net_income AS REAL) / CAST(f.total_assets AS REAL)
-                    ELSE NULL
-                END AS roa_pct,
                 CAST(f.operating_margins AS REAL),
                 f.common_name,
                 COALESCE(NULLIF(TRIM(f.source), ''), 'legacy_backfill'),

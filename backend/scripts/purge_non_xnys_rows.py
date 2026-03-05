@@ -14,9 +14,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from trading_calendar import non_xnys_dates
 
 DATA_TABLE_SPECS = [
-    ("prices_daily", "date"),
-    ("fundamental_snapshots", "fetch_date"),
-    ("trbc_industry_history", "as_of_date"),
+    ("security_prices_eod", "date"),
+    ("security_fundamentals_pit", "as_of_date"),
+    ("security_classification_pit", "as_of_date"),
+    ("estu_membership_daily", "date"),
     ("barra_raw_cross_section_history", "as_of_date"),
     ("universe_cross_section_snapshot", "as_of_date"),
 ]

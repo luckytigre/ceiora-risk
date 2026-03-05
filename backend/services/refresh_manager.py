@@ -9,8 +9,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from analytics.pipeline import run_refresh
 from db.sqlite import cache_get, cache_set
+from jobs.run_model_pipeline import PROFILE_CONFIG, STAGES, run_model_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,15 @@ def _default_state() -> dict[str, Any]:
     return {
         "status": "idle",
         "job_id": None,
+        "pipeline_run_id": None,
+        "profile": None,
+        "requested_profile": None,
         "mode": None,
+        "as_of_date": None,
+        "resume_run_id": None,
+        "from_stage": None,
+        "to_stage": None,
+        "force_core": False,
         "force_risk_recompute": False,
         "requested_at": None,
         "started_at": None,
@@ -75,14 +83,64 @@ def get_refresh_status() -> dict[str, Any]:
     return _snapshot()
 
 
-def _run_in_background(job_id: str, mode: str, force_risk_recompute: bool) -> None:
+def _resolve_profile(profile: str | None, mode: str | None) -> str:
+    prof = str(profile or "").strip().lower()
+    if prof:
+        if prof not in PROFILE_CONFIG:
+            raise ValueError(
+                f"Invalid profile '{profile}'. Valid profiles: {', '.join(sorted(PROFILE_CONFIG.keys()))}"
+            )
+        return prof
+    clean_mode = str(mode or "full").strip().lower()
+    if clean_mode == "light":
+        return "daily-fast"
+    if clean_mode == "full":
+        return "daily-with-core-if-due"
+    raise ValueError("Invalid mode. Expected 'full' or 'light' when profile is omitted.")
+
+
+def _normalize_stage(name: str | None) -> str | None:
+    if name is None:
+        return None
+    clean = str(name).strip().lower()
+    if not clean:
+        return None
+    if clean not in STAGES:
+        raise ValueError(f"Invalid stage '{name}'. Valid stages: {', '.join(STAGES)}")
+    return clean
+
+
+def _run_in_background(
+    *,
+    job_id: str,
+    profile: str,
+    mode: str,
+    as_of_date: str | None,
+    resume_run_id: str | None,
+    from_stage: str | None,
+    to_stage: str | None,
+    force_core: bool,
+) -> None:
     try:
-        result = run_refresh(mode=mode, force_risk_recompute=force_risk_recompute)
+        result = run_model_pipeline(
+            profile=profile,
+            as_of_date=as_of_date,
+            run_id=(None if resume_run_id else f"api_{job_id}"),
+            resume_run_id=resume_run_id,
+            from_stage=from_stage,
+            to_stage=to_stage,
+            force_core=bool(force_core),
+        )
+        terminal = "ok" if str(result.get("status") or "") == "ok" else "failed"
         _set_state(
-            status="ok",
+            status=terminal,
+            pipeline_run_id=result.get("run_id"),
             finished_at=_now_iso(),
             result=result,
-            error=None,
+            error=None if terminal == "ok" else {
+                "type": "pipeline_failed",
+                "message": "Orchestrated pipeline returned failed status.",
+            },
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Background refresh failed")
@@ -100,8 +158,23 @@ def _run_in_background(job_id: str, mode: str, force_risk_recompute: bool) -> No
         logger.info("Background refresh %s finished", job_id)
 
 
-def start_refresh(mode: str, force_risk_recompute: bool) -> tuple[bool, dict[str, Any]]:
+def start_refresh(
+    *,
+    mode: str,
+    force_risk_recompute: bool,
+    profile: str | None = None,
+    as_of_date: str | None = None,
+    resume_run_id: str | None = None,
+    from_stage: str | None = None,
+    to_stage: str | None = None,
+    force_core: bool = False,
+) -> tuple[bool, dict[str, Any]]:
     """Start refresh in a background thread. Returns (started, status)."""
+    resolved_profile = _resolve_profile(profile, mode)
+    stage_from = _normalize_stage(from_stage)
+    stage_to = _normalize_stage(to_stage)
+    force_core_effective = bool(force_core or force_risk_recompute)
+
     if not _RUN_LOCK.acquire(blocking=False):
         return False, _snapshot()
 
@@ -110,7 +183,15 @@ def start_refresh(mode: str, force_risk_recompute: bool) -> tuple[bool, dict[str
     running_state = _set_state(
         status="running",
         job_id=job_id,
+        pipeline_run_id=(str(resume_run_id).strip() if resume_run_id else None),
+        profile=resolved_profile,
+        requested_profile=(str(profile).strip().lower() if profile else None),
         mode=mode,
+        as_of_date=(str(as_of_date).strip() if as_of_date else None),
+        resume_run_id=(str(resume_run_id).strip() if resume_run_id else None),
+        from_stage=stage_from,
+        to_stage=stage_to,
+        force_core=bool(force_core_effective),
         force_risk_recompute=bool(force_risk_recompute),
         requested_at=now,
         started_at=now,
@@ -121,7 +202,16 @@ def start_refresh(mode: str, force_risk_recompute: bool) -> tuple[bool, dict[str
 
     worker = threading.Thread(
         target=_run_in_background,
-        args=(job_id, mode, bool(force_risk_recompute)),
+        kwargs={
+            "job_id": job_id,
+            "profile": resolved_profile,
+            "mode": str(mode),
+            "as_of_date": (str(as_of_date).strip() if as_of_date else None),
+            "resume_run_id": (str(resume_run_id).strip() if resume_run_id else None),
+            "from_stage": stage_from,
+            "to_stage": stage_to,
+            "force_core": bool(force_core_effective),
+        },
         name=f"refresh-{job_id}",
         daemon=True,
     )

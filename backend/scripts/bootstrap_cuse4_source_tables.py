@@ -1,4 +1,4 @@
-"""Bootstrap cUSE4 source-of-truth tables from current legacy source tables."""
+"""Ensure canonical cUSE4 source tables exist and report row counts."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from cuse4.bootstrap import bootstrap_cuse4_source_tables
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build/refresh security_master, fundamentals_history, and trbc_industry_country_history."
+        description="Ensure canonical cUSE4 source tables exist and report row counts."
     )
     parser.add_argument("--db-path", default="backend/data.db", help="Path to SQLite data DB")
     parser.add_argument(

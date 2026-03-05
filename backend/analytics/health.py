@@ -110,11 +110,14 @@ def _load_style_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, 
         style_cols_present = [c for c in STYLE_COLUMN_TO_LABEL.keys() if c in cols]
         if not style_cols_present:
             return [], {}
+        key_col = "ric" if "ric" in cols else ("ticker" if "ticker" in cols else None)
+        if key_col is None:
+            return [], {}
         df = pd.read_sql_query(
             f"""
-            SELECT ticker, as_of_date, {", ".join(style_cols_present)}
+            SELECT UPPER({key_col}) AS security_key, as_of_date, {", ".join(style_cols_present)}
             FROM barra_raw_cross_section_history
-            ORDER BY as_of_date, ticker
+            ORDER BY as_of_date, UPPER({key_col})
             """,
             conn,
         )
@@ -122,7 +125,7 @@ def _load_style_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, 
         conn.close()
     if df.empty:
         return [], {}
-    df["ticker"] = df["ticker"].astype(str).str.upper()
+    df["security_key"] = df["security_key"].astype(str).str.upper()
     df["as_of_date"] = df["as_of_date"].astype(str)
     for c in style_cols_present:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
@@ -130,8 +133,8 @@ def _load_style_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, 
     snapshots: dict[str, pd.DataFrame] = {}
     for as_of, g in df.groupby("as_of_date", sort=True):
         snap = (
-            g.drop_duplicates(subset=["ticker"], keep="last")
-            .set_index("ticker")[style_cols_present]
+            g.drop_duplicates(subset=["security_key"], keep="last")
+            .set_index("security_key")[style_cols_present]
             .rename(columns=STYLE_COLUMN_TO_LABEL)
             .fillna(0.0)
         )
@@ -219,8 +222,12 @@ def _compute_incremental_r2_by_block(
         if not np.isfinite(r2_full):
             continue
 
-        tickers = g["ticker"].astype(str)
-        raw_style = snap.reindex(tickers)
+        security_ids = (
+            g["ric"].astype(str).str.upper()
+            if "ric" in g.columns
+            else g["ticker"].astype(str).str.upper()
+        )
+        raw_style = snap.reindex(security_ids)
         if raw_style.empty:
             continue
         caps = pd.to_numeric(g["market_cap"], errors="coerce").astype(float)
@@ -230,7 +237,7 @@ def _compute_incremental_r2_by_block(
             continue
 
         valid_idx = g.index[valid]
-        valid_tickers = tickers.loc[valid_idx]
+        valid_security_ids = security_ids.loc[valid_idx]
         caps_valid = caps.loc[valid_idx]
         resid_full_valid = resid_full.loc[valid_idx].to_numpy(dtype=float)
         inds = g.loc[valid_idx, "trbc_industry_group"].fillna("").astype(str).str.strip()
@@ -238,13 +245,13 @@ def _compute_incremental_r2_by_block(
         if int(non_empty_ind.sum()) < 20:
             continue
         valid_idx = valid_idx[non_empty_ind.to_numpy(dtype=bool)]
-        valid_tickers = tickers.loc[valid_idx]
+        valid_security_ids = security_ids.loc[valid_idx]
         caps_valid = caps.loc[valid_idx]
         resid_full_valid = resid_full.loc[valid_idx].to_numpy(dtype=float)
         inds = inds.loc[valid_idx]
         ind_dummies = pd.get_dummies(inds, dtype=float)
 
-        style_scores = raw_style.loc[valid_tickers].copy()
+        style_scores = raw_style.loc[valid_security_ids].copy()
         style_scores.index = valid_idx
         style_scores = style_scores.replace([np.inf, -np.inf], np.nan)
         style_valid = style_scores.notna().all(axis=1)
@@ -252,7 +259,7 @@ def _compute_incremental_r2_by_block(
             continue
         style_scores = style_scores.loc[style_valid]
         valid_idx = style_scores.index
-        valid_tickers = valid_tickers.loc[valid_idx]
+        valid_security_ids = valid_security_ids.loc[valid_idx]
         caps_valid = caps_valid.loc[valid_idx]
         resid_full_valid = resid_full.loc[valid_idx].to_numpy(dtype=float)
         inds = inds.loc[valid_idx]
@@ -327,7 +334,10 @@ def _build_factor_exposure_matrix(
     if snapshot_df.empty or eligibility.empty:
         return pd.DataFrame()
     df = snapshot_df.copy()
-    df["ticker"] = df["ticker"].astype(str).str.upper()
+    key_col = "ric" if "ric" in df.columns else ("ticker" if "ticker" in df.columns else None)
+    if key_col is None:
+        return pd.DataFrame()
+    df[key_col] = df[key_col].astype(str).str.upper()
     style_cols = [c for c in STYLE_COLUMN_TO_LABEL.keys() if c in df.columns]
     if not style_cols:
         return pd.DataFrame()
@@ -337,8 +347,8 @@ def _build_factor_exposure_matrix(
         return pd.DataFrame()
     eligible_idx = eligible.index.astype(str).str.upper()
 
-    style = df[["ticker", *style_cols]].copy()
-    style = style.drop_duplicates(subset=["ticker"], keep="last").set_index("ticker")
+    style = df[[key_col, *style_cols]].copy()
+    style = style.drop_duplicates(subset=[key_col], keep="last").set_index(key_col)
     style = style.reindex(eligible_idx)
     style = style.apply(pd.to_numeric, errors="coerce")
     style = style.rename(columns=STYLE_COLUMN_TO_LABEL)
@@ -395,9 +405,9 @@ def _compute_exposure_turnover(
         exp_date, eligibility = structural_eligibility_for_date(ctx, d)
         if exp_date is None or eligibility.empty:
             continue
-        snap_with_ticker = snap.reset_index().rename(columns={"index": "ticker"})
+        snap_with_ric = snap.reset_index().rename(columns={"index": "ric"})
         m = _build_factor_exposure_matrix(
-            snap_with_ticker,
+            snap_with_ric,
             eligibility=eligibility,
         )
         if m.empty:
@@ -456,7 +466,7 @@ def _load_prices(data_db: Path, tickers: list[str], lookback_days: int = 400) ->
     placeholders = ",".join("?" for _ in clean)
     conn = sqlite3.connect(str(data_db))
     try:
-        latest_row = conn.execute("SELECT MAX(date) FROM prices_daily").fetchone()
+        latest_row = conn.execute("SELECT MAX(date) FROM security_prices_eod").fetchone()
         latest = str(latest_row[0]) if latest_row and latest_row[0] else None
         if latest is None:
             return pd.DataFrame()
@@ -464,11 +474,13 @@ def _load_prices(data_db: Path, tickers: list[str], lookback_days: int = 400) ->
         start = (latest_dt - timedelta(days=int(lookback_days * 1.8))).isoformat()
         df = pd.read_sql_query(
             f"""
-            SELECT ticker, date, CAST(close AS REAL) AS close
-            FROM prices_daily
-            WHERE ticker IN ({placeholders})
-              AND date >= ?
-            ORDER BY date, ticker
+            SELECT UPPER(sm.ticker) AS ticker, p.date, CAST(p.close AS REAL) AS close
+            FROM security_prices_eod p
+            JOIN security_master sm
+              ON sm.ric = p.ric
+            WHERE UPPER(sm.ticker) IN ({placeholders})
+              AND p.date >= ?
+            ORDER BY p.date, UPPER(sm.ticker)
             """,
             conn,
             params=(*clean, start),
@@ -678,9 +690,11 @@ def _load_equity_price_bounds(conn: sqlite3.Connection) -> pd.DataFrame:
     try:
         bounds = pd.read_sql_query(
             """
-            SELECT UPPER(ticker) AS ticker, MIN(date) AS min_date, MAX(date) AS max_date
-            FROM prices_daily
-            GROUP BY UPPER(ticker)
+            SELECT UPPER(sm.ticker) AS ticker, MIN(p.date) AS min_date, MAX(p.date) AS max_date
+            FROM security_prices_eod p
+            JOIN security_master sm
+              ON sm.ric = p.ric
+            GROUP BY UPPER(sm.ticker)
             """,
             conn,
         )
@@ -697,7 +711,12 @@ def _load_equity_price_bounds(conn: sqlite3.Connection) -> pd.DataFrame:
 def _load_equity_tickers(conn: sqlite3.Connection) -> set[str]:
     try:
         rows = conn.execute(
-            "SELECT UPPER(ticker) FROM ticker_ric_map WHERE COALESCE(classification_ok, 0) = 1"
+            """
+            SELECT UPPER(ticker)
+            FROM security_master
+            WHERE COALESCE(classification_ok, 0) = 1
+              AND COALESCE(is_equity_eligible, 0) = 1
+            """
         ).fetchall()
     except Exception:
         return set()
@@ -968,37 +987,79 @@ def compute_health_diagnostics(data_db: Path, cache_db: Path) -> dict[str, Any]:
         avg = rv.mean(axis=1)
         avg_factor_vol_series = [{"date": _to_date_str(d), "value": float(v if np.isfinite(v) else 0.0)} for d, v in avg.items()]
 
-    # SECTION 5 — Source-of-truth data coverage (historical fundamentals + TRBC history)
+    # SECTION 5 — Source-of-truth data coverage (canonical PIT fundamentals + classification)
     conn = sqlite3.connect(str(data_db))
     try:
         equity_tickers = _load_equity_tickers(conn)
         price_bounds = _load_equity_price_bounds(conn)
 
-        fundamentals_df = pd.read_sql_query("SELECT * FROM fundamental_snapshots", conn)
+        fundamentals_df = pd.read_sql_query(
+            """
+            WITH ranked AS (
+                SELECT
+                    UPPER(sm.ticker) AS ticker,
+                    f.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY f.ric, f.as_of_date
+                        ORDER BY f.stat_date DESC, f.updated_at DESC
+                    ) AS rn
+                FROM security_fundamentals_pit f
+                JOIN security_master sm
+                  ON sm.ric = f.ric
+                WHERE COALESCE(sm.classification_ok, 0) = 1
+                  AND COALESCE(sm.is_equity_eligible, 0) = 1
+            )
+            SELECT *
+            FROM ranked
+            WHERE rn = 1
+            """,
+            conn,
+        )
         fundamentals_df = _filter_active_equity_rows(
             fundamentals_df,
             ticker_col="ticker",
-            date_col="fetch_date",
+            date_col="as_of_date",
             equity_tickers=equity_tickers,
             price_bounds=price_bounds,
         )
         fundamentals_coverage = _compute_table_field_coverage(
             conn,
-            table="fundamental_snapshots",
-            date_col="fetch_date",
+            table="security_fundamentals_pit",
+            date_col="as_of_date",
             ticker_col="ticker",
-            excluded_cols={"ticker", "fetch_date", "source", "job_run_id", "updated_at"},
-            label="Historical Fundamentals",
+            excluded_cols={"ticker", "ric", "as_of_date", "stat_date", "source", "job_run_id", "updated_at"},
+            label="Fundamentals PIT History",
             base_df=fundamentals_df,
             use_field_expected_tickers=True,
             scope_note=(
-                "Denominator uses active mapped equities only (classification_ok=1 and within each ticker's "
-                "price-history date range). Field coverage is scored against tickers that report the field "
-                "at least once, so structural N/A does not count as missing."
+                "Denominator uses equity-eligible canonical names only and each ticker's "
+                "observed price-history date range. Field coverage is scored against tickers "
+                "that report the field at least once, so structural N/A does not count as missing."
             ),
         )
 
-        trbc_df = pd.read_sql_query("SELECT * FROM trbc_industry_history", conn)
+        trbc_df = pd.read_sql_query(
+            """
+            WITH ranked AS (
+                SELECT
+                    UPPER(sm.ticker) AS ticker,
+                    c.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY c.ric, c.as_of_date
+                        ORDER BY c.updated_at DESC
+                    ) AS rn
+                FROM security_classification_pit c
+                JOIN security_master sm
+                  ON sm.ric = c.ric
+                WHERE COALESCE(sm.classification_ok, 0) = 1
+                  AND COALESCE(sm.is_equity_eligible, 0) = 1
+            )
+            SELECT *
+            FROM ranked
+            WHERE rn = 1
+            """,
+            conn,
+        )
         trbc_df = _filter_active_equity_rows(
             trbc_df,
             ticker_col="ticker",
@@ -1008,16 +1069,16 @@ def compute_health_diagnostics(data_db: Path, cache_db: Path) -> dict[str, Any]:
         )
         trbc_coverage = _compute_table_field_coverage(
             conn,
-            table="trbc_industry_history",
+            table="security_classification_pit",
             date_col="as_of_date",
             ticker_col="ticker",
-            excluded_cols={"ticker", "as_of_date", "source", "job_run_id", "updated_at"},
-            label="Historical TRBC",
+            excluded_cols={"ticker", "ric", "as_of_date", "source", "job_run_id", "updated_at"},
+            label="Classification PIT History",
             base_df=trbc_df,
             use_field_expected_tickers=False,
             scope_note=(
-                "Denominator uses active mapped equities only (classification_ok=1 and within each ticker's "
-                "price-history date range)."
+                "Denominator uses equity-eligible canonical names only and each ticker's "
+                "observed price-history date range."
             ),
         )
     finally:
