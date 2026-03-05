@@ -18,6 +18,9 @@ node_modules/
 *.log
 *.pid
 backend/tmp/
+backend/neon_stage1_prep/
+backend/offline_backups/
+backend/DB_HEALTH_AUDIT_*.json
 
 # IDE
 .idea/
