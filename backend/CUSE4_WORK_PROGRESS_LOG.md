@@ -573,3 +573,32 @@ Documentation updates:
 - Validation:
   - both tables absent from schema post-drop.
   - DB integrity check remained `ok`.
+
+### Entry 16 - Neon Stage-2 Toolkit + Holdings Import Engine
+- Re-audited current canonical state before cloud migration work:
+  - `security_master`: `5,828` rows (`5,820` eligible).
+  - `security_prices_eod`: `10,681,457` rows (`2012-01-03` to `2026-03-04`).
+  - `security_fundamentals_pit`: `990,600` rows.
+  - `security_classification_pit`: `990,600` rows.
+  - `barra_raw_cross_section_history`: `10,681,457` rows.
+- Confirmed canonical key/orphan health checks remain clean:
+  - duplicate-key groups = `0` for canonical PKs.
+  - orphan RIC rows vs `security_master` = `0` for canonical time-series tables.
+- Documented sparse-latest-date caveat for migration gating:
+  - latest date `2026-03-04` currently contains only `10` names (partial), so parity/cutover gates must not assume `MAX(date)` is fully populated.
+- Added Stage-2 Neon migration tooling:
+  - `backend/scripts/neon_apply_schema.py`
+  - `backend/scripts/neon_sync_from_sqlite.py`
+  - `backend/scripts/neon_parity_audit.py`
+  - `backend/services/neon_stage2.py`
+  - `docs/cloud_migrate_notes/NEON_CANONICAL_SCHEMA.sql`
+- Added Neon holdings execution tooling:
+  - `backend/services/neon_holdings.py`
+  - `backend/scripts/neon_holdings_import_csv.py`
+  - `backend/scripts/neon_holdings_seed_mock.py`
+- Fixed holdings event-schema edge case so remove events are valid:
+  - `remove_position` now explicitly allows `quantity_after = 0` in `NEON_HOLDINGS_SCHEMA.sql`.
+- Added a current-state, phase-based cloud migration plan:
+  - `docs/cloud_migrate_notes/NEON_MIGRATION_EXECUTION_PLAN.md`
+- Updated operator runbook with concrete Stage-2 command sequence and holdings commands:
+  - `docs/cloud_migrate_notes/NEON_STAGE1_OPERATOR_RUNBOOK.md`
