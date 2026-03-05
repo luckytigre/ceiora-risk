@@ -1,0 +1,51 @@
+{
+  "risk_shares": {
+    "industry": 28.0,
+    "style": 32.0,
+    "idio": 40.0
+  },
+  "component_shares": {
+    "industry": 0.467,
+    "style": 0.533
+  },
+  "factor_details": [
+    {
+      "factor": "Beta",
+      "category": "style",
+      "exposure": 0.13,
+      "factor_vol": 0.05,
+      "sensitivity": 0.0065,
+      "marginal_var_contrib": 0.0002,
+      "pct_of_total": 3.4,
+      "pct_of_systematic": 5.7
+    }
+  ],
+  "cov_matrix": {
+    "factors": [
+      "Beta",
+      "Value"
+    ],
+    "correlation": [
+      [
+        1.0,
+        0.2
+      ],
+      [
+        0.2,
+        1.0
+      ]
+    ]
+  },
+  "risk_engine": {
+    "specific_risk_ticker_count": 100,
+    "method_version": "v2_trbc_l2_business_sector_2026_03_05"
+  },
+  "r_squared": 0.41,
+  "condition_number": 1100.0,
+  "model_sanity": {
+    "status": "ok",
+    "warnings": [],
+    "checks": {}
+  },
+  "_cached": true
+}

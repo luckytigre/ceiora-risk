@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
+import importlib
 from pathlib import Path
 
-from backend.jobs import run_model_pipeline
+run_model_pipeline = importlib.import_module("backend.orchestration.run_model_pipeline")
 from backend.services.refresh_manager import _resolve_profile
 
 

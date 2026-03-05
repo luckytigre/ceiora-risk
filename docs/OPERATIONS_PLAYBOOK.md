@@ -13,6 +13,8 @@
 ## Hobby Launch Profile (Low Cost, 1-2 Users)
 - Run a single backend process/worker only.
 - Keep SQLite local and persistent on disk (no shared multi-node writes).
+- Runtime DB location defaults to `backend/runtime/` (`data.db`, `cache.db`).
+- Legacy paths `backend/data.db` and `backend/cache.db` may be symlinks for command compatibility.
 - Set a non-empty `REFRESH_API_TOKEN` before exposing the app online.
 - Prefer manual or low-frequency refreshes (`daily-fast` most days).
 - Keep daily file backups of `data.db` and `cache.db`.
@@ -47,7 +49,7 @@
 - API refresh partial stage run:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=daily-fast&from_stage=ingest&to_stage=estu_audit"`
 - Orchestrated refresh via CLI module:
-  - `PYTHONPATH=backend python3 -m jobs.run_model_pipeline --profile daily-fast`
+  - `python3 -m backend.scripts.run_model_pipeline --profile daily-fast`
 - Orchestrated refresh via script wrapper:
   - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due`
 - Cold-core refresh via script wrapper:
@@ -55,13 +57,13 @@
 - Resume a previous run id:
   - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due --resume-run-id <run_id>`
 - Refresh data from LSEG:
-  - `python3 -m backend.scripts.download_data_lseg --db-path backend/data.db`
+  - `python3 -m backend.scripts.download_data_lseg --db-path backend/runtime/data.db`
 - Repair historical volume coverage only (writes `TR.Volume` into `security_prices_eod.volume`):
-  - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/data.db --start-date 2012-01-03 --end-date 2026-03-04 --volume-only --only-null-volume`
+  - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/runtime/data.db --start-date 2012-01-03 --end-date 2026-03-04 --volume-only --only-null-volume`
 - Bootstrap cUSE4 canonical source tables:
-  - `python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/data.db`
+  - `python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/runtime/data.db`
 - Build cUSE4 ESTU audit snapshot:
-  - `python3 -m backend.scripts.build_cuse4_estu_membership --db-path backend/data.db`
+  - `python3 -m backend.scripts.build_cuse4_estu_membership --db-path backend/runtime/data.db`
 
 ## What Gets Cached
 - Refresh outputs are staged under a run snapshot and become live only when the snapshot pointer is published.
@@ -75,6 +77,34 @@
 - `model_outputs_write`: latest relational model-output persistence status.
 - `refresh_status`: background orchestrator state snapshot.
 
+## Lookback Retention Policy
+- Think in terms of target factor-return history horizon `H` (years).
+- If you need to recompute and keep `H` years of factor returns, retain at least `H` years in:
+  - `barra_raw_cross_section_history`
+  - `security_prices_eod`
+  - `security_fundamentals_pit`
+  - `security_classification_pit`
+- Keep factor-return outputs for at least `H` years in:
+  - `cache.db.daily_factor_returns` (serving/history APIs)
+  - `data.db.model_factor_returns_daily` (durable relational output)
+- Important: `cold-core` clears core caches (`daily_factor_returns`, `daily_specific_residuals`) before recompute.
+  - After a cold-core run, your retained history is bounded by the source/raw tables above.
+  - If source/raw history is shorter than `H`, factor-return history will also be shorter than `H`.
+- Practical rule:
+  - For a 5-year history target (example: as of 2026-03-05, keep data from ~2021-03-05 onward), keep at least 5 years in the source/raw tables.
+  - Add extra buffer if you rebuild raw descriptors from prices (rolling feature construction benefits from pre-window data).
+
+### Storage vs Recompute Tradeoff
+- Keep long source/raw history:
+  - Pros: can recompute long history after methodology/data changes.
+  - Cons: largest disk footprint (`barra_raw_cross_section_history` and `security_prices_eod` dominate).
+- Keep only recent source/raw history:
+  - Pros: much smaller `data.db`.
+  - Cons: cold-core cannot regenerate older factor-return history.
+- `VACUUM` guidance:
+  - `VACUUM` only shrinks after deletes/pruning.
+  - Run pruning first, then `VACUUM`.
+
 ## Validation Checklist
 - Verify refresh status + orchestrator state:
   - `curl -s "http://localhost:8000/api/refresh/status" | jq`
@@ -83,11 +113,11 @@
 - Verify risk payload includes engine metadata:
   - `curl -s "http://localhost:8000/api/risk" | jq '.risk_engine'`
 - Verify latest usable eligibility summary (regression members > 0 preferred):
-  - `sqlite3 backend/cache.db "SELECT date,exp_date,regression_member_n,structural_coverage,regression_coverage FROM daily_universe_eligibility_summary ORDER BY date DESC LIMIT 10;"`
+  - `sqlite3 backend/runtime/cache.db "SELECT date,exp_date,regression_member_n,structural_coverage,regression_coverage FROM daily_universe_eligibility_summary ORDER BY date DESC LIMIT 10;"`
 - Verify no compatibility views remain:
-  - `sqlite3 backend/data.db "SELECT COUNT(*) FROM sqlite_master WHERE type='view';"`
+  - `sqlite3 backend/runtime/data.db "SELECT COUNT(*) FROM sqlite_master WHERE type='view';"`
 - Verify no `sid` column remains in canonical time-series tables:
-  - `sqlite3 backend/data.db "SELECT 'security_prices_eod', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_prices_eod') UNION ALL SELECT 'security_fundamentals_pit', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_fundamentals_pit') UNION ALL SELECT 'security_classification_pit', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_classification_pit') UNION ALL SELECT 'estu_membership_daily', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('estu_membership_daily');"`
+  - `sqlite3 backend/runtime/data.db "SELECT 'security_prices_eod', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_prices_eod') UNION ALL SELECT 'security_fundamentals_pit', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_fundamentals_pit') UNION ALL SELECT 'security_classification_pit', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_classification_pit') UNION ALL SELECT 'estu_membership_daily', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('estu_membership_daily');"`
 
 ## Rollback
 - Create checkpoint before major changes:
@@ -114,14 +144,29 @@
 
 ### Maintenance Commands
 - Compact DB files:
-  - `python3 -m backend.scripts.compact_sqlite_databases backend/data.db backend/cache.db`
+  - `python3 -m backend.scripts.compact_sqlite_databases backend/runtime/data.db backend/runtime/cache.db`
 - Rebuild raw cross-section history (targeted/incremental):
-  - `python3 -m backend.scripts.build_barra_raw_cross_section_history --db-path backend/data.db --frequency weekly`
+  - `python3 -m backend.scripts.build_barra_raw_cross_section_history --db-path backend/runtime/data.db --frequency weekly`
 - Force clean core recompute + full historical raw rebuild (preferred cold path):
   - `python3 -m backend.scripts.run_model_pipeline --profile cold-core`
+- Prune old history to a lookback horizon (dry run):
+  - `python3 -m backend.scripts.prune_history_by_lookback --years 5 --dry-run`
+- Prune old history to a lookback horizon + reclaim disk:
+  - `python3 -m backend.scripts.prune_history_by_lookback --years 5 --apply --vacuum`
 
 ### Quick Health Checks
 - Style-score completeness (recent):
-  - `sqlite3 backend/data.db "SELECT as_of_date, ROUND(100.0*AVG(CASE WHEN beta_score IS NOT NULL AND momentum_score IS NOT NULL AND size_score IS NOT NULL AND value_score IS NOT NULL THEN 1 ELSE 0 END),2) FROM barra_raw_cross_section_history GROUP BY as_of_date ORDER BY as_of_date DESC LIMIT 10;"`
+  - `sqlite3 backend/runtime/data.db "SELECT as_of_date, ROUND(100.0*AVG(CASE WHEN beta_score IS NOT NULL AND momentum_score IS NOT NULL AND size_score IS NOT NULL AND value_score IS NOT NULL THEN 1 ELSE 0 END),2) FROM barra_raw_cross_section_history GROUP BY as_of_date ORDER BY as_of_date DESC LIMIT 10;"`
 - Eligibility coverage (recent):
-  - `sqlite3 backend/cache.db "SELECT date, structural_eligible_n, regression_member_n, ROUND(100.0*regression_coverage,2) FROM daily_universe_eligibility_summary ORDER BY date DESC LIMIT 10;"`
+  - `sqlite3 backend/runtime/cache.db "SELECT date, structural_eligible_n, regression_member_n, ROUND(100.0*regression_coverage,2) FROM daily_universe_eligibility_summary ORDER BY date DESC LIMIT 10;"`
+
+## Retention Tooling
+- The pruning CLI enforces lookback retention across both `data.db` and `cache.db`.
+- Safety default:
+  - It runs in dry-run mode unless `--apply` is provided.
+- Tables currently pruned by lookback:
+  - `data.db`: `barra_raw_cross_section_history`, `security_prices_eod`, `security_fundamentals_pit`, `security_classification_pit`, `model_factor_returns_daily`
+  - `cache.db`: `daily_factor_returns`, `daily_specific_residuals`, `daily_universe_eligibility_summary`
+- Safety:
+  - Start with `--dry-run` to inspect row counts.
+  - Use `--vacuum` only after a non-dry-run prune to reclaim file size.

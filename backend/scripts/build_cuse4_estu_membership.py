@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 
-from backend.cuse4.estu import build_and_persist_estu_membership
+from backend.universe.estu import build_and_persist_estu_membership
 
 
 def _parse_args() -> argparse.Namespace:

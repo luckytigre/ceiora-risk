@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from backend.routes import data as data_routes
+from backend.api.routes import data as data_routes
 
 
 def _seed_data_db(path: Path) -> None:

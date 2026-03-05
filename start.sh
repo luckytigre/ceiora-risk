@@ -9,7 +9,7 @@ FRONTEND_PID=""
 FORCE_KILL_PORTS="${FORCE_KILL_PORTS:-0}"
 
 # Keep app storage in one explicit location unless caller overrides.
-export APP_DATA_DIR="${APP_DATA_DIR:-$DIR/backend}"
+export APP_DATA_DIR="${APP_DATA_DIR:-$DIR/backend/runtime}"
 
 cleanup() {
   echo ""

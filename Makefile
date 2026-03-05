@@ -1,4 +1,4 @@
-.PHONY: dev backend backend-prod frontend refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu
+.PHONY: dev backend backend-prod frontend refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry clean-local
 
 setup:
 	cd backend && python3 -m pip install -e ".[dev]"
@@ -39,7 +39,18 @@ refresh-cold:
 	fi
 
 cuse4-bootstrap:
-	python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/data.db
+	python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/runtime/data.db
 
 cuse4-estu:
-	python3 -m backend.scripts.build_cuse4_estu_membership --db-path backend/data.db
+	python3 -m backend.scripts.build_cuse4_estu_membership --db-path backend/runtime/data.db
+
+prune-history:
+	python3 -m backend.scripts.prune_history_by_lookback --years $${YEARS:-5} --apply --vacuum
+
+prune-history-dry:
+	python3 -m backend.scripts.prune_history_by_lookback --years $${YEARS:-5} --dry-run
+
+clean-local:
+	find . -name ".DS_Store" -delete || true
+	find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
+	find . -type f -name "*.pyc" -delete || true

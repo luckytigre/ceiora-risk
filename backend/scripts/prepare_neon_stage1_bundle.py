@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from backend.db.health_audit import CORE_TABLES, run_sqlite_health_audit
+from backend.data.health_audit import CORE_TABLES, run_sqlite_health_audit
 
 
 def _sha256(path: Path) -> str:

@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from backend.db.neon import connect, resolve_dsn
+from backend.data.neon import connect, resolve_dsn
 from backend.portfolio.positions_store import PORTFOLIO_POSITIONS
 from backend.services.neon_holdings import (
     apply_holdings_import,
@@ -23,7 +23,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--schema-sql",
         type=Path,
-        default=Path("docs/cloud_migrate_notes/NEON_HOLDINGS_SCHEMA.sql"),
+        default=Path("docs/migrations/neon/NEON_HOLDINGS_SCHEMA.sql"),
         help="Holdings schema SQL file",
     )
     p.add_argument("--requested-by", default="seed_mock", help="Operator identity")

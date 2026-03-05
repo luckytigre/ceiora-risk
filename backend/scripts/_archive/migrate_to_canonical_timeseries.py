@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-from backend.cuse4.schema import (
+from backend.universe.schema import (
     FUNDAMENTALS_HISTORY_TABLE,
     PRICES_TABLE,
     SECURITY_MASTER_TABLE,

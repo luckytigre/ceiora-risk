@@ -5,7 +5,7 @@ from __future__ import annotations
 
 
 
-from backend.jobs.run_model_pipeline import _parse_args, run_model_pipeline
+from backend.orchestration.run_model_pipeline import _parse_args, run_model_pipeline
 
 
 if __name__ == "__main__":

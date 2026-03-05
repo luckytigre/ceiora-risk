@@ -7,13 +7,13 @@ import sqlite3
 from pathlib import Path
 
 
-from backend.cuse4.schema import (
+from backend.universe.schema import (
     FUNDAMENTALS_HISTORY_TABLE,
     PRICES_TABLE,
     TRBC_HISTORY_TABLE,
     ensure_cuse4_schema,
 )
-from backend.db.trbc_schema import ensure_trbc_naming
+from backend.data.trbc_schema import ensure_trbc_naming
 
 
 def _dup_count(conn: sqlite3.Connection, table: str, key_cols: list[str]) -> int:

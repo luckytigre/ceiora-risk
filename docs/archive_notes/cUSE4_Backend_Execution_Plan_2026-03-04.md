@@ -1,5 +1,7 @@
 # cUSE4 Backend Execution Plan (Pre-Cloud Cleanup)
 
+> Archived note: historical context only. Commands/paths in this file may be outdated; use `docs/OPERATIONS_PLAYBOOK.md` and current protocol docs for active operations.
+
 Date: 2026-03-04
 Owner: Shaun + Codex
 Scope: Clean, modular backend refactor now; cloud DB cutover readiness in ~1 week.

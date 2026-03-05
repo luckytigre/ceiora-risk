@@ -21,7 +21,7 @@ from typing import Any
 import pandas as pd
 
 
-from backend.cuse4.schema import (
+from backend.universe.schema import (
     FUNDAMENTALS_HISTORY_TABLE,
     PRICES_TABLE,
     SECURITY_MASTER_TABLE,
