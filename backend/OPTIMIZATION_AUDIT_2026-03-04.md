@@ -119,11 +119,12 @@ Result:
 - `backend/data.db`: ~3.57 GB
 - `backend/cache.db`: ~0.74 GB
 - largest objects are still expected model output/time-series tables:
-  - `model_specific_residuals_daily`
   - `security_prices_eod`
   - `barra_raw_cross_section_history`
+  - `model_factor_returns_daily` / `model_specific_risk_daily` (durable model outputs)
+  - `cache.db.daily_specific_residuals` (compute cache, intentionally non-durable)
 
 ## Remaining Optional Optimizations
-1. Partition or archive very old `model_specific_residuals_daily` rows if local disk pressure matters.
-2. Add scheduled compaction cadence for local SQLite (e.g., weekly post-full-refresh).
+1. Add scheduled compaction cadence for local SQLite (e.g., weekly post-full-refresh).
+2. Add TTL pruning for `cache.db.daily_specific_residuals` to bound cache growth.
 3. Move model outputs to Postgres first during cloud transition to reduce local SQLite write amplification.

@@ -375,11 +375,11 @@ Where this remains an approximation:
 7. Relational model output persistence:
    - Persist into:
      - `model_factor_returns_daily`
-     - `model_specific_residuals_daily`
      - `model_factor_covariance_daily`
      - `model_specific_risk_daily`
      - `model_run_metadata`
-   - Cache remains acceleration-only for API latency.
+   - Residual history remains cache-only in `cache.db.daily_specific_residuals` (compute workspace, not durable output).
+   - Cache is limited to compute workspace + API acceleration; it is not a durable source of truth.
 8. Orchestrated execution profiles:
    - Run via `run_model_pipeline` with profile-based cadence:
      - `daily-fast`

@@ -29,6 +29,9 @@ Completed in latest optimization sweep:
 - `security_master` index ownership normalized on active table and migration artifact table removed.
 - Cross-section snapshot builder refactored to RIC-native joins/filters (removed `UPPER(...)` join path and ticker-window partitions).
 - Relational model output writes made incremental (write latest date slice instead of full-history rewrites each refresh).
+- Removed duplicated durable residual-history table from Layer B outputs:
+  - dropped `model_specific_residuals_daily` from schema + writer path
+  - retained residual history only in `cache.db.daily_specific_residuals` (compute workspace)
 - Data diagnostics endpoint reduced to canonical table set only (legacy table probes removed).
 - Full DB compaction completed:
   - `data.db` reclaimed `1,471,516,672` bytes
@@ -181,7 +184,6 @@ Owned by feature/model jobs only.
 - `universe_cross_section_snapshot` (`current` mode by default)
 - New explicit output tables to add:
   - `model_factor_returns_daily`
-  - `model_specific_residuals_daily`
   - `model_factor_covariance_daily`
   - `model_specific_risk_daily`
   - `model_run_metadata`
@@ -195,7 +197,7 @@ Rules:
 
 Owned by API/read layer only.
 - Reads from Layer B and selected Layer A metadata.
-- Cache is an acceleration layer, not source of truth.
+- Cache is a bounded compute workspace + acceleration layer, not source of truth.
 - Prefer table-backed outputs over opaque serialized cache blobs where practical.
 
 ## 6) Efficient Output Strategy (for your "outputs and stuff")
@@ -203,8 +205,8 @@ Owned by API/read layer only.
 Current outputs are split across `barra_raw_cross_section_history`, `cache.db` tables, and `cache` key-value blobs.
 
 Proposed cleaner model:
-1. Persist all model outputs as relational tables (Layer B).
-2. Use cache only for API latency, with short TTL and easy invalidation.
+1. Persist durable model outputs as relational tables (Layer B); keep residual history cache-only for specific-risk computation.
+2. Use cache only as compute workspace + API acceleration, with short TTL and easy invalidation.
 3. Keep one authoritative run manifest in `model_run_metadata`:
    - run_id
    - as_of_date
@@ -213,7 +215,7 @@ Proposed cleaner model:
    - row counts
    - status/error
 4. Incremental recompute policy:
-   - Daily: factor returns/residuals for new dates
+   - Daily: factor returns for new dates (residual history remains in cache workspace)
    - Weekly: covariance/specific risk full or rolling refresh
    - On demand: full rebuild
 

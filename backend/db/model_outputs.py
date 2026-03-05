@@ -11,9 +11,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from backend.db.trbc_schema import pick_trbc_industry_column
-
-
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return {str(r[1]) for r in rows}
@@ -26,11 +23,6 @@ def _drop_if_columns_missing(conn: sqlite3.Connection, *, table: str, required: 
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    _drop_if_columns_missing(
-        conn,
-        table="model_specific_residuals_daily",
-        required={"date", "ric", "ticker", "residual", "market_cap", "trbc_industry_group", "run_id", "updated_at"},
-    )
     _drop_if_columns_missing(
         conn,
         table="model_specific_risk_daily",
@@ -51,21 +43,6 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             run_id TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             PRIMARY KEY (date, factor_name)
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS model_specific_residuals_daily (
-            date TEXT NOT NULL,
-            ric TEXT NOT NULL,
-            ticker TEXT,
-            residual REAL NOT NULL,
-            market_cap REAL NOT NULL DEFAULT 0.0,
-            trbc_industry_group TEXT,
-            run_id TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            PRIMARY KEY (date, ric)
         )
         """
     )
@@ -121,9 +98,6 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_model_factor_returns_daily_date ON model_factor_returns_daily(date)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_model_specific_residuals_daily_date ON model_specific_residuals_daily(date)"
-    )
-    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_model_factor_covariance_daily_asof ON model_factor_covariance_daily(as_of_date)"
     )
     conn.execute(
@@ -132,6 +106,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_model_run_metadata_completed ON model_run_metadata(completed_at)"
     )
+    # Residual history is intentionally cache-only (daily_specific_residuals in cache.db).
+    # Remove deprecated duplicated persistence table from data.db when present.
+    conn.execute("DROP TABLE IF EXISTS model_specific_residuals_daily")
 
 
 def _load_factor_returns(cache_db: Path, *, date_from: str | None = None) -> pd.DataFrame:
@@ -179,51 +156,6 @@ def _load_factor_returns(cache_db: Path, *, date_from: str | None = None) -> pd.
     return df.dropna(subset=["date", "factor_name", "factor_return", "r_squared", "residual_vol"])
 
 
-def _load_specific_residuals(cache_db: Path, *, date_from: str | None = None) -> pd.DataFrame:
-    conn = sqlite3.connect(str(cache_db))
-    try:
-        cols = _table_columns(conn, "daily_specific_residuals")
-        if not cols:
-            return pd.DataFrame()
-        industry_col = pick_trbc_industry_column(cols)
-        if industry_col is None:
-            industry_col = "''"
-        ric_expr = "UPPER(ric)" if "ric" in cols else "UPPER(ticker)"
-        ticker_expr = "UPPER(ticker)" if "ticker" in cols else "UPPER(ric)"
-        where_sql = ""
-        params: list[Any] = []
-        if date_from:
-            where_sql = "WHERE date >= ?"
-            params.append(str(date_from))
-        df = pd.read_sql_query(
-            f"""
-            SELECT
-                date,
-                {ric_expr} AS ric,
-                {ticker_expr} AS ticker,
-                residual,
-                market_cap,
-                {industry_col} AS trbc_industry_group
-            FROM daily_specific_residuals
-            {where_sql}
-            ORDER BY date, {ric_expr}
-            """,
-            conn,
-            params=params,
-        )
-    finally:
-        conn.close()
-    if df.empty:
-        return df
-    df["date"] = df["date"].astype(str)
-    df["ric"] = df["ric"].astype(str).str.upper()
-    df["ticker"] = df["ticker"].astype(str).str.upper()
-    df["trbc_industry_group"] = df["trbc_industry_group"].fillna("").astype(str).str.strip()
-    for col in ["residual", "market_cap"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
-    return df.dropna(subset=["date", "ric", "residual", "market_cap"])
-
-
 def _upsert_factor_returns(
     conn: sqlite3.Connection,
     *,
@@ -254,39 +186,6 @@ def _upsert_factor_returns(
             date, factor_name, factor_return, r_squared, residual_vol,
             cross_section_n, eligible_n, coverage, run_id, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        payload,
-    )
-    return len(payload)
-
-
-def _upsert_specific_residuals(
-    conn: sqlite3.Connection,
-    *,
-    rows: pd.DataFrame,
-    run_id: str,
-    updated_at: str,
-) -> int:
-    if rows.empty:
-        return 0
-    payload = [
-        (
-            str(r.date),
-            str(r.ric).upper(),
-            str(r.ticker),
-            float(r.residual),
-            float(r.market_cap),
-            str(r.trbc_industry_group or ""),
-            run_id,
-            updated_at,
-        )
-        for r in rows.itertuples(index=False)
-    ]
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO model_specific_residuals_daily (
-            date, ric, ticker, residual, market_cap, trbc_industry_group, run_id, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         payload,
     )
@@ -412,13 +311,10 @@ def persist_model_outputs(
     try:
         _ensure_schema(conn)
         factor_date_from = _latest_date(conn, table="model_factor_returns_daily", col="date")
-        residual_date_from = _latest_date(conn, table="model_specific_residuals_daily", col="date")
 
         factor_returns = _load_factor_returns(cache_db, date_from=factor_date_from)
-        residuals = _load_specific_residuals(cache_db, date_from=residual_date_from)
 
         n_factor = _upsert_factor_returns(conn, rows=factor_returns, run_id=run_id, updated_at=now_iso)
-        n_resid = _upsert_specific_residuals(conn, rows=residuals, run_id=run_id, updated_at=now_iso)
         n_cov = _upsert_covariance(
             conn,
             as_of_date=as_of_date,
@@ -435,7 +331,6 @@ def persist_model_outputs(
         )
         row_counts = {
             "model_factor_returns_daily": int(n_factor),
-            "model_specific_residuals_daily": int(n_resid),
             "model_factor_covariance_daily": int(n_cov),
             "model_specific_risk_daily": int(n_spec),
         }
@@ -443,8 +338,6 @@ def persist_model_outputs(
         if str(status).lower() == "ok":
             if n_factor <= 0:
                 quality_errors.append("factor_returns_empty")
-            if n_resid <= 0:
-                quality_errors.append("specific_residuals_empty")
             if n_cov <= 0:
                 quality_errors.append("factor_covariance_empty")
             if n_spec <= 0:

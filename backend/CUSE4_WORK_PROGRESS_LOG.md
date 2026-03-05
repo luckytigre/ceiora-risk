@@ -536,3 +536,30 @@ Documentation updates:
   - `security_prices_eod`: `7,070,167` rows
   - distinct priced RICs: `2,675`
   - date range: `2012-01-03` to `2026-03-03`
+
+### Entry 24 - Residual Persistence De-dup Refactor + Price Backfill for New Adds (2026-03-04)
+- Refactored model-output persistence to remove duplicated durable residual history:
+  - removed `model_specific_residuals_daily` from active schema/writer path (`backend/db/model_outputs.py`).
+  - residual history now remains cache-only in `cache.db.daily_specific_residuals` and is consumed directly by specific-risk computation.
+  - retained durable outputs:
+    - `model_factor_returns_daily`
+    - `model_factor_covariance_daily`
+    - `model_specific_risk_daily`
+    - `model_run_metadata`
+- Updated tests to enforce new contract:
+  - `backend/tests/test_audit_fixes.py` now asserts the deprecated table is absent and row-count payload excludes it.
+- Executed full historical prices backfill for the new-add RIC set (`2,800` names) on canonical source table:
+  - date range: `2012-01-03` to `2026-03-03`
+  - result: `rows_upserted=3,828,445`, `failed_batches=0`
+- Post-backfill prices baseline:
+  - `security_prices_eod`: `10,671,922` rows
+  - distinct priced RICs: `3,942`
+  - new-add RICs with at least one price row: `1,267 / 2,800`
+
+### Entry 25 - Cache-Completeness Hardening for Cache-Only Residuals (2026-03-04)
+- Fixed cache completeness logic in daily factor-return builder:
+  - cached dates are now considered complete only when both `daily_factor_returns` and `daily_specific_residuals` contain the date.
+- Made factor-return and residual cache writes atomic per flush:
+  - batched writes now commit in one transaction to avoid partial-state holes after interruptions.
+- Added regression test coverage:
+  - verifies cached-date completeness requires both factor and residual rows.

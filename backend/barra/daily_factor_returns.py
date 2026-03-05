@@ -175,15 +175,16 @@ def _load_prices(data_db: Path) -> pd.DataFrame:
 
 
 def _load_cached_dates(cache_db: Path) -> set[str]:
-    """Return set of dates already computed in the cache."""
+    """Return dates that are complete in cache for both factors and residuals."""
     conn = sqlite3.connect(str(cache_db))
     conn.execute(_DAILY_FR_SCHEMA)
     conn.execute(_DAILY_FR_META_SCHEMA)
     conn.execute(_DAILY_RESIDUALS_SCHEMA)
     conn.execute(_DAILY_ELIGIBILITY_SUMMARY_SCHEMA)
     conn.commit()
-    cur = conn.execute("SELECT DISTINCT date FROM daily_factor_returns")
-    dates = {row[0] for row in cur.fetchall()}
+    factor_dates = {str(row[0]) for row in conn.execute("SELECT DISTINCT date FROM daily_factor_returns").fetchall()}
+    residual_dates = {str(row[0]) for row in conn.execute("SELECT DISTINCT date FROM daily_specific_residuals").fetchall()}
+    dates = factor_dates & residual_dates
     conn.close()
     return dates
 
@@ -243,33 +244,61 @@ def _ensure_cache_version(cache_db: Path):
     conn.close()
 
 
-def _save_daily_results(cache_db: Path, results: list[dict]):
-    """Batch-insert daily factor return rows into the cache."""
-    if not results:
+def _save_daily_results_and_residuals(
+    cache_db: Path,
+    results: list[dict],
+    residuals: list[dict],
+) -> None:
+    """Atomically batch-insert factor returns and residual history into cache."""
+    if not results and not residuals:
         return
     conn = sqlite3.connect(str(cache_db))
-    conn.execute(_DAILY_FR_SCHEMA)
-    conn.execute(_DAILY_FR_META_SCHEMA)
-    conn.executemany(
-        """INSERT OR REPLACE INTO daily_factor_returns
-           (date, factor_name, factor_return, r_squared, residual_vol, cross_section_n, eligible_n, coverage)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            (
-                r["date"],
-                r["factor_name"],
-                r["factor_return"],
-                r["r_squared"],
-                r["residual_vol"],
-                r["cross_section_n"],
-                r["eligible_n"],
-                r["coverage"],
+    try:
+        conn.execute(_DAILY_FR_SCHEMA)
+        conn.execute(_DAILY_FR_META_SCHEMA)
+        conn.execute(_DAILY_RESIDUALS_SCHEMA)
+        if results:
+            conn.executemany(
+                """INSERT OR REPLACE INTO daily_factor_returns
+                   (date, factor_name, factor_return, r_squared, residual_vol, cross_section_n, eligible_n, coverage)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    (
+                        r["date"],
+                        r["factor_name"],
+                        r["factor_return"],
+                        r["r_squared"],
+                        r["residual_vol"],
+                        r["cross_section_n"],
+                        r["eligible_n"],
+                        r["coverage"],
+                    )
+                    for r in results
+                ],
             )
-            for r in results
-        ],
-    )
-    conn.commit()
-    conn.close()
+        if residuals:
+            conn.executemany(
+                """INSERT OR REPLACE INTO daily_specific_residuals
+                   (date, ric, ticker, residual, market_cap, trbc_industry_group)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                [
+                    (
+                        r["date"],
+                        r["ric"],
+                        r["ticker"],
+                        r["residual"],
+                        r["market_cap"],
+                        r["trbc_industry_group"],
+                    )
+                    for r in residuals
+                ],
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def _save_daily_eligibility_summary(cache_db: Path, rows: list[dict]) -> None:
@@ -331,32 +360,6 @@ def _load_latest_structural_count(cache_db: Path) -> int | None:
         return int(row[0])
     except (TypeError, ValueError):
         return None
-
-
-def _save_daily_residuals(cache_db: Path, rows: list[dict]):
-    """Batch-insert stock residual rows into cache."""
-    if not rows:
-        return
-    conn = sqlite3.connect(str(cache_db))
-    conn.execute(_DAILY_RESIDUALS_SCHEMA)
-    conn.executemany(
-        """INSERT OR REPLACE INTO daily_specific_residuals
-           (date, ric, ticker, residual, market_cap, trbc_industry_group)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        [
-            (
-                r["date"],
-                r["ric"],
-                r["ticker"],
-                r["residual"],
-                r["market_cap"],
-                r["trbc_industry_group"],
-            )
-            for r in rows
-        ],
-    )
-    conn.commit()
-    conn.close()
 
 
 def compute_daily_factor_returns(
@@ -616,11 +619,9 @@ def compute_daily_factor_returns(
         n_computed += 1
 
         # Batch save every 100 dates
-        if len(batch_results) > 3000:
-            _save_daily_results(cache_db, batch_results)
+        if len(batch_results) > 3000 or len(batch_residuals) > 25000:
+            _save_daily_results_and_residuals(cache_db, batch_results, batch_residuals)
             batch_results = []
-        if len(batch_residuals) > 25000:
-            _save_daily_residuals(cache_db, batch_residuals)
             batch_residuals = []
         if len(batch_eligibility) > 500:
             _save_daily_eligibility_summary(cache_db, batch_eligibility)
@@ -632,8 +633,7 @@ def compute_daily_factor_returns(
             logger.info(f"  {i + 1}/{len(dates_to_compute)} dates ({rate:.0f} dates/s)")
 
     # Save remaining
-    _save_daily_results(cache_db, batch_results)
-    _save_daily_residuals(cache_db, batch_residuals)
+    _save_daily_results_and_residuals(cache_db, batch_results, batch_residuals)
     _save_daily_eligibility_summary(cache_db, batch_eligibility)
 
     elapsed = time.time() - t0

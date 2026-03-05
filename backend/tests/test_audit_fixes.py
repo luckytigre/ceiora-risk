@@ -6,7 +6,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from backend.barra.daily_factor_returns import load_specific_residuals
+from backend.barra.daily_factor_returns import (
+    _load_cached_dates,
+    _save_daily_results_and_residuals,
+    load_specific_residuals,
+)
 from backend.barra.raw_cross_section_history import ensure_raw_cross_section_history_table
 from backend.cuse4.schema import ensure_cuse4_schema
 from backend.db.cross_section_snapshot import ensure_cross_section_snapshot_table
@@ -188,9 +192,8 @@ def test_model_outputs_quality_gate_fails_on_empty_payload(tmp_path: Path) -> No
     assert status == "failed"
     assert err_type == "quality_gate_failed"
 
-    resid_cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(model_specific_residuals_daily)").fetchall()}
     spec_cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(model_specific_risk_daily)").fetchall()}
-    assert "ric" in resid_cols
+    assert conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='model_specific_residuals_daily'").fetchone()[0] == 0
     assert "ric" in spec_cols
     conn.close()
 
@@ -215,33 +218,12 @@ def test_model_outputs_persist_incremental_rows_only(tmp_path: Path) -> None:
         )
         """
     )
-    cache_conn.execute(
-        """
-        CREATE TABLE daily_specific_residuals (
-            date TEXT NOT NULL,
-            ric TEXT NOT NULL,
-            ticker TEXT,
-            residual REAL NOT NULL,
-            market_cap REAL NOT NULL,
-            trbc_industry_group TEXT,
-            PRIMARY KEY (date, ric)
-        )
-        """
-    )
     for d in ("2026-03-02", "2026-03-03"):
         cache_conn.execute(
             """
             INSERT INTO daily_factor_returns (
                 date, factor_name, factor_return, r_squared, residual_vol, cross_section_n, eligible_n, coverage
             ) VALUES (?, 'Beta', 0.01, 0.3, 0.2, 100, 95, 0.95)
-            """,
-            (d,),
-        )
-        cache_conn.execute(
-            """
-            INSERT INTO daily_specific_residuals (
-                date, ric, ticker, residual, market_cap, trbc_industry_group
-            ) VALUES (?, 'AAPL.OQ', 'AAPL', 0.01, 1000000000, 'Tech')
             """,
             (d,),
         )
@@ -275,7 +257,7 @@ def test_model_outputs_persist_incremental_rows_only(tmp_path: Path) -> None:
         specific_risk_by_ticker=spec,
     )
     assert first["row_counts"]["model_factor_returns_daily"] == 2
-    assert first["row_counts"]["model_specific_residuals_daily"] == 2
+    assert "model_specific_residuals_daily" not in first["row_counts"]
 
     second = persist_model_outputs(
         data_db=data_db,
@@ -293,7 +275,7 @@ def test_model_outputs_persist_incremental_rows_only(tmp_path: Path) -> None:
     )
     # Second write should only re-upsert the latest date slice.
     assert second["row_counts"]["model_factor_returns_daily"] == 1
-    assert second["row_counts"]["model_specific_residuals_daily"] == 1
+    assert "model_specific_residuals_daily" not in second["row_counts"]
 
 
 def test_ingest_stage_is_not_hardcoded_skip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -341,3 +323,94 @@ def test_load_specific_residuals_backcompat_ric_fallback(tmp_path: Path) -> None
     assert not df.empty
     assert str(df.iloc[0]["ric"]).upper() == "MSFT.OQ"
     assert str(df.iloc[0]["ticker"]).upper() == "MSFT.OQ"
+
+
+def test_cached_dates_require_factor_and_residual_rows(tmp_path: Path) -> None:
+    cache_db = tmp_path / "cache.db"
+    conn = sqlite3.connect(str(cache_db))
+    conn.execute(
+        """
+        CREATE TABLE daily_factor_returns (
+            date TEXT NOT NULL,
+            factor_name TEXT NOT NULL,
+            factor_return REAL NOT NULL,
+            r_squared REAL NOT NULL,
+            residual_vol REAL NOT NULL,
+            cross_section_n INTEGER NOT NULL DEFAULT 0,
+            eligible_n INTEGER NOT NULL DEFAULT 0,
+            coverage REAL NOT NULL DEFAULT 0,
+            PRIMARY KEY (date, factor_name)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE daily_specific_residuals (
+            date TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            residual REAL NOT NULL,
+            market_cap REAL NOT NULL DEFAULT 0.0,
+            trbc_industry_group TEXT,
+            PRIMARY KEY (date, ric)
+        )
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO daily_factor_returns
+        (date, factor_name, factor_return, r_squared, residual_vol, cross_section_n, eligible_n, coverage)
+        VALUES (?, 'Beta', 0.01, 0.5, 0.2, 100, 90, 0.9)
+        """,
+        [("2026-03-02",), ("2026-03-03",)],
+    )
+    conn.execute(
+        """
+        INSERT INTO daily_specific_residuals
+        (date, ric, ticker, residual, market_cap, trbc_industry_group)
+        VALUES ('2026-03-02', 'AAPL.OQ', 'AAPL', 0.01, 1000000000, 'Tech')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    cached = _load_cached_dates(cache_db)
+    assert cached == {"2026-03-02"}
+
+
+def test_atomic_cache_write_rolls_back_on_residual_failure(tmp_path: Path) -> None:
+    cache_db = tmp_path / "cache.db"
+    results = [
+        {
+            "date": "2026-03-03",
+            "factor_name": "Beta",
+            "factor_return": 0.01,
+            "r_squared": 0.2,
+            "residual_vol": 0.3,
+            "cross_section_n": 100,
+            "eligible_n": 95,
+            "coverage": 0.95,
+        }
+    ]
+    # Intentionally invalid: ric is NULL for NOT NULL column.
+    residuals = [
+        {
+            "date": "2026-03-03",
+            "ric": None,
+            "ticker": "AAPL",
+            "residual": 0.01,
+            "market_cap": 1_000_000_000.0,
+            "trbc_industry_group": "Tech",
+        }
+    ]
+
+    with pytest.raises(sqlite3.IntegrityError):
+        _save_daily_results_and_residuals(cache_db, results, residuals)
+
+    conn = sqlite3.connect(str(cache_db))
+    factor_n = conn.execute("SELECT COUNT(*) FROM daily_factor_returns").fetchone()[0]
+    resid_n = conn.execute("SELECT COUNT(*) FROM daily_specific_residuals").fetchone()[0]
+    conn.close()
+
+    assert factor_n == 0
+    assert resid_n == 0
