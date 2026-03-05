@@ -1,7 +1,7 @@
 .PHONY: dev backend frontend refresh setup cuse4-bootstrap cuse4-estu
 
 setup:
-	cd backend && pip install -e ".[dev]"
+	cd backend && python3 -m pip install -e ".[dev]"
 	cd frontend && npm install
 
 backend:

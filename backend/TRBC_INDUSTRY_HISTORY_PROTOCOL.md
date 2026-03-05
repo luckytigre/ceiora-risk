@@ -19,7 +19,7 @@ Ensure every cross-section (`ticker`, `as_of_date`) has a point-in-time LSEG TRB
 
 ## Operational Flow
 1. Run historical backfill once (or when universe coverage changes):
-   - `python -m backend.scripts.backfill_trbc_history_lseg --db-path backend/data.db`
+   - `python3 -m backend.scripts.backfill_trbc_history_lseg --db-path backend/data.db`
 2. This script:
    - Resolves ticker->RIC using multi-suffix probing and caches in `ticker_ric_map`
    - Upserts `trbc_industry_history` from LSEG `TRBCIndustryGroup` at each `barra_raw_cross_section_history.as_of_date`
@@ -27,7 +27,7 @@ Ensure every cross-section (`ticker`, `as_of_date`) has a point-in-time LSEG TRB
    - Reuses `ticker_ric_map` and refreshes unresolved mappings
    - Writes current-day TRBC industry rows into `trbc_industry_history`
 4. Recompute analytics cache:
-   - `python -c "from analytics.pipeline import run_refresh; print(run_refresh())"` (from `backend/`)
+   - `python3 -c "from backend.analytics.pipeline import run_refresh; print(run_refresh())"` (from repo root)
 
 ## Modeling Behavior
 - Structural eligibility is strict: a name is included only when style fields, market cap, TRBC sector, and TRBC industry are all present at that date.

@@ -79,7 +79,7 @@ chmod +x "$DIR/frontend/node_modules/.bin/"* 2>/dev/null || true
 
 if ! python3 -c "import fastapi; import psycopg; import pydantic" 2>/dev/null; then
   echo "Installing backend dependencies..."
-  if ! (cd "$DIR/backend" && pip install -e ".[dev]" -q); then
+  if ! (cd "$DIR/backend" && python3 -m pip install -e ".[dev]" -q); then
     python3 -m pip install -q fastapi "uvicorn[standard]" "psycopg[binary]" pydantic pandas numpy scipy python-dotenv
   fi
 fi
