@@ -2,9 +2,8 @@
 """Extend canonical security_prices_eod backward with LSEG range pulls in manageable batches.
 
 Volume policy:
-- Standard OHLCV pulls use `TR.Volume` when available.
-- Volume-repair mode (`--volume-only`) writes `TR.AvgDailyVolume3Month` into
-  `security_prices_eod.volume` for higher historical coverage in LSEG range pulls.
+- Standard OHLCV pulls use `TR.Volume`.
+- Volume-repair mode (`--volume-only`) uses the same `TR.Volume` metric.
 """
 
 from __future__ import annotations
@@ -35,7 +34,7 @@ SQLITE_TIMEOUT_SECONDS = 120
 SQLITE_BUSY_TIMEOUT_MS = 120000
 SQLITE_MAX_RETRIES = 6
 SQLITE_RETRY_SLEEP_SECONDS = 1.5
-VOLUME_REPAIR_FIELD = "TR.AvgDailyVolume3Month"
+VOLUME_FIELD = "TR.Volume"
 
 
 def _pick_col(df: pd.DataFrame, names: list[str]) -> str | None:
@@ -237,7 +236,7 @@ def backfill_prices(
                     "start_date": start_bound,
                     "end_date": previous_or_same_xnys_session(end_bound),
                 }
-            # `TR.AvgDailyVolume3Month` behaves reliably on single-day pulls; force one-day windows.
+            # Process only dates that still have missing volume; one-day windows keep pulls exact.
             unique_dates = sorted({str(d) for d in missing_volume_df["date"].tolist() if str(d).strip()})
             windows = [(d, d) for d in unique_dates]
 
@@ -262,7 +261,7 @@ def backfill_prices(
                         try:
                             if volume_only:
                                 field_sets = [
-                                    ["TR.PriceClose.date", VOLUME_REPAIR_FIELD],
+                                    ["TR.PriceClose.date", VOLUME_FIELD],
                                 ]
                             else:
                                 field_sets = [
@@ -303,11 +302,8 @@ def backfill_prices(
                                 volume_col = _pick_col(
                                     df,
                                     [
-                                        "Average Daily Volume, Three Month",
-                                        "Average Daily Volume, 3 Month",
-                                        "Average Daily Volume Three Month",
-                                        "Average Daily Volume 3 Month",
-                                        VOLUME_REPAIR_FIELD,
+                                        "Volume",
+                                        VOLUME_FIELD,
                                     ],
                                 )
                                 if not inst_col or not date_col:
@@ -433,7 +429,7 @@ def backfill_prices(
             out: dict[str, int | str] = {
                 "status": "ok",
                 "mode": "volume-only",
-                "volume_metric": VOLUME_REPAIR_FIELD,
+                "volume_metric": VOLUME_FIELD,
                 "volume_rows_updated": int(volume_rows_updated),
                 "batch_calls": int(batch_calls),
                 "failed_batches": int(failed_batches),
@@ -481,7 +477,7 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Only update volume field for existing price rows (no OHLC rewrite); "
-            f"uses {VOLUME_REPAIR_FIELD}."
+            f"uses {VOLUME_FIELD}."
         ),
     )
     p.add_argument(
