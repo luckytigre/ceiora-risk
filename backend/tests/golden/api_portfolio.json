@@ -1,0 +1,26 @@
+{
+  "positions": [
+    {
+      "ticker": "AAPL",
+      "weight": 0.6,
+      "trbc_sector": "Technology",
+      "exposures": {
+        "Beta": 1.1
+      },
+      "trbc_economic_sector_short": "Technology",
+      "trbc_economic_sector_short_abbr": "Tech"
+    },
+    {
+      "ticker": "JPM",
+      "weight": 0.4,
+      "trbc_economic_sector_short": "Financials",
+      "trbc_economic_sector_short_abbr": "Fins",
+      "exposures": {
+        "Beta": 0.9
+      }
+    }
+  ],
+  "total_value": 1000.0,
+  "position_count": 2,
+  "_cached": true
+}

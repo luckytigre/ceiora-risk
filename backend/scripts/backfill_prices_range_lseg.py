@@ -21,7 +21,7 @@ import pandas as pd
 
 import lseg.data as rd
 
-from backend.cuse4.schema import PRICES_TABLE, SECURITY_MASTER_TABLE, ensure_cuse4_schema
+from backend.universe.schema import PRICES_TABLE, SECURITY_MASTER_TABLE, ensure_cuse4_schema
 from backend.trading_calendar import filter_xnys_sessions, previous_or_same_xnys_session
 
 warnings.filterwarnings(

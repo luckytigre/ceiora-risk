@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from backend.routes import risk as risk_routes
+from backend.api.routes import risk as risk_routes
 
 
 def test_risk_route_accepts_correlation_cov_matrix(monkeypatch) -> None:

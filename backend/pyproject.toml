@@ -32,15 +32,18 @@ build-backend = "setuptools.build_meta"
 include-package-data = true
 packages = [
     "backend",
+    "backend.api",
+    "backend.api.routes",
     "backend.analytics",
-    "backend.barra",
-    "backend.cuse4",
-    "backend.db",
-    "backend.jobs",
+    "backend.analytics.services",
+    "backend.data",
+    "backend.ops",
+    "backend.orchestration",
     "backend.portfolio",
-    "backend.routes",
+    "backend.risk_model",
     "backend.scripts",
     "backend.services",
+    "backend.universe",
     "backend.vendor",
     "backend.vendor.lseg_toolkit",
     "backend.vendor.lseg_toolkit.client",
@@ -51,15 +54,18 @@ packages = [
 
 [tool.setuptools.package-dir]
 backend = "."
+"backend.api" = "api"
+"backend.api.routes" = "api/routes"
 "backend.analytics" = "analytics"
-"backend.barra" = "barra"
-"backend.cuse4" = "cuse4"
-"backend.db" = "db"
-"backend.jobs" = "jobs"
+"backend.analytics.services" = "analytics/services"
+"backend.data" = "data"
+"backend.ops" = "ops"
+"backend.orchestration" = "orchestration"
 "backend.portfolio" = "portfolio"
-"backend.routes" = "routes"
+"backend.risk_model" = "risk_model"
 "backend.scripts" = "scripts"
 "backend.services" = "services"
+"backend.universe" = "universe"
 "backend.vendor" = "vendor"
 "backend.vendor.lseg_toolkit" = "vendor/lseg_toolkit"
 "backend.vendor.lseg_toolkit.client" = "vendor/lseg_toolkit/client"

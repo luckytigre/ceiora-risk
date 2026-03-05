@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from backend.cuse4.schema import SECURITY_MASTER_TABLE, ensure_cuse4_schema
+from backend.universe.schema import SECURITY_MASTER_TABLE, ensure_cuse4_schema
 
 
 def _normalize_ric_series(series: pd.Series) -> pd.Series:

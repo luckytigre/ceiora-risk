@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 
-from backend.cuse4.bootstrap import bootstrap_cuse4_source_tables
+from backend.universe.bootstrap import bootstrap_cuse4_source_tables
 
 
 def _parse_args() -> argparse.Namespace:

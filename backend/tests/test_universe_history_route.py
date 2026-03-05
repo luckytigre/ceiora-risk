@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from backend.routes import universe as universe_routes
+from backend.api.routes import universe as universe_routes
 
 
 def _seed_prices(db_path: Path) -> None:

@@ -1,0 +1,34 @@
+{
+  "mode": "raw",
+  "factors": [
+    {
+      "factor": "Beta",
+      "value": 0.123456,
+      "factor_vol": 0.05,
+      "coverage_pct": 0.99,
+      "drilldown": [
+        {
+          "ticker": "AAPL",
+          "weight": 0.6,
+          "exposure": 1.1,
+          "contribution": 0.66
+        }
+      ]
+    },
+    {
+      "factor": "Technology Equipment",
+      "value": 0.2,
+      "factor_vol": 0.1,
+      "coverage_pct": 0.95,
+      "drilldown": [
+        {
+          "ticker": "AAPL",
+          "weight": 0.6,
+          "exposure": 1.0,
+          "contribution": 0.6
+        }
+      ]
+    }
+  ],
+  "_cached": true
+}

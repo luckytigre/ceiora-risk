@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from backend.routes import refresh as refresh_routes
+from backend.api.routes import refresh as refresh_routes
 
 
 def test_refresh_requires_token_when_configured(monkeypatch) -> None:

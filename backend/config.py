@@ -16,7 +16,7 @@ PG_PASSWORD = os.getenv("PG_PASSWORD", "")
 
 # Storage paths
 BASE_DIR = Path(__file__).resolve().parent
-APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", str(BASE_DIR))).expanduser()
+APP_DATA_DIR = Path(os.getenv("APP_DATA_DIR", str(BASE_DIR / "runtime"))).expanduser()
 if not APP_DATA_DIR.is_absolute():
     APP_DATA_DIR = (BASE_DIR / APP_DATA_DIR).resolve()
 APP_DATA_DIR.mkdir(parents=True, exist_ok=True)

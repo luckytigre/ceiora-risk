@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from backend.db.neon import connect, resolve_dsn
+from backend.data.neon import connect, resolve_dsn
 from backend.services.neon_stage2 import apply_sql_file
 
 
@@ -17,13 +17,13 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--canonical-schema",
         type=Path,
-        default=Path("docs/cloud_migrate_notes/NEON_CANONICAL_SCHEMA.sql"),
+        default=Path("docs/migrations/neon/NEON_CANONICAL_SCHEMA.sql"),
         help="Canonical source-table schema SQL path",
     )
     p.add_argument(
         "--holdings-schema",
         type=Path,
-        default=Path("docs/cloud_migrate_notes/NEON_HOLDINGS_SCHEMA.sql"),
+        default=Path("docs/migrations/neon/NEON_HOLDINGS_SCHEMA.sql"),
         help="Holdings schema SQL path",
     )
     p.add_argument(

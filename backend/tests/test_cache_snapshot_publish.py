@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 
 from backend import config
-from backend.db import sqlite as cache_sqlite
+from backend.data import sqlite as cache_sqlite
 
 
 def test_cache_snapshot_publish_switches_atomically(monkeypatch, tmp_path: Path) -> None:

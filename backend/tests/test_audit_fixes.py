@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import sqlite3
+import importlib
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from backend.barra.daily_factor_returns import (
+from backend.risk_model.daily_factor_returns import (
     _load_cached_dates,
     _save_daily_results_and_residuals,
     load_specific_residuals,
 )
-from backend.barra.raw_cross_section_history import ensure_raw_cross_section_history_table
-from backend.cuse4.schema import ensure_cuse4_schema
-from backend.db.cross_section_snapshot import ensure_cross_section_snapshot_table
-from backend.db.model_outputs import persist_model_outputs
-from backend.jobs import run_model_pipeline
+from backend.risk_model.raw_cross_section_history import ensure_raw_cross_section_history_table
+from backend.universe.schema import ensure_cuse4_schema
+from backend.data.cross_section_snapshot import ensure_cross_section_snapshot_table
+from backend.data.model_outputs import persist_model_outputs
+run_model_pipeline = importlib.import_module("backend.orchestration.run_model_pipeline")
 
 
 def _pk_cols(conn: sqlite3.Connection, table: str) -> list[str]:

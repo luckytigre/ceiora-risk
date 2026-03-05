@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 
-from backend.barra.raw_cross_section_history import rebuild_raw_cross_section_history
+from backend.risk_model.raw_cross_section_history import rebuild_raw_cross_section_history
 
 
 def _parse_args() -> argparse.Namespace:

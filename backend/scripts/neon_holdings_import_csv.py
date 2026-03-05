@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from backend.db.neon import connect, resolve_dsn
+from backend.data.neon import connect, resolve_dsn
 from backend.services.neon_holdings import (
     IMPORT_MODES,
     apply_holdings_import,
@@ -39,7 +39,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--schema-sql",
         type=Path,
-        default=Path("docs/cloud_migrate_notes/NEON_HOLDINGS_SCHEMA.sql"),
+        default=Path("docs/migrations/neon/NEON_HOLDINGS_SCHEMA.sql"),
         help="Holdings schema SQL file",
     )
     p.add_argument(

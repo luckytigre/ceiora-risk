@@ -9,8 +9,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from backend.db.sqlite import cache_get, cache_set
-from backend.jobs.run_model_pipeline import PROFILE_CONFIG, STAGES, run_model_pipeline
+from backend.data.cache import cache_get, cache_set
+from backend.orchestration.run_model_pipeline import PROFILE_CONFIG, STAGES, run_model_pipeline
 
 logger = logging.getLogger(__name__)
 

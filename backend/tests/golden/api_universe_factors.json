@@ -1,0 +1,14 @@
+{
+  "factors": [
+    "Beta",
+    "Technology Equipment"
+  ],
+  "factor_vols": {
+    "Beta": 0.05,
+    "Technology Equipment": 0.1
+  },
+  "ticker_count": 2,
+  "eligible_ticker_count": 2,
+  "factor_count": 2,
+  "_cached": true
+}

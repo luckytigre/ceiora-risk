@@ -10,7 +10,7 @@ from typing import Any
 
 from psycopg import sql
 
-from backend.db.neon import connect, resolve_dsn
+from backend.data.neon import connect, resolve_dsn
 
 
 @dataclass(frozen=True)

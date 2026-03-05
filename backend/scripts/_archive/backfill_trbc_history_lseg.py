@@ -15,7 +15,7 @@ from typing import Any
 import pandas as pd
 
 
-from backend.db.trbc_schema import ensure_trbc_naming
+from backend.data.trbc_schema import ensure_trbc_naming
 from lseg_ric_resolver import ensure_ric_map_table, load_ric_map, resolve_ric_map
 from backend.trading_calendar import filter_xnys_sessions, previous_or_same_xnys_session
 
