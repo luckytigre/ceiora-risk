@@ -210,6 +210,45 @@ export default function ExplorePage() {
     return groups;
   }, [rows]);
 
+  const weeklyHistoryCard = item ? (
+    <div className="chart-card">
+      <div className="detail-history" style={{ marginTop: 0, marginBottom: 0 }}>
+        <div className="detail-history-header">
+          <h5>5Y Weekly Close — {item.ticker}</h5>
+          {!historyLoading && !historyError && historySummary && (
+            <div className="detail-history-stats">
+              {historySummary.totalReturnPct != null && (
+                <span
+                  className="detail-history-stat"
+                  style={{
+                    color: historySummary.isPositive
+                      ? "rgba(107, 207, 154, 0.85)"
+                      : "rgba(224, 87, 127, 0.85)",
+                  }}
+                >
+                  {historySummary.totalReturnPct >= 0 ? "+" : ""}
+                  {historySummary.totalReturnPct.toFixed(1)}%
+                </span>
+              )}
+              <span className="detail-history-stat muted">
+                ${historySummary.latest.toFixed(2)}
+              </span>
+            </div>
+          )}
+        </div>
+        {historyLoading
+          ? <div className="detail-history-empty loading-pulse">Loading weekly history...</div>
+          : historyError
+            ? (
+              <div className="detail-history-empty">
+                Weekly history is temporarily unavailable for {item.ticker}.
+              </div>
+            )
+            : <TickerWeeklyPriceChart ticker={item.ticker} points={historyPoints} />}
+      </div>
+    </div>
+  ) : null;
+
   if (factorsError || portfolioError) {
     return <ApiErrorState title="Universe Data Not Ready" error={factorsError || portfolioError} />;
   }
@@ -378,111 +417,81 @@ export default function ExplorePage() {
             )}
           </div>
 
-          <div className="chart-card mb-4">
-            <div className="detail-history" style={{ marginTop: 0, marginBottom: 0 }}>
-              <div className="detail-history-header">
-                <h5>5Y Weekly Close — {item.ticker}</h5>
-                {!historyLoading && !historyError && historySummary && (
-                  <div className="detail-history-stats">
-                    {historySummary.totalReturnPct != null && (
-                      <span
-                        className="detail-history-stat"
-                        style={{
-                          color: historySummary.isPositive
-                            ? "rgba(107, 207, 154, 0.85)"
-                            : "rgba(224, 87, 127, 0.85)",
-                        }}
-                      >
-                        {historySummary.totalReturnPct >= 0 ? "+" : ""}
-                        {historySummary.totalReturnPct.toFixed(1)}%
-                      </span>
-                    )}
-                    <span className="detail-history-stat muted">
-                      ${historySummary.latest.toFixed(2)}
-                    </span>
-                  </div>
-                )}
-              </div>
-              {historyLoading
-                ? <div className="detail-history-empty loading-pulse">Loading weekly history...</div>
-                : historyError
-                  ? (
-                    <div className="detail-history-empty">
-                      Weekly history is temporarily unavailable for {item.ticker}.
-                    </div>
-                  )
-                  : <TickerWeeklyPriceChart ticker={item.ticker} points={historyPoints} />}
-            </div>
-          </div>
-
           {/* Two-column: Radar + Table */}
           {item.eligible_for_model !== false ? (
-            <div className="explore-detail-grid">
-              {/* Left: Radar Chart */}
-              <div className="chart-card">
-                <h3>Style Factor Profile</h3>
-                <FactorRadarChart exposures={item.exposures ?? {}} />
-              </div>
+            <>
+              <div className="explore-detail-grid">
+                {weeklyHistoryCard}
 
-              {/* Right: Factor Loadings Table */}
-              <div className="chart-card">
-                <h3>Factor Loadings</h3>
-                <div className="dash-table" style={{ maxHeight: 360, overflowY: "auto" }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Factor</th>
-                        <th className="text-right">Loading</th>
-                        <th className="text-right">Factor Vol</th>
-                        <th className="text-right">Sensitivity</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupedRows.map((group) => (
-                        <Fragment key={`tier-${group.tier}`}>
-                          <tr className="explore-tier-header">
-                            <td colSpan={4}>{TIER_NAMES[group.tier] ?? "Other"}</td>
-                          </tr>
-                          {group.rows.map((row) => (
-                            <tr key={row.factor}>
-                              <td>{shortFactorLabel(row.factor)}</td>
-                              <td
-                                className={`text-right ${row.loading >= 0 ? "positive" : "negative"}`}
-                              >
-                                {row.loading >= 0 ? "+" : ""}
-                                {row.loading.toFixed(4)}
-                              </td>
-                              <td className="text-right">{fmtPct(row.factorVol)}</td>
-                              <td
-                                className={`text-right ${row.sensitivity >= 0 ? "positive" : "negative"}`}
-                              >
-                                {row.sensitivity >= 0 ? "+" : ""}
-                                {row.sensitivity.toFixed(4)}
-                              </td>
-                            </tr>
-                          ))}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="chart-card">
+                  <h3>{item.ticker} Factor Exposures</h3>
+                  <ExposureBarChart factors={chartFactors} />
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="chart-card mb-4">
-              <h3>Model Analytics</h3>
-              <div style={{ color: "var(--text-secondary)" }}>
-                N/A for this ticker under strict equity eligibility rules.
-              </div>
-            </div>
-          )}
 
-          {/* Full exposure bar chart */}
-          {item.eligible_for_model !== false && (
-            <div className="chart-card mb-4">
-              <h3>{item.ticker} Factor Profile</h3>
-              <ExposureBarChart factors={chartFactors} />
-            </div>
+              <div className="explore-detail-grid">
+                {/* Left: Radar Chart */}
+                <div className="chart-card">
+                  <h3>Style Factor Profile</h3>
+                  <FactorRadarChart exposures={item.exposures ?? {}} />
+                </div>
+
+                {/* Right: Factor Loadings Table */}
+                <div className="chart-card">
+                  <h3>Factor Loadings</h3>
+                  <div className="dash-table" style={{ maxHeight: 360, overflowY: "auto" }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Factor</th>
+                          <th className="text-right">Loading</th>
+                          <th className="text-right">Factor Vol</th>
+                          <th className="text-right">Sensitivity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {groupedRows.map((group) => (
+                          <Fragment key={`tier-${group.tier}`}>
+                            <tr className="explore-tier-header">
+                              <td colSpan={4}>{TIER_NAMES[group.tier] ?? "Other"}</td>
+                            </tr>
+                            {group.rows.map((row) => (
+                              <tr key={row.factor}>
+                                <td>{shortFactorLabel(row.factor)}</td>
+                                <td
+                                  className={`text-right ${row.loading >= 0 ? "positive" : "negative"}`}
+                                >
+                                  {row.loading >= 0 ? "+" : ""}
+                                  {row.loading.toFixed(4)}
+                                </td>
+                                <td className="text-right">{fmtPct(row.factorVol)}</td>
+                                <td
+                                  className={`text-right ${row.sensitivity >= 0 ? "positive" : "negative"}`}
+                                >
+                                  {row.sensitivity >= 0 ? "+" : ""}
+                                  {row.sensitivity.toFixed(4)}
+                                </td>
+                              </tr>
+                            ))}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {weeklyHistoryCard}
+
+              <div className="chart-card mb-4">
+                <h3>Model Analytics</h3>
+                <div style={{ color: "var(--text-secondary)" }}>
+                  N/A for this ticker under strict equity eligibility rules.
+                </div>
+              </div>
+            </>
           )}
         </>
       )}
