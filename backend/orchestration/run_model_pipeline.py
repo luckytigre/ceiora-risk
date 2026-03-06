@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sqlite3
 import time
@@ -68,6 +69,85 @@ PROFILE_CONFIG: dict[str, dict[str, Any]] = {
         "reset_core_cache": True,
     },
 }
+
+
+def _write_neon_mirror_artifact(
+    *,
+    run_id: str,
+    profile: str,
+    as_of_date: str,
+    overall_status: str,
+    neon_mirror: dict[str, Any],
+) -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    reports_dir = Path(config.APP_DATA_DIR) / "audit_reports" / "neon_parity"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "run_id": str(run_id),
+        "profile": str(profile),
+        "as_of_date": str(as_of_date),
+        "overall_status": str(overall_status),
+        "neon_mirror": neon_mirror,
+    }
+    artifact_path = reports_dir / f"neon_mirror_{stamp}_{run_id}.json"
+    artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    latest_path = reports_dir / "latest_neon_mirror_report.json"
+    latest_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return str(artifact_path)
+
+
+def _publish_neon_sync_health(
+    *,
+    run_id: str,
+    profile: str,
+    as_of_date: str,
+    neon_mirror: dict[str, Any],
+    artifact_path: str | None,
+) -> None:
+    mirror_status = str(neon_mirror.get("status") or "").strip().lower()
+    sync_status = str((neon_mirror.get("sync") or {}).get("status") or "").strip().lower()
+    parity = neon_mirror.get("parity") if isinstance(neon_mirror.get("parity"), dict) else {}
+    parity_status = str((parity or {}).get("status") or "").strip().lower()
+    parity_issues = list((parity or {}).get("issues") or [])
+
+    has_error = (
+        mirror_status in {"failed", "mismatch"}
+        or sync_status in {"failed", "mismatch"}
+        or parity_status in {"failed", "mismatch"}
+    )
+    status = "error" if has_error else "ok"
+    message = (
+        f"Neon mirror={mirror_status or 'unknown'} sync={sync_status or 'n/a'} "
+        f"parity={parity_status or 'n/a'}"
+    )
+    if not has_error and mirror_status in {"", "unknown", "skipped"}:
+        status = "warning"
+
+    payload = {
+        "status": status,
+        "message": message,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "run_id": str(run_id),
+        "profile": str(profile),
+        "as_of_date": str(as_of_date),
+        "mirror_status": mirror_status or None,
+        "sync_status": sync_status or None,
+        "parity_status": parity_status or None,
+        "parity_issue_count": int(len(parity_issues)),
+        "parity_issue_examples": [str(x) for x in parity_issues[:10]],
+        "artifact_path": str(artifact_path) if artifact_path else None,
+    }
+    sqlite.cache_set("neon_sync_health", payload)
+
+    if status == "error":
+        logger.error("Neon sync/parity health ERROR: %s", message)
+    elif status == "warning":
+        logger.warning("Neon sync/parity health WARNING: %s", message)
+    else:
+        logger.info("Neon sync/parity health OK: %s", message)
 
 
 def _parse_iso_date(value: Any) -> date | None:
@@ -541,6 +621,31 @@ def run_model_pipeline(
                 overall_status = "failed"
     elif overall_status != "ok":
         neon_mirror = {"status": "skipped", "reason": "pipeline_failed"}
+
+    neon_artifact_path: str | None = None
+    if bool(config.NEON_AUTO_SYNC_ENABLED):
+        try:
+            neon_artifact_path = _write_neon_mirror_artifact(
+                run_id=effective_run_id,
+                profile=profile_key,
+                as_of_date=as_of,
+                overall_status=overall_status,
+                neon_mirror=neon_mirror,
+            )
+            neon_mirror["artifact_path"] = neon_artifact_path
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to persist Neon mirror artifact")
+
+        try:
+            _publish_neon_sync_health(
+                run_id=effective_run_id,
+                profile=profile_key,
+                as_of_date=as_of,
+                neon_mirror=neon_mirror,
+                artifact_path=neon_artifact_path,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to publish Neon sync health status")
 
     return {
         "status": overall_status,

@@ -21,9 +21,17 @@ for _router in API_ROUTERS:
 
 @app.get("/api/health")
 async def health():
-    from backend.data.cache import get_cache_age
+    from backend.data.cache import cache_get, get_cache_age
     try:
-        return {"status": "ok", "cache_age_seconds": get_cache_age()}
+        neon_sync_health = cache_get("neon_sync_health")
+        api_status = "ok"
+        if isinstance(neon_sync_health, dict) and str(neon_sync_health.get("status") or "").lower() == "error":
+            api_status = "degraded"
+        return {
+            "status": api_status,
+            "cache_age_seconds": get_cache_age(),
+            "neon_sync_health": neon_sync_health,
+        }
     except Exception as exc:  # noqa: BLE001
         return {
             "status": "degraded",

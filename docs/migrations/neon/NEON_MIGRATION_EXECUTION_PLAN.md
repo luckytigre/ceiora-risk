@@ -44,6 +44,14 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 - In non-Neon mode, existing in-code mock positions remain the local fallback.
 - Neon mode intentionally does not fall back to in-code mocks on query failure.
 
+### 5) Parity artifact + health signal
+- Every post-refresh Neon mirror run now writes a formal JSON artifact:
+  - `backend/runtime/audit_reports/neon_parity/neon_mirror_<timestamp>_<run_id>.json`
+  - rolling pointer: `backend/runtime/audit_reports/neon_parity/latest_neon_mirror_report.json`
+- Pipeline publishes `neon_sync_health` cache state (`ok|warning|error`) with mirror/parity status and issue examples.
+- `/api/health` now includes `neon_sync_health` and degrades to `status=degraded` when `neon_sync_health.status=error`.
+- Header health signal consumes mirror/parity status from refresh payload and turns red on non-OK Neon mirror/parity.
+
 ## Environment Controls
 - `DATA_BACKEND=sqlite|neon`
 - `NEON_DATABASE_URL=...`

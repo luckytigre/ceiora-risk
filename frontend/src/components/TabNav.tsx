@@ -43,6 +43,23 @@ function formatAgeFromIso(iso: string | null | undefined, nowMs: number): string
   return formatAgeFromMs(ms, nowMs);
 }
 
+function getNeonMirrorStatus(result: unknown): { mirror: string; parity: string } {
+  if (!result || typeof result !== "object") {
+    return { mirror: "", parity: "" };
+  }
+  const mirrorObj = (result as Record<string, unknown>).neon_mirror;
+  if (!mirrorObj || typeof mirrorObj !== "object") {
+    return { mirror: "", parity: "" };
+  }
+  const mirror = String((mirrorObj as Record<string, unknown>).status || "").toLowerCase();
+  const parityObj = (mirrorObj as Record<string, unknown>).parity;
+  const parity =
+    parityObj && typeof parityObj === "object"
+      ? String((parityObj as Record<string, unknown>).status || "").toLowerCase()
+      : "";
+  return { mirror, parity };
+}
+
 export default function TabNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -137,8 +154,17 @@ export default function TabNav() {
     const lastSyncIso = refreshState?.finished_at || refreshState?.started_at || null;
     const lastSyncAge = formatAgeFromIso(lastSyncIso, clockMs);
     const pendingAge = pending && dirtySince ? formatAgeFromIso(dirtySince, clockMs) : null;
+    const neon = getNeonMirrorStatus(refreshState?.result ?? null);
+    const neonMirrorError = neon.mirror === "failed" || neon.mirror === "mismatch";
+    const neonParityError = neon.parity === "failed" || neon.parity === "mismatch";
     let tone: "success" | "warning" | "error" = "success";
-    if (syncState === "failed" || refreshStatus === "failed" || refreshStatus === "unknown") {
+    if (
+      syncState === "failed" ||
+      refreshStatus === "failed" ||
+      refreshStatus === "unknown" ||
+      neonMirrorError ||
+      neonParityError
+    ) {
       tone = "error";
     } else if (
       refreshStatus === "running" ||
@@ -165,6 +191,8 @@ export default function TabNav() {
     if (refreshStatus === "running") segments.push("Sync status: running");
     if (refreshStatus === "failed") segments.push("Sync status: failed");
     if (syncState === "failed") segments.push("Latest sync attempt did not start");
+    if (neon.mirror) segments.push(`Neon mirror: ${neon.mirror}`);
+    if (neon.parity) segments.push(`Neon parity: ${neon.parity}`);
     return {
       tone,
       detail: segments.join(" | "),

@@ -70,6 +70,13 @@ python3 -m backend.scripts.neon_parity_audit \
   --json
 ```
 
+Post-run artifact + signal checks:
+```bash
+ls -1 backend/runtime/audit_reports/neon_parity | tail -n 5
+curl -s http://127.0.0.1:8000/api/health
+curl -s http://127.0.0.1:8000/api/refresh/status
+```
+
 ## Local -> Neon Sync Model
 - Triggered immediately after each successful local run.
 - Target lag budget: 10-20 minutes.

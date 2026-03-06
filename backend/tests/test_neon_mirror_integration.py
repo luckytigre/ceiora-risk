@@ -11,15 +11,23 @@ def _patch_lightweight_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(run_model_pipeline, "_stage_window", lambda *_args, **_kwargs: ["feature_build"])
     monkeypatch.setattr(run_model_pipeline, "_run_stage", lambda **_kwargs: {"status": "ok"})
     monkeypatch.setattr(run_model_pipeline.sqlite, "cache_get", lambda _k: {})
+    monkeypatch.setattr(run_model_pipeline.sqlite, "cache_set", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(run_model_pipeline.job_runs, "ensure_schema", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(run_model_pipeline.job_runs, "completed_stages", lambda *_args, **_kwargs: set())
     monkeypatch.setattr(run_model_pipeline.job_runs, "begin_stage", lambda **_kwargs: None)
     monkeypatch.setattr(run_model_pipeline.job_runs, "finish_stage", lambda **_kwargs: None)
     monkeypatch.setattr(run_model_pipeline.job_runs, "run_rows", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "_write_neon_mirror_artifact",
+        lambda **_kwargs: "/tmp/neon_mirror_report.json",
+    )
 
 
 def test_run_model_pipeline_runs_optional_neon_mirror(monkeypatch) -> None:
     _patch_lightweight_pipeline(monkeypatch)
+    health_cache: dict[str, object] = {}
+    monkeypatch.setattr(run_model_pipeline.sqlite, "cache_set", lambda k, v: health_cache.__setitem__(k, v))
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_ENABLED", True)
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_REQUIRED", False)
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_PARITY_ENABLED", True)
@@ -39,10 +47,17 @@ def test_run_model_pipeline_runs_optional_neon_mirror(monkeypatch) -> None:
 
     assert out["status"] == "ok"
     assert out["neon_mirror"]["status"] == "ok"
+    assert out["neon_mirror"]["artifact_path"] == "/tmp/neon_mirror_report.json"
+    assert "neon_sync_health" in health_cache
+    payload = health_cache["neon_sync_health"]
+    assert isinstance(payload, dict)
+    assert payload.get("status") == "ok"
 
 
 def test_run_model_pipeline_fails_if_required_neon_mirror_mismatch(monkeypatch) -> None:
     _patch_lightweight_pipeline(monkeypatch)
+    health_cache: dict[str, object] = {}
+    monkeypatch.setattr(run_model_pipeline.sqlite, "cache_set", lambda k, v: health_cache.__setitem__(k, v))
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_ENABLED", True)
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_REQUIRED", True)
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_PARITY_ENABLED", True)
@@ -62,3 +77,8 @@ def test_run_model_pipeline_fails_if_required_neon_mirror_mismatch(monkeypatch) 
 
     assert out["neon_mirror"]["status"] == "mismatch"
     assert out["status"] == "failed"
+    assert out["neon_mirror"]["artifact_path"] == "/tmp/neon_mirror_report.json"
+    assert "neon_sync_health" in health_cache
+    payload = health_cache["neon_sync_health"]
+    assert isinstance(payload, dict)
+    assert payload.get("status") == "error"
