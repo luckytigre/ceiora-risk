@@ -33,6 +33,8 @@ from backend.analytics.health import compute_health_diagnostics
 from backend.data import sqlite
 
 logger = logging.getLogger(__name__)
+ELIGIBILITY_WELL_COVERED_RATIO = 0.50
+ELIGIBILITY_WELL_COVERED_MIN_N = 100
 
 
 def _finite_float(value: Any, default: float = 0.0) -> float:
@@ -101,9 +103,21 @@ def build_model_sanity_report(
             f"{sign_mismatch} factors have exposure/sensitivity sign mismatch; expected same sign."
         )
 
+    coverage_date = str(eligibility_summary.get("date") or "")
+    latest_available_date = str(eligibility_summary.get("latest_available_date") or "")
+    used_older_than_latest = bool(eligibility_summary.get("used_older_than_latest"))
+    if used_older_than_latest and coverage_date and latest_available_date:
+        warnings.append(
+            f"Using latest well-covered date {coverage_date} (latest source date is {latest_available_date})."
+        )
+
     return {
         "status": "warn" if warnings else "ok",
         "warnings": warnings,
+        "coverage_date": coverage_date or None,
+        "latest_available_date": latest_available_date or None,
+        "selection_mode": str(eligibility_summary.get("selection_mode") or ""),
+        "update_available": bool(used_older_than_latest),
         "checks": {
             "factor_sign_mismatch_count": int(sign_mismatch),
             "latest_regression_coverage_pct": round(regression_cov * 100.0, 2),
@@ -118,35 +132,78 @@ def build_model_sanity_report(
 def load_latest_eligibility_summary(cache_db: Path) -> EligibilitySummaryPayload:
     conn = sqlite3.connect(str(cache_db))
     try:
+        latest_any = conn.execute(
+            """
+            SELECT date, exp_date, exposure_n, structural_eligible_n, regression_member_n,
+                   structural_coverage, regression_coverage, drop_pct_from_prev, alert_level
+            FROM daily_universe_eligibility_summary
+            ORDER BY date DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        max_row = conn.execute(
+            """
+            SELECT MAX(regression_member_n)
+            FROM daily_universe_eligibility_summary
+            """
+        ).fetchone()
+        max_regression_n = int(max_row[0] or 0) if max_row else 0
+        coverage_threshold_n = max(
+            ELIGIBILITY_WELL_COVERED_MIN_N,
+            int(ELIGIBILITY_WELL_COVERED_RATIO * max_regression_n),
+        )
+
         row = conn.execute(
             """
             SELECT date, exp_date, exposure_n, structural_eligible_n, regression_member_n,
                    structural_coverage, regression_coverage, drop_pct_from_prev, alert_level
             FROM daily_universe_eligibility_summary
-            WHERE regression_member_n > 0
+            WHERE regression_member_n >= ?
             ORDER BY date DESC
             LIMIT 1
-            """
+            """,
+            (coverage_threshold_n,),
         ).fetchone()
+        selection_mode = "well_covered"
         if row is None:
             row = conn.execute(
                 """
                 SELECT date, exp_date, exposure_n, structural_eligible_n, regression_member_n,
                        structural_coverage, regression_coverage, drop_pct_from_prev, alert_level
                 FROM daily_universe_eligibility_summary
+                WHERE regression_member_n > 0
                 ORDER BY date DESC
                 LIMIT 1
                 """
             ).fetchone()
+            selection_mode = "latest_positive"
+        if row is None:
+            row = latest_any
+            selection_mode = "latest_any"
     except sqlite3.OperationalError:
+        latest_any = None
+        max_regression_n = 0
+        coverage_threshold_n = ELIGIBILITY_WELL_COVERED_MIN_N
+        selection_mode = "none"
         row = None
     finally:
         conn.close()
     if not row:
-        return {"status": "no-data"}
+        return {
+            "status": "no-data",
+            "selection_mode": "none",
+            "max_regression_member_n": int(max_regression_n),
+            "coverage_threshold_n": int(coverage_threshold_n),
+            "latest_available_date": str(latest_any[0]) if latest_any and latest_any[0] is not None else None,
+        }
+
+    latest_available_date = str(latest_any[0]) if latest_any and latest_any[0] is not None else str(row[0])
+    selected_date = str(row[0])
+    selected_well_covered = bool(selection_mode == "well_covered")
+    used_older_than_latest = bool(latest_available_date and latest_available_date > selected_date)
     return {
         "status": "ok",
-        "date": str(row[0]),
+        "date": selected_date,
         "exp_date": str(row[1]) if row[1] is not None else None,
         "exposure_n": int(row[2] or 0),
         "structural_eligible_n": int(row[3] or 0),
@@ -155,6 +212,12 @@ def load_latest_eligibility_summary(cache_db: Path) -> EligibilitySummaryPayload
         "regression_coverage": float(row[6] or 0.0),
         "drop_pct_from_prev": float(row[7] or 0.0),
         "alert_level": str(row[8] or ""),
+        "selection_mode": selection_mode,
+        "max_regression_member_n": int(max_regression_n),
+        "coverage_threshold_n": int(coverage_threshold_n),
+        "latest_available_date": latest_available_date,
+        "selected_well_covered": selected_well_covered,
+        "used_older_than_latest": used_older_than_latest,
     }
 
 

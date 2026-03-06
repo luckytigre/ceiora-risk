@@ -27,6 +27,12 @@ export interface PortfolioData {
   positions: Position[];
   total_value: number;
   position_count: number;
+  source_dates?: {
+    fundamentals_asof?: string | null;
+    exposures_asof?: string | null;
+    prices_asof?: string | null;
+    classification_asof?: string | null;
+  };
   _cached: boolean;
 }
 
@@ -112,6 +118,10 @@ export interface RiskData {
     status?: string;
     warnings?: string[];
     checks?: Record<string, number>;
+    coverage_date?: string | null;
+    latest_available_date?: string | null;
+    selection_mode?: string;
+    update_available?: boolean;
   };
   _cached: boolean;
 }

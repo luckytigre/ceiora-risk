@@ -193,6 +193,12 @@ class EligibilitySummaryPayload(TypedDict, total=False):
     regression_coverage: float
     drop_pct_from_prev: float
     alert_level: str
+    selection_mode: str
+    max_regression_member_n: int
+    coverage_threshold_n: int
+    latest_available_date: str | None
+    selected_well_covered: bool
+    used_older_than_latest: bool
 
 
 class ModelSanityChecksPayload(TypedDict):
@@ -208,6 +214,10 @@ class ModelSanityPayload(TypedDict):
     status: str
     warnings: list[str]
     checks: ModelSanityChecksPayload
+    coverage_date: NotRequired[str | None]
+    latest_available_date: NotRequired[str | None]
+    selection_mode: NotRequired[str]
+    update_available: NotRequired[bool]
 
 
 class SpecificRiskPayload(TypedDict, total=False):

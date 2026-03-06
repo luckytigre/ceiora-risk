@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { usePortfolio, useRisk } from "@/hooks/useApi";
+import { triggerRefresh, usePortfolio, useRisk } from "@/hooks/useApi";
 import KpiCard from "@/components/KpiCard";
 import RiskDecompChart from "@/components/RiskDecompChart";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
@@ -27,6 +27,8 @@ export default function OverviewPage() {
   const { data: portfolio, isLoading: pLoading, error: pError } = usePortfolio();
   const { data: risk, isLoading: rLoading, error: rError } = useRisk();
   const [showAllHoldings, setShowAllHoldings] = useState(false);
+  const [refreshState, setRefreshState] = useState<"idle" | "running" | "done" | "failed">("idle");
+  const [dismissUpdatePrompt, setDismissUpdatePrompt] = useState(false);
 
   if (pLoading || rLoading) {
     return <AnalyticsLoadingViz message="Loading overview..." />;
@@ -43,12 +45,73 @@ export default function OverviewPage() {
   const riskShares = risk?.risk_shares ?? { industry: 0, style: 0, idio: 100 };
   const modelAsOf = risk?.risk_engine?.factor_returns_latest_date;
   const lagDays = risk?.risk_engine?.cross_section_min_age_days;
+  const latestSourceAsOf = String(
+    portfolio?.source_dates?.exposures_asof
+      || portfolio?.source_dates?.fundamentals_asof
+      || "",
+  );
+  const updateAvailable = Boolean(
+    !dismissUpdatePrompt
+    && modelAsOf
+    && latestSourceAsOf
+    && latestSourceAsOf > String(modelAsOf),
+  );
 
   const holdings = [...positions].sort((a, b) => b.market_value - a.market_value);
   const visibleHoldings = showAllHoldings ? holdings : holdings.slice(0, COLLAPSED_ROWS);
 
+  async function handleRefreshPrompt() {
+    const proceed = window.confirm(
+      `Run refresh now?\n\nLatest source date: ${latestSourceAsOf}\nModel as-of date: ${modelAsOf}`,
+    );
+    if (!proceed) return;
+    setRefreshState("running");
+    try {
+      await triggerRefresh("light");
+      setRefreshState("done");
+    } catch {
+      setRefreshState("failed");
+    }
+  }
+
   return (
     <div>
+      {updateAvailable && (
+        <div className="chart-card mb-4" style={{ border: "1px solid rgba(255, 143, 42, 0.45)" }}>
+          <h3 style={{ marginBottom: 8 }}>Update Available</h3>
+          <div style={{ color: "rgba(232, 237, 249, 0.86)", fontSize: 13, lineHeight: 1.5 }}>
+            Newer source data exists for <strong>{latestSourceAsOf}</strong>, while the model currently uses the latest
+            well-covered date <strong>{modelAsOf}</strong>.
+          </div>
+          <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              className="btn btn-secondary"
+              onClick={handleRefreshPrompt}
+              disabled={refreshState === "running"}
+            >
+              {refreshState === "running" ? "Starting refresh..." : "Run Refresh"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setDismissUpdatePrompt(true)}
+              style={{ opacity: 0.8 }}
+            >
+              Dismiss
+            </button>
+          </div>
+          {refreshState === "done" && (
+            <div style={{ marginTop: 8, color: "rgba(169,182,210,0.85)", fontSize: 12 }}>
+              Refresh started in background.
+            </div>
+          )}
+          {refreshState === "failed" && (
+            <div style={{ marginTop: 8, color: "rgba(204,53,88,0.9)", fontSize: 12 }}>
+              Could not start refresh from this page.
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="kpi-row">
         <KpiCard label="Total Value" value={fmt(totalValue)} subtitle={`${posCount} positions`} />
         <KpiCard label="Positions" value={String(posCount)} />
