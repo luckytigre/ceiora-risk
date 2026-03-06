@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
-export type BgMode = "field" | "topo" | "none";
+export type BgMode = "topo" | "flow" | "none";
 
 interface BackgroundContextValue {
   mode: BgMode;
@@ -10,16 +10,19 @@ interface BackgroundContextValue {
 }
 
 const BackgroundContext = createContext<BackgroundContextValue>({
-  mode: "field",
+  mode: "topo",
   setMode: () => {},
 });
 
 export function BackgroundProvider({ children }: { children: ReactNode }) {
   const [mode, setModeRaw] = useState<BgMode>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("bg-mode") as BgMode) || "field";
+      const stored = String(localStorage.getItem("bg-mode") || "").trim().toLowerCase();
+      if (stored === "none") return "none";
+      if (stored === "flow") return "flow";
+      return "topo";
     }
-    return "field";
+    return "topo";
   });
 
   const setMode = useCallback((m: BgMode) => {

@@ -127,12 +127,18 @@ async def search_universe(
         return {"query": q, "results": [], "total": 0, "_cached": True}
 
     index = data.get("index") or []
+    by_ticker = data.get("by_ticker") or {}
     ranked: list[tuple[tuple[int, int, str], dict]] = []
     for row in index:
         ticker = str(row.get("ticker", "")).upper()
         name = str(row.get("name", "")).upper()
         if needle in ticker or needle in name:
-            ranked.append((_search_rank(row, needle), normalize_trbc_sector_fields(row)))
+            normalized = normalize_trbc_sector_fields(row)
+            if not normalized.get("ric"):
+                ric = str((by_ticker.get(ticker) or {}).get("ric") or "").upper().strip()
+                if ric:
+                    normalized["ric"] = ric
+            ranked.append((_search_rank(normalized, needle), normalized))
 
     ranked.sort(key=lambda item: item[0])
     hits = [row for _, row in ranked[:limit]]

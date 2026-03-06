@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Position } from "@/lib/types";
 import TableRowToggle from "@/components/TableRowToggle";
+import ShareAdjuster from "@/components/ShareAdjuster";
 
 interface PositionTableProps {
   positions: Position[];
@@ -84,7 +85,12 @@ export default function PositionTable({ positions }: PositionTableProps) {
                 </span>
               </td>
               <td>{pos.trbc_economic_sector_short || "—"}</td>
-              <td className="text-right">{fmtShares(pos.shares)}</td>
+              <td className="text-right">
+                <span className="share-cell">
+                  <span>{fmtShares(pos.shares)}</span>
+                  <ShareAdjuster ticker={pos.ticker} currentShares={pos.shares} accountId={pos.account} />
+                </span>
+              </td>
               <td className="text-right">{fmt(pos.price)}</td>
               <td className="text-right">{fmt(pos.market_value)}</td>
               <td>{pos.account || "—"}</td>

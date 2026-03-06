@@ -4,6 +4,12 @@ import useSWR from "swr";
 import { ApiError, apiFetch, apiPath, type RefreshMode } from "@/lib/api";
 import type {
   PortfolioData,
+  HoldingsModeData,
+  HoldingsAccountsData,
+  HoldingsPositionsData,
+  HoldingsImportMode,
+  HoldingsImportResponse,
+  HoldingsPositionEditResponse,
   ExposuresData,
   RiskData,
   FactorHistoryData,
@@ -13,20 +19,43 @@ import type {
   UniverseFactorsData,
   HealthDiagnosticsData,
   DataDiagnosticsData,
+  RefreshStatusData,
 } from "@/lib/types";
 
 export { ApiError };
 
 const SWR_OPTS = {
-  revalidateOnFocus: true,
-  shouldRetryOnError: true,
-  errorRetryCount: 3,
-  errorRetryInterval: 5000,
-  refreshInterval: 15000,
+  revalidateOnFocus: false,
+  revalidateOnReconnect: false,
+  shouldRetryOnError: false,
+  errorRetryCount: 0,
+  refreshInterval: 0,
+};
+
+const HEAVY_DIAGNOSTICS_OPTS = {
+  ...SWR_OPTS,
+  // Diagnostics payloads can be expensive to build on large local SQLite files.
+  // Keep these on-demand/focus refreshes only instead of interval polling.
+  refreshInterval: 0,
 };
 
 export function usePortfolio() {
   return useSWR<PortfolioData>(apiPath.portfolio(), apiFetch, SWR_OPTS);
+}
+
+export function useHoldingsModes() {
+  return useSWR<HoldingsModeData>(apiPath.holdingsModes(), apiFetch, {
+    ...SWR_OPTS,
+    refreshInterval: 0,
+  });
+}
+
+export function useHoldingsAccounts() {
+  return useSWR<HoldingsAccountsData>(apiPath.holdingsAccounts(), apiFetch, SWR_OPTS);
+}
+
+export function useHoldingsPositions(accountId?: string | null) {
+  return useSWR<HoldingsPositionsData>(apiPath.holdingsPositions(accountId), apiFetch, SWR_OPTS);
 }
 
 export function useExposures(mode: string) {
@@ -65,13 +94,78 @@ export function useUniverseFactors() {
 }
 
 export function useHealthDiagnostics() {
-  return useSWR<HealthDiagnosticsData>(apiPath.healthDiagnostics(), apiFetch, SWR_OPTS);
+  return useSWR<HealthDiagnosticsData>(apiPath.healthDiagnostics(), apiFetch, HEAVY_DIAGNOSTICS_OPTS);
 }
 
 export function useDataDiagnostics() {
-  return useSWR<DataDiagnosticsData>(apiPath.dataDiagnostics(), apiFetch, SWR_OPTS);
+  return useSWR<DataDiagnosticsData>(apiPath.dataDiagnostics(), apiFetch, HEAVY_DIAGNOSTICS_OPTS);
+}
+
+export function useRefreshStatus() {
+  return useSWR<RefreshStatusData>(apiPath.refreshStatus(), apiFetch, {
+    ...SWR_OPTS,
+    refreshInterval: 0,
+  });
 }
 
 export async function triggerRefresh(mode: RefreshMode = "full"): Promise<{ status: string }> {
   return apiFetch<{ status: string }>(apiPath.refresh(mode), { method: "POST" });
+}
+
+export async function triggerHoldingsImport(payload: {
+  account_id: string;
+  mode: HoldingsImportMode;
+  rows: Array<{
+    account_id?: string;
+    ric?: string;
+    ticker?: string;
+    quantity: number;
+    source?: string;
+  }>;
+  filename?: string;
+  requested_by?: string;
+  notes?: string;
+  default_source?: string;
+  dry_run?: boolean;
+  trigger_refresh?: boolean;
+}): Promise<HoldingsImportResponse> {
+  return apiFetch<HoldingsImportResponse>(apiPath.holdingsImport(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function upsertHoldingPosition(payload: {
+  account_id: string;
+  quantity: number;
+  ric?: string;
+  ticker?: string;
+  source?: string;
+  requested_by?: string;
+  notes?: string;
+  dry_run?: boolean;
+  trigger_refresh?: boolean;
+}): Promise<HoldingsPositionEditResponse> {
+  return apiFetch<HoldingsPositionEditResponse>(apiPath.holdingsPosition(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removeHoldingPosition(payload: {
+  account_id: string;
+  ric?: string;
+  ticker?: string;
+  requested_by?: string;
+  notes?: string;
+  dry_run?: boolean;
+  trigger_refresh?: boolean;
+}): Promise<HoldingsPositionEditResponse> {
+  return apiFetch<HoldingsPositionEditResponse>(apiPath.holdingsPositionRemove(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }

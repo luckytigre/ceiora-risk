@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -204,11 +204,53 @@ def _upsert_security_master(
         batch_size=batch_size,
     )
 
+    col_idx = {c: i for i, c in enumerate(columns)}
+
+    def _to_flag(value: Any) -> int:
+        if isinstance(value, bool):
+            return 1 if value else 0
+        if isinstance(value, int):
+            return 1 if value != 0 else 0
+        if isinstance(value, float):
+            return 1 if value != 0.0 else 0
+        txt = str(value or "").strip().lower()
+        if txt in {"1", "true", "yes", "y"}:
+            return 1
+        if txt in {"0", "false", "no", "n", ""}:
+            return 0
+        try:
+            return 1 if float(txt) != 0.0 else 0
+        except ValueError:
+            return 0
+
+    def _normalize_row(row: tuple[Any, ...]) -> tuple[Any, ...]:
+        out = list(row)
+        if "classification_ok" in col_idx:
+            out[col_idx["classification_ok"]] = _to_flag(
+                out[col_idx["classification_ok"]]
+            )
+        if "is_equity_eligible" in col_idx:
+            out[col_idx["is_equity_eligible"]] = _to_flag(
+                out[col_idx["is_equity_eligible"]]
+            )
+        if "updated_at" in col_idx:
+            raw = out[col_idx["updated_at"]]
+            txt = str(raw or "").strip()
+            if txt:
+                try:
+                    datetime.fromisoformat(txt.replace("Z", "+00:00"))
+                except ValueError:
+                    txt = ""
+            if not txt:
+                txt = datetime.now(timezone.utc).isoformat()
+            out[col_idx["updated_at"]] = txt
+        return tuple(out)
+
     loaded = 0
     chunk: list[tuple[Any, ...]] = []
     with pg_conn.cursor() as cur:
         for row in src_rows:
-            chunk.append(row)
+            chunk.append(_normalize_row(row))
             if len(chunk) >= batch_size:
                 cur.executemany(insert_sql, chunk)
                 loaded += len(chunk)

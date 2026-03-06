@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 function backendOrigin(): string {
-  return (process.env.BACKEND_API_ORIGIN || "http://localhost:8000").replace(/\/+$/, "");
+  return (process.env.BACKEND_API_ORIGIN || "http://127.0.0.1:8000").replace(/\/+$/, "");
 }
 
 function refreshHeaders(extra: Record<string, string> = {}): HeadersInit {
@@ -25,4 +25,3 @@ export async function POST(req: NextRequest) {
     headers: { "content-type": res.headers.get("content-type") || "application/json" },
   });
 }
-

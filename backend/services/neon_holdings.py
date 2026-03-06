@@ -527,14 +527,18 @@ def apply_holdings_import(
     notes: str | None,
     dry_run: bool,
 ) -> dict[str, Any]:
-    accepted_rows: list[ResolvedImportRow] = [r for r in parsed.get("accepted", []) if r.account_id == account_id]
+    acct = _normalize_account_id(account_id)
+    if acct is None:
+        raise ValueError("invalid account_id")
+
+    accepted_rows: list[ResolvedImportRow] = [r for r in parsed.get("accepted", []) if r.account_id == acct]
     rejected_rows = list(parsed.get("rejected", []))
     warnings = list(parsed.get("warnings", []))
 
-    _ensure_account(pg_conn, account_id=account_id)
+    _ensure_account(pg_conn, account_id=acct)
     batch_id = _insert_batch(
         pg_conn,
-        account_id=account_id,
+        account_id=acct,
         mode=mode,
         filename=filename,
         row_count=len(accepted_rows),
@@ -542,7 +546,7 @@ def apply_holdings_import(
         notes=notes,
     )
 
-    existing = _load_current_positions(pg_conn, account_id=account_id)
+    existing = _load_current_positions(pg_conn, account_id=acct)
     accepted_map: dict[str, ResolvedImportRow] = {r.ric: r for r in accepted_rows}
 
     applied_upserts = 0
@@ -556,11 +560,11 @@ def apply_holdings_import(
 
         if row is None:
             if remove_if_missing and before_qty is not None:
-                _delete_position(pg_conn, account_id=account_id, ric=ric)
+                _delete_position(pg_conn, account_id=acct, ric=ric)
                 _insert_event(
                     pg_conn,
                     import_batch_id=batch_id,
-                    account_id=account_id,
+                    account_id=acct,
                     ric=ric,
                     ticker=(before_ticker or None),
                     event_type="remove_position",
@@ -575,11 +579,11 @@ def apply_holdings_import(
         target_qty = row.quantity
         if target_qty == Decimal("0"):
             if before_qty is not None:
-                _delete_position(pg_conn, account_id=account_id, ric=ric)
+                _delete_position(pg_conn, account_id=acct, ric=ric)
                 _insert_event(
                     pg_conn,
                     import_batch_id=batch_id,
-                    account_id=account_id,
+                    account_id=acct,
                     ric=ric,
                     ticker=(row.ticker or before_ticker),
                     event_type="remove_position",
@@ -593,7 +597,7 @@ def apply_holdings_import(
 
         _upsert_position(
             pg_conn,
-            account_id=account_id,
+            account_id=acct,
             ric=ric,
             ticker=row.ticker,
             quantity=target_qty,
@@ -604,7 +608,7 @@ def apply_holdings_import(
         _insert_event(
             pg_conn,
             import_batch_id=batch_id,
-            account_id=account_id,
+            account_id=acct,
             ric=ric,
             ticker=row.ticker,
             event_type="set_absolute",
@@ -625,11 +629,11 @@ def apply_holdings_import(
 
         if qty_after == Decimal("0"):
             if before_qty is not None:
-                _delete_position(pg_conn, account_id=account_id, ric=ric)
+                _delete_position(pg_conn, account_id=acct, ric=ric)
                 _insert_event(
                     pg_conn,
                     import_batch_id=batch_id,
-                    account_id=account_id,
+                    account_id=acct,
                     ric=ric,
                     ticker=(row.ticker or before_ticker),
                     event_type="remove_position",
@@ -643,7 +647,7 @@ def apply_holdings_import(
 
         _upsert_position(
             pg_conn,
-            account_id=account_id,
+            account_id=acct,
             ric=ric,
             ticker=(row.ticker or before_ticker),
             quantity=qty_after,
@@ -653,7 +657,7 @@ def apply_holdings_import(
         _insert_event(
             pg_conn,
             import_batch_id=batch_id,
-            account_id=account_id,
+            account_id=acct,
             ric=ric,
             ticker=(row.ticker or before_ticker),
             event_type="increment_delta",
@@ -687,7 +691,7 @@ def apply_holdings_import(
     return {
         "status": status,
         "mode": mode,
-        "account_id": account_id,
+        "account_id": acct,
         "import_batch_id": batch_id,
         "accepted_rows": len(accepted_rows),
         "rejected_rows": len(rejected_rows),
@@ -696,3 +700,330 @@ def apply_holdings_import(
         "applied_upserts": int(applied_upserts),
         "applied_deletes": int(applied_deletes),
     }
+
+
+def parse_holdings_rows(
+    pg_conn,
+    *,
+    rows: list[dict[str, Any]],
+    mode: str,
+    default_account_id: str | None,
+    default_source: str,
+) -> dict[str, Any]:
+    mode_norm = str(mode).strip()
+    if mode_norm not in IMPORT_MODES:
+        raise ValueError(f"invalid mode: {mode_norm}")
+
+    accepted: list[ResolvedImportRow] = []
+    rejected: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    default_acct = _normalize_account_id(default_account_id)
+    seen_keys: set[tuple[str, str]] = set()
+
+    for idx, row in enumerate(list(rows or []), start=1):
+        account_id = _normalize_account_id(row.get("account_id")) or default_acct
+        if account_id is None:
+            rejected.append(
+                {
+                    "row_number": idx,
+                    "reason_code": "invalid_account_id",
+                    "message": "account_id missing or invalid",
+                }
+            )
+            continue
+
+        try:
+            qty = _parse_quantity(str(row.get("quantity")))
+        except (InvalidOperation, ValueError):
+            rejected.append(
+                {
+                    "row_number": idx,
+                    "reason_code": "invalid_quantity",
+                    "message": f"invalid quantity: {row.get('quantity')!r}",
+                }
+            )
+            continue
+
+        ric = _normalize_ric(row.get("ric"))
+        ticker = _normalize_ticker(row.get("ticker"))
+        resolved_ric = ""
+        resolved_ticker: str | None = ticker or None
+        if ric:
+            ok, mapped_ticker = _ric_exists(pg_conn, ric)
+            if not ok:
+                rejected.append(
+                    {
+                        "row_number": idx,
+                        "reason_code": "unknown_ric",
+                        "message": f"RIC not found in security_master: {ric}",
+                    }
+                )
+                continue
+            resolved_ric = ric
+            resolved_ticker = mapped_ticker or resolved_ticker
+        elif ticker:
+            picked_ric, alternatives = _resolve_ticker_to_ric(pg_conn, ticker)
+            if not picked_ric:
+                rejected.append(
+                    {
+                        "row_number": idx,
+                        "reason_code": "unknown_ticker",
+                        "message": f"Ticker not found in security_master: {ticker}",
+                    }
+                )
+                continue
+            resolved_ric = picked_ric
+            if alternatives:
+                warnings.append(
+                    f"row {idx}: ticker {ticker} resolved to {picked_ric}; alternatives={','.join(alternatives[:10])}"
+                )
+        else:
+            rejected.append(
+                {
+                    "row_number": idx,
+                    "reason_code": "missing_identifier",
+                    "message": "need ric or ticker",
+                }
+            )
+            continue
+
+        dup_key = (account_id, resolved_ric)
+        if dup_key in seen_keys:
+            rejected.append(
+                {
+                    "row_number": idx,
+                    "reason_code": "duplicate_row_in_file",
+                    "message": f"duplicate account_id+ric in payload: {account_id}/{resolved_ric}",
+                }
+            )
+            continue
+        seen_keys.add(dup_key)
+        src = str(row.get("source") or default_source).strip() or str(default_source)
+        accepted.append(
+            ResolvedImportRow(
+                row_number=idx,
+                account_id=account_id,
+                ric=resolved_ric,
+                ticker=resolved_ticker,
+                quantity=qty,
+                source=src,
+            )
+        )
+
+    rejection_counts: dict[str, int] = {}
+    for r in rejected:
+        code = str(r.get("reason_code") or "unknown")
+        rejection_counts[code] = int(rejection_counts.get(code, 0) + 1)
+
+    return {
+        "mode": mode_norm,
+        "accepted": accepted,
+        "rejected": rejected,
+        "warnings": warnings,
+        "rejection_counts": rejection_counts,
+        "csv_path": "<payload_rows>",
+    }
+
+
+def list_holdings_accounts(pg_conn) -> list[dict[str, Any]]:
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                a.account_id,
+                a.account_name,
+                a.is_active,
+                COUNT(p.ric) AS positions_count,
+                COALESCE(SUM(ABS(CAST(p.quantity AS DOUBLE PRECISION))), 0) AS gross_quantity,
+                MAX(p.updated_at) AS last_position_updated_at
+            FROM holdings_accounts a
+            LEFT JOIN holdings_positions_current p
+              ON p.account_id = a.account_id
+            GROUP BY a.account_id, a.account_name, a.is_active
+            ORDER BY a.account_id ASC
+            """
+        )
+        rows = cur.fetchall()
+    out: list[dict[str, Any]] = []
+    for account_id, account_name, is_active, positions_count, gross_qty, last_updated in rows:
+        out.append(
+            {
+                "account_id": str(account_id),
+                "account_name": str(account_name or account_id),
+                "is_active": bool(is_active),
+                "positions_count": int(positions_count or 0),
+                "gross_quantity": float(gross_qty or 0.0),
+                "last_position_updated_at": str(last_updated) if last_updated is not None else None,
+            }
+        )
+    return out
+
+
+def list_holdings_positions(pg_conn, *, account_id: str | None = None) -> list[dict[str, Any]]:
+    acct = _normalize_account_id(account_id) if account_id is not None else None
+    with pg_conn.cursor() as cur:
+        if acct:
+            cur.execute(
+                """
+                SELECT account_id, ric, ticker, quantity, source, updated_at
+                FROM holdings_positions_current
+                WHERE account_id = %s
+                ORDER BY account_id, ticker, ric
+                """,
+                (acct,),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT account_id, ric, ticker, quantity, source, updated_at
+                FROM holdings_positions_current
+                ORDER BY account_id, ticker, ric
+                """
+            )
+        rows = cur.fetchall()
+    out: list[dict[str, Any]] = []
+    for account_id, ric, ticker, quantity, source, updated_at in rows:
+        out.append(
+            {
+                "account_id": str(account_id),
+                "ric": _normalize_ric(ric),
+                "ticker": _normalize_ticker(ticker),
+                "quantity": float(quantity or 0.0),
+                "source": str(source or ""),
+                "updated_at": str(updated_at) if updated_at is not None else None,
+            }
+        )
+    return out
+
+
+def apply_single_position_edit(
+    pg_conn,
+    *,
+    account_id: str,
+    quantity: Any,
+    ric: str | None = None,
+    ticker: str | None = None,
+    source: str = "ui_edit",
+    requested_by: str | None = None,
+    notes: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    acct = _normalize_account_id(account_id)
+    if acct is None:
+        raise ValueError("invalid account_id")
+    qty = _parse_quantity(str(quantity))
+    ric_norm = _normalize_ric(ric)
+    ticker_norm = _normalize_ticker(ticker)
+    if not ric_norm and not ticker_norm:
+        raise ValueError("need ric or ticker")
+
+    resolved_ric = ric_norm
+    resolved_ticker: str | None = ticker_norm or None
+    if resolved_ric:
+        ok, mapped_ticker = _ric_exists(pg_conn, resolved_ric)
+        if not ok:
+            raise ValueError(f"unknown ric: {resolved_ric}")
+        resolved_ticker = mapped_ticker or resolved_ticker
+    else:
+        picked_ric, _alts = _resolve_ticker_to_ric(pg_conn, ticker_norm)
+        if not picked_ric:
+            raise ValueError(f"unknown ticker: {ticker_norm}")
+        resolved_ric = picked_ric
+        ok, mapped_ticker = _ric_exists(pg_conn, resolved_ric)
+        resolved_ticker = mapped_ticker if ok else resolved_ticker
+
+    _ensure_account(pg_conn, account_id=acct)
+    batch_id = _insert_batch(
+        pg_conn,
+        account_id=acct,
+        mode="upsert_absolute",
+        filename="<ui_edit>",
+        row_count=1,
+        requested_by=requested_by,
+        notes=notes,
+    )
+    existing = _load_current_positions(pg_conn, account_id=acct).get(resolved_ric, {})
+    before_qty = existing.get("quantity")
+    before_ticker = existing.get("ticker")
+
+    action = "none"
+    if qty == Decimal("0"):
+        if before_qty is not None:
+            _delete_position(pg_conn, account_id=acct, ric=resolved_ric)
+            _insert_event(
+                pg_conn,
+                import_batch_id=batch_id,
+                account_id=acct,
+                ric=resolved_ric,
+                ticker=(resolved_ticker or before_ticker),
+                event_type="remove_position",
+                quantity_before=before_qty,
+                quantity_delta=(Decimal("0") - before_qty),
+                quantity_after=Decimal("0"),
+                created_by=requested_by,
+            )
+            action = "deleted"
+    else:
+        _upsert_position(
+            pg_conn,
+            account_id=acct,
+            ric=resolved_ric,
+            ticker=(resolved_ticker or before_ticker),
+            quantity=qty,
+            source=str(source or "ui_edit"),
+            import_batch_id=batch_id,
+        )
+        qty_before = before_qty if before_qty is not None else Decimal("0")
+        _insert_event(
+            pg_conn,
+            import_batch_id=batch_id,
+            account_id=acct,
+            ric=resolved_ric,
+            ticker=(resolved_ticker or before_ticker),
+            event_type="ui_edit",
+            quantity_before=before_qty,
+            quantity_delta=(qty - qty_before),
+            quantity_after=qty,
+            created_by=requested_by,
+        )
+        action = "upserted"
+
+    if dry_run:
+        pg_conn.rollback()
+        status = "dry_run"
+    else:
+        pg_conn.commit()
+        status = "ok"
+
+    return {
+        "status": status,
+        "action": action,
+        "account_id": acct,
+        "ric": resolved_ric,
+        "ticker": resolved_ticker,
+        "quantity": float(qty),
+        "import_batch_id": batch_id,
+    }
+
+
+def remove_single_position(
+    pg_conn,
+    *,
+    account_id: str,
+    ric: str | None = None,
+    ticker: str | None = None,
+    requested_by: str | None = None,
+    notes: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    return apply_single_position_edit(
+        pg_conn,
+        account_id=account_id,
+        quantity="0",
+        ric=ric,
+        ticker=ticker,
+        source="ui_edit",
+        requested_by=requested_by,
+        notes=notes,
+        dry_run=dry_run,
+    )

@@ -18,64 +18,9 @@ function frac(v: number) {
   return v - Math.floor(v);
 }
 
-/* ── Colour zones — shared by both modes ──────────────────── */
-
-const ZONES: [number, number, number, number, number, number, number][] = [
-  [166, 79, 121, 0.2, 0.3, 0.6, 0.08],   // muted rose
-  [120, 80, 155, 0.8, 0.2, 0.5, 0.06],    // dusty violet
-  [60, 120, 150, 0.5, 0.8, 0.55, 0.05],   // slate blue
-  [204, 53, 88, 0.15, 0.85, 0.4, 0.04],   // faint crimson
-];
-
-function tintColor(x: number, y: number, w: number, h: number): [number, number, number] {
-  let cr = 158, cg = 158, cb = 164;
-  const nx = x / w, ny = y / h;
-  for (const z of ZONES) {
-    const dx = nx - z[3], dy = ny - z[4];
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const inf = Math.max(0, 1 - dist / z[5]);
-    const s = inf * inf * z[6];
-    cr = cr * (1 - s) + z[0] * s;
-    cg = cg * (1 - s) + z[1] * s;
-    cb = cb * (1 - s) + z[2] * s;
-  }
-  return [cr, cg, cb];
-}
-
-/* ── Mode: "field" — uniform grid, smooth noise brightness ─── */
-
-function noiseField(x: number, y: number) {
-  return (
-    Math.sin(x * 0.012 + y * 0.009) * 0.5 +
-    Math.sin(x * 0.007 - y * 0.013 + 2.0) * 0.4 +
-    Math.sin((x + y) * 0.005 + 1.3) * 0.3 +
-    Math.sin(x * 0.019 + y * 0.003 - 0.8) * 0.2
-  );
-}
+/* ── Mode: "topo" — topographic isoline dots ─────────────── */
 
 const SCALE = 0.875;
-
-function drawField(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const spacing = 9 * SCALE;
-  const baseR = 0.55 * SCALE;
-
-  for (let y = spacing / 2; y < h; y += spacing) {
-    for (let x = spacing / 2; x < w; x += spacing) {
-      const n = noiseField(x / SCALE, y / SCALE);
-      const norm = (n + 1.4) / 2.8;
-      const alpha = 0.06 + norm * norm * 0.22;
-      const r = baseR + norm * 0.25 * SCALE;
-      const [cr, cg, cb] = tintColor(x, y, w, h);
-
-      ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${alpha.toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
-
-/* ── Mode: "topo" — original topographic isoline dots ─────── */
 
 function terrainHeight(x: number, z: number) {
   const ridge =
@@ -132,11 +77,113 @@ function drawTopo(ctx: CanvasRenderingContext2D, w: number, h: number) {
   }
 }
 
-/* ── Renderer ──────────────────────────────────────────────── */
+/* ── Mode: "flow" — organized ribbon sweeps ────────────────── */
 
-const RENDERERS: Record<string, (ctx: CanvasRenderingContext2D, w: number, h: number) => void> = {
-  field: drawField,
+/**
+ * Each ribbon is a coherent bundle of parallel bezier curves.
+ * All strands share the same control-point skeleton — they're
+ * offset perpendicular to the curve at each of the 4 points,
+ * with per-point spread control so ribbons can tighten and widen
+ * gracefully along their path.
+ */
+interface Ribbon {
+  /* Four bezier points as fractions of viewport */
+  p0: [number, number];
+  p1: [number, number];
+  p2: [number, number];
+  p3: [number, number];
+  /* Perpendicular spread (px) at each of the 4 points */
+  s0: number; s1: number; s2: number; s3: number;
+  /* Number of strands in this ribbon */
+  n: number;
+  /* Alpha range [edge, center] */
+  alpha: [number, number];
+  lw: number;
+  /* Gradient color stops — light, muted tints [r,g,b] */
+  c0: [number, number, number];
+  c1: [number, number, number];
+}
+
+function drawRibbon(ctx: CanvasRenderingContext2D, w: number, h: number, r: Ribbon) {
+  for (let i = 0; i < r.n; i++) {
+    const t = r.n <= 1 ? 0 : (i / (r.n - 1)) - 0.5; // -0.5 … +0.5
+
+    // At each control point, offset perpendicular to the local tangent direction
+    const perp = (ax: number, ay: number, bx: number, by: number): [number, number] => {
+      const dx = bx - ax, dy = by - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      return [-dy / len, dx / len];
+    };
+
+    const [p0, p1, p2, p3] = [r.p0, r.p1, r.p2, r.p3];
+    const n0 = perp(p0[0], p0[1], p1[0], p1[1]);
+    const n1 = perp(p0[0], p0[1], p2[0], p2[1]);
+    const n2 = perp(p1[0], p1[1], p3[0], p3[1]);
+    const n3 = perp(p2[0], p2[1], p3[0], p3[1]);
+
+    const x0 = p0[0] * w + n0[0] * t * r.s0;
+    const y0 = p0[1] * h + n0[1] * t * r.s0;
+    const x1 = p1[0] * w + n1[0] * t * r.s1;
+    const y1 = p1[1] * h + n1[1] * t * r.s1;
+    const x2 = p2[0] * w + n2[0] * t * r.s2;
+    const y2 = p2[1] * h + n2[1] * t * r.s2;
+    const x3 = p3[0] * w + n3[0] * t * r.s3;
+    const y3 = p3[1] * h + n3[1] * t * r.s3;
+
+    const edgeFade = 1 - Math.abs(t) * 2;
+    const a = r.alpha[0] + (r.alpha[1] - r.alpha[0]) * edgeFade;
+
+    // Gradient along the curve from c0 → c1
+    const grad = ctx.createLinearGradient(x0, y0, x3, y3);
+    grad.addColorStop(0, `rgba(${r.c0[0]},${r.c0[1]},${r.c0[2]},${a.toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${r.c1[0]},${r.c1[1]},${r.c1[2]},${a.toFixed(3)})`);
+
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = r.lw;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.bezierCurveTo(x1, y1, x2, y2, x3, y3);
+    ctx.stroke();
+  }
+}
+
+function drawFlow(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  ctx.lineCap = "round";
+
+  /* Subtle tints derived from theme accents, lifted to light pastel range:
+     accent-blue #3ba9e1  → [155,200,225]   accent-green #31f6ff → [150,220,225]
+     accent-purple #d757ba → [210,165,200]   accent-yellow #ff8f2a → [220,190,155]
+     neutral grey baseline: [176,176,176]                                        */
+
+  const ribbons: Ribbon[] = [
+    // Ribbon A: enters top-left, swoops down, pinches left-of-center,
+    // then opens wide as it climbs to exit top-right.
+    {
+      p0: [-0.25, -0.30], p1: [0.05, 1.00], p2: [0.55, -0.05], p3: [1.30, -0.34],
+      s0: 682, s1: 55, s2: 308, s3: 748,
+      n: 25, alpha: [0.06, 0.20], lw: 0.7,
+      c0: [155, 200, 225], c1: [210, 165, 200],
+    },
+    // Ribbon B: enters bottom-right, arcs high, pinches right-of-center,
+    // then fans wide as it descends to exit bottom-left.
+    {
+      p0: [1.28, 1.11], p1: [0.90, -0.40], p2: [0.40, 0.68], p3: [-0.25, 1.13],
+      s0: 638, s1: 60, s2: 286, s3: 715,
+      n: 23, alpha: [0.05, 0.18], lw: 0.65,
+      c0: [176, 180, 190], c1: [150, 220, 225],
+    },
+  ];
+
+  for (const r of ribbons) {
+    drawRibbon(ctx, w, h, r);
+  }
+}
+
+/* ── Renderer ──────────────────────────────────────────────── */
+const RENDERERS: Record<BgMode, (ctx: CanvasRenderingContext2D, w: number, h: number) => void> = {
   topo: drawTopo,
+  flow: drawFlow,
+  none: () => {},
 };
 
 /* Parallax: viewport-sized canvas (position:fixed), shifted via GPU transform */

@@ -47,7 +47,35 @@ def _first_existing(cols: set[str], candidates: list[str]) -> str | None:
     return None
 
 
-def _table_stats(conn: sqlite3.Connection, table: str) -> dict[str, Any]:
+def _approx_row_count_from_stats(conn: sqlite3.Connection, table: str) -> int | None:
+    if not _table_exists(conn, "sqlite_stat1"):
+        return None
+    rows = conn.execute(
+        "SELECT stat FROM sqlite_stat1 WHERE tbl = ?",
+        (table,),
+    ).fetchall()
+    estimates: list[int] = []
+    for (stat,) in rows:
+        if not stat:
+            continue
+        head = str(stat).split(" ", 1)[0].strip()
+        if not head:
+            continue
+        try:
+            estimates.append(int(head))
+        except ValueError:
+            continue
+    if not estimates:
+        return None
+    return max(estimates)
+
+
+def _table_stats(
+    conn: sqlite3.Connection,
+    table: str,
+    include_exact_row_counts: bool = False,
+    include_expensive_checks: bool = False,
+) -> dict[str, Any]:
     if not _table_exists(conn, table):
         return {"table": table, "exists": False}
     cols = _table_columns(conn, table)
@@ -56,22 +84,48 @@ def _table_stats(conn: sqlite3.Connection, table: str) -> dict[str, Any]:
     ticker_col = "ticker" if "ticker" in cols else None
     job_col = "job_run_id" if "job_run_id" in cols else None
 
-    row_count = int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] or 0)
-    ticker_count = (
-        int(conn.execute(f"SELECT COUNT(DISTINCT {ticker_col}) FROM {table}").fetchone()[0] or 0)
-        if ticker_col
-        else None
-    )
+    approx_row_count = _approx_row_count_from_stats(conn, table)
+    row_count: int | None
+    row_count_mode: str
+    if include_exact_row_counts:
+        row_count = int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] or 0)
+        row_count_mode = "exact"
+    else:
+        row_count = int(approx_row_count) if approx_row_count is not None else None
+        row_count_mode = "approx" if approx_row_count is not None else "unknown"
+    if ticker_col and include_expensive_checks:
+        ticker_count = int(conn.execute(f"SELECT COUNT(DISTINCT {ticker_col}) FROM {table}").fetchone()[0] or 0)
+    else:
+        ticker_count = None
     min_date = max_date = None
     if date_col:
-        min_date, max_date = conn.execute(
-            f"SELECT MIN({date_col}), MAX({date_col}) FROM {table}"
+        # Use indexed ORDER BY probes instead of MIN/MAX aggregates to avoid
+        # full scans on very large SQLite tables.
+        min_row = conn.execute(
+            f"""
+            SELECT {date_col}
+            FROM {table}
+            WHERE {date_col} IS NOT NULL
+            ORDER BY {date_col} ASC
+            LIMIT 1
+            """
         ).fetchone()
+        max_row = conn.execute(
+            f"""
+            SELECT {date_col}
+            FROM {table}
+            WHERE {date_col} IS NOT NULL
+            ORDER BY {date_col} DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        min_date = min_row[0] if min_row else None
+        max_date = max_row[0] if max_row else None
     last_updated_at = None
-    if updated_col:
+    if updated_col and include_expensive_checks:
         last_updated_at = conn.execute(f"SELECT MAX({updated_col}) FROM {table}").fetchone()[0]
     last_job_run_id = None
-    if job_col:
+    if job_col and include_expensive_checks:
         if updated_col:
             row = conn.execute(
                 f"""
@@ -99,6 +153,7 @@ def _table_stats(conn: sqlite3.Connection, table: str) -> dict[str, Any]:
         "table": table,
         "exists": True,
         "row_count": row_count,
+        "row_count_mode": row_count_mode,
         "ticker_count": ticker_count,
         "date_column": date_col,
         "min_date": str(min_date) if min_date is not None else None,
@@ -170,7 +225,11 @@ def _resolve_exposure_source_table(conn: sqlite3.Connection) -> str:
 
 
 @router.get("/data/diagnostics")
-async def get_data_diagnostics(include_paths: bool = Query(False)):
+def get_data_diagnostics(
+    include_paths: bool = Query(False),
+    include_exact_row_counts: bool = Query(False),
+    include_expensive_checks: bool = Query(False),
+):
     data_conn = sqlite3.connect(str(DATA_DB))
     cache_conn = sqlite3.connect(str(CACHE_DB))
     try:
@@ -184,15 +243,38 @@ async def get_data_diagnostics(include_paths: bool = Query(False)):
             "universe_cross_section_snapshot": "universe_cross_section_snapshot",
         }
         source_tables = {
-            label: _table_stats(data_conn, table) if _table_exists(data_conn, table) else None
+            label: (
+                _table_stats(
+                    data_conn,
+                    table,
+                    include_exact_row_counts=include_exact_row_counts,
+                    include_expensive_checks=include_expensive_checks,
+                )
+                if _table_exists(data_conn, table)
+                else None
+            )
             for label, table in canonical_tables.items()
         }
 
         exposure_source_table = _resolve_exposure_source_table(data_conn)
 
-        dup_stats = {
-            "active_exposure_source": _exposure_duplicate_stats(data_conn, exposure_source_table),
-        }
+        if include_expensive_checks:
+            dup_stats = {
+                "active_exposure_source": {
+                    **_exposure_duplicate_stats(data_conn, exposure_source_table),
+                    "computed": True,
+                },
+            }
+        else:
+            dup_stats = {
+                "active_exposure_source": {
+                    "table": exposure_source_table,
+                    "exists": _table_exists(data_conn, exposure_source_table),
+                    "duplicate_groups": None,
+                    "duplicate_extra_rows": None,
+                    "computed": False,
+                },
+            }
 
         elig_summary = {
             "available": False,

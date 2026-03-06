@@ -301,6 +301,7 @@ def build_universe_ticker_loadings(
     search_index = [
         {
             "ticker": t,
+            "ric": d.get("ric", None),
             "name": d.get("name", ""),
             "trbc_economic_sector_short": d.get("trbc_economic_sector_short", ""),
             "trbc_economic_sector_short_abbr": d.get(

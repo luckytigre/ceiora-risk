@@ -36,6 +36,81 @@ export interface PortfolioData {
   _cached: boolean;
 }
 
+export type HoldingsImportMode = "replace_account" | "upsert_absolute" | "increment_delta";
+
+export interface HoldingsModeData {
+  modes: HoldingsImportMode[];
+  default: HoldingsImportMode;
+}
+
+export interface HoldingsAccount {
+  account_id: string;
+  account_name: string;
+  is_active: boolean;
+  positions_count: number;
+  gross_quantity: number;
+  last_position_updated_at: string | null;
+}
+
+export interface HoldingsAccountsData {
+  accounts: HoldingsAccount[];
+}
+
+export interface HoldingsPosition {
+  account_id: string;
+  ric: string;
+  ticker: string;
+  quantity: number;
+  source: string;
+  updated_at: string | null;
+}
+
+export interface HoldingsPositionsData {
+  positions: HoldingsPosition[];
+  account_id: string | null;
+  count: number;
+}
+
+export interface HoldingsImportRowPayload {
+  account_id?: string;
+  ric?: string;
+  ticker?: string;
+  quantity: number;
+  source?: string;
+}
+
+export interface HoldingsImportResponse {
+  status: string;
+  mode: HoldingsImportMode;
+  account_id: string;
+  import_batch_id: string;
+  accepted_rows: number;
+  rejected_rows: number;
+  rejection_counts: Record<string, number>;
+  warnings: string[];
+  applied_upserts: number;
+  applied_deletes: number;
+  refresh?: {
+    started: boolean;
+    state: Record<string, unknown>;
+  } | null;
+  preview_rejections?: Array<Record<string, unknown>>;
+}
+
+export interface HoldingsPositionEditResponse {
+  status: string;
+  action: string;
+  account_id: string;
+  ric: string;
+  ticker: string | null;
+  quantity: number;
+  import_batch_id: string;
+  refresh?: {
+    started: boolean;
+    state: Record<string, unknown>;
+  } | null;
+}
+
 export interface FactorDrilldownItem {
   ticker: string;
   weight: number;
@@ -165,6 +240,7 @@ export interface UniverseTickerHistoryData {
 
 export interface UniverseSearchItem {
   ticker: string;
+  ric?: string | null;
   name: string;
   trbc_economic_sector_short: string;
   trbc_economic_sector_short_abbr: string;
@@ -410,4 +486,33 @@ export interface DataDiagnosticsData {
     updated_at_unix: number | null;
     updated_at_utc: string | null;
   }>;
+}
+
+export interface RefreshStatusState {
+  status: string;
+  job_id: string | null;
+  pipeline_run_id: string | null;
+  profile: string | null;
+  requested_profile: string | null;
+  mode: string | null;
+  as_of_date: string | null;
+  resume_run_id: string | null;
+  from_stage: string | null;
+  to_stage: string | null;
+  force_core: boolean;
+  force_risk_recompute: boolean;
+  requested_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  result: Record<string, unknown> | null;
+  error: {
+    type?: string;
+    message?: string;
+    traceback?: string;
+  } | null;
+}
+
+export interface RefreshStatusData {
+  status: string;
+  refresh: RefreshStatusState;
 }

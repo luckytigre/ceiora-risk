@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { BackgroundProvider } from "@/components/BackgroundContext";
+import { RecomputePromptProvider } from "@/components/RecomputePromptContext";
 import Neo2DotBackground from "@/components/Neo2DotBackground";
 import TabNav from "@/components/TabNav";
 
@@ -14,9 +15,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <BackgroundProvider>
-          <Neo2DotBackground />
-          <TabNav />
-          <main className="dash-main">{children}</main>
+          <RecomputePromptProvider>
+            <Neo2DotBackground />
+            <TabNav />
+            <main className="dash-main">{children}</main>
+          </RecomputePromptProvider>
         </BackgroundProvider>
       </body>
     </html>

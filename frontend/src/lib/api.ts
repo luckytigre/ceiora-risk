@@ -23,6 +23,15 @@ export class ApiError extends Error {
 
 export const apiPath = {
   portfolio: () => "/api/portfolio",
+  holdingsModes: () => "/api/holdings/modes",
+  holdingsAccounts: () => "/api/holdings/accounts",
+  holdingsPositions: (accountId?: string | null) =>
+    accountId && accountId.trim().length > 0
+      ? `/api/holdings/positions?account_id=${encodeURIComponent(accountId.trim())}`
+      : "/api/holdings/positions",
+  holdingsImport: () => "/api/holdings/import",
+  holdingsPosition: () => "/api/holdings/position",
+  holdingsPositionRemove: () => "/api/holdings/position/remove",
   exposures: (mode: string) => `/api/exposures?mode=${encodeURIComponent(mode)}`,
   exposureHistory: (factor: string, years: number) =>
     `/api/exposures/history?factor=${encodeURIComponent(factor)}&years=${years}`,
@@ -36,6 +45,7 @@ export const apiPath = {
   healthDiagnostics: () => "/api/health/diagnostics",
   dataDiagnostics: () => "/api/data/diagnostics",
   refresh: (mode: RefreshMode) => `/api/refresh?mode=${mode}`,
+  refreshStatus: () => "/api/refresh/status",
 };
 
 async function parseErrorDetail(res: Response): Promise<unknown> {

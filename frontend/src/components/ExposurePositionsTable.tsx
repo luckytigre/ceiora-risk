@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Position } from "@/lib/types";
 import TableRowToggle from "@/components/TableRowToggle";
+import ShareAdjuster from "@/components/ShareAdjuster";
 
 interface ExposurePositionsTableProps {
   positions: Position[];
@@ -81,7 +82,12 @@ export default function ExposurePositionsTable({ positions }: ExposurePositionsT
             <tr key={pos.ticker}>
               <td>{pos.ticker}</td>
               <td>{pos.trbc_industry_group || "Unmapped"}</td>
-              <td className="text-right">{fmtShares(pos.shares)}</td>
+              <td className="text-right">
+                <span className="share-cell">
+                  <span>{fmtShares(pos.shares)}</span>
+                  <ShareAdjuster ticker={pos.ticker} currentShares={pos.shares} accountId={pos.account} />
+                </span>
+              </td>
               <td className="text-right">{fmtCurrency(pos.market_value)}</td>
               <td className="text-right">{riskMixLabel(pos)}</td>
             </tr>

@@ -4,6 +4,9 @@
 
 :root {
   --bg-primary: #1f1f21;
+  --bg-primary-top: #252529;
+  --bg-primary-mid: #202024;
+  --bg-primary-bottom: #19191d;
   --bg-secondary: #111111;
   --bg-card: rgba(14, 19, 33, 0.7);
   --bg-card-hover: rgba(19, 25, 43, 0.78);
@@ -43,8 +46,21 @@
 
 html,
 body {
-  background: var(--bg-primary);
+  background: transparent;
   color: var(--text-primary);
+}
+
+html {
+  background-color: var(--bg-primary);
+  background-image: linear-gradient(
+    180deg,
+    var(--bg-primary-top) 0%,
+    var(--bg-primary-mid) 46%,
+    var(--bg-primary-bottom) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 100% 100vh;
+  background-attachment: fixed;
 }
 
 * {
@@ -58,7 +74,7 @@ body {
   line-height: 1.36;
   position: relative;
   overflow-x: hidden;
-  background: var(--bg-primary);
+  background: transparent;
 }
 
 /* Dot background */
@@ -100,13 +116,13 @@ main {
 
 /* Tab navigation */
 .dash-tabs {
-  background-color: rgba(16, 16, 19, 1);
+  background-color: rgba(16, 16, 19, 0.78);
   border-bottom: none;
   padding: 0 32px;
   position: sticky;
   top: 0;
   z-index: 6000;
-  box-shadow: 0 8px 18px rgba(2, 6, 14, 0.52);
+  box-shadow: 0 5px 12px rgba(2, 6, 14, 0.34);
   display: flex;
   align-items: center;
   min-height: 48px;
@@ -129,6 +145,139 @@ main {
   display: flex;
   justify-content: center;
   gap: 2px;
+}
+
+.dash-tabs-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dash-health-signal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(232, 237, 249, 0.82);
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dash-health-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 6px;
+}
+
+.dash-health-detail {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 7px);
+  z-index: 7000;
+  max-width: 560px;
+  padding: 4px 9px;
+  border-radius: 5px;
+  border: 1px solid rgba(154, 171, 214, 0.18);
+  background: rgba(12, 16, 26, 0.9);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  color: inherit;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  transition: opacity 0.12s ease;
+}
+
+.dash-health-signal:hover .dash-health-detail,
+.dash-health-signal:focus-visible .dash-health-detail {
+  opacity: 1;
+  visibility: visible;
+}
+
+.dash-health-signal.success {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.dash-health-signal.warning {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.dash-health-signal.error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.dash-sync-icon-btn {
+  color: #9ea2aa;
+}
+
+.dash-sync-icon-btn:hover {
+  color: #d5d8de;
+}
+
+.dash-sync-icon-btn:disabled {
+  opacity: 0.65;
+}
+
+.dash-sync-icon-btn.failed {
+  color: rgba(239, 149, 174, 0.95);
+}
+
+.dash-sync-icon-btn svg.spin {
+  animation: dash-sync-spin 0.9s linear infinite;
+}
+
+@keyframes dash-sync-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dash-recompute-btn {
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+  padding: 3px 10px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 0;
+}
+
+.dash-recompute-btn:hover {
+  border-color: rgba(245, 158, 11, 0.62);
+}
+
+.dash-recompute-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.dash-recompute-btn.failed {
+  border-color: rgba(224, 87, 127, 0.62);
+  color: rgba(239, 149, 174, 0.95);
+  background: rgba(224, 87, 127, 0.09);
 }
 
 .dash-menu-btn {
@@ -211,6 +360,8 @@ main {
   background: transparent;
   color: #9ea2aa;
   padding: 10px 12px;
+  width: 90px;
+  text-align: center;
   border-radius: 0;
   cursor: pointer;
   white-space: nowrap;
@@ -230,6 +381,22 @@ main {
   background: transparent;
   box-shadow: none;
   font-weight: 580;
+}
+
+@media (max-width: 1024px) {
+  .dash-tab-btn {
+    width: 82px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+@media (max-width: 800px) {
+  .dash-tab-btn {
+    width: 74px;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+  }
 }
 
 /* KPI cards */
@@ -436,6 +603,51 @@ main {
   font-weight: 400;
 }
 
+.share-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.share-adjuster-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.share-adjuster-btn {
+  border: 1px solid rgba(154, 171, 214, 0.22);
+  background: rgba(226, 231, 238, 0.05);
+  color: rgba(232, 237, 249, 0.86);
+  width: 20px;
+  height: 18px;
+  line-height: 1;
+  font-size: 11px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.share-adjuster-btn:hover {
+  border-color: rgba(154, 171, 214, 0.45);
+}
+
+.share-adjuster-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.share-adjuster-btn.active {
+  border-color: rgba(59, 169, 225, 0.55);
+  color: rgba(232, 237, 249, 0.95);
+}
+
+.share-adjuster-error {
+  color: rgba(224, 87, 127, 0.9);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .positive {
   color: var(--text-positive);
 }
@@ -603,6 +815,53 @@ main {
 .explore-search-btn:hover {
   color: rgba(232, 237, 249, 1);
   border-bottom-color: rgba(226, 231, 238, 0.58);
+}
+
+.holdings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 12px;
+}
+
+.holdings-form-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.holdings-form-block label {
+  color: rgba(169, 182, 210, 0.78);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.holdings-compact-input {
+  padding: 6px 8px;
+  min-height: 30px;
+  font-size: 11px;
+}
+
+.holdings-file-input {
+  font-size: 11px;
+  color: rgba(169, 182, 210, 0.86);
+}
+
+.holdings-file-input::file-selector-button {
+  border: 1px solid rgba(154, 171, 214, 0.24);
+  background: rgba(56, 64, 86, 0.96);
+  color: rgba(239, 244, 252, 0.98);
+  padding: 4px 8px;
+  margin-right: 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.holdings-file-input::file-selector-button:hover {
+  border-color: rgba(154, 171, 214, 0.4);
+  background: rgba(68, 76, 100, 0.98);
 }
 
 /* Typeahead dropdown */
