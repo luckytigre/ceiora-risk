@@ -1,4 +1,4 @@
-.PHONY: dev backend backend-prod frontend refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry clean-local
+.PHONY: dev backend backend-prod frontend frontend-safe refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check clean-local
 
 setup:
 	cd backend && python3 -m pip install -e ".[dev]"
@@ -12,6 +12,9 @@ backend-prod:
 
 frontend:
 	cd frontend && npm run dev -- --port 3000
+
+frontend-safe:
+	cd frontend && rm -rf .next && npm run dev
 
 dev:
 	@echo "Starting backend and frontend..."
@@ -49,6 +52,9 @@ prune-history:
 
 prune-history-dry:
 	python3 -m backend.scripts.prune_history_by_lookback --years $${YEARS:-5} --dry-run
+
+smoke-check:
+	./scripts/smoke_check.sh
 
 clean-local:
 	find . -name ".DS_Store" -delete || true

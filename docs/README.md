@@ -2,6 +2,7 @@
 
 ## Core Operations
 - `OPERATIONS_PLAYBOOK.md`: runbook for refresh, retention, validation, and recovery.
+- `OPERATIONS_HARDENING_CHECKLIST.md`: pre-run hygiene, smoke checks, and rollback guardrails.
 - `specs/cUSE4_engine_spec.md`: cUSE4 model/foundation spec.
 
 ## Migration Notes

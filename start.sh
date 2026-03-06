@@ -4,6 +4,8 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_PORT=8000
 FRONTEND_PORT=3000
+BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
+FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 BACKEND_PID=""
 FRONTEND_PID=""
 FORCE_KILL_PORTS="${FORCE_KILL_PORTS:-0}"
@@ -100,14 +102,14 @@ BACKEND_PID=$!
 
 # --- Start frontend ---
 echo "Starting frontend on :$FRONTEND_PORT..."
-(cd "$DIR/frontend" && npm run dev -- --port "$FRONTEND_PORT") &
+(cd "$DIR/frontend" && npm run dev) &
 FRONTEND_PID=$!
 
 # --- Wait for backend ---
 echo "Waiting for backend..."
 BACKEND_READY=0
 for i in $(seq 1 30); do
-  if curl -sf "http://localhost:$BACKEND_PORT/api/health" >/dev/null 2>&1; then
+  if curl -sf "http://$BACKEND_HOST:$BACKEND_PORT/api/health" >/dev/null 2>&1; then
     BACKEND_READY=1
     break
   fi
@@ -123,7 +125,7 @@ fi
 echo "Waiting for frontend..."
 FRONTEND_READY=0
 for i in $(seq 1 30); do
-  if curl -sfI "http://localhost:$FRONTEND_PORT" >/dev/null 2>&1; then
+  if curl -sfI "http://$FRONTEND_HOST:$FRONTEND_PORT" >/dev/null 2>&1; then
     FRONTEND_READY=1
     break
   fi
@@ -141,18 +143,19 @@ if [ -z "$REFRESH_TOKEN" ] && [ -f "$DIR/backend/.env" ]; then
   REFRESH_TOKEN="$(grep -E '^REFRESH_API_TOKEN=' "$DIR/backend/.env" | tail -n1 | cut -d= -f2- | tr -d '\r' || true)"
 fi
 if [ -n "$REFRESH_TOKEN" ]; then
-  CURL_REFRESH_HEADERS=(-H "X-Refresh-Token: $REFRESH_TOKEN")
+  if ! curl -sf -X POST -H "X-Refresh-Token: $REFRESH_TOKEN" "http://$BACKEND_HOST:$BACKEND_PORT/api/refresh?mode=light" >/dev/null; then
+    echo "WARNING: Could not trigger background refresh. App is running, but data may be stale."
+  fi
 else
-  CURL_REFRESH_HEADERS=()
-fi
-if ! curl -sf -X POST "${CURL_REFRESH_HEADERS[@]}" "http://localhost:$BACKEND_PORT/api/refresh?mode=light" >/dev/null; then
-  echo "WARNING: Could not trigger background refresh. App is running, but data may be stale."
+  if ! curl -sf -X POST "http://$BACKEND_HOST:$BACKEND_PORT/api/refresh?mode=light" >/dev/null; then
+    echo "WARNING: Could not trigger background refresh. App is running, but data may be stale."
+  fi
 fi
 
 echo ""
 echo "==================================="
-echo "  Open http://localhost:$FRONTEND_PORT"
-echo "  Refresh status: http://localhost:$BACKEND_PORT/api/refresh/status"
+echo "  Open http://$FRONTEND_HOST:$FRONTEND_PORT"
+echo "  Refresh status: http://$BACKEND_HOST:$BACKEND_PORT/api/refresh/status"
 echo "  Ctrl+C to stop"
 echo "==================================="
 
