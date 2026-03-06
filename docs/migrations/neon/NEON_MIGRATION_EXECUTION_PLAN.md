@@ -1,6 +1,6 @@
 # Neon Migration Execution Plan
 
-Date: 2026-03-05
+Date: 2026-03-06
 Owner: Codex
 
 ## Objective
@@ -8,6 +8,7 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 1. Post-refresh canonical mirror.
 2. Pruned serving store (10y source + 5y analytics windows).
 3. Controlled read target, enabled surface-by-surface.
+4. Holdings runtime source (positions) in Neon.
 
 ## Implemented Now
 
@@ -38,6 +39,11 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 - Current runtime setting for controlled cutover can include all three surfaces:
   - `NEON_READ_SURFACES=core_reads,factor_history,price_history`
 
+### 4) Holdings runtime cutover
+- `backend/portfolio/positions_store.py` now reads from Neon `holdings_positions_current` when `DATA_BACKEND=neon`.
+- In non-Neon mode, existing in-code mock positions remain the local fallback.
+- Neon mode intentionally does not fall back to in-code mocks on query failure.
+
 ## Environment Controls
 - `DATA_BACKEND=sqlite|neon`
 - `NEON_DATABASE_URL=...`
@@ -62,6 +68,7 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 4. After stable operation, either:
    - keep mixed mode with selected surfaces, or
    - set `DATA_BACKEND=neon` for full read cutover.
+5. For holdings, seed/import Neon positions and verify the dashboard position set before switching `DATA_BACKEND=neon`.
 
 ## Operator Notes
 - Local SQLite remains the LSEG ingest authority and keeps full history.
