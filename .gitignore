@@ -13,6 +13,7 @@ node_modules/
 
 # Environment
 .env
+.neon
 *.db
 *.db.*
 *.db-wal
@@ -25,6 +26,8 @@ backend/runtime/
 backend/neon_stage1_prep/
 backend/offline_backups/
 backend/DB_HEALTH_AUDIT_*.json
+frontend/.next_devseed_*/
+frontend/.next_stale_*/
 
 # IDE
 .idea/
