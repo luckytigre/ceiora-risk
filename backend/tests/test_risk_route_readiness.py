@@ -15,8 +15,8 @@ def test_risk_route_accepts_correlation_cov_matrix(monkeypatch) -> None:
         "risk_engine": {
             "specific_risk_ticker_count": 100,
         },
-        "risk_shares": {"industry": 60.0, "style": 30.0, "idio": 10.0},
-        "component_shares": {"industry": 0.67, "style": 0.33},
+        "risk_shares": {"country": 0.0, "industry": 60.0, "style": 30.0, "idio": 10.0},
+        "component_shares": {"country": 0.0, "industry": 0.67, "style": 0.33},
         "factor_details": [],
         "r_squared": 0.4,
         "condition_number": 1200.0,

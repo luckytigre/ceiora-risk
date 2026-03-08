@@ -150,8 +150,8 @@ export default function ExposuresPage() {
                     <span className="col-help-wrap">
                       <HelpLabel
                         label="Category"
-                        plain="Whether the factor is industry-based or style-based."
-                        math="Category ∈ {industry, style}"
+                        plain="Whether the factor is country, industry, or style based."
+                        math="Category ∈ {country, industry, style}"
                         interpret={{
                           lookFor: "If one category overwhelmingly dominates.",
                           good: "Mix aligns with your intended portfolio construction.",
@@ -240,7 +240,11 @@ export default function ExposuresPage() {
                     <td><strong>{d.factor}</strong></td>
                     <td>
                       <span className={`text-xs ${
-                        d.category === "style" ? "text-[#f5bae4]" : "text-[#cc3558]"
+                        d.category === "style"
+                          ? "text-[#f5bae4]"
+                          : d.category === "country"
+                            ? "text-[#58b6c7]"
+                            : "text-[#cc3558]"
                       }`}>
                         {d.category}
                       </span>

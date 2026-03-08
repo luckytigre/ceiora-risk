@@ -1,5 +1,6 @@
 /** Short display names for Barra factor labels (style + industry). */
 const SHORT_LABELS: Record<string, string> = {
+  "Country: Non-US": "Non-US",
   // Style factors
   "Book-to-Price": "B/P",
   "Earnings Yield": "Earn Yld",
@@ -126,7 +127,7 @@ export function shortFactorLabel(name: string): string {
  * Phase B: all style factors, estimated on Phase A residuals.
  * Size is not orthogonalised itself — other factors are orthogonalised *to* it.
  */
-type FactorTier = 1 | 2;
+type FactorTier = 1 | 2 | 3;
 
 export const STYLE_FACTORS = new Set([
   "Size", "Nonlinear Size", "Liquidity", "Beta",
@@ -135,12 +136,17 @@ export const STYLE_FACTORS = new Set([
   "Momentum", "Short-Term Reversal", "Residual Volatility",
 ]);
 
+export function isCountryFactor(name: string): boolean {
+  return String(name || "").startsWith("Country:");
+}
+
 /**
  * Sort key for regression hierarchy:
  *  1 = industry (Phase A alongside intercept)
  *  2 = style (Phase B, on Phase A residuals)
  */
 export function factorTier(name: string): FactorTier {
-  if (STYLE_FACTORS.has(name)) return 2;
-  return 1; // industry
+  if (isCountryFactor(name)) return 1;
+  if (STYLE_FACTORS.has(name)) return 3;
+  return 2; // industry
 }

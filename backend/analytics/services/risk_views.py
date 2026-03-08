@@ -14,7 +14,11 @@ from backend.analytics.contracts import (
     PositionRiskMixPayload,
     SpecificRiskPayload,
 )
-from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL, portfolio_factor_exposure
+from backend.risk_model.risk_attribution import (
+    SYSTEMATIC_CATEGORIES,
+    portfolio_factor_exposure,
+    systematic_variance_by_category,
+)
 from backend.portfolio.positions_store import get_position_meta, get_shares, get_tickers
 
 
@@ -238,16 +242,13 @@ def compute_position_risk_mix(
         for pos in positions:
             ticker = str(pos.get("ticker", "")).upper()
             if ticker:
-                out[ticker] = {"industry": 0.0, "style": 0.0, "idio": 0.0}
+                out[ticker] = {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}
         return out
 
     factors = [str(c) for c in cov.columns if str(c).lower() != "market"]
     if not factors:
         return {}
-    idx = {f: i for i, f in enumerate(factors)}
     f_mat = cov.reindex(index=factors, columns=factors).to_numpy(dtype=float)
-    style_idx = [idx[f] for f in factors if f in STYLE_COLUMN_TO_LABEL.values()]
-    industry_idx = [idx[f] for f in factors if f not in STYLE_COLUMN_TO_LABEL.values()]
 
     spec_map = specific_risk_by_ticker or {}
     out: dict[str, PositionRiskMixPayload] = {}
@@ -257,67 +258,40 @@ def compute_position_risk_mix(
             continue
         exps = pos.get("exposures", {}) or {}
         x = np.array([_finite_float(exps.get(f), 0.0) for f in factors], dtype=float)
-
-        var_ind = 0.0
-        var_style = 0.0
-        var_cross = 0.0
-        if industry_idx:
-            xi = x[industry_idx]
-            fii = f_mat[np.ix_(industry_idx, industry_idx)]
-            var_ind = _finite_float(float(xi.T @ fii @ xi), 0.0)
-        if style_idx:
-            xs = x[style_idx]
-            fss = f_mat[np.ix_(style_idx, style_idx)]
-            var_style = _finite_float(float(xs.T @ fss @ xs), 0.0)
-        if industry_idx and style_idx:
-            xi = x[industry_idx]
-            xs = x[style_idx]
-            fis = f_mat[np.ix_(industry_idx, style_idx)]
-            var_cross = _finite_float(float(2.0 * xi.T @ fis @ xs), 0.0)
-
-        base_ind = max(0.0, var_ind)
-        base_style = max(0.0, var_style)
-        denom = base_ind + base_style
-        if abs(var_cross) <= 1e-12:
-            cross_ind = 0.0
-            cross_style = 0.0
-        elif denom <= 1e-12:
-            cross_ind = 0.5 * var_cross
-            cross_style = 0.5 * var_cross
-        else:
-            w_ind = base_ind / denom
-            w_style = base_style / denom
-            cross_ind = w_ind * var_cross
-            cross_style = w_style * var_cross
-
-        sys_ind = max(0.0, base_ind + cross_ind)
-        sys_style = max(0.0, base_style + cross_style)
+        systematic = systematic_variance_by_category(
+            factors=factors,
+            exposures=x,
+            covariance=f_mat,
+        )
         spec_var = _finite_float(spec_map.get(ticker, {}).get("specific_var"), 0.0)
         if spec_var < 0:
             spec_var = 0.0
 
-        total = sys_ind + sys_style + spec_var
+        total = float(sum(systematic.values())) + spec_var
         if total <= 0:
-            out[ticker] = {"industry": 0.0, "style": 0.0, "idio": 0.0}
+            out[ticker] = {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}
             continue
 
-        ind_pct = 100.0 * sys_ind / total
-        style_pct = 100.0 * sys_style / total
+        systematic_pct = {
+            category: 100.0 * float(systematic.get(category, 0.0)) / total
+            for category in SYSTEMATIC_CATEGORIES
+        }
         idio_pct = 100.0 * spec_var / total
 
-        ind_pct = max(0.0, ind_pct)
-        style_pct = max(0.0, style_pct)
+        for category in systematic_pct:
+            systematic_pct[category] = max(0.0, systematic_pct[category])
         idio_pct = max(0.0, idio_pct)
-        s = ind_pct + style_pct + idio_pct
+        s = float(sum(systematic_pct.values())) + idio_pct
         if s > 0:
             k = 100.0 / s
-            ind_pct *= k
-            style_pct *= k
+            for category in systematic_pct:
+                systematic_pct[category] *= k
             idio_pct *= k
 
         out[ticker] = {
-            "industry": round(ind_pct, 2),
-            "style": round(style_pct, 2),
+            "country": round(systematic_pct.get("country", 0.0), 2),
+            "industry": round(systematic_pct.get("industry", 0.0), 2),
+            "style": round(systematic_pct.get("style", 0.0), 2),
             "idio": round(idio_pct, 2),
         }
     return out

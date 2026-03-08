@@ -42,7 +42,7 @@ export default function OverviewPage() {
   const posCount = portfolio?.position_count ?? 0;
   const rSquared = risk?.r_squared ?? 0;
   const condNum = risk?.condition_number ?? 0;
-  const riskShares = risk?.risk_shares ?? { industry: 0, style: 0, idio: 100 };
+  const riskShares = risk?.risk_shares ?? { country: 0, industry: 0, style: 0, idio: 100 };
   const modelAsOf = risk?.risk_engine?.factor_returns_latest_date;
   const lagDays = risk?.risk_engine?.cross_section_min_age_days;
   const latestSourceAsOf = String(

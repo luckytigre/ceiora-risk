@@ -824,9 +824,11 @@ def compute_health_diagnostics(data_db: Path, cache_db: Path) -> dict[str, Any]:
     }
 
     portfolio_variance_split = {
+        "country_pct_total": float((risk_cache.get("risk_shares") or {}).get("country", 0.0) or 0.0),
         "industry_pct_total": float((risk_cache.get("risk_shares") or {}).get("industry", 0.0) or 0.0),
         "style_pct_total": float((risk_cache.get("risk_shares") or {}).get("style", 0.0) or 0.0),
         "idio_pct_total": float((risk_cache.get("risk_shares") or {}).get("idio", 0.0) or 0.0),
+        "country_pct_factor_only": float((risk_cache.get("component_shares") or {}).get("country", 0.0) or 0.0) * 100.0,
         "industry_pct_factor_only": float((risk_cache.get("component_shares") or {}).get("industry", 0.0) or 0.0) * 100.0,
         "style_pct_factor_only": float((risk_cache.get("component_shares") or {}).get("style", 0.0) or 0.0) * 100.0,
     }

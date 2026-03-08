@@ -27,6 +27,12 @@ export default function RiskDecompChart({ shares }: RiskDecompChartProps) {
     labels,
     datasets: [
       {
+        label: "Country",
+        data: [shares.country || 0],
+        backgroundColor: "#58b6c7",
+        barThickness: 18,
+      },
+      {
         label: "Industry",
         data: [shares.industry || 0],
         backgroundColor: "#cc3558",

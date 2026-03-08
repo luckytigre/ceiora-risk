@@ -25,7 +25,7 @@ from backend.risk_model.eligibility import (
     structural_eligibility_for_date,
 )
 from backend.risk_model.descriptors import FULL_STYLE_ORTH_RULES, canonicalize_style_scores
-from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
+from backend.risk_model.risk_attribution import COUNTRY_NON_US_FACTOR, STYLE_COLUMN_TO_LABEL
 from backend.risk_model.wls_regression import estimate_factor_returns_two_phase
 from backend.trading_calendar import filter_xnys_sessions, non_xnys_dates, previous_or_same_xnys_session
 
@@ -566,8 +566,18 @@ def compute_daily_factor_returns(
             .astype(str)
             .str.strip()
         )
+        country_series = (
+            eligibility.loc[valid_idx, "hq_country_code"]
+            .fillna("")
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
         if industry_series.eq("").all():
             skip_counts["missing_l2_sector"] += 1
+            continue
+        if country_series.eq("").all():
+            skip_counts["missing_country"] += 1
             continue
 
         returns = returns_series.to_numpy(dtype=float)
@@ -580,19 +590,25 @@ def compute_daily_factor_returns(
         style_scores = exp_snap.loc[valid_idx, style_cols_present].copy()
         style_scores.columns = style_names
 
-        # Industry exposures (one-hot from TRBC L2 business-sector groups).
-        industry_dummies = pd.get_dummies(industry_series, dtype=float)
-        if industry_dummies.empty:
+        # Structural exposures: country block plus TRBC L2 business-sector groups.
+        structural_dummies = pd.get_dummies(industry_series, dtype=float)
+        if structural_dummies.empty:
             skip_counts["empty_dummies"] += 1
             continue
-        ind_x = industry_dummies.to_numpy(dtype=float)
-        ind_names = list(industry_dummies.columns)
+        non_us_indicator = (country_series != "US").astype(float)
+        if non_us_indicator.nunique(dropna=False) > 1:
+            structural_dummies = pd.concat(
+                [non_us_indicator.rename(COUNTRY_NON_US_FACTOR), structural_dummies],
+                axis=1,
+            )
+        ind_x = structural_dummies.to_numpy(dtype=float)
+        ind_names = list(structural_dummies.columns)
 
         style_canonical = canonicalize_style_scores(
             style_scores=style_scores,
             market_caps=market_cap_series.loc[valid_idx],
             orth_rules=FULL_STYLE_ORTH_RULES,
-            industry_exposures=industry_dummies,
+            industry_exposures=structural_dummies,
         )
         style_x = style_canonical[style_names].to_numpy(dtype=float)
 

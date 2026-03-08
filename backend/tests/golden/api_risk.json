@@ -1,10 +1,12 @@
 {
   "risk_shares": {
+    "country": 0.0,
     "industry": 28.0,
     "style": 32.0,
     "idio": 40.0
   },
   "component_shares": {
+    "country": 0.0,
     "industry": 0.467,
     "style": 0.533
   },

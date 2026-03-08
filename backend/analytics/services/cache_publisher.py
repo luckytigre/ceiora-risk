@@ -86,7 +86,10 @@ def build_model_sanity_report(
         )
 
     industry_pct = _finite_float(risk_shares.get("industry"), 0.0)
+    country_pct = _finite_float(risk_shares.get("country"), 0.0)
     style_pct = _finite_float(risk_shares.get("style"), 0.0)
+    if country_pct > 90.0:
+        warnings.append(f"Country risk share is highly concentrated at {country_pct:.1f}% of total risk.")
     if industry_pct > 90.0:
         warnings.append(f"Industry risk share is highly concentrated at {industry_pct:.1f}% of total risk.")
     if style_pct > 90.0:
@@ -120,6 +123,7 @@ def build_model_sanity_report(
         "update_available": bool(used_older_than_latest),
         "checks": {
             "factor_sign_mismatch_count": int(sign_mismatch),
+            "country_risk_share_pct": round(country_pct, 2),
             "latest_regression_coverage_pct": round(regression_cov * 100.0, 2),
             "latest_structural_eligible_n": int(eligibility_summary.get("structural_eligible_n", 0) or 0),
             "industry_risk_share_pct": round(industry_pct, 2),

@@ -31,6 +31,7 @@ class EligibilityContext:
     trbc_economic_sector_short_panel: pd.DataFrame
     trbc_business_sector_panel: pd.DataFrame
     trbc_industry_panel: pd.DataFrame
+    hq_country_code_panel: pd.DataFrame
     dates: list[str]
 
 
@@ -185,9 +186,9 @@ def _load_market_cap_panel(data_db: Path, dates: list[str]) -> pd.DataFrame:
 def _load_trbc_classification_panel(
     data_db: Path,
     dates: list[str],
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if not dates:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     conn = sqlite3.connect(str(data_db))
     try:
@@ -208,7 +209,8 @@ def _load_trbc_classification_panel(
                            h.as_of_date AS ref_date,
                            h.{h_sec_col} AS trbc_economic_sector_short,
                            h.{h_biz_col} AS trbc_business_sector,
-                           {ind_expr} AS trbc_industry_group
+                           {ind_expr} AS trbc_industry_group,
+                           COALESCE(UPPER(TRIM(h.hq_country_code)), '') AS hq_country_code
                     FROM security_classification_pit h
                     WHERE h.as_of_date <= ?
                     """,
@@ -223,7 +225,7 @@ def _load_trbc_classification_panel(
 
     if not parts:
         empty = pd.DataFrame(index=dates)
-        return empty, empty.copy(), empty.copy()
+        return empty, empty.copy(), empty.copy(), empty.copy()
 
     df = pd.concat(parts, ignore_index=True)
     df["ric"] = df["ric"].astype(str).str.upper()
@@ -231,9 +233,11 @@ def _load_trbc_classification_panel(
     df["trbc_economic_sector_short"] = _normalize_text_series(df["trbc_economic_sector_short"])
     df["trbc_business_sector"] = _normalize_text_series(df["trbc_business_sector"])
     df["trbc_industry_group"] = _normalize_text_series(df["trbc_industry_group"])
+    df["hq_country_code"] = _normalize_text_series(df["hq_country_code"]).str.upper()
     df["trbc_economic_sector_short"] = df["trbc_economic_sector_short"].replace({"": np.nan})
     df["trbc_business_sector"] = df["trbc_business_sector"].replace({"": np.nan})
     df["trbc_industry_group"] = df["trbc_industry_group"].replace({"": np.nan})
+    df["hq_country_code"] = df["hq_country_code"].replace({"": np.nan})
     df = df.dropna(subset=["ric", "ref_date"])
     df = (
         df.sort_values(["ref_date", "priority"])
@@ -252,9 +256,14 @@ def _load_trbc_classification_panel(
         df.pivot(index="ref_date", columns="ric", values="trbc_industry_group")
         .sort_index()
     )
+    country = (
+        df.pivot(index="ref_date", columns="ric", values="hq_country_code")
+        .sort_index()
+    )
     sec = sec.astype("string")
     biz = biz.astype("string")
     ind = ind.astype("string")
+    country = country.astype("string")
     full_index = sorted(set(sec.index.astype(str)).union(set(dates)))
     with pd.option_context("future.no_silent_downcasting", True):
         sec = sec.reindex(full_index).ffill().reindex(dates)
@@ -264,7 +273,10 @@ def _load_trbc_classification_panel(
     full_index = sorted(set(ind.index.astype(str)).union(set(dates)))
     with pd.option_context("future.no_silent_downcasting", True):
         ind = ind.reindex(full_index).ffill().reindex(dates)
-    return sec, biz, ind
+    full_index = sorted(set(country.index.astype(str)).union(set(dates)))
+    with pd.option_context("future.no_silent_downcasting", True):
+        country = country.reindex(full_index).ffill().reindex(dates)
+    return sec, biz, ind, country
 
 
 def _load_panels_from_cross_section_snapshot(
@@ -364,7 +376,7 @@ def build_eligibility_context(
         merged_dates = sorted(set(str(d) for d in dates).union(exposure_dates))
 
     market_cap_panel = _load_market_cap_panel(data_db, merged_dates)
-    sector_panel, business_sector_panel, industry_panel = _load_trbc_classification_panel(data_db, merged_dates)
+    sector_panel, business_sector_panel, industry_panel, country_panel = _load_trbc_classification_panel(data_db, merged_dates)
     if market_cap_panel.empty or sector_panel.empty or business_sector_panel.empty or industry_panel.empty:
         snap_market, snap_sector, snap_business, snap_industry = _load_panels_from_cross_section_snapshot(
             data_db,
@@ -385,6 +397,7 @@ def build_eligibility_context(
         trbc_economic_sector_short_panel=sector_panel,
         trbc_business_sector_panel=business_sector_panel,
         trbc_industry_panel=industry_panel,
+        hq_country_code_panel=country_panel,
         dates=merged_dates,
     )
 
@@ -407,6 +420,7 @@ def structural_eligibility_for_snapshot(
     trbc_economic_sector_shorts: pd.Series,
     trbc_business_sectors: pd.Series,
     trbc_industries: pd.Series,
+    hq_country_codes: pd.Series,
     required_style_cols: list[str] | None = None,
     non_equity_sectors: set[str] | None = None,
 ) -> pd.DataFrame:
@@ -432,12 +446,15 @@ def structural_eligibility_for_snapshot(
     sec = _normalize_text_series(pd.Series(trbc_economic_sector_shorts, index=trbc_economic_sector_shorts.index)).reindex(idx)
     biz = _normalize_text_series(pd.Series(trbc_business_sectors, index=trbc_business_sectors.index)).reindex(idx)
     ind = _normalize_text_series(pd.Series(trbc_industries, index=trbc_industries.index)).reindex(idx)
+    country = _normalize_text_series(pd.Series(hq_country_codes, index=hq_country_codes.index)).str.upper().reindex(idx)
     frame["trbc_economic_sector_short"] = sec.fillna("")
     frame["trbc_business_sector"] = biz.fillna("")
     frame["trbc_industry_group"] = ind.fillna("")
+    frame["hq_country_code"] = country.fillna("")
     frame["has_trbc_economic_sector_short"] = frame["trbc_economic_sector_short"].str.len() > 0
     frame["has_trbc_business_sector"] = frame["trbc_business_sector"].str.len() > 0
     frame["has_trbc_industry"] = frame["trbc_industry_group"].str.len() > 0
+    frame["has_hq_country_code"] = frame["hq_country_code"].str.len() > 0
     frame["is_non_equity"] = frame["trbc_economic_sector_short"].isin(non_equity)
 
     frame["is_structural_eligible"] = (
@@ -445,6 +462,7 @@ def structural_eligibility_for_snapshot(
         & frame["has_market_cap"]
         & frame["has_trbc_economic_sector_short"]
         & frame["has_trbc_business_sector"]
+        & frame["has_hq_country_code"]
         & ~frame["is_non_equity"]
     )
 
@@ -459,6 +477,8 @@ def structural_eligibility_for_snapshot(
         # Keep legacy reason token for downstream compatibility, but gate on L2 business sector.
         if not bool(row.get("has_trbc_business_sector", False)):
             out.append("missing_trbc_industry")
+        if not bool(row.get("has_hq_country_code", False)):
+            out.append("missing_country")
         if bool(row.get("is_non_equity", False)):
             out.append("non_equity")
         return "|".join(out)
@@ -486,11 +506,13 @@ def structural_eligibility_for_date(
     sector_row = _panel_row(context.trbc_economic_sector_short_panel, str(date_key))
     business_sector_row = _panel_row(context.trbc_business_sector_panel, str(date_key))
     industry_row = _panel_row(context.trbc_industry_panel, str(date_key))
+    country_row = _panel_row(context.hq_country_code_panel, str(date_key))
     elig = structural_eligibility_for_snapshot(
         exposure_snapshot=snap,
         market_caps=mcap_row,
         trbc_economic_sector_shorts=sector_row,
         trbc_business_sectors=business_sector_row,
         trbc_industries=industry_row,
+        hq_country_codes=country_row,
     )
     return exp_date, elig

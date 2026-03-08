@@ -137,7 +137,7 @@ export default function ExposureBarChart({ factors, onBarClick, mode = "raw" }: 
     }
   }
 
-  const TIER_LABELS: Record<number, string> = { 1: "INDUSTRY", 2: "STYLE" };
+  const TIER_LABELS: Record<number, string> = { 1: "COUNTRY", 2: "INDUSTRY", 3: "STYLE" };
 
   const tierSeparatorPlugin: Plugin<"bar" | "line"> = {
     id: "tierSeparator",

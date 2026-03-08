@@ -45,6 +45,7 @@ class RiskEngineStatePayload(TypedDict):
 
 
 class PositionRiskMixPayload(TypedDict):
+    country: float
     industry: float
     style: float
     idio: float
@@ -74,12 +75,14 @@ class PositionPayload(TypedDict, total=False):
 
 
 class RiskSharesPayload(TypedDict):
+    country: float
     industry: float
     style: float
     idio: float
 
 
 class ComponentSharesPayload(TypedDict):
+    country: float
     industry: float
     style: float
 
@@ -205,6 +208,7 @@ class ModelSanityChecksPayload(TypedDict):
     factor_sign_mismatch_count: int
     latest_regression_coverage_pct: float
     latest_structural_eligible_n: int
+    country_risk_share_pct: float
     industry_risk_share_pct: float
     style_risk_share_pct: float
     idio_risk_share_pct: float

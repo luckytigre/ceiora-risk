@@ -19,7 +19,7 @@ from backend.analytics.contracts import (
 from backend.analytics.trbc_economic_sector_short import abbreviate_trbc_economic_sector_short
 from backend.risk_model.descriptors import FULL_STYLE_ORTH_RULES, canonicalize_style_scores
 from backend.risk_model.eligibility import build_eligibility_context, structural_eligibility_for_date
-from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
+from backend.risk_model.risk_attribution import COUNTRY_NON_US_FACTOR, STYLE_COLUMN_TO_LABEL
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +254,10 @@ def build_universe_ticker_loadings(
             (eligibility_df.loc[ric, "trbc_business_sector"] if ric in eligibility_df.index else "")
             or trbc_business_sector_map.get(ticker, "")
         )
+        hq_country_code = str(
+            (eligibility_df.loc[ric, "hq_country_code"] if ric in eligibility_df.index else "")
+            or ""
+        ).upper()
         market_cap = _finite_float(
             eligibility_df.loc[ric, "market_cap"] if ric in eligibility_df.index else mcap_map.get(ticker),
             np.nan,
@@ -262,6 +266,8 @@ def build_universe_ticker_loadings(
         exposures: dict[str, float] = {}
         if eligible and ticker in canonical_style_map:
             exposures.update(canonical_style_map[ticker])
+            if hq_country_code and hq_country_code != "US":
+                exposures[COUNTRY_NON_US_FACTOR] = 1.0
             if trbc_business_sector:
                 exposures[trbc_business_sector] = 1.0
 

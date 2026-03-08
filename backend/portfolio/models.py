@@ -21,7 +21,7 @@ class Position(BaseModel):
     weight: float = 0.0
     exposures: dict[str, float] = {}
     risk_contrib_pct: float = 0.0
-    risk_mix: dict[str, float] = {"industry": 0.0, "style": 0.0, "idio": 0.0}
+    risk_mix: dict[str, float] = {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}
 
 
 class Portfolio(BaseModel):

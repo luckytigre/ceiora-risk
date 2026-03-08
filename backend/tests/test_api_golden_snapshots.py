@@ -43,8 +43,8 @@ def test_api_portfolio_matches_golden_snapshot(monkeypatch) -> None:
 
 def test_api_risk_matches_golden_snapshot(monkeypatch) -> None:
     risk_payload = {
-        "risk_shares": {"industry": 28.0, "style": 32.0, "idio": 40.0},
-        "component_shares": {"industry": 0.467, "style": 0.533},
+        "risk_shares": {"country": 0.0, "industry": 28.0, "style": 32.0, "idio": 40.0},
+        "component_shares": {"country": 0.0, "industry": 0.467, "style": 0.533},
         "factor_details": [
             {
                 "factor": "Beta",

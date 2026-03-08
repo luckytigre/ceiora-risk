@@ -23,7 +23,7 @@ Scope note:
 
 - Country factor is segmented as `US` vs `non-US` (binary structural block).
 - Industry handling uses weighted sum-to-zero constraints (not dropped dummy baseline).
-- Country handling uses weighted sum-to-zero constraints.
+- Current runtime implementation carries country as an explicit `Country: Non-US` structural factor in phase A.
 - Factor covariance will include both:
   - Newey-West adjustment, and
   - shrinkage (toward a structured/shrunk target).
@@ -36,7 +36,7 @@ Current implemented state:
 - Eligible investable set is controlled by:
   - `classification_ok = 1`
   - `is_equity_eligible = 1`
-- As of this spec revision, the active eligible universe is 5,819 names (current DB run: 5,819 eligible RICs in `security_master`).
+- As of this spec revision, the active eligible universe is 5,820 names (current DB run: 5,820 eligible RICs in `security_master`).
 - Distinct tickers can be lower than distinct RICs due to share classes/listing aliases.
 
 Data-model state:
@@ -53,6 +53,7 @@ Data-model state:
 `security_master` is the only authoritative universe table.
 - Universe updates are explicit (file-driven merge into `security_master`), not auto-regenerated from index constituent builders.
 - Identity keys and mappings live in `security_master`; they are not duplicated into separate persisted mapping tables.
+- The git-versioned universe artifact is `data/reference/security_master_seed.csv`; live DB state is runtime, not source control.
 
 ### 3.2 Equity-only ingest scope (all canonical time-series)
 
@@ -63,8 +64,7 @@ Use centralized eligibility rules from `security_master` when ingesting/backfill
 ### 3.3 PIT and daily backfill policy
 
 - Fundamentals/classification are PIT-series with anchor-date backfills:
-  - quarterly baseline history,
-  - monthly extension where requested.
+  - monthly baseline history by default.
 - Prices are daily EOD history.
 - Backfills run in manageable shards/chunks to avoid long stuck processes.
 - For targeted repairs, subset backfills by RIC are supported.
@@ -230,7 +230,7 @@ Columns:
 ## 5) Barra Factors and Metric Roll-up
 
 Structural blocks in regression:
-- `country`: binary `US` vs `non-US`
+- `country`: binary `US` vs `non-US`, emitted in runtime as `Country: Non-US`
 - `industry`: TRBC industry-group dummies
 
 Style factors:
@@ -261,7 +261,7 @@ Per date on ESTU:
    - cap-weighted mean centering
    - equal-weighted std scaling
 4. Structural neutralization (WLS, cap-based weights):
-   - neutralize style descriptors to `country + industry` block as configured.
+   - neutralize style descriptors to `country + industry` structural block as configured.
 5. Build composites from standardized component descriptors.
 6. Orthogonalize styles in fixed order (WLS):
    - Nonlinear Size ⟂ Size
@@ -305,7 +305,8 @@ Descriptor-specific rules:
 Daily cross-sectional model on ESTU:
 - `r_i,t = CountryBlock_i,t + IndustryBlock_i,t + StyleBlock_i,t + eps_i,t`
 - WLS weights: cap-based, stable policy (recommended `sqrt(mcap)`).
-- Country and industry coefficients estimated with weighted sum-to-zero constraints.
+- Industry coefficients are estimated with weighted sum-to-zero constraints.
+- Country currently enters as an explicit binary structural factor (`Country: Non-US`) in the phase-A block.
 
 Persist:
 - factor returns by date/factor

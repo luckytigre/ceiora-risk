@@ -395,17 +395,20 @@ def run_refresh(
         specific_risk_by_ticker=specific_risk_by_ticker,
     )
     risk_shares: RiskSharesPayload = {
+        "country": float(raw_risk_shares.get("country", 0.0)),
         "industry": float(raw_risk_shares.get("industry", 0.0)),
         "style": float(raw_risk_shares.get("style", 0.0)),
         "idio": float(raw_risk_shares.get("idio", 0.0)),
     }
     component_shares: ComponentSharesPayload = {
+        "country": float(raw_component_shares.get("country", 0.0)),
         "industry": float(raw_component_shares.get("industry", 0.0)),
         "style": float(raw_component_shares.get("style", 0.0)),
     }
     factor_details: list[FactorDetailPayload] = [dict(row) for row in raw_factor_details]
     logger.info(
-        "Risk decomposition complete: industry=%.2f style=%.2f idio=%.2f factors=%s",
+        "Risk decomposition complete: country=%.2f industry=%.2f style=%.2f idio=%.2f factors=%s",
+        float(risk_shares["country"]),
         float(risk_shares["industry"]),
         float(risk_shares["style"]),
         float(risk_shares["idio"]),
@@ -426,6 +429,7 @@ def run_refresh(
         )
         pos["risk_contrib_pct"] = round(risk_score * pos["weight"] * 100, 2)
         pos["risk_mix"] = dict(position_risk_mix.get(str(pos.get("ticker", "")).upper(), {
+            "country": 0.0,
             "industry": 0.0,
             "style": 0.0,
             "idio": 0.0,

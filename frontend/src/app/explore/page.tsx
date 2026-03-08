@@ -24,7 +24,7 @@ interface ExploreRow {
   tier: number;
 }
 
-const TIER_NAMES: Record<number, string> = { 1: "Industry", 2: "Style" };
+const TIER_NAMES: Record<number, string> = { 1: "Country", 2: "Industry", 3: "Style" };
 
 function fmtPct(value: number): string {
   return `${(value * 100).toFixed(2)}%`;

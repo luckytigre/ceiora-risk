@@ -201,7 +201,7 @@ def run_backfill(
     max_retries: int,
     sleep_seconds: float,
     rics_csv: str | None = None,
-    frequency: str = "quarterly",
+    frequency: str = "monthly",
     write_fundamentals: bool = True,
     write_prices: bool = True,
     write_classification: bool = True,
@@ -308,7 +308,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--max-retries", type=int, default=1, help="Retries per shard on failure")
     p.add_argument("--sleep-seconds", type=float, default=2.0, help="Sleep between retries")
     p.add_argument("--rics", default=None, help="Optional comma-separated RIC subset")
-    p.add_argument("--frequency", choices=["quarterly", "monthly"], default="quarterly", help="PIT schedule frequency")
+    p.add_argument("--frequency", choices=["quarterly", "monthly"], default="monthly", help="PIT schedule frequency")
     p.add_argument("--skip-fundamentals", action="store_true", help="Skip fundamentals writes")
     p.add_argument("--skip-prices", action="store_true", help="Skip prices writes")
     p.add_argument("--skip-classification", action="store_true", help="Skip classification writes")

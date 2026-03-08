@@ -49,8 +49,8 @@ def test_stage_refresh_cache_snapshot_is_not_live_until_publish(monkeypatch, tmp
         specific_risk_by_security={"AAPL.OQ": {"ticker": "AAPL", "specific_var": 0.01}},
         positions=[{"ticker": "AAPL", "weight": 1.0, "exposures": {"Beta": 1.1}}],
         total_value=100.0,
-        risk_shares={"industry": 20.0, "style": 30.0, "idio": 50.0},
-        component_shares={"industry": 0.4, "style": 0.6},
+        risk_shares={"country": 0.0, "industry": 20.0, "style": 30.0, "idio": 50.0},
+        component_shares={"country": 0.0, "industry": 0.4, "style": 0.6},
         factor_details=[
             {"factor": "Beta", "exposure": 0.1, "sensitivity": 0.01, "factor_vol": 0.05, "pct_of_total": 3.0}
         ],

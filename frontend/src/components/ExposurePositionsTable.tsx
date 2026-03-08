@@ -23,12 +23,12 @@ function fmtShares(n: number): string {
 }
 
 function riskMixLabel(pos: Position): string {
-  const mix = pos.risk_mix ?? { industry: 0, style: 0, idio: 0 };
-  return `Ind ${mix.industry.toFixed(1)}% / Sty ${mix.style.toFixed(1)}% / Idio ${mix.idio.toFixed(1)}%`;
+  const mix = pos.risk_mix ?? { country: 0, industry: 0, style: 0, idio: 0 };
+  return `Ctry ${mix.country.toFixed(1)}% / Ind ${mix.industry.toFixed(1)}% / Sty ${mix.style.toFixed(1)}% / Idio ${mix.idio.toFixed(1)}%`;
 }
 
 function riskMixSortValue(pos: Position): number {
-  const mix = pos.risk_mix ?? { industry: 0, style: 0, idio: 0 };
+  const mix = pos.risk_mix ?? { country: 0, industry: 0, style: 0, idio: 0 };
   return Number(mix.idio || 0);
 }
 
@@ -73,7 +73,7 @@ export default function ExposurePositionsTable({ positions }: ExposurePositionsT
             <th className="text-right" onClick={() => handleSort("shares")}>Share Count{arrow("shares")}</th>
             <th className="text-right" onClick={() => handleSort("market_value")}>Market Value{arrow("market_value")}</th>
             <th className="text-right" onClick={() => handleSort("risk_mix")}>
-              Risk Mix (Ind/Sty/Idio){arrow("risk_mix")}
+              Risk Mix (Ctry/Ind/Sty/Idio){arrow("risk_mix")}
             </th>
           </tr>
         </thead>

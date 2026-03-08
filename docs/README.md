@@ -3,6 +3,7 @@
 ## Core Operations
 - `OPERATIONS_PLAYBOOK.md`: runbook for refresh, retention, validation, and recovery.
 - `OPERATIONS_HARDENING_CHECKLIST.md`: pre-run hygiene, smoke checks, and rollback guardrails.
+- `OPERATING_MODEL_PLAN.md`: operating model for universe maintenance, source ingest, core cUSE4 recompute, serving refresh, Neon pruning, and frontend observability.
 - `specs/cUSE4_engine_spec.md`: cUSE4 model/foundation spec.
 
 ## Migration Notes
@@ -10,6 +11,9 @@
 
 ## Data Protocols
 - `data_protocols/TRBC_CLASSIFICATION_PIT_PROTOCOL.md`: canonical TRBC PIT classification protocol (`security_classification_pit` based).
+
+## Reference Data
+- `../data/reference/security_master_seed.csv`: versioned seed artifact for the canonical universe registry.
 
 ## Archived Planning Notes
 - `archive_notes/`: historical plans and execution notes kept for context only; do not run commands from these files as active operational guidance.

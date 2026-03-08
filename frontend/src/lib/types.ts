@@ -17,6 +17,7 @@ export interface Position {
   eligible_for_model?: boolean;
   eligibility_reason?: string;
   risk_mix?: {
+    country: number;
     industry: number;
     style: number;
     idio: number;
@@ -151,7 +152,7 @@ export interface FactorHistoryData {
 
 export interface FactorDetail {
   factor: string;
-  category: "industry" | "style";
+  category: "country" | "industry" | "style";
   exposure: number;
   factor_vol: number;
   sensitivity: number;
@@ -160,6 +161,7 @@ export interface FactorDetail {
 }
 
 export interface RiskShares {
+  country: number;
   industry: number;
   style: number;
   idio: number;
