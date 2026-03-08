@@ -98,12 +98,15 @@ export function useHealthDiagnostics() {
   return useSWR<HealthDiagnosticsData>(apiPath.healthDiagnostics(), apiFetch, HEAVY_DIAGNOSTICS_OPTS);
 }
 
-export function useDataDiagnostics() {
-  return useSWR<DataDiagnosticsData>(apiPath.dataDiagnostics(), apiFetch, HEAVY_DIAGNOSTICS_OPTS);
+export function useDataDiagnostics(opts?: { includeExactRowCounts?: boolean; includeExpensiveChecks?: boolean }) {
+  return useSWR<DataDiagnosticsData>(apiPath.dataDiagnostics(opts), apiFetch, HEAVY_DIAGNOSTICS_OPTS);
 }
 
 export function useOperatorStatus() {
-  return useSWR<OperatorStatusData>(apiPath.operatorStatus(), apiFetch, SWR_OPTS);
+  return useSWR<OperatorStatusData>(apiPath.operatorStatus(), apiFetch, {
+    ...SWR_OPTS,
+    refreshInterval: 15000,
+  });
 }
 
 export function useRefreshStatus() {

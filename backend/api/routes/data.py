@@ -220,8 +220,19 @@ def _cache_rows() -> list[dict[str, Any]]:
     return out
 
 
-def _resolve_exposure_source_table(conn: sqlite3.Connection) -> str:
-    return "barra_raw_cross_section_history"
+def _resolve_exposure_source(conn: sqlite3.Connection) -> dict[str, Any]:
+    table = "barra_raw_cross_section_history"
+    latest_asof = None
+    if _table_exists(conn, table):
+        row = conn.execute(f"SELECT MAX(as_of_date) FROM {table}").fetchone()
+        latest_asof = row[0] if row else None
+    return {
+        "table": table,
+        "selection_mode": "canonical_latest_raw_history",
+        "is_dynamic": False,
+        "latest_asof": str(latest_asof) if latest_asof is not None else None,
+        "plain_english": "The analytics engine always takes the latest row per RIC from barra_raw_cross_section_history.",
+    }
 
 
 @router.get("/data/diagnostics")
@@ -256,7 +267,8 @@ def get_data_diagnostics(
             for label, table in canonical_tables.items()
         }
 
-        exposure_source_table = _resolve_exposure_source_table(data_conn)
+        exposure_source = _resolve_exposure_source(data_conn)
+        exposure_source_table = str(exposure_source.get("table") or "")
 
         if include_expensive_checks:
             dup_stats = {
@@ -351,6 +363,7 @@ def get_data_diagnostics(
             "database_path": DATA_DB.name,
             "cache_db_path": CACHE_DB.name,
             "exposure_source_table": exposure_source_table,
+            "exposure_source": exposure_source,
             "source_tables": source_tables,
             "exposure_duplicates": dup_stats,
             "cross_section_usage": {

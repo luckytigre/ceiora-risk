@@ -288,3 +288,56 @@ def latest_run_summary_by_profile(
     for profile, run_id in latest_by_profile.items():
         out[profile] = summarize_run_rows(run_rows(db_path=db_path, run_id=run_id))
     return out
+
+
+def recent_run_summaries_by_profile(
+    *,
+    db_path: Path,
+    profiles: list[str] | None = None,
+    limit_per_profile: int = 8,
+) -> dict[str, list[dict[str, Any]]]:
+    ensure_schema(db_path)
+    conn = _connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        clause = ""
+        params: list[Any] = []
+        if profiles:
+            clean = [str(p).strip() for p in profiles if str(p).strip()]
+            if clean:
+                placeholders = ",".join("?" for _ in clean)
+                clause = f"WHERE profile IN ({placeholders})"
+                params.extend(clean)
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    profile,
+                    run_id,
+                    MAX(COALESCE(completed_at, started_at, updated_at)) AS last_ts
+                FROM {TABLE}
+                {clause}
+                GROUP BY profile, run_id
+                ORDER BY profile ASC, last_ts DESC
+                """,
+                params,
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rows = []
+    finally:
+        conn.close()
+
+    run_ids_by_profile: dict[str, list[str]] = {}
+    for row in rows:
+        profile = str(row["profile"] or "")
+        run_id = str(row["run_id"] or "")
+        if not profile or not run_id:
+            continue
+        lst = run_ids_by_profile.setdefault(profile, [])
+        if len(lst) < max(1, int(limit_per_profile)):
+            lst.append(run_id)
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for profile, run_ids in run_ids_by_profile.items():
+        out[profile] = [summarize_run_rows(run_rows(db_path=db_path, run_id=run_id)) for run_id in run_ids]
+    return out

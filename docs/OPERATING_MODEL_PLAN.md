@@ -10,10 +10,13 @@ Implemented now:
 - canonical orchestrator lane names are live in `run_model_pipeline`
 - legacy profile aliases still resolve for compatibility
 - `/api/operator/status` exposes lane status, source recency, core-due state, refresh state, and Neon parity health
-- Data page now acts as the operator control deck with lane controls, plain-English popovers, and lane recency
+- `/api/operator/status` also carries backend-authoritative holdings dirty state, runtime warnings, and per-lane recent-run history
+- Data page now acts as the operator control deck with lane controls, plain-English popovers, recent-run history strips, stage detail, and fast/deep diagnostics
 - Health page also surfaces operator cards for redundancy
 - source recency now explicitly tracks prices, fundamentals, classification, and raw cross-section dates
 - `make operator-check` / `scripts/operator_check.sh` provide one-command backend/operator validation
+- holdings serving reads now prefer Neon whenever a Neon DSN is configured; in-code mock positions are bootstrap fallback only
+- refresh-driven `RECALC needed` state is backend-persisted and only clears after a successful serving refresh
 
 Cold-core lessons now incorporated:
 - serving refresh must read live risk-engine cache keys, not only the active published snapshot
@@ -132,7 +135,7 @@ Examples:
 
 Should do:
 - write holdings to Neon
-- mark serving cache dirty
+- mark serving cache dirty in backend state
 - allow manual `RECALC`
 - refresh portfolio/exposure/risk projection outputs
 
@@ -362,6 +365,7 @@ Policy:
   - source tables: 10 years
   - analytics tables: 5 years
 - parity checks must compare Neon only against the same bounded windows
+- if a Neon DSN is configured, holdings-serving reads should resolve from Neon rather than static mock positions
 
 This is already the implemented direction and should remain the rule.
 
@@ -371,7 +375,7 @@ The frontend should expose operations by lane, not as one vague status.
 
 ### Header-level signals
 
-- holdings dirty / `RECALC` needed
+- backend-authoritative holdings dirty / `RECALC` needed
 - refresh running / idle / failed
 - Neon sync health
 
@@ -383,6 +387,8 @@ Should show:
 - last `core-weekly`
 - last `cold-core`
 - last `universe-add`
+- recent run history per lane
+- latest stage detail per lane
 - latest source dates:
   - prices
   - fundamentals
@@ -394,6 +400,8 @@ Should show:
 - Neon mirror status
 - Neon parity status
 - latest parity artifact link/path
+- runtime warnings when the backend is not operating in the standard Neon-first profile
+- fast diagnostics vs deep diagnostics explicitly labeled, so omitted expensive checks are not mistaken for live truth
 
 ### Recommended color model
 

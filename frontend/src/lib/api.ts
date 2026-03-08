@@ -43,7 +43,13 @@ export const apiPath = {
     `/api/universe/search?q=${encodeURIComponent(query)}&limit=${limit}`,
   universeFactors: () => "/api/universe/factors",
   healthDiagnostics: () => "/api/health/diagnostics",
-  dataDiagnostics: () => "/api/data/diagnostics",
+  dataDiagnostics: (opts?: { includeExactRowCounts?: boolean; includeExpensiveChecks?: boolean }) => {
+    const params = new URLSearchParams();
+    if (opts?.includeExactRowCounts) params.set("include_exact_row_counts", "true");
+    if (opts?.includeExpensiveChecks) params.set("include_expensive_checks", "true");
+    const qs = params.toString();
+    return qs ? `/api/data/diagnostics?${qs}` : "/api/data/diagnostics";
+  },
   operatorStatus: () => "/api/operator/status",
   refresh: (mode: RefreshMode) => `/api/refresh?mode=${mode}`,
   refreshProfile: (profile: string) => `/api/refresh?profile=${encodeURIComponent(profile)}`,

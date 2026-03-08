@@ -237,7 +237,7 @@ def run_refresh(
     # 1. Fetch full-universe data from local data.db
     logger.info("Fetching data from local database...")
     source_dates: SourceDatesPayload = postgres.load_source_dates()
-    fundamentals_asof = source_dates.get("exposures_asof")
+    fundamentals_asof = source_dates.get("fundamentals_asof") or source_dates.get("exposures_asof")
     prices_universe_df = postgres.load_latest_prices()
     fundamentals_universe_df = postgres.load_latest_fundamentals(
         as_of_date=str(fundamentals_asof) if fundamentals_asof else None,

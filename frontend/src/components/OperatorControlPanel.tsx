@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import HelpLabel from "@/components/HelpLabel";
+import ConfirmActionModal from "@/components/ConfirmActionModal";
+import LaneRunHistoryStrip from "@/components/operator/LaneRunHistoryStrip";
 import { triggerRefreshProfile, useOperatorStatus, useRefreshStatus } from "@/hooks/useApi";
 import type { OperatorLaneStatus } from "@/lib/types";
 
@@ -62,12 +64,22 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
   const { data, error, isLoading, mutate } = useOperatorStatus();
   const { data: refreshStatusData, mutate: mutateRefreshStatus } = useRefreshStatus();
   const [actionState, setActionState] = useState<Record<string, "idle" | "running" | "done" | "failed">>({});
+  const [confirmLane, setConfirmLane] = useState<OperatorLaneStatus | null>(null);
   const refreshRunning = String(refreshStatusData?.refresh?.status || "").toLowerCase() === "running";
 
   const neonHealth = data?.neon_sync_health;
+  const holdingsSync = data?.holdings_sync;
   const sourceDates = data?.source_dates ?? {};
-
+  const runtimeWarnings = data?.runtime?.warnings ?? [];
   const orderedLanes = useMemo(() => data?.lanes ?? [], [data?.lanes]);
+
+  useEffect(() => {
+    const intervalMs = refreshRunning ? 5000 : 30000;
+    const id = window.setInterval(() => {
+      void Promise.all([mutate(), mutateRefreshStatus()]);
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [refreshRunning, mutate, mutateRefreshStatus]);
 
   async function runLane(profile: string) {
     setActionState((prev) => ({ ...prev, [profile]: "running" }));
@@ -78,6 +90,14 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
     } catch {
       setActionState((prev) => ({ ...prev, [profile]: "failed" }));
     }
+  }
+
+  function requestLaneRun(lane: OperatorLaneStatus) {
+    if (lane.profile === "cold-core") {
+      setConfirmLane(lane);
+      return;
+    }
+    void runLane(lane.profile);
   }
 
   return (
@@ -91,6 +111,11 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
       <div className="detail-history-empty" style={{ marginBottom: 14 }}>
         This page is the plain-English control room for your backend. Each lane below is a specific kind of update, with clear scope and current status.
       </div>
+      {runtimeWarnings.length > 0 && (
+        <div className="detail-history-empty" style={{ marginBottom: 14, color: "rgba(224,190,92,0.92)" }}>
+          Runtime warnings: {runtimeWarnings.join(" | ")}
+        </div>
+      )}
       <div className="health-grid-2-half" style={{ marginBottom: 14 }}>
         <div className="chart-card" style={{ margin: 0 }}>
           <h4 style={{ marginBottom: 8 }}>Live State</h4>
@@ -98,7 +123,11 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
           <div className="health-kpi-subrow"><strong>Core due:</strong> {data ? (data.core_due.due ? `Yes (${data.core_due.reason})` : `No (${data.core_due.reason})`) : "—"}</div>
           <div className="health-kpi-subrow"><strong>Risk engine:</strong> {data?.risk_engine?.method_version ?? "—"}</div>
           <div className="health-kpi-subrow"><strong>Active snapshot:</strong> {data?.active_snapshot?.snapshot_id ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Neon health:</strong> {neonHealth?.status ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Holdings dirty:</strong> {holdingsSync?.pending ? `Yes (${holdingsSync.pending_count || 0})` : "No"}</div>
+          <div className="health-kpi-subrow"><strong>Dirty since:</strong> {fmtTs(holdingsSync?.dirty_since)}</div>
+          <div className="health-kpi-subrow"><strong>Last holdings change:</strong> {holdingsSync?.last_mutation_summary ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Neon mirror:</strong> {neonHealth?.mirror_status ?? neonHealth?.status ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Neon parity:</strong> {neonHealth?.parity_status ?? "—"}</div>
           <div className="health-kpi-subrow"><strong>Parity artifact:</strong> {data?.latest_parity_artifact ?? "—"}</div>
         </div>
         <div className="chart-card" style={{ margin: 0 }}>
@@ -108,6 +137,8 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
           <div className="health-kpi-subrow"><strong>Classification:</strong> {sourceDates.classification_asof ?? "—"}</div>
           <div className="health-kpi-subrow"><strong>Cross section:</strong> {sourceDates.exposures_asof ?? "—"}</div>
           <div className="health-kpi-subrow"><strong>Factor returns:</strong> {data?.risk_engine?.factor_returns_latest_date ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Data backend:</strong> {data?.runtime?.data_backend ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Neon read surfaces:</strong> {(data?.runtime?.neon_read_surfaces ?? []).join(", ") || "—"}</div>
         </div>
       </div>
       {error && !data && (
@@ -122,6 +153,7 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
               <th>Lane</th>
               <th>Status</th>
               <th>What It Does</th>
+              <th>Recent Runs</th>
               <th>Stages</th>
               <th>Last Run</th>
               <th>Action</th>
@@ -150,7 +182,28 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
                     <span className={`status-pill ${tone(lane.latest_run.status)}`}>{lane.latest_run.status}</span>
                   </td>
                   <td style={{ maxWidth: compact ? 240 : 340 }}>{help.plain}</td>
-                  <td>{lane.default_stages.join(" -> ") || "—"}</td>
+                  <td style={{ minWidth: 96 }}>
+                    <LaneRunHistoryStrip runs={lane.recent_runs ?? []} />
+                  </td>
+                  <td>
+                    <div style={{ marginBottom: 6 }}>{lane.default_stages.join(" -> ") || "—"}</div>
+                    <details>
+                      <summary style={{ cursor: "pointer", color: "rgba(169,182,210,0.82)" }}>
+                        Stage detail
+                      </summary>
+                      <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                        {(lane.latest_run.stages ?? []).map((stage) => (
+                          <div key={`${lane.profile}:${stage.stage_name}`} style={{ fontSize: 12, color: "rgba(232,237,249,0.82)" }}>
+                            <strong>{stage.stage_name}</strong>: {stage.status}
+                            {stage.error_message ? ` — ${stage.error_message}` : ""}
+                          </div>
+                        ))}
+                        {(lane.latest_run.stages ?? []).length === 0 && (
+                          <div style={{ fontSize: 12, color: "rgba(169,182,210,0.68)" }}>No stage records yet.</div>
+                        )}
+                      </div>
+                    </details>
+                  </td>
                   <td>{laneSummary(lane)}</td>
                   <td>
                     {lane.profile === "universe-add" ? (
@@ -158,14 +211,10 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
                     ) : (
                       <button
                         className="btn btn-secondary"
-                        onClick={() => runLane(lane.profile)}
+                        onClick={() => requestLaneRun(lane)}
                         disabled={disabled}
                       >
-                        {state === "running"
-                          ? "Starting..."
-                          : lane.profile === "serve-refresh"
-                            ? "Run"
-                            : "Run"}
+                        {state === "running" ? "Starting..." : "Run"}
                       </button>
                     )}
                     {state === "done" && (
@@ -181,6 +230,20 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
           </tbody>
         </table>
       </div>
+      <ConfirmActionModal
+        open={!!confirmLane}
+        title="Confirm cold-core rebuild"
+        body="This is the deepest rebuild lane. Use it after history rewrites or model-method changes. It rebuilds structural history and then rebuilds the core model on top of it."
+        confirmLabel="Type to confirm"
+        confirmValue="COLD-CORE"
+        dangerText="Run cold-core"
+        onCancel={() => setConfirmLane(null)}
+        onConfirm={async () => {
+          const lane = confirmLane;
+          setConfirmLane(null);
+          if (lane) await runLane(lane.profile);
+        }}
+      />
     </div>
   );
 }

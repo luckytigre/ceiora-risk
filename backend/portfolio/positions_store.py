@@ -1,4 +1,8 @@
-"""Portfolio position store used by analytics projection."""
+"""Portfolio position store used by analytics projection.
+
+Holdings are authoritative in Neon when a DSN is configured. The in-code mock
+portfolio is only a bootstrap fallback for local development without Neon.
+"""
 
 from __future__ import annotations
 
@@ -83,14 +87,14 @@ def get_position_meta(ticker: str) -> dict[str, str]:
 
 
 def _load_positions() -> tuple[dict[str, float], dict[str, dict[str, str]]]:
-    if str(config.DATA_BACKEND).strip().lower() != "neon":
-        return dict(PORTFOLIO_POSITIONS), dict(POSITION_META)
-
     try:
         return _load_positions_from_neon()
     except Exception:
-        # In Neon mode, fail closed to avoid silently mixing stale in-code mocks.
-        return {}, {}
+        if str(config.DATA_BACKEND).strip().lower() == "neon" or str(config.NEON_DATABASE_URL).strip():
+            # In Neon-backed runtime, fail closed to avoid mixing stale mock data
+            # with live holdings writes.
+            return {}, {}
+        return dict(PORTFOLIO_POSITIONS), dict(POSITION_META)
 
 
 def _load_positions_from_neon() -> tuple[dict[str, float], dict[str, dict[str, str]]]:

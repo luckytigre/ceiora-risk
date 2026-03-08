@@ -24,6 +24,7 @@ from backend.risk_model import (
     rebuild_raw_cross_section_history,
 )
 from backend.services.neon_mirror import run_neon_mirror_cycle
+from backend.services.holdings_runtime_state import mark_refresh_finished
 from backend.universe import bootstrap_cuse4_source_tables, build_and_persist_estu_membership
 from backend.scripts.download_data_lseg import download_from_lseg
 from backend.trading_calendar import previous_or_same_xnys_session
@@ -367,15 +368,17 @@ def _run_stage(
     enable_ingest: bool = False,
 ) -> dict[str, Any]:
     if stage == "ingest":
-        if not enable_ingest:
-            return {
-                "status": "skipped",
-                "reason": "profile_skip_ingest",
-            }
         bootstrap = bootstrap_cuse4_source_tables(
             db_path=DATA_DB,
             replace_all=False,
         )
+        if not enable_ingest:
+            return {
+                "status": "ok",
+                "mode": "bootstrap_only",
+                "reason": "profile_skip_lseg_ingest",
+                "bootstrap": bootstrap,
+            }
         if not bool(config.ORCHESTRATOR_ENABLE_INGEST):
             return {
                 "status": "ok",
@@ -727,6 +730,22 @@ def run_model_pipeline(
             )
         except Exception:  # noqa: BLE001
             logger.exception("Failed to publish Neon sync health status")
+
+    try:
+        serving_completed = any(
+            str(item.get("stage") or "") == "serving_refresh"
+            and str(item.get("status") or "") == "completed"
+            for item in stage_results
+        )
+        mark_refresh_finished(
+            profile=profile_key,
+            run_id=effective_run_id,
+            status=("ok" if overall_status == "ok" else "failed"),
+            message="Serving outputs refreshed" if serving_completed and overall_status == "ok" else "Refresh finished",
+            clear_pending=bool(serving_completed and overall_status == "ok"),
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to update holdings refresh state")
 
     return {
         "status": overall_status,

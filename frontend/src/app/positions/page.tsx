@@ -13,10 +13,10 @@ import {
   usePortfolio,
   useUniverseSearch,
 } from "@/hooks/useApi";
+import ConfirmActionModal from "@/components/ConfirmActionModal";
 import PositionTable from "@/components/PositionTable";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ApiErrorState from "@/components/ApiErrorState";
-import { useRecomputePrompt } from "@/components/RecomputePromptContext";
 import type { HoldingsImportMode, HoldingsPosition } from "@/lib/types";
 
 function parseCsvLine(line: string): string[] {
@@ -115,7 +115,6 @@ function fmtQty(n: number): string {
 }
 
 export default function PositionsPage() {
-  const { markPending } = useRecomputePrompt();
   const { data: portfolio, isLoading: pLoading, error: pError } = usePortfolio();
   const { data: modesData } = useHoldingsModes();
   const { data: accountsData, error: accountError } = useHoldingsAccounts();
@@ -130,6 +129,14 @@ export default function PositionsPage() {
   const [editQty, setEditQty] = useState("");
   const [editSource, setEditSource] = useState("ui_edit");
   const [busy, setBusy] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<null | {
+    title: string;
+    body: string;
+    confirmValue?: string | null;
+    confirmLabel?: string;
+    dangerText: string;
+    onConfirm: () => Promise<void>;
+  }>(null);
   const [resultMessage, setResultMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [rejectionPreview, setRejectionPreview] = useState<Array<Record<string, unknown>>>([]);
@@ -179,6 +186,7 @@ export default function PositionsPage() {
       mutate(apiPath.holdingsAccounts()),
       mutate(apiPath.holdingsPositions(accountId)),
       mutate(apiPath.portfolio()),
+      mutate(apiPath.operatorStatus()),
     ]);
   }
 
@@ -194,7 +202,7 @@ export default function PositionsPage() {
     return "Adds CSV quantities to existing quantities for listed positions.";
   }
 
-  async function handleCsvImport() {
+  async function runCsvImport() {
     setErrorMessage("");
     setResultMessage("");
     setRejectionPreview([]);
@@ -224,7 +232,6 @@ export default function PositionsPage() {
         `${out.status}: ${out.applied_upserts} upserts, ${out.applied_deletes} deletes, ${out.rejected_rows} backend rejects${extras}.`,
       );
       setRejectionPreview((out.preview_rejections ?? []).slice(0, 15));
-      markPending();
       await revalidateHoldingsViews(selectedAccount);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -239,7 +246,53 @@ export default function PositionsPage() {
     }
   }
 
-  async function handleManualUpsert() {
+  async function handleCsvImport() {
+    try {
+      if (!csvFile) {
+        void runCsvImport();
+        return;
+      }
+      const raw = await csvFile.text();
+      const parsed = parseHoldingsCsv(raw, csvSource || "csv_upload");
+      const destructiveRows = parsed.rows.filter((row) => {
+        const qty = Number(row.quantity || 0);
+        if (mode === "replace_account") return true;
+        if (mode === "upsert_absolute") return qty === 0;
+        const existing = holdingsRows.find(
+          (h) =>
+            (row.ric && h.ric === String(row.ric).toUpperCase()) ||
+            (row.ticker && h.ticker === String(row.ticker).toUpperCase()),
+        );
+        return !!existing && Number(existing.quantity) + qty === 0;
+      });
+      if (destructiveRows.length === 0) {
+        void runCsvImport();
+        return;
+      }
+      setConfirmConfig({
+        title: "Confirm destructive CSV import",
+        body:
+          mode === "replace_account"
+            ? `This will replace all current positions in ${selectedAccount || "the selected account"} with only the rows present in the CSV. Positions omitted from the file will be deleted.`
+            : `This CSV will delete ${destructiveRows.length} position${destructiveRows.length === 1 ? "" : "s"} in ${selectedAccount || "the selected account"} because the imported quantity resolves to zero.`,
+        confirmValue: selectedAccount || null,
+        confirmLabel: "Type account ID",
+        dangerText: "Run import",
+        onConfirm: async () => {
+          setConfirmConfig(null);
+          await runCsvImport();
+        },
+      });
+    } catch (err) {
+      if (err instanceof Error) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage("Unable to inspect CSV import.");
+      }
+    }
+  }
+
+  async function runManualUpsert() {
     setErrorMessage("");
     setResultMessage("");
     if (!selectedAccount) {
@@ -267,7 +320,6 @@ export default function PositionsPage() {
         trigger_refresh: false,
       });
       setResultMessage(`${out.status}: ${out.action} ${out.ticker || out.ric} @ ${fmtQty(out.quantity)}`);
-      markPending();
       await revalidateHoldingsViews(selectedAccount);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -282,7 +334,26 @@ export default function PositionsPage() {
     }
   }
 
-  async function handleRemove(row: HoldingsPosition) {
+  function handleManualUpsert() {
+    const qty = Number.parseFloat(editQty);
+    if (Number.isFinite(qty) && qty === 0) {
+      setConfirmConfig({
+        title: "Confirm zero-quantity upsert",
+        body: "A zero quantity is treated as a delete for this position in the selected account.",
+        confirmValue: "REMOVE",
+        confirmLabel: "Type to confirm",
+        dangerText: "Remove position",
+        onConfirm: async () => {
+          setConfirmConfig(null);
+          await runManualUpsert();
+        },
+      });
+      return;
+    }
+    void runManualUpsert();
+  }
+
+  async function runRemove(row: HoldingsPosition) {
     setErrorMessage("");
     setResultMessage("");
     try {
@@ -293,7 +364,6 @@ export default function PositionsPage() {
         trigger_refresh: false,
       });
       setResultMessage(`${out.status}: removed ${row.ticker || row.ric}`);
-      markPending();
       await revalidateHoldingsViews(row.account_id);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -308,7 +378,40 @@ export default function PositionsPage() {
     }
   }
 
+  function handleRemove(row: HoldingsPosition) {
+    setConfirmConfig({
+      title: "Confirm position removal",
+      body: `This will delete ${row.ticker || row.ric} from account ${row.account_id}.`,
+      confirmValue: "REMOVE",
+      confirmLabel: "Type to confirm",
+      dangerText: "Remove",
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        await runRemove(row);
+      },
+    });
+  }
+
   async function handleAdjust(row: HoldingsPosition, delta: number) {
+    const targetQty = Number(row.quantity) + Number(delta);
+    if (targetQty === 0) {
+      setConfirmConfig({
+        title: "Confirm zero-share adjustment",
+        body: `This adjustment will remove ${row.ticker || row.ric} from account ${row.account_id}.`,
+        confirmValue: "REMOVE",
+        confirmLabel: "Type to confirm",
+        dangerText: "Remove position",
+        onConfirm: async () => {
+          setConfirmConfig(null);
+          await handleAdjustConfirmed(row, delta);
+        },
+      });
+      return;
+    }
+    await handleAdjustConfirmed(row, delta);
+  }
+
+  async function handleAdjustConfirmed(row: HoldingsPosition, delta: number) {
     setErrorMessage("");
     setResultMessage("");
     try {
@@ -322,7 +425,6 @@ export default function PositionsPage() {
         trigger_refresh: false,
       });
       setResultMessage(`${out.status}: ${row.ticker || row.ric} -> ${fmtQty(targetQty)} shares`);
-      markPending();
       await revalidateHoldingsViews(row.account_id);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -573,6 +675,20 @@ export default function PositionsPage() {
         <h3>Model Portfolio Positions ({positions.length})</h3>
         <PositionTable positions={positions} />
       </div>
+      <ConfirmActionModal
+        open={!!confirmConfig}
+        title={confirmConfig?.title || ""}
+        body={confirmConfig?.body || ""}
+        confirmValue={confirmConfig?.confirmValue ?? null}
+        confirmLabel={confirmConfig?.confirmLabel}
+        dangerText={confirmConfig?.dangerText || "Confirm"}
+        onCancel={() => setConfirmConfig(null)}
+        onConfirm={async () => {
+          if (confirmConfig) {
+            await confirmConfig.onConfirm();
+          }
+        }}
+      />
     </div>
   );
 }

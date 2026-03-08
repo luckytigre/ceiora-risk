@@ -92,6 +92,7 @@ function OperatorStatusSection({
 }) {
   const sourceDates = data?.source_dates ?? {};
   const neon = data?.neon_sync_health;
+  const holdingsSync = data?.holdings_sync;
   return (
     <div className="chart-card">
       <h3 style={{ marginBottom: 8 }}>Operator Status</h3>
@@ -144,7 +145,9 @@ function OperatorStatusSection({
         <div className="chart-card" style={{ margin: 0 }}>
           <h4 style={{ marginBottom: 8 }}>Runtime Health</h4>
           <div className="health-kpi-subrow"><strong>Refresh:</strong> {data?.refresh?.status ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Neon:</strong> {neon?.status ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Holdings dirty:</strong> {holdingsSync?.pending ? `Yes (${holdingsSync.pending_count || 0})` : "No"}</div>
+          <div className="health-kpi-subrow"><strong>Neon mirror:</strong> {neon?.mirror_status ?? neon?.status ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Neon parity:</strong> {neon?.parity_status ?? "—"}</div>
           <div className="health-kpi-subrow"><strong>Snapshot:</strong> {data?.active_snapshot?.snapshot_id ?? "—"}</div>
           <div className="health-kpi-subrow"><strong>Risk Engine:</strong> {data?.risk_engine?.method_version ?? "—"}</div>
           <div className="health-kpi-subrow"><strong>Parity Artifact:</strong> {data?.latest_parity_artifact ?? "—"}</div>

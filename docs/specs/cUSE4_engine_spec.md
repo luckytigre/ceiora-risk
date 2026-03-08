@@ -12,6 +12,7 @@ Key design tradeoff:
 
 Operational intent:
 - Data and analytics are stored in a relational database.
+- Holdings are edited in Neon and serving outputs should read those holdings from Neon as the authoritative runtime store.
 - Security-level loadings may refresh more frequently, but full model recomputation is intentionally slower (typically weekly, or up to twice weekly).
 - Core cross-sectional estimation, factor returns, covariance, and specific-risk calculations run on lagged data only, with a minimum lag of 5 trading days (about one week).
 - Over time, historical cross-sections can be backfilled forward toward `t-1`, but full model estimation remains restricted to a lagged cutoff (`t-5` or older) by policy.
@@ -33,6 +34,8 @@ Scope note:
 
 Current implemented state:
 - Universe definition is centralized in `security_master` (identity hub; canonical time-series joins are RIC-keyed).
+- Holdings dirty / `RECALC needed` state is backend-persisted and visible in the operator UI.
+- Data page is the primary operator cockpit, with lane controls, lane history, stage detail, and fast/deep diagnostics.
 - Eligible investable set is controlled by:
   - `classification_ok = 1`
   - `is_equity_eligible = 1`

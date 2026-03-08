@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { mutate } from "swr";
 import { apiPath, ApiError } from "@/lib/api";
 import { triggerHoldingsImport } from "@/hooks/useApi";
+import ConfirmActionModal from "@/components/ConfirmActionModal";
 import type { PortfolioData, Position } from "@/lib/types";
-import { useRecomputePrompt } from "./RecomputePromptContext";
 
 interface ShareAdjusterProps {
   ticker: string;
@@ -23,10 +23,10 @@ function normalizeAccountId(raw: string | null | undefined): string | null {
 }
 
 export default function ShareAdjuster({ ticker, currentShares, accountId, step = 5 }: ShareAdjusterProps) {
-  const { markPending } = useRecomputePrompt();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<"up" | "down" | null>(null);
+  const [confirmDelta, setConfirmDelta] = useState<number | null>(null);
 
   const accountIdNorm = useMemo(
     () => normalizeAccountId(accountId),
@@ -69,6 +69,18 @@ export default function ShareAdjuster({ ticker, currentShares, accountId, step =
       setError("No account ID");
       return;
     }
+    if (Number(currentShares) + Number(delta) === 0) {
+      setConfirmDelta(delta);
+      return;
+    }
+    await adjustConfirmed(delta);
+  }
+
+  async function adjustConfirmed(delta: number) {
+    if (!accountIdNorm) {
+      setError("No account ID");
+      return;
+    }
     try {
       setBusy(true);
       await triggerHoldingsImport({
@@ -78,10 +90,10 @@ export default function ShareAdjuster({ ticker, currentShares, accountId, step =
         trigger_refresh: false,
       });
       optimisticPortfolioUpdate(delta);
-      markPending();
       await Promise.all([
         mutate(apiPath.holdingsPositions(accountIdNorm)),
         mutate(apiPath.holdingsAccounts()),
+        mutate(apiPath.operatorStatus()),
       ]);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -118,6 +130,22 @@ export default function ShareAdjuster({ ticker, currentShares, accountId, step =
         ↓
       </button>
       {error && <span className="share-adjuster-error" title={error}>!</span>}
+      <ConfirmActionModal
+        open={confirmDelta !== null}
+        title="Confirm zero-share adjustment"
+        body={`This stepper action will remove ${ticker} from account ${accountIdNorm?.toUpperCase() || accountId}.`}
+        confirmValue="REMOVE"
+        confirmLabel="Type to confirm"
+        dangerText="Remove position"
+        onCancel={() => setConfirmDelta(null)}
+        onConfirm={async () => {
+          const delta = confirmDelta;
+          setConfirmDelta(null);
+          if (delta !== null) {
+            await adjustConfirmed(delta);
+          }
+        }}
+      />
     </span>
   );
 }

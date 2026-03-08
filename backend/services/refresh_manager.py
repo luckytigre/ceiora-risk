@@ -16,6 +16,8 @@ from backend.orchestration.run_model_pipeline import (
     resolve_profile_name,
     run_model_pipeline,
 )
+from backend.services.holdings_runtime_state import mark_refresh_started
+from backend.services.holdings_runtime_state import mark_refresh_finished
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +154,16 @@ def _run_in_background(
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Background refresh failed")
+        try:
+            mark_refresh_finished(
+                profile=profile,
+                run_id=(str(resume_run_id).strip() if resume_run_id else f"api_{job_id}"),
+                status="failed",
+                message=str(exc),
+                clear_pending=False,
+            )
+        except Exception:
+            logger.exception("Failed to mark holdings refresh failure state")
         _set_state(
             status="failed",
             finished_at=_now_iso(),
@@ -207,6 +219,10 @@ def start_refresh(
         result=None,
         error=None,
     )
+    try:
+        mark_refresh_started(profile=resolved_profile, run_id=job_id)
+    except Exception:
+        logger.exception("Failed to mark holdings refresh start state")
 
     worker = threading.Thread(
         target=_run_in_background,
@@ -227,6 +243,16 @@ def start_refresh(
         worker.start()
     except Exception as exc:  # noqa: BLE001
         _RUN_LOCK.release()
+        try:
+            mark_refresh_finished(
+                profile=resolved_profile,
+                run_id=job_id,
+                status="failed",
+                message=str(exc),
+                clear_pending=False,
+            )
+        except Exception:
+            logger.exception("Failed to mark holdings refresh worker-start failure state")
         failed_state = _set_state(
             status="failed",
             finished_at=_now_iso(),

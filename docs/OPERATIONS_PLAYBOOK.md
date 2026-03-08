@@ -1,6 +1,8 @@
 # Barra Dashboard Operations Playbook
 
 ## Core Policy
+- Holdings writes and holdings-serving reads are both Neon-authoritative when a Neon DSN is configured.
+- `RECALC`/holdings-dirty state is backend-persisted, not browser-local.
 - Risk engine recompute cadence: weekly (`RISK_RECOMPUTE_INTERVAL_DAYS=7` by default).
 - Cross-section recency guard: regressions only use exposure snapshots at least 7 calendar days old (`CROSS_SECTION_MIN_AGE_DAYS=7`).
 - Loadings/UI cache refresh: can run daily; it reuses latest weekly risk-engine state unless recompute is due.
@@ -37,7 +39,19 @@
 - `core-weekly`: force core recompute without rebuilding full raw history.
 - `cold-core`: full historical reset for structural data changes (new/changed historical prices, volume, fundamentals, classification, or factor methodology).
   - This path rebuilds `barra_raw_cross_section_history` over full history and clears core cache tables before recomputing factor returns/risk.
+  - UI now requires explicit confirmation before starting this lane from the operator deck.
 - `universe-add`: finalization lane after explicit `security_master` merge and targeted source backfills for new names.
+
+## Operator UI Policy
+- Data page is the primary control room.
+- Fast diagnostics are the default because they are cheap and always available.
+- Deep diagnostics are on-demand and compute exact row counts, ticker counts, duplicate checks, and update metadata.
+- Operator lane cards show:
+  - plain-English lane purpose
+  - latest run state
+  - recent-run history strip
+  - stage-level detail
+  - separate Neon mirror and Neon parity status
 
 ## Key Commands
 - Orchestrated refresh via API (default profile from `mode=full` mapping):
@@ -121,6 +135,7 @@
 - One-command operator check:
   - `make operator-check`
   - or `./scripts/operator_check.sh`
+  - If Neon auto-sync is disabled, this check degrades gracefully instead of failing on missing parity artifacts.
 - Verify latest refresh metadata:
   - `curl -s "http://localhost:8000/api/data/status" | jq '.cache_outputs[] | select(.key==\"refresh_meta\")'`
 - Verify risk payload includes engine metadata:

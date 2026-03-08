@@ -6,6 +6,7 @@
 - `OPERATING_MODEL_PLAN.md`: operating model for universe maintenance, source ingest, core cUSE4 recompute, serving refresh, Neon pruning, and frontend observability.
 - `specs/cUSE4_engine_spec.md`: cUSE4 model/foundation spec.
 - `Makefile` / `scripts/operator_check.sh`: quick operator validation of `/api/health`, `/api/operator/status`, and parity artifact presence.
+- Data page in the app is the live operator cockpit; the playbook mirrors that runtime behavior.
 
 ## Migration Notes
 - `migrations/neon/`: Neon migration plans, SQL, and runbooks.

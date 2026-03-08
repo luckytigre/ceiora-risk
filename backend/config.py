@@ -50,10 +50,11 @@ SQLITE_CACHE_RETRY_ATTEMPTS = max(1, int(os.getenv("SQLITE_CACHE_RETRY_ATTEMPTS"
 SQLITE_CACHE_RETRY_DELAY_MS = max(10, int(os.getenv("SQLITE_CACHE_RETRY_DELAY_MS", "50")))
 SQLITE_CACHE_SNAPSHOT_RETENTION = max(1, int(os.getenv("SQLITE_CACHE_SNAPSHOT_RETENTION", "3")))
 
-# Data backend routing (Stage 1 Neon prep keeps runtime on SQLite by default).
+# Data backend routing.
 # Allowed values: "sqlite", "neon"
-DATA_BACKEND = str(os.getenv("DATA_BACKEND", "sqlite")).strip().lower()
 NEON_DATABASE_URL = str(os.getenv("NEON_DATABASE_URL", "")).strip()
+_DEFAULT_DATA_BACKEND = "neon" if NEON_DATABASE_URL or os.getenv("DATABASE_URL", "").strip() else "sqlite"
+DATA_BACKEND = str(os.getenv("DATA_BACKEND", _DEFAULT_DATA_BACKEND)).strip().lower()
 
 # Analytics
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "504"))  # ~2 years trading days
@@ -82,17 +83,23 @@ def _env_csv(name: str, default: list[str]) -> list[str]:
 
 
 # Neon mirror + cutover controls.
-NEON_AUTO_SYNC_ENABLED = _env_bool("NEON_AUTO_SYNC_ENABLED", False)
+NEON_AUTO_SYNC_ENABLED = _env_bool("NEON_AUTO_SYNC_ENABLED", bool(NEON_DATABASE_URL))
 NEON_AUTO_SYNC_REQUIRED = _env_bool("NEON_AUTO_SYNC_REQUIRED", False)
-NEON_AUTO_PARITY_ENABLED = _env_bool("NEON_AUTO_PARITY_ENABLED", True)
-NEON_AUTO_PRUNE_ENABLED = _env_bool("NEON_AUTO_PRUNE_ENABLED", True)
+NEON_AUTO_PARITY_ENABLED = _env_bool("NEON_AUTO_PARITY_ENABLED", bool(NEON_DATABASE_URL))
+NEON_AUTO_PRUNE_ENABLED = _env_bool("NEON_AUTO_PRUNE_ENABLED", bool(NEON_DATABASE_URL))
 NEON_AUTO_SYNC_MODE = str(os.getenv("NEON_AUTO_SYNC_MODE", "incremental")).strip().lower()
 if NEON_AUTO_SYNC_MODE not in {"incremental", "full"}:
     NEON_AUTO_SYNC_MODE = "incremental"
 NEON_AUTO_SYNC_TABLES = _env_csv("NEON_AUTO_SYNC_TABLES", [])
 NEON_SOURCE_RETENTION_YEARS = max(1, int(os.getenv("NEON_SOURCE_RETENTION_YEARS", "10")))
 NEON_ANALYTICS_RETENTION_YEARS = max(1, int(os.getenv("NEON_ANALYTICS_RETENTION_YEARS", "5")))
-NEON_READ_SURFACES = {s.strip().lower() for s in _env_csv("NEON_READ_SURFACES", [])}
+NEON_READ_SURFACES = {
+    s.strip().lower()
+    for s in _env_csv(
+        "NEON_READ_SURFACES",
+        (["core_reads", "factor_history", "price_history"] if NEON_DATABASE_URL else []),
+    )
+}
 
 
 # cUSE4 foundation toggles (non-breaking additive path).

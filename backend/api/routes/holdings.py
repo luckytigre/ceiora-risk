@@ -17,6 +17,7 @@ from backend.services.neon_holdings import (
     parse_holdings_rows,
     remove_single_position,
 )
+from backend.services.holdings_runtime_state import mark_holdings_dirty
 from backend.services.refresh_manager import start_refresh
 
 router = APIRouter()
@@ -75,6 +76,23 @@ def _trigger_light_refresh_if_requested(trigger: bool) -> dict[str, Any] | None:
         "started": bool(started),
         "state": state,
     }
+
+
+def _record_holdings_dirty(
+    *,
+    action: str,
+    account_id: str | None,
+    summary: str,
+    import_batch_id: str | None,
+    change_count: int,
+) -> None:
+    mark_holdings_dirty(
+        action=action,
+        account_id=account_id,
+        summary=summary,
+        import_batch_id=import_batch_id,
+        change_count=change_count,
+    )
 
 
 @router.get("/holdings/modes")
@@ -139,6 +157,18 @@ async def post_holdings_import(payload: HoldingsImportRequest):
             notes=payload.notes,
             dry_run=bool(payload.dry_run),
         )
+        applied_changes = int(out.get("applied_upserts") or 0) + int(out.get("applied_deletes") or 0)
+        if not payload.dry_run and str(out.get("status")) == "ok" and applied_changes > 0:
+            _record_holdings_dirty(
+                action=f"holdings_import:{payload.mode}",
+                account_id=payload.account_id,
+                summary=(
+                    f"{payload.mode} import applied for {payload.account_id}: "
+                    f"{int(out.get('applied_upserts') or 0)} upserts, {int(out.get('applied_deletes') or 0)} deletes"
+                ),
+                import_batch_id=str(out.get("import_batch_id") or "") or None,
+                change_count=applied_changes,
+            )
         out["refresh"] = _trigger_light_refresh_if_requested(
             bool(payload.trigger_refresh and not payload.dry_run and str(out.get("status")) == "ok")
         )
@@ -169,6 +199,14 @@ async def post_holdings_position(payload: HoldingsPositionEditRequest):
             notes=payload.notes,
             dry_run=bool(payload.dry_run),
         )
+        if not payload.dry_run and str(out.get("status")) == "ok" and str(out.get("action") or "") != "none":
+            _record_holdings_dirty(
+                action="holdings_position_edit",
+                account_id=payload.account_id,
+                summary=f"Position {out.get('action')} for {out.get('ticker') or out.get('ric')}",
+                import_batch_id=str(out.get("import_batch_id") or "") or None,
+                change_count=1,
+            )
         out["refresh"] = _trigger_light_refresh_if_requested(
             bool(payload.trigger_refresh and not payload.dry_run and str(out.get("status")) == "ok")
         )
@@ -196,6 +234,14 @@ async def post_holdings_position_remove(payload: HoldingsPositionRemoveRequest):
             notes=payload.notes,
             dry_run=bool(payload.dry_run),
         )
+        if not payload.dry_run and str(out.get("status")) == "ok" and str(out.get("action") or "") != "none":
+            _record_holdings_dirty(
+                action="holdings_position_remove",
+                account_id=payload.account_id,
+                summary=f"Position removed for {out.get('ticker') or out.get('ric')}",
+                import_batch_id=str(out.get("import_batch_id") or "") or None,
+                change_count=1,
+            )
         out["refresh"] = _trigger_light_refresh_if_requested(
             bool(payload.trigger_refresh and not payload.dry_run and str(out.get("status")) == "ok")
         )

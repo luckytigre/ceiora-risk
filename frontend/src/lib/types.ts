@@ -419,6 +419,7 @@ export interface DataTableStats {
   table: string;
   exists: boolean;
   row_count?: number;
+  row_count_mode?: string | null;
   ticker_count?: number | null;
   date_column?: string | null;
   min_date?: string | null;
@@ -432,6 +433,13 @@ export interface DataDiagnosticsData {
   database_path: string;
   cache_db_path: string;
   exposure_source_table: string;
+  exposure_source?: {
+    table: string;
+    selection_mode: string;
+    is_dynamic: boolean;
+    latest_asof?: string | null;
+    plain_english?: string | null;
+  };
   source_tables: {
     security_master: DataTableStats | null;
     security_fundamentals_pit: DataTableStats | null;
@@ -445,8 +453,9 @@ export interface DataDiagnosticsData {
     active_exposure_source: {
       table: string;
       exists: boolean;
-      duplicate_groups: number;
-      duplicate_extra_rows: number;
+      duplicate_groups: number | null;
+      duplicate_extra_rows: number | null;
+      computed?: boolean;
     };
   };
   cross_section_usage: {
@@ -553,6 +562,7 @@ export interface OperatorLaneStatus {
   enable_ingest: boolean;
   aliases: string[];
   latest_run: OperatorLaneLatestRun;
+  recent_runs?: OperatorLaneLatestRun[];
 }
 
 export interface OperatorStatusData {
@@ -579,11 +589,30 @@ export interface OperatorStatusData {
     reason: string;
   };
   refresh: RefreshStatusState;
+  holdings_sync?: {
+    pending?: boolean;
+    pending_count?: number;
+    dirty_since?: string | null;
+    last_mutation_at?: string | null;
+    last_mutation_kind?: string | null;
+    last_mutation_summary?: string | null;
+    last_mutation_account_id?: string | null;
+    last_import_batch_id?: string | null;
+    last_refresh_started_at?: string | null;
+    last_refresh_finished_at?: string | null;
+    last_refresh_status?: string | null;
+    last_refresh_profile?: string | null;
+    last_refresh_run_id?: string | null;
+    last_refresh_message?: string | null;
+  } | null;
   neon_sync_health?: {
     status?: string;
     message?: string;
     updated_at?: string;
     artifact_path?: string | null;
+    mirror_status?: string | null;
+    sync_status?: string | null;
+    parity_status?: string | null;
     parity_issue_count?: number;
   } | null;
   active_snapshot?: {
@@ -591,4 +620,13 @@ export interface OperatorStatusData {
     published_at?: number;
   } | null;
   latest_parity_artifact?: string | null;
+  runtime?: {
+    data_backend?: string;
+    neon_database_configured?: boolean;
+    neon_auto_sync_enabled?: boolean;
+    neon_auto_parity_enabled?: boolean;
+    neon_auto_prune_enabled?: boolean;
+    neon_read_surfaces?: string[];
+    warnings?: string[];
+  } | null;
 }

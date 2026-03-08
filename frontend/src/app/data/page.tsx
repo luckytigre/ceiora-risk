@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ApiErrorState from "@/components/ApiErrorState";
 import OperatorControlPanel from "@/components/OperatorControlPanel";
@@ -26,7 +27,11 @@ function fmtTs(s?: string | null): string {
 }
 
 export default function DataPage() {
-  const { data, isLoading, error } = useDataDiagnostics();
+  const [deepMode, setDeepMode] = useState(false);
+  const { data, isLoading, error } = useDataDiagnostics({
+    includeExpensiveChecks: deepMode,
+    includeExactRowCounts: deepMode,
+  });
 
   if (isLoading) {
     return <AnalyticsLoadingViz message="Loading data diagnostics..." />;
@@ -57,9 +62,9 @@ export default function DataPage() {
         <div className="kpi-card">
           <div className="label">Exposure Source</div>
           <div className="value" style={{ fontSize: 15 }}>
-            {data?.exposure_source_table || "—"}
+            {data?.exposure_source?.table || data?.exposure_source_table || "—"}
           </div>
-          <div className="sub">Active table used for engine exposures</div>
+          <div className="sub">{data?.exposure_source?.plain_english || "Canonical engine exposure source"}</div>
         </div>
         <div className="kpi-card">
           <div className="label">Min Structural N</div>
@@ -79,7 +84,17 @@ export default function DataPage() {
       </div>
 
       <div className="chart-card mb-4">
-        <h3>Source Refresh & Coverage</h3>
+        <div className="health-meta-row" style={{ marginBottom: 12 }}>
+          <h3 style={{ margin: 0 }}>Source Refresh & Coverage</h3>
+          <button className="btn btn-secondary" onClick={() => setDeepMode((v) => !v)}>
+            {deepMode ? "Use fast diagnostics" : "Run deep diagnostics"}
+          </button>
+        </div>
+        <div className="detail-history-empty" style={{ marginBottom: 12 }}>
+          {deepMode
+            ? "Deep diagnostics compute exact row counts, ticker counts, duplicate checks, and latest update metadata."
+            : "Fast diagnostics favor speed. Expensive fields are intentionally omitted instead of guessed."}
+        </div>
         <div className="dash-table">
           <table>
             <thead>
@@ -96,11 +111,16 @@ export default function DataPage() {
               {refreshRows.map(({ label, table }) => (
                 <tr key={label}>
                   <td>{label}</td>
-                  <td className="text-right">{fmtInt(table?.row_count)}</td>
-                  <td className="text-right">{fmtInt(table?.ticker_count)}</td>
+                  <td className="text-right">
+                    {fmtInt(table?.row_count)}
+                    {table?.row_count_mode === "approx" ? " approx" : ""}
+                  </td>
+                  <td className="text-right">
+                    {typeof table?.ticker_count === "number" ? fmtInt(table?.ticker_count) : deepMode ? "—" : "fast mode"}
+                  </td>
                   <td>{table?.min_date && table?.max_date ? `${table.min_date} → ${table.max_date}` : "—"}</td>
-                  <td>{fmtTs(table?.last_updated_at)}</td>
-                  <td>{table?.last_job_run_id || "—"}</td>
+                  <td>{table?.last_updated_at ? fmtTs(table?.last_updated_at) : deepMode ? "—" : "fast mode"}</td>
+                  <td>{table?.last_job_run_id || (deepMode ? "—" : "fast mode")}</td>
                 </tr>
               ))}
             </tbody>
@@ -162,8 +182,16 @@ export default function DataPage() {
             <tbody>
               <tr>
                 <td>{data?.exposure_duplicates?.active_exposure_source?.table || "—"}</td>
-                <td className="text-right">{fmtInt(data?.exposure_duplicates?.active_exposure_source?.duplicate_groups)}</td>
-                <td className="text-right">{fmtInt(data?.exposure_duplicates?.active_exposure_source?.duplicate_extra_rows)}</td>
+                <td className="text-right">
+                  {data?.exposure_duplicates?.active_exposure_source?.computed
+                    ? fmtInt(data?.exposure_duplicates?.active_exposure_source?.duplicate_groups)
+                    : "fast mode"}
+                </td>
+                <td className="text-right">
+                  {data?.exposure_duplicates?.active_exposure_source?.computed
+                    ? fmtInt(data?.exposure_duplicates?.active_exposure_source?.duplicate_extra_rows)
+                    : "fast mode"}
+                </td>
               </tr>
             </tbody>
           </table>
