@@ -11,6 +11,7 @@
 
 ## Data Protocols
 - `data_protocols/TRBC_CLASSIFICATION_PIT_PROTOCOL.md`: canonical TRBC PIT classification protocol (`security_classification_pit` based).
+- `data_protocols/UNIVERSE_ADD_RUNBOOK.md`: approved onboarding workflow for adding new RICs to the universe and backfilling canonical source tables.
 
 ## Reference Data
 - `../data/reference/security_master_seed.csv`: versioned seed artifact for the canonical universe registry.

@@ -20,7 +20,7 @@ import CovarianceHeatmap from "@/components/CovarianceHeatmap";
 import HelpLabel from "@/components/HelpLabel";
 import TableRowToggle from "@/components/TableRowToggle";
 import ApiErrorState from "@/components/ApiErrorState";
-import { useHealthDiagnostics } from "@/hooks/useApi";
+import { useHealthDiagnostics, useOperatorStatus } from "@/hooks/useApi";
 import { shortFactorLabel, STYLE_FACTORS } from "@/lib/factorLabels";
 import type {
   HealthCoverageFieldRow,
@@ -28,6 +28,8 @@ import type {
   HealthExposureStats,
   HealthFactorPctRow,
   HealthHistogram,
+  OperatorLaneStatus,
+  OperatorStatusData,
   SeriesPoint,
 } from "@/lib/types";
 
@@ -49,6 +51,107 @@ function fmtInt(v: number): string {
 
 function compactDateLabel(s: string): string {
   return s.length >= 7 ? s.slice(0, 7) : s;
+}
+
+function fmtTs(v: string | null | undefined): string {
+  if (!v) return "—";
+  const dt = new Date(v);
+  if (Number.isNaN(dt.getTime())) return v;
+  return dt.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function operatorTone(status: string | null | undefined): "success" | "warning" | "error" {
+  const clean = String(status || "").toLowerCase();
+  if (clean === "ok" || clean === "completed") return "success";
+  if (clean === "running") return "warning";
+  if (clean === "missing" || clean === "unknown" || clean === "skipped") return "warning";
+  return "error";
+}
+
+function laneSummary(lane: OperatorLaneStatus): string {
+  const run = lane.latest_run;
+  if (run.status === "missing") return "No runs yet";
+  if (run.status === "running") return `Running since ${fmtTs(run.started_at)}`;
+  const ts = run.finished_at || run.updated_at;
+  return `${run.status.toUpperCase()} · ${fmtTs(ts)}`;
+}
+
+function OperatorStatusSection({
+  data,
+  error,
+  isLoading,
+}: {
+  data?: OperatorStatusData;
+  error?: unknown;
+  isLoading: boolean;
+}) {
+  const sourceDates = data?.source_dates ?? {};
+  const neon = data?.neon_sync_health;
+  return (
+    <div className="chart-card">
+      <h3 style={{ marginBottom: 8 }}>Operator Status</h3>
+      <div className="health-meta-row">
+        <span>{data ? `Updated ${fmtTs(data.generated_at)}` : isLoading ? "Loading operator state..." : "Operator state unavailable"}</span>
+        <span>
+          Core due: {data ? (data.core_due.due ? `Yes (${data.core_due.reason})` : `No (${data.core_due.reason})`) : "—"}
+        </span>
+      </div>
+      {Boolean(error) && !data && (
+        <div className="detail-history-empty" style={{ marginTop: 10 }}>
+          Operator status endpoint is unavailable.
+        </div>
+      )}
+      <div className="health-kpi-strip" style={{ marginTop: 12, marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
+        {(data?.lanes ?? []).map((lane) => (
+          <div
+            key={lane.profile}
+            className="health-kpi"
+            style={{
+              minWidth: 210,
+              flex: "1 1 210px",
+              border: `1px solid ${
+                operatorTone(lane.latest_run.status) === "success"
+                  ? "rgba(107, 207, 154, 0.22)"
+                  : operatorTone(lane.latest_run.status) === "warning"
+                    ? "rgba(224, 190, 92, 0.22)"
+                    : "rgba(224, 87, 127, 0.24)"
+              }`,
+            }}
+          >
+            <div className="health-kpi-label">{lane.label}</div>
+            <div className="health-kpi-value" style={{ textTransform: "uppercase", fontSize: 18 }}>
+              {lane.latest_run.status}
+            </div>
+            <div className="health-kpi-subrow">{laneSummary(lane)}</div>
+            <div className="health-kpi-subrow">Stages: {lane.default_stages.join(" -> ") || "—"}</div>
+          </div>
+        ))}
+      </div>
+      <div className="health-grid-2-half">
+        <div className="chart-card" style={{ margin: 0 }}>
+          <h4 style={{ marginBottom: 8 }}>Source Recency</h4>
+          <div className="health-kpi-subrow"><strong>Prices:</strong> {sourceDates.prices_asof ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Fundamentals:</strong> {sourceDates.fundamentals_asof ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Classification:</strong> {sourceDates.classification_asof ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Cross Section:</strong> {sourceDates.exposures_asof ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Factor Returns:</strong> {data?.risk_engine?.factor_returns_latest_date ?? "—"}</div>
+        </div>
+        <div className="chart-card" style={{ margin: 0 }}>
+          <h4 style={{ marginBottom: 8 }}>Runtime Health</h4>
+          <div className="health-kpi-subrow"><strong>Refresh:</strong> {data?.refresh?.status ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Neon:</strong> {neon?.status ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Snapshot:</strong> {data?.active_snapshot?.snapshot_id ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Risk Engine:</strong> {data?.risk_engine?.method_version ?? "—"}</div>
+          <div className="health-kpi-subrow"><strong>Parity Artifact:</strong> {data?.latest_parity_artifact ?? "—"}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function buildHistogramData(hist: HealthHistogram): ChartData<"bar", number[], string> {
@@ -214,6 +317,11 @@ function sortCoverageRows(rows: HealthCoverageFieldRow[], key: CoverageSortKey, 
 
 export default function HealthPage() {
   const { data, isLoading, error } = useHealthDiagnostics();
+  const {
+    data: operatorData,
+    isLoading: operatorLoading,
+    error: operatorError,
+  } = useOperatorStatus();
   const [showAllTStatRows, setShowAllTStatRows] = useState(false);
   const [showAllExposureRows, setShowAllExposureRows] = useState(false);
   const [showAllFundCoverageRows, setShowAllFundCoverageRows] = useState(false);
@@ -270,19 +378,32 @@ export default function HealthPage() {
 
   const blockChartRef = useRef<ChartJS<"line"> | null>(null);
 
-  if (isLoading) {
+  if (isLoading && !operatorData) {
     return <AnalyticsLoadingViz message="Loading model health..." />;
   }
+  const operatorSection = (
+    <OperatorStatusSection data={operatorData} error={operatorError} isLoading={operatorLoading} />
+  );
   if (error) {
-    return <ApiErrorState title="Health Diagnostics Not Ready" error={error} />;
+    return (
+      <div className="health-wrap">
+        {operatorSection}
+        <ApiErrorState title="Health Diagnostics Not Ready" error={error} />
+      </div>
+    );
   }
 
   if (!data || data.status !== "ok") {
     return (
-      <div className="chart-card">
-        <h3>Health Diagnostics</h3>
-        <div className="detail-history-empty">
-          No diagnostics payload is available yet. Run refresh and reload this page.
+      <div className="health-wrap">
+        {operatorSection}
+        <div className="chart-card">
+          <h3>Health Diagnostics</h3>
+          <div className="detail-history-empty">
+            {isLoading
+              ? "Health diagnostics are still loading."
+              : "No diagnostics payload is available yet. Run refresh and reload this page."}
+          </div>
         </div>
       </div>
     );
@@ -448,6 +569,7 @@ export default function HealthPage() {
 
   return (
     <div className="health-wrap">
+      {operatorSection}
       <div className="chart-card">
         <h3 style={{ marginBottom: 6 }}>Model Health Diagnostics</h3>
         <div className="health-meta-row">

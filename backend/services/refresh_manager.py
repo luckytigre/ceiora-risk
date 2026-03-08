@@ -10,7 +10,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.data.cache import cache_get, cache_set
-from backend.orchestration.run_model_pipeline import PROFILE_CONFIG, STAGES, run_model_pipeline
+from backend.orchestration.run_model_pipeline import (
+    PROFILE_CONFIG,
+    STAGES,
+    resolve_profile_name,
+    run_model_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +91,7 @@ def get_refresh_status() -> dict[str, Any]:
 def _resolve_profile(profile: str | None, mode: str | None) -> str:
     prof = str(profile or "").strip().lower()
     if prof:
+        prof = resolve_profile_name(prof)
         if prof not in PROFILE_CONFIG:
             raise ValueError(
                 f"Invalid profile '{profile}'. Valid profiles: {', '.join(sorted(PROFILE_CONFIG.keys()))}"
@@ -93,11 +99,11 @@ def _resolve_profile(profile: str | None, mode: str | None) -> str:
         return prof
     clean_mode = str(mode or "full").strip().lower()
     if clean_mode == "light":
-        return "daily-fast"
+        return "serve-refresh"
     if clean_mode == "cold":
         return "cold-core"
     if clean_mode == "full":
-        return "daily-with-core-if-due"
+        return "source-daily-plus-core-if-due"
     raise ValueError("Invalid mode. Expected 'full', 'light', or 'cold' when profile is omitted.")
 
 

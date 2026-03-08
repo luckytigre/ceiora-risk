@@ -267,7 +267,7 @@ def build_universe_ticker_loadings(
         if eligible and ticker in canonical_style_map:
             exposures.update(canonical_style_map[ticker])
             if hq_country_code:
-                exposures[COUNTRY_FACTOR] = 1.0 if hq_country_code == "US" else -1.0
+                exposures[COUNTRY_FACTOR] = 1.0 if hq_country_code == "US" else 0.0
             if trbc_business_sector:
                 exposures[trbc_business_sector] = 1.0
 

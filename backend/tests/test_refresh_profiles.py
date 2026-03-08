@@ -12,12 +12,33 @@ def test_mode_cold_maps_to_cold_core_profile() -> None:
     assert _resolve_profile(None, "cold") == "cold-core"
 
 
+def test_mode_light_maps_to_serve_refresh_profile() -> None:
+    assert _resolve_profile(None, "light") == "serve-refresh"
+
+
+def test_legacy_profile_alias_maps_to_canonical_profile() -> None:
+    assert _resolve_profile("daily-with-core-if-due", None) == "source-daily-plus-core-if-due"
+
+
 def test_cold_profile_config_enables_full_rebuild_and_cache_reset() -> None:
     cfg = run_model_pipeline.PROFILE_CONFIG["cold-core"]
     assert cfg["core_policy"] == "always"
     assert cfg["serving_mode"] == "full"
     assert cfg["raw_history_policy"] == "full-daily"
     assert bool(cfg["reset_core_cache"]) is True
+
+
+def test_source_daily_profile_enables_ingest_without_core() -> None:
+    cfg = run_model_pipeline.PROFILE_CONFIG["source-daily"]
+    assert cfg["core_policy"] == "never"
+    assert cfg["enable_ingest"] is True
+    assert cfg["default_stages"] == ["ingest", "serving_refresh"]
+
+
+def test_cli_profile_choices_include_legacy_aliases() -> None:
+    choices = sorted(set(run_model_pipeline.PROFILE_CONFIG.keys()) | set(run_model_pipeline.PROFILE_ALIASES.keys()))
+    assert "daily-fast" in choices
+    assert "weekly-core" in choices
 
 
 def test_reset_core_caches_clears_core_tables(tmp_path: Path) -> None:

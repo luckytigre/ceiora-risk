@@ -23,7 +23,7 @@ function fmtShares(n: number): string {
 }
 
 function normalizeRiskMix(pos: Position) {
-  const raw = pos.risk_mix ?? {};
+  const raw = (pos.risk_mix ?? {}) as Partial<NonNullable<Position["risk_mix"]>>;
   return {
     country: Number(raw.country ?? 0) || 0,
     industry: Number(raw.industry ?? 0) || 0,

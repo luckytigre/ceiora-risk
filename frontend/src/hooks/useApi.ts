@@ -19,6 +19,7 @@ import type {
   UniverseFactorsData,
   HealthDiagnosticsData,
   DataDiagnosticsData,
+  OperatorStatusData,
   RefreshStatusData,
 } from "@/lib/types";
 
@@ -99,6 +100,10 @@ export function useHealthDiagnostics() {
 
 export function useDataDiagnostics() {
   return useSWR<DataDiagnosticsData>(apiPath.dataDiagnostics(), apiFetch, HEAVY_DIAGNOSTICS_OPTS);
+}
+
+export function useOperatorStatus() {
+  return useSWR<OperatorStatusData>(apiPath.operatorStatus(), apiFetch, SWR_OPTS);
 }
 
 export function useRefreshStatus() {

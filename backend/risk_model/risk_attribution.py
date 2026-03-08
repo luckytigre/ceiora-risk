@@ -29,7 +29,7 @@ STYLE_COLUMN_TO_LABEL: dict[str, str] = {
 }
 
 STYLE_FACTOR_NAMES = set(FULL_STYLE_FACTORS.keys())
-COUNTRY_FACTOR = "Country: US vs Non-US"
+COUNTRY_FACTOR = "Country: US"
 SYSTEMATIC_CATEGORIES: tuple[str, ...] = ("country", "industry", "style")
 
 

@@ -20,7 +20,7 @@ def test_risk_decomposition_emits_country_bucket() -> None:
             "ticker": "SHOP",
             "weight": 0.7,
             "exposures": {
-                COUNTRY_FACTOR: -1.0,
+                COUNTRY_FACTOR: 0.0,
                 "Software & Services": 1.0,
                 "Beta": 0.4,
             },

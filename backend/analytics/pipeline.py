@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 DATA_DB = Path(config.DATA_DB_PATH)
 CACHE_DB = Path(config.SQLITE_PATH)
-RISK_ENGINE_METHOD_VERSION = "v3_trbc_l2_country_centered_2026_03_07"
+RISK_ENGINE_METHOD_VERSION = "v4_trbc_l2_country_us_dummy_2026_03_08"
 
 
 def _finite_float(value: Any, default: float = 0.0) -> float:

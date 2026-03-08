@@ -315,9 +315,21 @@ def load_source_dates() -> dict[str, str | None]:
         fundamentals_asof = _max_val(
             "SELECT MAX(as_of_date) AS latest FROM security_fundamentals_pit"
         )
+    classification_asof = None
+    if _table_exists("security_classification_pit"):
+        classification_asof = _max_val(
+            "SELECT MAX(as_of_date) AS latest FROM security_classification_pit"
+        )
+    prices_asof = None
+    if _table_exists("security_prices_eod"):
+        prices_asof = _max_val(
+            "SELECT MAX(date) AS latest FROM security_prices_eod"
+        )
 
     return {
         "fundamentals_asof": fundamentals_asof,
+        "classification_asof": classification_asof,
+        "prices_asof": prices_asof,
         "exposures_asof": _max_val(
             f"SELECT MAX(as_of_date) AS latest FROM {_exposure_source_table_required()}"
         ),

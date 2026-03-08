@@ -44,6 +44,7 @@ export const apiPath = {
   universeFactors: () => "/api/universe/factors",
   healthDiagnostics: () => "/api/health/diagnostics",
   dataDiagnostics: () => "/api/data/diagnostics",
+  operatorStatus: () => "/api/operator/status",
   refresh: (mode: RefreshMode) => `/api/refresh?mode=${mode}`,
   refreshStatus: () => "/api/refresh/status",
 };

@@ -5,10 +5,12 @@
 - Cross-section recency guard: regressions only use exposure snapshots at least 7 calendar days old (`CROSS_SECTION_MIN_AGE_DAYS=7`).
 - Loadings/UI cache refresh: can run daily; it reuses latest weekly risk-engine state unless recompute is due.
 - Execution model: one orchestrator framework with profile-specific cadence:
-  - `daily-fast`
-  - `daily-with-core-if-due`
-  - `weekly-core`
+  - `serve-refresh`
+  - `source-daily`
+  - `source-daily-plus-core-if-due`
+  - `core-weekly`
   - `cold-core` (full historical rebuild path)
+  - `universe-add` (post-onboarding finalization lane)
 
 ## Hobby Launch Profile (Low Cost, 1-2 Users)
 - Run a single backend process/worker only.
@@ -16,7 +18,7 @@
 - Runtime DB location defaults to `backend/runtime/` (`data.db`, `cache.db`).
 - Legacy paths `backend/data.db` and `backend/cache.db` may be symlinks for command compatibility.
 - Set a non-empty `REFRESH_API_TOKEN` before exposing the app online.
-- Prefer manual or low-frequency refreshes (`daily-fast` most days).
+- Prefer manual or low-frequency refreshes (`serve-refresh` most days).
 - Keep daily file backups of `data.db` and `cache.db`.
 - Production backend command:
   - `BACKEND_WORKERS=1 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 1`
@@ -29,33 +31,39 @@
 - After a broad historical volume repair, run `cold-core` refresh to rebuild raw cross-sections and risk caches from the updated volume series.
 
 ## Refresh Paths (When To Use)
-- `daily-fast`: quick serving refresh; no core recompute.
-- `daily-with-core-if-due`: default full refresh mode; recomputes core only when cadence/version says due.
-- `weekly-core`: force core recompute without rebuilding full raw history.
+- `serve-refresh`: quick serving refresh; no core recompute and no source ingest.
+- `source-daily`: latest-source ingest plus serving refresh only.
+- `source-daily-plus-core-if-due`: default daily maintenance lane; recomputes core only when cadence/version says due.
+- `core-weekly`: force core recompute without rebuilding full raw history.
 - `cold-core`: full historical reset for structural data changes (new/changed historical prices, volume, fundamentals, classification, or factor methodology).
   - This path rebuilds `barra_raw_cross_section_history` over full history and clears core cache tables before recomputing factor returns/risk.
+- `universe-add`: finalization lane after explicit `security_master` merge and targeted source backfills for new names.
 
 ## Key Commands
 - Orchestrated refresh via API (default profile from `mode=full` mapping):
   - `curl -X POST "http://localhost:8000/api/refresh"`
-- API refresh explicit daily-fast profile:
-  - `curl -X POST "http://localhost:8000/api/refresh?profile=daily-fast"`
+- API refresh explicit serve-refresh profile:
+  - `curl -X POST "http://localhost:8000/api/refresh?profile=serve-refresh"`
+- API refresh explicit source-daily profile:
+  - `curl -X POST "http://localhost:8000/api/refresh?profile=source-daily"`
 - API refresh explicit weekly core recompute:
-  - `curl -X POST "http://localhost:8000/api/refresh?profile=weekly-core&force_core=true"`
+  - `curl -X POST "http://localhost:8000/api/refresh?profile=core-weekly&force_core=true"`
 - API refresh explicit cold-core rebuild:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=cold-core"`
 - API refresh cold mode shortcut:
   - `curl -X POST "http://localhost:8000/api/refresh?mode=cold"`
 - API refresh partial stage run:
-  - `curl -X POST "http://localhost:8000/api/refresh?profile=daily-fast&from_stage=ingest&to_stage=estu_audit"`
+  - `curl -X POST "http://localhost:8000/api/refresh?profile=source-daily-plus-core-if-due&from_stage=ingest&to_stage=risk_model"`
 - Orchestrated refresh via CLI module:
-  - `python3 -m backend.scripts.run_model_pipeline --profile daily-fast`
+  - `python3 -m backend.scripts.run_model_pipeline --profile serve-refresh`
 - Orchestrated refresh via script wrapper:
-  - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due`
+  - `python3 -m backend.scripts.run_model_pipeline --profile source-daily-plus-core-if-due`
+- Source-only refresh via script wrapper:
+  - `python3 -m backend.scripts.run_model_pipeline --profile source-daily`
 - Cold-core refresh via script wrapper:
   - `python3 -m backend.scripts.run_model_pipeline --profile cold-core`
 - Resume a previous run id:
-  - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due --resume-run-id <run_id>`
+  - `python3 -m backend.scripts.run_model_pipeline --profile source-daily-plus-core-if-due --resume-run-id <run_id>`
 - Refresh data from LSEG:
   - `python3 -m backend.scripts.download_data_lseg --db-path backend/runtime/data.db`
 - Repair historical volume coverage only (writes `TR.Volume` into `security_prices_eod.volume`):
@@ -108,6 +116,8 @@
 ## Validation Checklist
 - Verify refresh status + orchestrator state:
   - `curl -s "http://localhost:8000/api/refresh/status" | jq`
+- Verify operator lane matrix:
+  - `curl -s "http://localhost:8000/api/operator/status" | jq`
 - Verify latest refresh metadata:
   - `curl -s "http://localhost:8000/api/data/status" | jq '.cache_outputs[] | select(.key==\"refresh_meta\")'`
 - Verify risk payload includes engine metadata:

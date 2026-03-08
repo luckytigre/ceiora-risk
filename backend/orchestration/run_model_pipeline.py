@@ -44,31 +44,98 @@ STAGES = [
 ]
 
 PROFILE_CONFIG: dict[str, dict[str, Any]] = {
-    "daily-fast": {
+    "serve-refresh": {
+        "label": "Serve Refresh",
+        "description": "Rebuild frontend-facing caches only.",
         "core_policy": "never",
         "serving_mode": "light",
         "raw_history_policy": "none",
         "reset_core_cache": False,
+        "default_stages": ["serving_refresh"],
+        "enable_ingest": False,
     },
-    "daily-with-core-if-due": {
+    "source-daily": {
+        "label": "Source Daily",
+        "description": "Pull latest source-of-truth data and rebuild serving caches.",
+        "core_policy": "never",
+        "serving_mode": "light",
+        "raw_history_policy": "none",
+        "reset_core_cache": False,
+        "default_stages": ["ingest", "serving_refresh"],
+        "enable_ingest": True,
+    },
+    "source-daily-plus-core-if-due": {
+        "label": "Source Daily + Core If Due",
+        "description": "Daily source refresh with core recompute only when due.",
         "core_policy": "due",
         "serving_mode": "light",
         "raw_history_policy": "none",
         "reset_core_cache": False,
+        "default_stages": ["ingest", "factor_returns", "risk_model", "serving_refresh"],
+        "enable_ingest": True,
     },
-    "weekly-core": {
+    "core-weekly": {
+        "label": "Core Weekly",
+        "description": "Recompute factor returns, covariance, and specific risk from current source tables.",
         "core_policy": "always",
         "serving_mode": "full",
         "raw_history_policy": "none",
         "reset_core_cache": False,
+        "default_stages": ["factor_returns", "risk_model", "serving_refresh"],
+        "enable_ingest": False,
     },
     "cold-core": {
+        "label": "Cold Core",
+        "description": "Structural rebuild of raw history and core model state.",
         "core_policy": "always",
         "serving_mode": "full",
         "raw_history_policy": "full-daily",
         "reset_core_cache": True,
+        "default_stages": ["raw_history", "feature_build", "estu_audit", "factor_returns", "risk_model", "serving_refresh"],
+        "enable_ingest": False,
+    },
+    "universe-add": {
+        "label": "Universe Add",
+        "description": "Post-universe-onboarding serving refresh after targeted source backfills.",
+        "core_policy": "never",
+        "serving_mode": "full",
+        "raw_history_policy": "none",
+        "reset_core_cache": False,
+        "default_stages": ["serving_refresh"],
+        "enable_ingest": False,
     },
 }
+
+PROFILE_ALIASES: dict[str, str] = {
+    "daily-fast": "serve-refresh",
+    "daily-with-core-if-due": "source-daily-plus-core-if-due",
+    "weekly-core": "core-weekly",
+}
+
+
+def resolve_profile_name(profile: str) -> str:
+    clean = str(profile or "").strip().lower()
+    if not clean:
+        raise ValueError("profile is required")
+    return PROFILE_ALIASES.get(clean, clean)
+
+
+def profile_catalog() -> list[dict[str, Any]]:
+    return [
+        {
+            "profile": profile,
+            "label": str(cfg.get("label") or profile),
+            "description": str(cfg.get("description") or ""),
+            "core_policy": str(cfg.get("core_policy") or ""),
+            "serving_mode": str(cfg.get("serving_mode") or ""),
+            "raw_history_policy": str(cfg.get("raw_history_policy") or "none"),
+            "reset_core_cache": bool(cfg.get("reset_core_cache")),
+            "default_stages": list(cfg.get("default_stages") or []),
+            "enable_ingest": bool(cfg.get("enable_ingest")),
+            "aliases": [alias for alias, canonical in PROFILE_ALIASES.items() if canonical == profile],
+        }
+        for profile, cfg in PROFILE_CONFIG.items()
+    ]
 
 
 def _write_neon_mirror_artifact(
@@ -280,6 +347,13 @@ def _stage_window(from_stage: str | None, to_stage: str | None) -> list[str]:
     return STAGES[start : end + 1]
 
 
+def _default_stage_selection(cfg: dict[str, Any], from_stage: str | None, to_stage: str | None) -> list[str]:
+    if from_stage or to_stage:
+        return _stage_window(from_stage, to_stage)
+    selected = [str(stage) for stage in (cfg.get("default_stages") or []) if str(stage) in STAGES]
+    return selected or list(STAGES)
+
+
 def _run_stage(
     *,
     stage: str,
@@ -290,8 +364,14 @@ def _run_stage(
     core_reason: str,
     raw_history_policy: str = "none",
     reset_core_cache: bool = False,
+    enable_ingest: bool = False,
 ) -> dict[str, Any]:
     if stage == "ingest":
+        if not enable_ingest:
+            return {
+                "status": "skipped",
+                "reason": "profile_skip_ingest",
+            }
         bootstrap = bootstrap_cuse4_source_tables(
             db_path=DATA_DB,
             replace_all=False,
@@ -452,14 +532,14 @@ def run_model_pipeline(
     to_stage: str | None = None,
     force_core: bool = False,
 ) -> dict[str, Any]:
-    profile_key = str(profile).strip().lower()
+    profile_key = resolve_profile_name(profile)
     if profile_key not in PROFILE_CONFIG:
         raise ValueError(
             f"Unsupported profile '{profile}'. Expected one of: {', '.join(sorted(PROFILE_CONFIG))}"
         )
 
     cfg = PROFILE_CONFIG[profile_key]
-    selected = _stage_window(from_stage, to_stage)
+    selected = _default_stage_selection(cfg, from_stage, to_stage)
     effective_run_id = (
         str(resume_run_id).strip()
         if resume_run_id and str(resume_run_id).strip()
@@ -532,6 +612,7 @@ def run_model_pipeline(
                 core_reason=str(core_reason),
                 raw_history_policy=raw_history_policy,
                 reset_core_cache=reset_core_cache,
+                enable_ingest=bool(cfg.get("enable_ingest")),
             )
             stage_status = "skipped" if str(out.get("status")) == "skipped" else "completed"
             elapsed = time.perf_counter() - stage_t0
@@ -651,6 +732,7 @@ def run_model_pipeline(
         "status": overall_status,
         "run_id": effective_run_id,
         "profile": profile_key,
+        "profile_label": str(cfg.get("label") or profile_key),
         "as_of_date": as_of,
         "core_policy": core_policy,
         "core_due": bool(due),
@@ -670,7 +752,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         required=True,
-        choices=sorted(PROFILE_CONFIG.keys()),
+        choices=sorted(set(PROFILE_CONFIG.keys()) | set(PROFILE_ALIASES.keys())),
         help="Execution profile for cadence and core-risk policy.",
     )
     parser.add_argument("--as-of-date", default=None, help="Optional as-of date (YYYY-MM-DD).")

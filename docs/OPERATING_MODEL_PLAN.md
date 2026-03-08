@@ -1,8 +1,22 @@
 # Operating Model Plan
 
-Date: 2026-03-07
+Date: 2026-03-08
 Owner: Codex
-Status: Planning document for pre-cloud operating cleanup
+Status: Active implementation document for pre-cloud operating cleanup
+
+## Current Implementation Status
+
+Implemented now:
+- canonical orchestrator lane names are live in `run_model_pipeline`
+- legacy profile aliases still resolve for compatibility
+- `/api/operator/status` exposes lane status, source recency, core-due state, refresh state, and Neon parity health
+- Health page now surfaces operator cards and lane recency
+- source recency now explicitly tracks prices, fundamentals, classification, and raw cross-section dates
+
+Cold-core lessons now incorporated:
+- serving refresh must read live risk-engine cache keys, not only the active published snapshot
+- staged snapshots can be correct while the live pointer is still stale, so operator observability must show the active snapshot id
+- heavy diagnostics and operator-state surfaces should be separated so the operator view remains useful even when diagnostics are stale
 
 ## Objective
 
@@ -194,8 +208,8 @@ Primary trigger:
 - holdings edits
 - manual frontend refresh
 
-Current closest path:
-- `daily-fast`
+Current implemented path:
+- `serve-refresh`
 
 ### 2) `source-daily`
 
@@ -213,8 +227,9 @@ Does not:
 Primary trigger:
 - daily market data update
 
-Current gap:
-- current orchestrator has ingest available, but it is gated by `ORCHESTRATOR_ENABLE_INGEST=false` and is not presented as a named operating lane.
+Current implemented path:
+- `source-daily`
+- actual live ingest still depends on `ORCHESTRATOR_ENABLE_INGEST=true`
 
 ### 3) `source-daily-plus-core-if-due`
 
@@ -229,8 +244,8 @@ Does:
 Primary trigger:
 - once-daily operator run
 
-Current closest path:
-- `daily-with-core-if-due`, but only once ingest is made an explicit first-class part of the run profile
+Current implemented path:
+- `source-daily-plus-core-if-due`
 
 ### 4) `core-weekly`
 
@@ -247,8 +262,8 @@ Does:
 Does not:
 - historical raw rebuild unless separately requested
 
-Current closest path:
-- `weekly-core`
+Current implemented path:
+- `core-weekly`
 
 ### 5) `cold-core`
 
@@ -287,8 +302,9 @@ Does:
   - `serve-refresh` for small adds, or
   - `cold-core` for material additions
 
-Current gap:
-- exists as scripts and procedures, but not yet as one documented named workflow
+Current state:
+- named lane exists for observability/finalization
+- onboarding and targeted backfill still remain operator-driven via runbook/commands
 
 ## Universe-Add Standard Procedure
 
@@ -415,11 +431,10 @@ This should become the only approved path for new ticker onboarding.
 
 ## Proposed Implementation Order
 
-1. Add an operator-facing status model and API payload for run lanes.
-2. Add a Data/Health page card set that shows the five operational lanes clearly.
-3. Refactor refresh naming so `serve-refresh`, `source-daily`, `core-weekly`, and `cold-core` are explicit.
-4. Add a documented and scriptable `universe-add` workflow.
-5. Only after that, finalize cloud cutover semantics around scheduled runs.
+1. Finalize a documented and scriptable `universe-add` workflow.
+2. Add one-command operator checks around `/api/operator/status`, `/api/health`, and latest parity artifact.
+3. Tighten frontend affordances so lane-triggering actions are explicit from the UI.
+4. Only after that, finalize cloud cutover semantics around scheduled runs.
 
 ## What “Done” Looks Like
 

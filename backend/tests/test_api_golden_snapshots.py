@@ -63,7 +63,7 @@ def test_api_risk_matches_golden_snapshot(monkeypatch) -> None:
         },
         "risk_engine": {
             "specific_risk_ticker_count": 100,
-            "method_version": "v3_trbc_l2_country_centered_2026_03_07",
+            "method_version": "v4_trbc_l2_country_us_dummy_2026_03_08",
         },
         "r_squared": 0.41,
         "condition_number": 1100.0,

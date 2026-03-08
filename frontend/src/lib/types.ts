@@ -518,3 +518,77 @@ export interface RefreshStatusData {
   status: string;
   refresh: RefreshStatusState;
 }
+
+export interface OperatorLaneLatestRun {
+  run_id: string | null;
+  profile: string | null;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string | null;
+  stage_count: number;
+  completed_stage_count: number;
+  failed_stage_count: number;
+  running_stage_count: number;
+  stages: Array<{
+    stage_name: string;
+    stage_order: number;
+    status: string;
+    started_at: string | null;
+    completed_at: string | null;
+    error_type: string | null;
+    error_message: string | null;
+  }>;
+}
+
+export interface OperatorLaneStatus {
+  profile: string;
+  label: string;
+  description: string;
+  core_policy: string;
+  serving_mode: string;
+  raw_history_policy: string;
+  reset_core_cache: boolean;
+  default_stages: string[];
+  enable_ingest: boolean;
+  aliases: string[];
+  latest_run: OperatorLaneLatestRun;
+}
+
+export interface OperatorStatusData {
+  status: string;
+  generated_at: string;
+  lanes: OperatorLaneStatus[];
+  source_dates: {
+    fundamentals_asof?: string | null;
+    classification_asof?: string | null;
+    prices_asof?: string | null;
+    exposures_asof?: string | null;
+  };
+  risk_engine: {
+    status?: string;
+    method_version?: string;
+    last_recompute_date?: string;
+    factor_returns_latest_date?: string;
+    lookback_days?: number;
+    cross_section_min_age_days?: number;
+    recompute_interval_days?: number;
+  };
+  core_due: {
+    due: boolean;
+    reason: string;
+  };
+  refresh: RefreshStatusState;
+  neon_sync_health?: {
+    status?: string;
+    message?: string;
+    updated_at?: string;
+    artifact_path?: string | null;
+    parity_issue_count?: number;
+  } | null;
+  active_snapshot?: {
+    snapshot_id?: string;
+    published_at?: number;
+  } | null;
+  latest_parity_artifact?: string | null;
+}

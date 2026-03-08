@@ -36,7 +36,7 @@ STYLE_SCORE_COLS = list(STYLE_COLUMN_TO_LABEL.keys())
 RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v13_trbc_l2_country_centered_2026_03_07"
+CACHE_METHOD_VERSION = "v14_trbc_l2_country_us_dummy_2026_03_08"
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
@@ -590,14 +590,14 @@ def compute_daily_factor_returns(
         style_scores = exp_snap.loc[valid_idx, style_cols_present].copy()
         style_scores.columns = style_names
 
-        # Structural exposures: country block plus TRBC L2 business-sector groups.
+        # Structural exposures: US country dummy plus TRBC L2 business-sector groups.
         structural_dummies = pd.get_dummies(industry_series, dtype=float)
         if structural_dummies.empty:
             skip_counts["empty_dummies"] += 1
             continue
-        country_exposure = np.where(country_series.eq("US"), 1.0, -1.0)
+        country_exposure = np.where(country_series.eq("US"), 1.0, 0.0)
         country_exposure = pd.Series(country_exposure, index=country_series.index, dtype=float)
-        if country_series.nunique(dropna=False) > 1:
+        if country_series.eq("US").any() and country_series.ne("US").any():
             structural_dummies = pd.concat(
                 [country_exposure.rename(COUNTRY_FACTOR), structural_dummies],
                 axis=1,

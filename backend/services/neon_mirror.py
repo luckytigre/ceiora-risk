@@ -63,6 +63,7 @@ def sync_factor_returns_to_neon(
     mode: str = "incremental",
     overlap_days: int = 14,
     batch_size: int = 25_000,
+    analytics_years: int = 5,
 ) -> dict[str, Any]:
     cache_db = Path(cache_path).expanduser().resolve()
     if not cache_db.exists():
@@ -73,6 +74,7 @@ def sync_factor_returns_to_neon(
     mode_norm = str(mode or "incremental").strip().lower()
     if mode_norm not in {"full", "incremental"}:
         mode_norm = "incremental"
+    sync_cutoff = _cutoff_iso(years=analytics_years)
 
     sqlite_conn = sqlite3.connect(str(cache_db))
     pg_conn = connect(dsn=resolve_dsn(dsn), autocommit=False)
@@ -90,24 +92,42 @@ def sync_factor_returns_to_neon(
         where_sql = ""
         where_params: tuple[Any, ...] = ()
         action = "truncate_and_reload"
+        source_count_sql = f"SELECT COUNT(*) FROM {source_table} WHERE date >= ?"
+        source_count_params: tuple[Any, ...] = (sync_cutoff,)
         if mode_norm == "full":
             with pg_conn.cursor() as cur:
                 cur.execute(sql.SQL("TRUNCATE TABLE {}").format(sql.Identifier(table)))
+            where_sql = "WHERE date >= ?"
+            where_params = (sync_cutoff,)
         else:
             with pg_conn.cursor() as cur:
                 cur.execute(
-                    sql.SQL("SELECT MAX(date)::text FROM {}").format(sql.Identifier(table))
+                    sql.SQL(
+                        "SELECT COUNT(*), MAX(date)::text FROM {} WHERE date >= %s"
+                    ).format(sql.Identifier(table)),
+                    (sync_cutoff,),
                 )
                 row = cur.fetchone()
-                max_date_txt = str(row[0]) if row and row[0] is not None else ""
+                target_count = int(row[0] or 0) if row else 0
+                max_date_txt = str(row[1]) if row and row[1] is not None else ""
+            src_count_row = sqlite_conn.execute(source_count_sql, source_count_params).fetchone()
+            source_window_rows = int(src_count_row[0] or 0) if src_count_row else 0
             max_date = _parse_iso_date(max_date_txt)
             if max_date is None:
                 with pg_conn.cursor() as cur:
                     cur.execute(sql.SQL("TRUNCATE TABLE {}").format(sql.Identifier(table)))
                 action = "target_empty_truncate_and_reload"
+                where_sql = "WHERE date >= ?"
+                where_params = (sync_cutoff,)
+            elif target_count != source_window_rows:
+                with pg_conn.cursor() as cur:
+                    cur.execute(sql.SQL("TRUNCATE TABLE {}").format(sql.Identifier(table)))
+                where_sql = "WHERE date >= ?"
+                where_params = (sync_cutoff,)
+                action = "bounded_full_reload_after_count_mismatch"
             else:
                 cutoff = max_date - timedelta(days=max(0, int(overlap_days)))
-                cutoff_txt = cutoff.isoformat()
+                cutoff_txt = max(cutoff.isoformat(), sync_cutoff)
                 with pg_conn.cursor() as cur:
                     cur.execute(
                         sql.SQL("DELETE FROM {} WHERE date >= %s").format(
@@ -576,6 +596,7 @@ def run_neon_mirror_cycle(
             dsn=dsn,
             mode=str(mode),
             batch_size=int(batch_size),
+            analytics_years=int(analytics_years),
         )
 
     if prune_enabled:

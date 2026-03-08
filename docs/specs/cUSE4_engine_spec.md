@@ -23,7 +23,7 @@ Scope note:
 
 - Country factor is segmented as `US` vs `non-US` (binary structural block).
 - Industry handling uses weighted sum-to-zero constraints (not dropped dummy baseline).
-- Current runtime implementation carries country as an explicit centered `Country: US vs Non-US` structural factor in phase A.
+- Current runtime implementation carries country as a simple `Country: US` dummy in phase A.
 - Factor covariance will include both:
   - Newey-West adjustment, and
   - shrinkage (toward a structured/shrunk target).
@@ -230,7 +230,7 @@ Columns:
 ## 5) Barra Factors and Metric Roll-up
 
 Structural blocks in regression:
-- `country`: binary `US` vs `non-US`, emitted in runtime as centered factor `Country: US vs Non-US`
+- `country`: binary `US` dummy, emitted in runtime as `Country: US`
 - `industry`: TRBC industry-group dummies
 
 Style factors:
@@ -306,7 +306,7 @@ Daily cross-sectional model on ESTU:
 - `r_i,t = CountryBlock_i,t + IndustryBlock_i,t + StyleBlock_i,t + eps_i,t`
 - WLS weights: cap-based, stable policy (recommended `sqrt(mcap)`).
 - Industry coefficients are estimated with weighted sum-to-zero constraints.
-- Country currently enters as an explicit centered structural factor (`Country: US vs Non-US`) in the phase-A block.
+- Country currently enters as a simple structural dummy factor (`Country: US`) in the phase-A block.
 
 Persist:
 - factor returns by date/factor
@@ -387,17 +387,24 @@ Where this remains an approximation:
    - Cache is limited to compute workspace + API acceleration; it is not a durable source of truth.
 8. Orchestrated execution profiles:
    - Run via `run_model_pipeline` with profile-based cadence:
-     - `daily-fast`
-     - `daily-with-core-if-due`
-     - `weekly-core`
+     - `serve-refresh`
+     - `source-daily`
+     - `source-daily-plus-core-if-due`
+     - `core-weekly`
+     - `cold-core`
+     - `universe-add`
    - Stage checkpoints persist in `job_run_status`.
    - `ingest` stage always runs canonical bootstrap checks; optional live LSEG ingest is controlled by `ORCHESTRATOR_ENABLE_INGEST`.
+   - Legacy profile names remain accepted as aliases during the transition:
+     - `daily-fast` -> `serve-refresh`
+     - `daily-with-core-if-due` -> `source-daily-plus-core-if-due`
+     - `weekly-core` -> `core-weekly`
 9. Downstream usage:
    - Portfolio exposures/risk attribution and API caches read from processed model outputs, not raw ingest tables.
 
 ## 11) Near-Term Operating Priorities
 
-1. Complete final full-run parity QA under orchestrator profiles (`daily-fast`, `daily-with-core-if-due`, `weekly-core`).
+1. Complete final full-run parity QA under orchestrator profiles (`serve-refresh`, `source-daily-plus-core-if-due`, `core-weekly`).
 2. Keep `universe_cross_section_snapshot` on `mode=current` unless a historical materialization run is explicitly requested.
 3. Continue scheduled coverage audits (fundamentals/classification/prices) and ESTU drop-reason monitoring.
 4. Optionally hard-delete archived deprecated scripts after cloud cutover readiness review.

@@ -22,7 +22,7 @@ Ensure each (`ric`, `as_of_date`) used by the model has point-in-time TRBC class
 1. Refresh canonical source tables:
    - `python3 -m backend.scripts.download_data_lseg --db-path backend/runtime/data.db`
 2. Run orchestrated model refresh:
-   - `python3 -m backend.scripts.run_model_pipeline --profile daily-with-core-if-due`
+   - `python3 -m backend.scripts.run_model_pipeline --profile source-daily-plus-core-if-due`
 3. Use `cold-core` only after structural history changes:
    - `python3 -m backend.scripts.run_model_pipeline --profile cold-core`
 
