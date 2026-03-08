@@ -65,7 +65,7 @@ export default function TabNav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [recomputeState, setRecomputeState] = useState<"idle" | "running" | "failed">("idle");
   const [syncState, setSyncState] = useState<"idle" | "running" | "failed">("idle");
-  const [clockMs, setClockMs] = useState<number>(() => Date.now());
+  const [clockMs, setClockMs] = useState<number>(0);
   const navRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { mode, setMode } = useBackground();
@@ -107,6 +107,7 @@ export default function TabNav() {
   }, [pending]);
 
   useEffect(() => {
+    setClockMs(Date.now());
     const id = window.setInterval(() => setClockMs(Date.now()), 60000);
     return () => window.clearInterval(id);
   }, []);

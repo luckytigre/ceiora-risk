@@ -25,7 +25,7 @@ from backend.risk_model.eligibility import (
     structural_eligibility_for_date,
 )
 from backend.risk_model.descriptors import FULL_STYLE_ORTH_RULES, canonicalize_style_scores
-from backend.risk_model.risk_attribution import COUNTRY_NON_US_FACTOR, STYLE_COLUMN_TO_LABEL
+from backend.risk_model.risk_attribution import COUNTRY_FACTOR, STYLE_COLUMN_TO_LABEL
 from backend.risk_model.wls_regression import estimate_factor_returns_two_phase
 from backend.trading_calendar import filter_xnys_sessions, non_xnys_dates, previous_or_same_xnys_session
 
@@ -36,7 +36,7 @@ STYLE_SCORE_COLS = list(STYLE_COLUMN_TO_LABEL.keys())
 RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v12_trbc_l2_business_sector_2026_03_05"
+CACHE_METHOD_VERSION = "v13_trbc_l2_country_centered_2026_03_07"
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
@@ -595,10 +595,11 @@ def compute_daily_factor_returns(
         if structural_dummies.empty:
             skip_counts["empty_dummies"] += 1
             continue
-        non_us_indicator = (country_series != "US").astype(float)
-        if non_us_indicator.nunique(dropna=False) > 1:
+        country_exposure = np.where(country_series.eq("US"), 1.0, -1.0)
+        country_exposure = pd.Series(country_exposure, index=country_series.index, dtype=float)
+        if country_series.nunique(dropna=False) > 1:
             structural_dummies = pd.concat(
-                [non_us_indicator.rename(COUNTRY_NON_US_FACTOR), structural_dummies],
+                [country_exposure.rename(COUNTRY_FACTOR), structural_dummies],
                 axis=1,
             )
         ind_x = structural_dummies.to_numpy(dtype=float)

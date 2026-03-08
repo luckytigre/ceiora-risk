@@ -23,7 +23,7 @@ Scope note:
 
 - Country factor is segmented as `US` vs `non-US` (binary structural block).
 - Industry handling uses weighted sum-to-zero constraints (not dropped dummy baseline).
-- Current runtime implementation carries country as an explicit `Country: Non-US` structural factor in phase A.
+- Current runtime implementation carries country as an explicit centered `Country: US vs Non-US` structural factor in phase A.
 - Factor covariance will include both:
   - Newey-West adjustment, and
   - shrinkage (toward a structured/shrunk target).
@@ -230,7 +230,7 @@ Columns:
 ## 5) Barra Factors and Metric Roll-up
 
 Structural blocks in regression:
-- `country`: binary `US` vs `non-US`, emitted in runtime as `Country: Non-US`
+- `country`: binary `US` vs `non-US`, emitted in runtime as centered factor `Country: US vs Non-US`
 - `industry`: TRBC industry-group dummies
 
 Style factors:
@@ -306,7 +306,7 @@ Daily cross-sectional model on ESTU:
 - `r_i,t = CountryBlock_i,t + IndustryBlock_i,t + StyleBlock_i,t + eps_i,t`
 - WLS weights: cap-based, stable policy (recommended `sqrt(mcap)`).
 - Industry coefficients are estimated with weighted sum-to-zero constraints.
-- Country currently enters as an explicit binary structural factor (`Country: Non-US`) in the phase-A block.
+- Country currently enters as an explicit centered structural factor (`Country: US vs Non-US`) in the phase-A block.
 
 Persist:
 - factor returns by date/factor

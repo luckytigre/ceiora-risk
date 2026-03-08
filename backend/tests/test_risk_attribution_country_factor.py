@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from backend.risk_model.risk_attribution import COUNTRY_NON_US_FACTOR, risk_decomposition
+from backend.risk_model.risk_attribution import COUNTRY_FACTOR, risk_decomposition
 
 
 def test_risk_decomposition_emits_country_bucket() -> None:
@@ -12,24 +12,24 @@ def test_risk_decomposition_emits_country_bucket() -> None:
             [0.0000, 0.0900, 0.0000],
             [0.0000, 0.0000, 0.0100],
         ],
-        index=[COUNTRY_NON_US_FACTOR, "Software & Services", "Beta"],
-        columns=[COUNTRY_NON_US_FACTOR, "Software & Services", "Beta"],
+        index=[COUNTRY_FACTOR, "Software & Services", "Beta"],
+        columns=[COUNTRY_FACTOR, "Software & Services", "Beta"],
     )
     positions = [
         {
             "ticker": "SHOP",
-            "weight": 0.5,
+            "weight": 0.7,
             "exposures": {
-                COUNTRY_NON_US_FACTOR: 1.0,
+                COUNTRY_FACTOR: -1.0,
                 "Software & Services": 1.0,
                 "Beta": 0.4,
             },
         },
         {
             "ticker": "AAPL",
-            "weight": 0.5,
+            "weight": 0.3,
             "exposures": {
-                COUNTRY_NON_US_FACTOR: 0.0,
+                COUNTRY_FACTOR: 1.0,
                 "Software & Services": 1.0,
                 "Beta": 0.6,
             },
@@ -45,6 +45,6 @@ def test_risk_decomposition_emits_country_bucket() -> None:
     assert risk_shares["country"] > 0.0
     assert component_shares["country"] > 0.0
     by_factor = {row["factor"]: row for row in factor_details}
-    assert by_factor[COUNTRY_NON_US_FACTOR]["category"] == "country"
+    assert by_factor[COUNTRY_FACTOR]["category"] == "country"
     assert by_factor["Software & Services"]["category"] == "industry"
     assert by_factor["Beta"]["category"] == "style"

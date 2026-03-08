@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 DATA_DB = Path(config.DATA_DB_PATH)
 CACHE_DB = Path(config.SQLITE_PATH)
-RISK_ENGINE_METHOD_VERSION = "v2_trbc_l2_business_sector_2026_03_05"
+RISK_ENGINE_METHOD_VERSION = "v3_trbc_l2_country_centered_2026_03_07"
 
 
 def _finite_float(value: Any, default: float = 0.0) -> float:
@@ -290,7 +290,11 @@ def run_refresh(
             }
 
     # 2. Weekly risk-engine recompute gate.
-    risk_engine_meta: RiskEngineMetaPayload = sqlite.cache_get("risk_engine_meta") or {}
+    risk_engine_meta: RiskEngineMetaPayload = (
+        sqlite.cache_get_live("risk_engine_meta")
+        or sqlite.cache_get("risk_engine_meta")
+        or {}
+    )
     should_recompute, recompute_reason = _risk_recompute_due(risk_engine_meta, today_utc=today_utc)
     if skip_risk_engine:
         should_recompute = False
@@ -302,8 +306,14 @@ def run_refresh(
         should_recompute = True
         recompute_reason = "force_risk_recompute"
 
-    cov = _deserialize_covariance(sqlite.cache_get("risk_engine_cov"))
-    cached_specific = sqlite.cache_get("risk_engine_specific_risk")
+    cov = _deserialize_covariance(
+        sqlite.cache_get_live("risk_engine_cov")
+        or sqlite.cache_get("risk_engine_cov")
+    )
+    cached_specific = (
+        sqlite.cache_get_live("risk_engine_specific_risk")
+        or sqlite.cache_get("risk_engine_specific_risk")
+    )
     specific_risk_by_security: dict[str, SpecificRiskPayload] = (
         cached_specific if isinstance(cached_specific, dict) else {}
     )

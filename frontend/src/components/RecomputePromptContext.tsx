@@ -23,21 +23,22 @@ const RecomputePromptContext = createContext<RecomputePromptValue>({
 });
 
 export function RecomputePromptProvider({ children }: { children: ReactNode }) {
-  const [pending, setPending] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(STORAGE_KEY) === "1";
-  });
-  const [pendingCount, setPendingCount] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    const raw = window.localStorage.getItem(COUNT_KEY);
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
-  });
-  const [dirtySince, setDirtySince] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const raw = window.localStorage.getItem(DIRTY_SINCE_KEY);
-    return raw && raw.trim().length > 0 ? raw : null;
-  });
+  const [pending, setPending] = useState<boolean>(false);
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  const [dirtySince, setDirtySince] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nextPending = window.localStorage.getItem(STORAGE_KEY) === "1";
+    const rawCount = window.localStorage.getItem(COUNT_KEY);
+    const parsedCount = Number(rawCount);
+    const nextCount = Number.isFinite(parsedCount) && parsedCount > 0 ? Math.floor(parsedCount) : 0;
+    const rawDirtySince = window.localStorage.getItem(DIRTY_SINCE_KEY);
+    const nextDirtySince = rawDirtySince && rawDirtySince.trim().length > 0 ? rawDirtySince : null;
+
+    setPending(nextPending);
+    setPendingCount(nextCount);
+    setDirtySince(nextDirtySince);
+  }, []);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {

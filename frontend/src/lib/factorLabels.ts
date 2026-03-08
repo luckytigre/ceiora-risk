@@ -1,6 +1,6 @@
 /** Short display names for Barra factor labels (style + industry). */
 const SHORT_LABELS: Record<string, string> = {
-  "Country: Non-US": "Non-US",
+  "Country: US vs Non-US": "Country",
   // Style factors
   "Book-to-Price": "B/P",
   "Earnings Yield": "Earn Yld",

@@ -140,6 +140,26 @@ def cache_get(key: str) -> Any | None:
     return _run_with_lock_retry(_work)
 
 
+def cache_get_live(key: str) -> Any | None:
+    """Retrieve a cache value by raw key, ignoring the active snapshot pointer."""
+    _ensure_schema()
+
+    def _work() -> Any | None:
+        conn = _conn()
+        try:
+            row = conn.execute(
+                "SELECT value FROM cache WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if row is None:
+                return None
+            return json.loads(row[0])
+        finally:
+            conn.close()
+
+    return _run_with_lock_retry(_work)
+
+
 def cache_set(key: str, value: Any, *, snapshot_id: str | None = None) -> None:
     """Store a JSON-serializable value in the cache."""
     _ensure_schema()
