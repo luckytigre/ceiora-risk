@@ -87,3 +87,19 @@ def test_latest_run_summary_by_profile_handles_empty_db(tmp_path) -> None:
 
     out = job_runs.latest_run_summary_by_profile(db_path=tmp_path / "data.db", profiles=["serve-refresh"])
     assert out == {}
+
+
+def test_operator_status_reports_cloud_allowed_profiles(monkeypatch) -> None:
+    monkeypatch.setattr(operator_route.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(operator_route.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(operator_route.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
+    monkeypatch.setattr(operator_route.job_runs, "recent_run_summaries_by_profile", lambda **kwargs: {})
+    monkeypatch.setattr(operator_route.core_reads, "load_source_dates", lambda: {})
+    monkeypatch.setattr(operator_route.sqlite, "cache_get", lambda key: {})
+    monkeypatch.setattr(operator_route, "get_holdings_sync_state", lambda: {"pending": False, "pending_count": 0})
+
+    client = TestClient(app)
+    res = client.get("/api/operator/status", headers={"X-Operator-Token": "op-secret"})
+
+    assert res.status_code == 200
+    assert res.json()["runtime"]["allowed_profiles"] == ["serve-refresh"]

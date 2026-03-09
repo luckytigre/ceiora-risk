@@ -16,6 +16,10 @@ def test_mode_light_maps_to_serve_refresh_profile() -> None:
     assert _resolve_profile(None, "light") == "serve-refresh"
 
 
+def test_mode_full_maps_to_source_daily_plus_core_if_due_profile() -> None:
+    assert _resolve_profile(None, "full") == "source-daily-plus-core-if-due"
+
+
 def test_unknown_profile_is_rejected() -> None:
     try:
         _resolve_profile("daily-with-core-if-due", None)
@@ -44,6 +48,12 @@ def test_cli_profile_choices_are_canonical_only() -> None:
     choices = sorted(run_model_pipeline.PROFILE_CONFIG.keys())
     assert "serve-refresh" in choices
     assert "daily-fast" not in choices
+
+
+def test_profile_catalog_has_no_runtime_aliases() -> None:
+    catalog = run_model_pipeline.profile_catalog()
+    assert catalog
+    assert all(item["aliases"] == [] for item in catalog)
 
 
 def test_reset_core_caches_clears_core_tables(tmp_path: Path) -> None:
