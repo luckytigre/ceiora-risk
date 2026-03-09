@@ -95,6 +95,9 @@ export default function DataPage() {
             ? "Deep diagnostics compute exact row counts, ticker counts, duplicate checks, and latest update metadata."
             : "Fast diagnostics favor speed. Expensive fields are intentionally omitted instead of guessed."}
         </div>
+        <div className="detail-history-empty" style={{ marginBottom: 12 }}>
+          {data?.diagnostic_scope?.plain_english || "Diagnostics reflect the current backend instance."}
+        </div>
         <div className="dash-table">
           <table>
             <thead>

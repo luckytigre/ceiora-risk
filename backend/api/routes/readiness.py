@@ -14,6 +14,7 @@ def cache_not_ready_payload(
     cache_key: str,
     message: str,
     refresh_mode: str = "light",
+    refresh_profile: str = "serve-refresh",
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": "not_ready",
@@ -22,7 +23,7 @@ def cache_not_ready_payload(
         "message": message,
         "action": {
             "method": "POST",
-            "endpoint": f"/api/refresh?mode={refresh_mode}",
+            "endpoint": f"/api/refresh?profile={refresh_profile}",
         },
     }
     refresh = cache_get("refresh_status")
@@ -36,6 +37,7 @@ def raise_cache_not_ready(
     cache_key: str,
     message: str,
     refresh_mode: str = "light",
+    refresh_profile: str = "serve-refresh",
 ) -> None:
     raise HTTPException(
         status_code=503,
@@ -43,5 +45,6 @@ def raise_cache_not_ready(
             cache_key=cache_key,
             message=message,
             refresh_mode=refresh_mode,
+            refresh_profile=refresh_profile,
         ),
     )

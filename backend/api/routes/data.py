@@ -371,6 +371,13 @@ def get_data_diagnostics(
             "status": "ok",
             "database_path": DATA_DB.name,
             "cache_db_path": CACHE_DB.name,
+            "diagnostic_scope": {
+                "source": "local_sqlite_and_cache",
+                "plain_english": (
+                    "Detailed diagnostics reflect this backend instance's local SQLite/cache state. "
+                    "Use operator status above for cloud-serving truth, lane status, and Neon health."
+                ),
+            },
             "exposure_source_table": exposure_source_table,
             "exposure_source": exposure_source,
             "source_tables": source_tables,

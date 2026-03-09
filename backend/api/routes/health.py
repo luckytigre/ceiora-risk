@@ -26,6 +26,5 @@ async def get_health_diagnostics(
         return {**data, "_cached": True}
     raise_cache_not_ready(
         cache_key="health_diagnostics",
-        message="Health diagnostics are not ready yet. Run a full refresh.",
-        refresh_mode="full",
+        message="Health diagnostics are not ready yet. Run serve-refresh or a deeper local refresh.",
     )
