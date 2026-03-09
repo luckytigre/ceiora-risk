@@ -13,6 +13,7 @@ import {
   useUniverseTicker,
   useUniverseTickerHistory,
 } from "@/hooks/useApi";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { shortFactorLabel, factorTier } from "@/lib/factorLabels";
 import type { FactorExposure } from "@/lib/types";
 
@@ -52,7 +53,8 @@ export default function ExplorePage() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const { data: searchData, error: searchError } = useUniverseSearch(query, 10);
+  const debouncedQuery = useDebouncedValue(query, 220);
+  const { data: searchData, error: searchError } = useUniverseSearch(debouncedQuery, 10);
   const { data: tickerData, isLoading, error: tickerError } = useUniverseTicker(selectedTicker);
   const {
     data: historyData,
@@ -97,13 +99,13 @@ export default function ExplorePage() {
 
   // Show dropdown when there's a query with results
   useEffect(() => {
-    if (query.trim().length > 0 && results.length > 0) {
+    if (debouncedQuery.trim().length > 0 && results.length > 0) {
       setDropdownOpen(true);
       setActiveIndex(-1);
     } else {
       setDropdownOpen(false);
     }
-  }, [query, results.length]);
+  }, [debouncedQuery, results.length]);
 
   // Close on outside click
   useEffect(() => {

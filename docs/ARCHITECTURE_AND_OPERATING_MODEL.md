@@ -1,8 +1,8 @@
-# Operating Model Plan
+# Architecture And Operating Model
 
 Date: 2026-03-08
 Owner: Codex
-Status: Active implementation document for pre-cloud operating cleanup
+Status: Canonical reference document
 
 ## Current Implementation Status
 
@@ -122,6 +122,36 @@ Examples:
 - portfolio projection
 - exposures page
 - risk page
+
+### Dashboard Output Wiring
+
+The dashboard should stay thin. Each page should read one of a small number of serving surfaces rather than rebuilding logic in the browser.
+
+Canonical page-to-backend wiring:
+- `Overview`
+  - reads: `/api/portfolio`, `/api/risk`
+  - purpose: high-level portfolio, risk split, top holdings
+- `Risk` (`/exposures`)
+  - reads: `/api/exposures`, `/api/risk`, `/api/portfolio`
+  - purpose: factor-level portfolio views plus per-position drilldown
+- `Explore`
+  - reads: `/api/universe/search`, `/api/universe/ticker/{ticker}`, `/api/universe/ticker/{ticker}/history`, `/api/universe/factors`, `/api/portfolio`
+  - purpose: single-name inspection against the cached universe
+- `Positions`
+  - reads: `/api/holdings/*`, `/api/portfolio`, `/api/universe/search`
+  - purpose: holdings editing/import and current model portfolio view
+- `Data`
+  - reads: `/api/operator/status`, `/api/data/diagnostics`
+  - purpose: operator control deck and source/serving diagnostics
+- `Health`
+  - reads: `/api/operator/status`, `/api/health/diagnostics`
+  - purpose: deeper model-diagnostics study, loaded on demand because it is the heaviest dashboard page
+
+Efficiency rules now in force:
+- operator state is polled centrally and slowly; pages should not each invent their own background loop
+- ticker/RIC typeahead is debounced before hitting `/api/universe/search`
+- Health diagnostics are no longer fetched automatically on page load
+- serving pages should consume durable serving outputs rather than piecing together raw source tables in the browser
 - universe explore/search outputs
 - health/diagnostic payloads
 

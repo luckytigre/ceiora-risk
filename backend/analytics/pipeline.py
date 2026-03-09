@@ -39,7 +39,7 @@ from backend.analytics.services.universe_loadings import (
     build_universe_ticker_loadings as _build_universe_ticker_loadings_impl,
     load_latest_factor_coverage as _load_latest_factor_coverage_impl,
 )
-from backend.data import model_outputs, postgres, rebuild_cross_section_snapshot, serving_outputs, sqlite
+from backend.data import core_reads, model_outputs, rebuild_cross_section_snapshot, serving_outputs, sqlite
 from backend.risk_model import (
     build_factor_covariance_from_cache,
     build_specific_risk_from_cache,
@@ -236,13 +236,13 @@ def run_refresh(
 
     # 1. Fetch full-universe data from local data.db
     logger.info("Fetching data from local database...")
-    source_dates: SourceDatesPayload = postgres.load_source_dates()
+    source_dates: SourceDatesPayload = core_reads.load_source_dates()
     fundamentals_asof = source_dates.get("fundamentals_asof") or source_dates.get("exposures_asof")
-    prices_universe_df = postgres.load_latest_prices()
-    fundamentals_universe_df = postgres.load_latest_fundamentals(
+    prices_universe_df = core_reads.load_latest_prices()
+    fundamentals_universe_df = core_reads.load_latest_fundamentals(
         as_of_date=str(fundamentals_asof) if fundamentals_asof else None,
     )
-    exposures_universe_df = postgres.load_raw_cross_section_latest()
+    exposures_universe_df = core_reads.load_raw_cross_section_latest()
     logger.info(
         "Loaded source rows: prices=%s fundamentals=%s exposures=%s",
         int(len(prices_universe_df)),

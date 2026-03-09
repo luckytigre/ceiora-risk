@@ -31,7 +31,7 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 
 ### 3) Controlled read cutover (no silent fallback)
 - Added read-surface routing via `NEON_READ_SURFACES`:
-  - `core_reads` -> `backend/data/postgres.py` canonical read path (used by refresh pipeline source fetches).
+  - `core_reads` -> `backend/data/core_reads.py` canonical read path (used by refresh pipeline source fetches).
   - `factor_history` -> `/api/exposures/history` path via `backend/data/history_queries.py`.
   - `price_history` -> `/api/universe/ticker/{ticker}/history` path via `backend/data/history_queries.py`.
 - If a surface is enabled, reads go to Neon for that surface.

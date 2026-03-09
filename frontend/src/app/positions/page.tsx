@@ -13,6 +13,7 @@ import {
   usePortfolio,
   useUniverseSearch,
 } from "@/hooks/useApi";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import ConfirmActionModal from "@/components/ConfirmActionModal";
 import PositionTable from "@/components/PositionTable";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
@@ -141,7 +142,8 @@ export default function PositionsPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [rejectionPreview, setRejectionPreview] = useState<Array<Record<string, unknown>>>([]);
   const tickerSearchQuery = editTicker.trim().toUpperCase();
-  const { data: tickerRicSearch } = useUniverseSearch(tickerSearchQuery, 12);
+  const debouncedTickerSearchQuery = useDebouncedValue(tickerSearchQuery, 220);
+  const { data: tickerRicSearch } = useUniverseSearch(debouncedTickerSearchQuery, 12);
 
   useEffect(() => {
     if (!modesData?.default) return;

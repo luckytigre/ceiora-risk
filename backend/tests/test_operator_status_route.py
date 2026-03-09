@@ -45,7 +45,7 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        operator_route.postgres,
+        operator_route.core_reads,
         "load_source_dates",
         lambda: {
             "prices_asof": "2026-03-07",
