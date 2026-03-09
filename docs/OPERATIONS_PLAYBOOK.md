@@ -61,6 +61,14 @@ Runtime-role rule:
   - stage-level detail
   - separate Neon mirror and Neon parity status
 
+## Local App Lifecycle
+- Preferred local launch path: `make app-up`
+- Stop local app cleanly: `make app-down`
+- Restart from a clean state: `make app-restart`
+- Verify backend/frontend/proxy health: `make app-check`
+- Show tracked PIDs, URLs, and log paths: `make app-status`
+- Canonical launcher scripts live under `scripts/local_app/` and write runtime state under `backend/runtime/local_app/`.
+
 ## Key Commands
 - Orchestrated refresh via API (default profile from `mode=full` mapping):
   - `curl -X POST "http://localhost:8000/api/refresh"`

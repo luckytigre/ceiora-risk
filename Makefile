@@ -1,7 +1,9 @@
-.PHONY: dev backend backend-prod frontend frontend-safe refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local
+.PHONY: dev backend backend-prod frontend frontend-safe refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status
 
 setup:
-	cd backend && python3 -m pip install -e ".[dev]"
+	python3 -m venv backend/.venv || true
+	backend/.venv/bin/python -m pip install --upgrade pip
+	cd backend && .venv/bin/python -m pip install -e ".[dev]"
 	cd frontend && npm install
 
 backend:
@@ -19,6 +21,21 @@ frontend-safe:
 dev:
 	@echo "Starting backend and frontend..."
 	$(MAKE) backend & $(MAKE) frontend & wait
+
+app-up:
+	./scripts/local_app/up.sh
+
+app-down:
+	./scripts/local_app/down.sh
+
+app-restart:
+	./scripts/local_app/restart.sh
+
+app-check:
+	./scripts/local_app/check.sh
+
+app-status:
+	./scripts/local_app/status.sh
 
 refresh:
 	@if [ -n "$$REFRESH_API_TOKEN" ]; then \
