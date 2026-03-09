@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from backend import config
 from backend.data.cache import cache_get, cache_set
 from backend.orchestration.run_model_pipeline import (
     PROFILE_CONFIG,
@@ -109,6 +110,22 @@ def _resolve_profile(profile: str | None, mode: str | None) -> str:
     raise ValueError("Invalid mode. Expected 'full', 'light', or 'cold' when profile is omitted.")
 
 
+def _runtime_allowed_profiles() -> set[str]:
+    if config.cloud_mode():
+        return {"serve-refresh"}
+    return set(PROFILE_CONFIG.keys())
+
+
+def _assert_profile_allowed(profile: str) -> None:
+    allowed = _runtime_allowed_profiles()
+    if profile in allowed:
+        return
+    raise ValueError(
+        f"Profile '{profile}' is not allowed when APP_RUNTIME_ROLE={config.APP_RUNTIME_ROLE}. "
+        f"Allowed profiles: {', '.join(sorted(allowed))}"
+    )
+
+
 def _normalize_stage(name: str | None) -> str | None:
     if name is None:
         return None
@@ -191,6 +208,7 @@ def start_refresh(
 ) -> tuple[bool, dict[str, Any]]:
     """Start refresh in a background thread. Returns (started, status)."""
     resolved_profile = _resolve_profile(profile, mode)
+    _assert_profile_allowed(resolved_profile)
     stage_from = _normalize_stage(from_stage)
     stage_to = _normalize_stage(to_stage)
     force_core_effective = bool(force_core or force_risk_recompute)

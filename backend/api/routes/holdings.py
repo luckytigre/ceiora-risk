@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, HTTPException, Query
 
+from backend.api.auth import require_role
 from backend.data.neon import connect, resolve_dsn
 from backend.services.neon_holdings import (
     IMPORT_MODES,
@@ -134,7 +135,18 @@ async def get_holdings_positions(account_id: str | None = Query(default=None)):
 
 
 @router.post("/holdings/import")
-async def post_holdings_import(payload: HoldingsImportRequest):
+async def post_holdings_import(
+    payload: HoldingsImportRequest,
+    x_editor_token: str | None = Header(default=None, alias="X-Editor-Token"),
+    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
+    authorization: str | None = Header(default=None),
+):
+    require_role(
+        "editor",
+        x_editor_token=x_editor_token,
+        x_operator_token=x_operator_token,
+        authorization=authorization,
+    )
     try:
         conn = connect(dsn=resolve_dsn(None), autocommit=False)
     except Exception as exc:  # noqa: BLE001
@@ -182,7 +194,18 @@ async def post_holdings_import(payload: HoldingsImportRequest):
 
 
 @router.post("/holdings/position")
-async def post_holdings_position(payload: HoldingsPositionEditRequest):
+async def post_holdings_position(
+    payload: HoldingsPositionEditRequest,
+    x_editor_token: str | None = Header(default=None, alias="X-Editor-Token"),
+    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
+    authorization: str | None = Header(default=None),
+):
+    require_role(
+        "editor",
+        x_editor_token=x_editor_token,
+        x_operator_token=x_operator_token,
+        authorization=authorization,
+    )
     try:
         conn = connect(dsn=resolve_dsn(None), autocommit=False)
     except Exception as exc:  # noqa: BLE001
@@ -219,7 +242,18 @@ async def post_holdings_position(payload: HoldingsPositionEditRequest):
 
 
 @router.post("/holdings/position/remove")
-async def post_holdings_position_remove(payload: HoldingsPositionRemoveRequest):
+async def post_holdings_position_remove(
+    payload: HoldingsPositionRemoveRequest,
+    x_editor_token: str | None = Header(default=None, alias="X-Editor-Token"),
+    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
+    authorization: str | None = Header(default=None),
+):
+    require_role(
+        "editor",
+        x_editor_token=x_editor_token,
+        x_operator_token=x_operator_token,
+        authorization=authorization,
+    )
     try:
         conn = connect(dsn=resolve_dsn(None), autocommit=False)
     except Exception as exc:  # noqa: BLE001

@@ -44,6 +44,12 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 - In non-Neon mode, existing in-code mock positions remain the local fallback.
 - Neon mode intentionally does not fall back to in-code mocks on query failure.
 
+### 4b) Durable serving-output cutover
+- `serving_payload_current` now holds the latest persisted dashboard-serving payloads (`portfolio`, `risk`, `exposures`, `universe_loadings`, `universe_factors`, `model_sanity`, `refresh_meta`, `eligibility`).
+- This table is written during refresh publish in SQLite and also upserted directly into Neon.
+- In `cloud-serve` mode, this durable layer is the effective primary serving authority.
+- `SERVING_OUTPUTS_PRIMARY_READS=true` still exists for staged local rehearsal, but cloud mode no longer depends on it being manually flipped.
+
 ### 5) Parity artifact + health signal
 - Every post-refresh Neon mirror run now writes a formal JSON artifact:
   - `backend/runtime/audit_reports/neon_parity/neon_mirror_<timestamp>_<run_id>.json`
@@ -55,6 +61,7 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 ## Environment Controls
 - `DATA_BACKEND=sqlite|neon`
 - `NEON_DATABASE_URL=...`
+- `APP_RUNTIME_ROLE=local-ingest|cloud-serve`
 - `NEON_AUTO_SYNC_ENABLED=true|false`
 - `NEON_AUTO_SYNC_REQUIRED=true|false`
 - `NEON_AUTO_SYNC_MODE=incremental|full`
@@ -64,6 +71,9 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 - `NEON_SOURCE_RETENTION_YEARS=10`
 - `NEON_ANALYTICS_RETENTION_YEARS=5`
 - `NEON_READ_SURFACES=core_reads,factor_history,price_history`
+- `SERVING_OUTPUTS_PRIMARY_READS=true|false`
+- `OPERATOR_API_TOKEN=...`
+- `EDITOR_API_TOKEN=...`
 
 ## Recommended Cutover Sequence
 1. Keep `DATA_BACKEND=sqlite` and set:
@@ -81,6 +91,8 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 ## Operator Notes
 - Local SQLite remains the LSEG ingest authority and keeps full history.
 - Neon is expected to be the serving-oriented windowed store.
+- In `local-ingest`, broad post-run mirror/parity/prune remain the publish path.
+- In `cloud-serve`, broad mirror/parity/prune are intentionally skipped; serving payloads are written directly and holdings stay Neon-authoritative.
 - Manual emergency mirror still available via:
   - `python3 -m backend.scripts.neon_sync_from_sqlite --mode incremental --json`
   - `python3 -m backend.scripts.neon_parity_audit --json`

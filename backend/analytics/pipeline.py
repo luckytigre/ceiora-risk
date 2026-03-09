@@ -39,7 +39,7 @@ from backend.analytics.services.universe_loadings import (
     build_universe_ticker_loadings as _build_universe_ticker_loadings_impl,
     load_latest_factor_coverage as _load_latest_factor_coverage_impl,
 )
-from backend.data import model_outputs, postgres, rebuild_cross_section_snapshot, sqlite
+from backend.data import model_outputs, postgres, rebuild_cross_section_snapshot, serving_outputs, sqlite
 from backend.risk_model import (
     build_factor_covariance_from_cache,
     build_specific_risk_from_cache,
@@ -534,8 +534,10 @@ def run_refresh(
     risk_engine_state = dict(staged.get("risk_engine_state") or {})
     sanity = dict(staged.get("sanity") or {"status": "no-data", "warnings": [], "checks": {}})
     health_refreshed = bool(staged.get("health_refreshed", False))
+    persisted_payloads = dict(staged.get("persisted_payloads") or {})
 
     model_outputs_write: dict[str, Any] = {"status": "skipped"}
+    serving_outputs_write: dict[str, Any] = {"status": "skipped"}
     try:
         model_outputs_write = model_outputs.persist_model_outputs(
             data_db=DATA_DB,
@@ -568,6 +570,32 @@ def run_refresh(
         sqlite.cache_set("model_outputs_write", model_outputs_write)
         raise RuntimeError(f"Relational model output persistence failed: {type(exc).__name__}: {exc}") from exc
     sqlite.cache_set("model_outputs_write", model_outputs_write)
+    try:
+        serving_outputs_write = serving_outputs.persist_current_payloads(
+            data_db=DATA_DB,
+            run_id=run_id,
+            snapshot_id=snapshot_id,
+            refresh_mode=refresh_mode,
+            payloads=persisted_payloads,
+        )
+        neon_write = serving_outputs_write.get("neon_write") if isinstance(serving_outputs_write, dict) else None
+        if (
+            config.cloud_mode()
+            and config.neon_surface_enabled("serving_outputs")
+            and isinstance(neon_write, dict)
+            and str(neon_write.get("status") or "") != "ok"
+        ):
+            raise RuntimeError(f"Serving payload Neon write failed: {neon_write}")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to persist serving payloads")
+        serving_outputs_write = {
+            "status": "error",
+            "run_id": run_id,
+            "error": {"type": type(exc).__name__, "message": str(exc)},
+        }
+        sqlite.cache_set("serving_outputs_write", serving_outputs_write)
+        raise RuntimeError(f"Serving payload persistence failed: {type(exc).__name__}: {exc}") from exc
+    sqlite.cache_set("serving_outputs_write", serving_outputs_write)
     sqlite.cache_publish_snapshot(snapshot_id)
 
     logger.info("Refresh complete.")
@@ -584,4 +612,5 @@ def run_refresh(
         "cuse4_foundation": cuse4_foundation,
         "health_refreshed": bool(health_refreshed),
         "model_outputs_write": model_outputs_write,
+        "serving_outputs_write": serving_outputs_write,
     }

@@ -52,6 +52,10 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         date_col="as_of_date",
         overlap_days=14,
     ),
+    "serving_payload_current": TableConfig(
+        name="serving_payload_current",
+        pk_cols=("payload_name",),
+    ),
 }
 
 

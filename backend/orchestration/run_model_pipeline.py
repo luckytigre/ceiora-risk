@@ -372,12 +372,21 @@ def _run_stage(
             db_path=DATA_DB,
             replace_all=False,
         )
+        if not config.runtime_role_allows_ingest():
+            return {
+                "status": "skipped",
+                "mode": "bootstrap_only",
+                "reason": "runtime_role_disallows_ingest",
+                "bootstrap": bootstrap,
+                "runtime_role": str(config.APP_RUNTIME_ROLE),
+            }
         if not enable_ingest:
             return {
                 "status": "ok",
                 "mode": "bootstrap_only",
                 "reason": "profile_skip_lseg_ingest",
                 "bootstrap": bootstrap,
+                "runtime_role": str(config.APP_RUNTIME_ROLE),
             }
         if not bool(config.ORCHESTRATOR_ENABLE_INGEST):
             return {
@@ -385,6 +394,7 @@ def _run_stage(
                 "mode": "bootstrap_only",
                 "reason": "ORCHESTRATOR_ENABLE_INGEST=false",
                 "bootstrap": bootstrap,
+                "runtime_role": str(config.APP_RUNTIME_ROLE),
             }
         ingest = download_from_lseg(
             db_path=DATA_DB,
@@ -669,13 +679,17 @@ def run_model_pipeline(
             )
             break
 
-    if overall_status == "ok" and bool(config.NEON_AUTO_SYNC_ENABLED):
+    neon_sync_enabled = bool(config.neon_auto_sync_enabled_effective())
+    neon_parity_enabled = bool(config.neon_auto_parity_enabled_effective())
+    neon_prune_enabled = bool(config.neon_auto_prune_enabled_effective())
+
+    if overall_status == "ok" and neon_sync_enabled:
         try:
             logger.info(
                 "Running Neon mirror cycle: mode=%s parity=%s prune=%s source_years=%s analytics_years=%s",
                 config.NEON_AUTO_SYNC_MODE,
-                bool(config.NEON_AUTO_PARITY_ENABLED),
-                bool(config.NEON_AUTO_PRUNE_ENABLED),
+                neon_parity_enabled,
+                neon_prune_enabled,
                 int(config.NEON_SOURCE_RETENTION_YEARS),
                 int(config.NEON_ANALYTICS_RETENTION_YEARS),
             )
@@ -685,8 +699,8 @@ def run_model_pipeline(
                 dsn=(str(config.NEON_DATABASE_URL).strip() or None),
                 mode=str(config.NEON_AUTO_SYNC_MODE or "incremental"),
                 tables=(list(config.NEON_AUTO_SYNC_TABLES) or None),
-                parity_enabled=bool(config.NEON_AUTO_PARITY_ENABLED),
-                prune_enabled=bool(config.NEON_AUTO_PRUNE_ENABLED),
+                parity_enabled=neon_parity_enabled,
+                prune_enabled=neon_prune_enabled,
                 source_years=int(config.NEON_SOURCE_RETENTION_YEARS),
                 analytics_years=int(config.NEON_ANALYTICS_RETENTION_YEARS),
             )
@@ -705,6 +719,12 @@ def run_model_pipeline(
                 overall_status = "failed"
     elif overall_status != "ok":
         neon_mirror = {"status": "skipped", "reason": "pipeline_failed"}
+    elif bool(config.NEON_AUTO_SYNC_ENABLED) and not neon_sync_enabled:
+        neon_mirror = {
+            "status": "skipped",
+            "reason": "runtime_role_disallows_neon_mirror",
+            "runtime_role": str(config.APP_RUNTIME_ROLE),
+        }
 
     neon_artifact_path: str | None = None
     if bool(config.NEON_AUTO_SYNC_ENABLED):

@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from backend import config
+from backend.api.auth import require_role
 from backend.data.sqlite import cache_get
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
 
 router = APIRouter()
 
@@ -240,7 +241,15 @@ def get_data_diagnostics(
     include_paths: bool = Query(False),
     include_exact_row_counts: bool = Query(False),
     include_expensive_checks: bool = Query(False),
+    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
+    authorization: str | None = Header(default=None),
 ):
+    if bool(include_paths or include_exact_row_counts or include_expensive_checks):
+        require_role(
+            "operator",
+            x_operator_token=x_operator_token,
+            authorization=authorization,
+        )
     data_conn = sqlite3.connect(str(DATA_DB))
     cache_conn = sqlite3.connect(str(CACHE_DB))
     try:

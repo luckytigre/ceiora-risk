@@ -105,7 +105,7 @@ export function useDataDiagnostics(opts?: { includeExactRowCounts?: boolean; inc
 export function useOperatorStatus() {
   return useSWR<OperatorStatusData>(apiPath.operatorStatus(), apiFetch, {
     ...SWR_OPTS,
-    refreshInterval: 15000,
+    refreshInterval: 0,
   });
 }
 

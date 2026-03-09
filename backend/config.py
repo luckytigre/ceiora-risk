@@ -55,6 +55,9 @@ SQLITE_CACHE_SNAPSHOT_RETENTION = max(1, int(os.getenv("SQLITE_CACHE_SNAPSHOT_RE
 NEON_DATABASE_URL = str(os.getenv("NEON_DATABASE_URL", "")).strip()
 _DEFAULT_DATA_BACKEND = "neon" if NEON_DATABASE_URL or os.getenv("DATABASE_URL", "").strip() else "sqlite"
 DATA_BACKEND = str(os.getenv("DATA_BACKEND", _DEFAULT_DATA_BACKEND)).strip().lower()
+APP_RUNTIME_ROLE = str(os.getenv("APP_RUNTIME_ROLE", "local-ingest")).strip().lower()
+if APP_RUNTIME_ROLE not in {"local-ingest", "cloud-serve"}:
+    APP_RUNTIME_ROLE = "cloud-serve"
 
 # Analytics
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "504"))  # ~2 years trading days
@@ -93,11 +96,12 @@ if NEON_AUTO_SYNC_MODE not in {"incremental", "full"}:
 NEON_AUTO_SYNC_TABLES = _env_csv("NEON_AUTO_SYNC_TABLES", [])
 NEON_SOURCE_RETENTION_YEARS = max(1, int(os.getenv("NEON_SOURCE_RETENTION_YEARS", "10")))
 NEON_ANALYTICS_RETENTION_YEARS = max(1, int(os.getenv("NEON_ANALYTICS_RETENTION_YEARS", "5")))
+SERVING_OUTPUTS_PRIMARY_READS = _env_bool("SERVING_OUTPUTS_PRIMARY_READS", False)
 NEON_READ_SURFACES = {
     s.strip().lower()
     for s in _env_csv(
         "NEON_READ_SURFACES",
-        (["core_reads", "factor_history", "price_history"] if NEON_DATABASE_URL else []),
+        (["core_reads", "factor_history", "price_history", "serving_outputs"] if NEON_DATABASE_URL else []),
     )
 }
 
@@ -118,6 +122,8 @@ CORS_ALLOW_ORIGINS = _env_csv(
 
 # Optional protection for refresh endpoints.
 REFRESH_API_TOKEN = str(os.getenv("REFRESH_API_TOKEN", "")).strip()
+OPERATOR_API_TOKEN = str(os.getenv("OPERATOR_API_TOKEN", "")).strip()
+EDITOR_API_TOKEN = str(os.getenv("EDITOR_API_TOKEN", "")).strip()
 
 
 def pg_dsn() -> str:
@@ -132,8 +138,34 @@ def neon_surface_enabled(surface: str) -> bool:
     clean = str(surface or "").strip().lower()
     if not clean:
         return False
+    if cloud_mode():
+        return True
     if DATA_BACKEND == "neon":
         return True
     if "*" in NEON_READ_SURFACES:
         return True
     return clean in NEON_READ_SURFACES
+
+
+def runtime_role_allows_ingest() -> bool:
+    return APP_RUNTIME_ROLE == "local-ingest"
+
+
+def cloud_mode() -> bool:
+    return APP_RUNTIME_ROLE == "cloud-serve"
+
+
+def serving_outputs_primary_reads_enabled() -> bool:
+    return bool(SERVING_OUTPUTS_PRIMARY_READS or cloud_mode())
+
+
+def neon_auto_sync_enabled_effective() -> bool:
+    return bool(NEON_AUTO_SYNC_ENABLED and runtime_role_allows_ingest())
+
+
+def neon_auto_parity_enabled_effective() -> bool:
+    return bool(NEON_AUTO_PARITY_ENABLED and runtime_role_allows_ingest())
+
+
+def neon_auto_prune_enabled_effective() -> bool:
+    return bool(NEON_AUTO_PRUNE_ENABLED and runtime_role_allows_ingest())

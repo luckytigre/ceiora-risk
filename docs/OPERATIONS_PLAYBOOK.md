@@ -19,7 +19,10 @@
 - Keep SQLite local and persistent on disk (no shared multi-node writes).
 - Runtime DB location defaults to `backend/runtime/` (`data.db`, `cache.db`).
 - Legacy paths `backend/data.db` and `backend/cache.db` may be symlinks for command compatibility.
-- Set a non-empty `REFRESH_API_TOKEN` before exposing the app online.
+- In `cloud-serve` mode, set non-empty auth tokens before exposing the app online:
+  - `OPERATOR_API_TOKEN`
+  - `EDITOR_API_TOKEN`
+  - or at minimum `REFRESH_API_TOKEN` as the operator fallback
 - Prefer manual or low-frequency refreshes (`serve-refresh` most days).
 - Keep daily file backups of `data.db` and `cache.db`.
 - Production backend command:
@@ -42,6 +45,10 @@
   - UI now requires explicit confirmation before starting this lane from the operator deck.
 - `universe-add`: finalization lane after explicit `security_master` merge and targeted source backfills for new names.
 
+Runtime-role rule:
+- `local-ingest`: all lanes may be used.
+- `cloud-serve`: only `serve-refresh` is allowed.
+
 ## Operator UI Policy
 - Data page is the primary control room.
 - Fast diagnostics are the default because they are cheap and always available.
@@ -58,6 +65,8 @@
   - `curl -X POST "http://localhost:8000/api/refresh"`
 - API refresh explicit serve-refresh profile:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=serve-refresh"`
+- Cloud-mode authenticated serve-refresh:
+  - `curl -X POST "http://localhost:8000/api/refresh?profile=serve-refresh" -H "X-Refresh-Token: $OPERATOR_API_TOKEN"`
 - API refresh explicit source-daily profile:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=source-daily"`
 - API refresh explicit weekly core recompute:
@@ -132,6 +141,11 @@
   - `curl -s "http://localhost:8000/api/refresh/status" | jq`
 - Verify operator lane matrix:
   - `curl -s "http://localhost:8000/api/operator/status" | jq`
+  - Confirm:
+    - `.runtime.app_runtime_role`
+    - `.runtime.allowed_profiles`
+    - `.runtime.serving_outputs_primary_reads_effective`
+    - `.runtime.neon_auto_sync_enabled_effective`
 - One-command operator check:
   - `make operator-check`
   - or `./scripts/operator_check.sh`
