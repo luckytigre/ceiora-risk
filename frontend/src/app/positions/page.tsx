@@ -120,7 +120,7 @@ export default function PositionsPage() {
   const { data: modesData } = useHoldingsModes();
   const { data: accountsData, error: accountError } = useHoldingsAccounts();
   const [selectedAccount, setSelectedAccount] = useState("");
-  const { data: holdingsData, error: holdingsError } = useHoldingsPositions(selectedAccount || null);
+  const { data: holdingsData, error: holdingsError } = useHoldingsPositions(selectedAccount || undefined);
 
   const [mode, setMode] = useState<HoldingsImportMode>("upsert_absolute");
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -603,6 +603,9 @@ export default function PositionsPage() {
           {" "}
           [{holdingsRows.length}]
         </h3>
+        <div className="detail-history-empty" style={{ marginBottom: 10 }}>
+          This table is the live holdings ledger. The model portfolio table below refreshes after a serving update, so temporary differences are expected until `RECALC` runs.
+        </div>
         {holdingsError ? (
           <ApiErrorState title="Holdings Not Ready" error={holdingsError} />
         ) : (

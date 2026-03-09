@@ -134,7 +134,7 @@ export default function TabNav() {
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void mutateOperatorStatus();
-    }, 60000);
+    }, 300000);
     return () => window.clearInterval(id);
   }, [refreshIsRunning, mutateOperatorStatus]);
 

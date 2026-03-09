@@ -2,13 +2,18 @@
 set -euo pipefail
 
 BACKEND_ORIGIN="${BACKEND_ORIGIN:-http://127.0.0.1:8000}"
+OPERATOR_TOKEN="${OPERATOR_API_TOKEN:-${REFRESH_API_TOKEN:-}}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 fetch_json() {
   local url="$1"
   local out="$2"
-  curl -fsS "$url" > "$out"
+  if [[ -n "$OPERATOR_TOKEN" ]]; then
+    curl -fsS -H "X-Operator-Token: ${OPERATOR_TOKEN}" "$url" > "$out"
+  else
+    curl -fsS "$url" > "$out"
+  fi
 }
 
 fetch_json "${BACKEND_ORIGIN}/api/health" "$TMP_DIR/health.json"
@@ -26,7 +31,7 @@ neon = operator.get('neon_sync_health') or {}
 runtime = operator.get('runtime') or {}
 core_due = operator.get('core_due') or {}
 lanes = operator.get('lanes') or []
-neon_enabled = bool(runtime.get('neon_auto_sync_enabled'))
+neon_enabled = bool(runtime.get('neon_auto_sync_enabled_effective', runtime.get('neon_auto_sync_enabled')))
 
 if health_status != 'ok':
     errors.append(f"api health={health_status}")

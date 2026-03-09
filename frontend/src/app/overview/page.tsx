@@ -67,7 +67,7 @@ export default function OverviewPage() {
     if (!proceed) return;
     setRefreshState("running");
     try {
-      await triggerRefresh("light");
+      await triggerRefresh("full");
       setRefreshState("done");
     } catch {
       setRefreshState("failed");

@@ -26,7 +26,9 @@ export const apiPath = {
   holdingsModes: () => "/api/holdings/modes",
   holdingsAccounts: () => "/api/holdings/accounts",
   holdingsPositions: (accountId?: string | null) =>
-    accountId && accountId.trim().length > 0
+    accountId === undefined
+      ? null
+      : accountId && accountId.trim().length > 0
       ? `/api/holdings/positions?account_id=${encodeURIComponent(accountId.trim())}`
       : "/api/holdings/positions",
   holdingsImport: () => "/api/holdings/import",

@@ -151,7 +151,7 @@ Runtime-role rule:
   - or `./scripts/operator_check.sh`
   - If Neon auto-sync is disabled, this check degrades gracefully instead of failing on missing parity artifacts.
 - Verify latest refresh metadata:
-  - `curl -s "http://localhost:8000/api/data/status" | jq '.cache_outputs[] | select(.key==\"refresh_meta\")'`
+  - `curl -s "http://localhost:8000/api/data/diagnostics" | jq '.cache_outputs[] | select(.key==\"refresh_meta\")'`
 - Verify risk payload includes engine metadata:
   - `curl -s "http://localhost:8000/api/risk" | jq '.risk_engine'`
 - Verify latest usable eligibility summary (regression members > 0 preferred):

@@ -55,7 +55,8 @@ export function useHoldingsAccounts() {
 }
 
 export function useHoldingsPositions(accountId?: string | null) {
-  return useSWR<HoldingsPositionsData>(apiPath.holdingsPositions(accountId), apiFetch, SWR_OPTS);
+  const key = apiPath.holdingsPositions(accountId);
+  return useSWR<HoldingsPositionsData>(key, apiFetch, SWR_OPTS);
 }
 
 export function useExposures(mode: string) {

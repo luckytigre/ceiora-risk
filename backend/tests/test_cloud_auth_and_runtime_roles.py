@@ -10,6 +10,7 @@ from backend.api import auth as auth_module
 from backend.api.routes import data as data_routes
 from backend.api.routes import health as health_routes
 from backend.api.routes import holdings as holdings_route
+from backend.api.routes import operator as operator_route
 from backend.api.routes import refresh as refresh_routes
 
 orchestrator = importlib.import_module("backend.orchestration.run_model_pipeline")
@@ -76,6 +77,21 @@ def test_cloud_expensive_diagnostics_require_operator_token(monkeypatch) -> None
     assert client.get("/api/data/diagnostics?include_expensive_checks=true", headers={"X-Operator-Token": "op-secret"}).status_code == 200
     assert client.get("/api/health/diagnostics").status_code == 401
     assert client.get("/api/health/diagnostics", headers={"X-Operator-Token": "op-secret"}).status_code == 200
+
+
+def test_cloud_operator_status_requires_operator_token(monkeypatch) -> None:
+    monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(operator_route.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(operator_route.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(operator_route.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
+    monkeypatch.setattr(operator_route.job_runs, "recent_run_summaries_by_profile", lambda **kwargs: {})
+    monkeypatch.setattr(operator_route.core_reads, "load_source_dates", lambda: {})
+    monkeypatch.setattr(operator_route.sqlite, "cache_get", lambda key: {})
+
+    client = TestClient(app)
+    assert client.get("/api/operator/status").status_code == 401
+    assert client.get("/api/operator/status", headers={"X-Operator-Token": "op-secret"}).status_code == 200
 
 
 def test_cloud_runtime_role_blocks_ingest_stage(monkeypatch) -> None:

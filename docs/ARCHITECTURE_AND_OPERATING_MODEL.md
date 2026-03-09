@@ -448,41 +448,6 @@ Should show:
 - yellow: stale / due / waiting for recalc
 - red: failed / mismatch / missing required data
 
-## Immediate Cleanup Needed
-
-### 1) Make source ingest an explicit first-class run type
-
-Reason:
-- today the system has ingest code, but daily refresh semantics are still centered on cache refresh and core cadence rather than named source-data operations
-
-### 2) Separate operator concepts in docs and UI
-
-Separate:
-- source update
-- core model update
-- serving refresh
-- holdings recompute
-- universe maintenance
-
-### 3) Add an operator status matrix
-
-Expose one payload that reports:
-- latest successful run by profile
-- start/end times
-- last result
-- source dates
-- core due
-- Neon health
-
-### 4) Add a formal `universe-add` runbook
-
-This should become the only approved path for new ticker onboarding.
-
-## Proposed Implementation Order
-
-1. Keep `universe-add` as an explicit manual workflow with Codex until you want self-service onboarding.
-2. Only after that, finalize cloud cutover semantics around scheduled runs.
-
 ## What “Done” Looks Like
 
 The operating model is considered ready for full cloud usage when:

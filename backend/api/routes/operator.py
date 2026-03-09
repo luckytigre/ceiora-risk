@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 
-from backend.data import core_reads, job_runs, sqlite
 from backend import config
+from backend.api.auth import require_role
+from backend.data import core_reads, job_runs, sqlite
 from backend.orchestration.run_model_pipeline import (
     DATA_DB,
     _risk_recompute_due,
@@ -27,7 +28,18 @@ def _today_session_date():
 
 
 @router.get("/operator/status")
-def get_operator_status():
+def get_operator_status(
+    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
+    x_refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+    authorization: str | None = Header(default=None),
+):
+    if config.cloud_mode():
+        require_role(
+            "operator",
+            x_operator_token=x_operator_token,
+            x_refresh_token=x_refresh_token,
+            authorization=authorization,
+        )
     catalog = profile_catalog()
     profiles = [str(item.get("profile") or "") for item in catalog]
     latest_runs = job_runs.latest_run_summary_by_profile(db_path=DATA_DB, profiles=profiles)

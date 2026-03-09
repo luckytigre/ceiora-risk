@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, triggerRefresh } from "@/hooks/useApi";
+import { ApiError, triggerRefresh, triggerRefreshProfile } from "@/hooks/useApi";
 
 function parseError(error: unknown): {
   message: string;
   actionMethod?: string;
   actionEndpoint?: string;
+  refreshMode?: "full" | "light" | "cold";
+  refreshProfile?: string;
 } {
   if (error instanceof ApiError) {
     const detail = error.detail as
@@ -16,10 +18,26 @@ function parseError(error: unknown): {
         }
       | null
       | undefined;
+    const actionEndpoint = detail?.action?.endpoint;
+    let refreshMode: "full" | "light" | "cold" | undefined;
+    let refreshProfile: string | undefined;
+    if (actionEndpoint) {
+      try {
+        const url = new URL(actionEndpoint, "http://localhost");
+        const mode = String(url.searchParams.get("mode") || "").toLowerCase();
+        const profile = String(url.searchParams.get("profile") || "").trim();
+        if (mode === "full" || mode === "light" || mode === "cold") refreshMode = mode;
+        if (profile) refreshProfile = profile;
+      } catch {
+        // noop
+      }
+    }
     return {
       message: detail?.message || error.message || "Request failed.",
       actionMethod: detail?.action?.method,
-      actionEndpoint: detail?.action?.endpoint,
+      actionEndpoint,
+      refreshMode,
+      refreshProfile,
     };
   }
   if (error instanceof Error) {
@@ -41,7 +59,11 @@ export default function ApiErrorState({
   async function handleRefresh() {
     setRefreshState("running");
     try {
-      await triggerRefresh("light");
+      if (parsed.refreshProfile) {
+        await triggerRefreshProfile(parsed.refreshProfile);
+      } else {
+        await triggerRefresh(parsed.refreshMode || "light");
+      }
       setRefreshState("done");
     } catch {
       setRefreshState("failed");
@@ -59,7 +81,11 @@ export default function ApiErrorState({
             onClick={handleRefresh}
             disabled={refreshState === "running"}
           >
-            {refreshState === "running" ? "Starting refresh..." : "Run Light Refresh"}
+            {refreshState === "running"
+              ? "Starting refresh..."
+              : parsed.refreshProfile
+                ? `Run ${parsed.refreshProfile}`
+                : `Run ${parsed.refreshMode || "light"} refresh`}
           </button>
           {refreshState === "done" && (
             <div style={{ marginTop: 8, color: "rgba(169,182,210,0.8)", fontSize: 12 }}>
@@ -76,4 +102,3 @@ export default function ApiErrorState({
     </div>
   );
 }
-
