@@ -152,6 +152,15 @@ CREATE TABLE IF NOT EXISTS model_factor_returns_daily (
     PRIMARY KEY (date, factor_name)
 );
 
+CREATE TABLE IF NOT EXISTS serving_payload_current (
+    payload_name TEXT PRIMARY KEY,
+    snapshot_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    refresh_mode TEXT NOT NULL,
+    payload_json JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_security_master_ticker ON security_master (ticker);
 CREATE INDEX IF NOT EXISTS idx_security_master_permid ON security_master (permid);
 CREATE INDEX IF NOT EXISTS idx_security_master_sid ON security_master (sid);
@@ -162,3 +171,4 @@ CREATE INDEX IF NOT EXISTS idx_security_classification_pit_asof ON security_clas
 CREATE INDEX IF NOT EXISTS idx_barra_raw_cross_section_history_asof ON barra_raw_cross_section_history (as_of_date);
 CREATE INDEX IF NOT EXISTS idx_barra_raw_cross_section_history_ticker ON barra_raw_cross_section_history (ticker);
 CREATE INDEX IF NOT EXISTS idx_model_factor_returns_daily_factor ON model_factor_returns_daily (factor_name);
+CREATE INDEX IF NOT EXISTS idx_serving_payload_current_updated ON serving_payload_current (updated_at);

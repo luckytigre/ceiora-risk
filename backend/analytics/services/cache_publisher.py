@@ -359,4 +359,14 @@ def stage_refresh_cache_snapshot(
         "risk_engine_state": risk_engine_state,
         "sanity": sanity,
         "health_refreshed": bool(health_refreshed),
+        "persisted_payloads": {
+            "portfolio": portfolio_data,
+            "risk": risk_data,
+            "exposures": exposure_modes,
+            "universe_loadings": universe_loadings,
+            "universe_factors": universe_factors,
+            "eligibility": eligibility_summary,
+            "model_sanity": sanity,
+            "refresh_meta": refresh_meta,
+        },
     }

@@ -11,6 +11,7 @@ from backend import config
 from backend.api.routes.presenters import normalize_trbc_sector_fields
 from backend.api.routes.readiness import raise_cache_not_ready
 from backend.data.history_queries import load_price_history_rows
+from backend.data.serving_outputs import load_current_payload
 from backend.data.sqlite import cache_get
 
 router = APIRouter()
@@ -38,9 +39,25 @@ def _week_ending_friday(d: date) -> date:
     return d + timedelta(days=(4 - d.weekday()))
 
 
+def _load_universe_payload():
+    if config.cloud_mode() and config.neon_surface_enabled("serving_outputs"):
+        return load_current_payload("universe_loadings")
+    if config.serving_outputs_primary_reads_enabled() and config.neon_surface_enabled("serving_outputs"):
+        return load_current_payload("universe_loadings") or cache_get("universe_loadings")
+    return cache_get("universe_loadings") or load_current_payload("universe_loadings")
+
+
+def _load_universe_factors_payload():
+    if config.cloud_mode() and config.neon_surface_enabled("serving_outputs"):
+        return load_current_payload("universe_factors")
+    if config.serving_outputs_primary_reads_enabled() and config.neon_surface_enabled("serving_outputs"):
+        return load_current_payload("universe_factors") or cache_get("universe_factors")
+    return cache_get("universe_factors") or load_current_payload("universe_factors")
+
+
 @router.get("/universe/ticker/{ticker}")
 async def get_universe_ticker(ticker: str):
-    data = cache_get("universe_loadings")
+    data = _load_universe_payload()
     if data is None:
         raise_cache_not_ready(
             cache_key="universe_loadings",
@@ -59,7 +76,7 @@ def get_universe_ticker_history(
     ticker: str,
     years: int = Query(5, ge=1, le=20),
 ):
-    data = cache_get("universe_loadings")
+    data = _load_universe_payload()
     if data is None:
         raise_cache_not_ready(
             cache_key="universe_loadings",
@@ -114,7 +131,7 @@ async def search_universe(
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=200),
 ):
-    data = cache_get("universe_loadings")
+    data = _load_universe_payload()
     if data is None:
         raise_cache_not_ready(
             cache_key="universe_loadings",
@@ -147,7 +164,7 @@ async def search_universe(
 
 @router.get("/universe/factors")
 async def get_universe_factors():
-    data = cache_get("universe_factors")
+    data = _load_universe_factors_payload()
     if data is None:
         raise_cache_not_ready(
             cache_key="universe_factors",

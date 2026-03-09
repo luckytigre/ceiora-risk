@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import HelpLabel from "@/components/HelpLabel";
 import ConfirmActionModal from "@/components/ConfirmActionModal";
 import LaneRunHistoryStrip from "@/components/operator/LaneRunHistoryStrip";
-import { triggerRefreshProfile, useOperatorStatus, useRefreshStatus } from "@/hooks/useApi";
+import { triggerRefreshProfile, useOperatorStatus } from "@/hooks/useApi";
 import type { OperatorLaneStatus } from "@/lib/types";
 
 function fmtTs(v: string | null | undefined): string {
@@ -62,10 +62,9 @@ const LANE_HELP: Record<string, { plain: string; math: string }> = {
 
 export default function OperatorControlPanel({ compact = false }: { compact?: boolean }) {
   const { data, error, isLoading, mutate } = useOperatorStatus();
-  const { data: refreshStatusData, mutate: mutateRefreshStatus } = useRefreshStatus();
   const [actionState, setActionState] = useState<Record<string, "idle" | "running" | "done" | "failed">>({});
   const [confirmLane, setConfirmLane] = useState<OperatorLaneStatus | null>(null);
-  const refreshRunning = String(refreshStatusData?.refresh?.status || "").toLowerCase() === "running";
+  const refreshRunning = String(data?.refresh?.status || "").toLowerCase() === "running";
 
   const neonHealth = data?.neon_sync_health;
   const holdingsSync = data?.holdings_sync;
@@ -74,18 +73,19 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
   const orderedLanes = useMemo(() => data?.lanes ?? [], [data?.lanes]);
 
   useEffect(() => {
-    const intervalMs = refreshRunning ? 5000 : 30000;
+    const intervalMs = refreshRunning ? 5000 : 60000;
     const id = window.setInterval(() => {
-      void Promise.all([mutate(), mutateRefreshStatus()]);
+      if (document.visibilityState !== "visible") return;
+      void mutate();
     }, intervalMs);
     return () => window.clearInterval(id);
-  }, [refreshRunning, mutate, mutateRefreshStatus]);
+  }, [refreshRunning, mutate]);
 
   async function runLane(profile: string) {
     setActionState((prev) => ({ ...prev, [profile]: "running" }));
     try {
       await triggerRefreshProfile(profile);
-      await Promise.all([mutate(), mutateRefreshStatus()]);
+      await mutate();
       setActionState((prev) => ({ ...prev, [profile]: "done" }));
     } catch {
       setActionState((prev) => ({ ...prev, [profile]: "failed" }));

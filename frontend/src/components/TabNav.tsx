@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useBackground, type BgMode } from "./BackgroundContext";
-import { triggerRefresh, useOperatorStatus, useRefreshStatus } from "@/hooks/useApi";
+import { triggerRefresh, useOperatorStatus } from "@/hooks/useApi";
 
 const TABS = [
   { href: "/overview", label: "Overview" },
@@ -69,13 +69,12 @@ export default function TabNav() {
   const menuRef = useRef<HTMLDivElement>(null);
   const { mode, setMode } = useBackground();
   const { data: operatorStatusData, mutate: mutateOperatorStatus } = useOperatorStatus();
-  const { data: refreshStatusData, mutate: mutateRefreshStatus } = useRefreshStatus();
   const holdingsSync = operatorStatusData?.holdings_sync;
   const pending = Boolean(holdingsSync?.pending);
   const pendingCount = Number(holdingsSync?.pending_count || 0);
   const dirtySince = holdingsSync?.dirty_since || null;
 
-  const refreshState = refreshStatusData?.refresh;
+  const refreshState = operatorStatusData?.refresh;
   const refreshStatus = String(refreshState?.status || "idle").toLowerCase();
   const refreshIsRunning = refreshStatus === "running";
 
@@ -124,17 +123,27 @@ export default function TabNav() {
   useEffect(() => {
     if (!refreshIsRunning) return;
     const id = window.setInterval(() => {
-      void Promise.all([mutateRefreshStatus(), mutateOperatorStatus()]);
+      if (document.visibilityState !== "visible") return;
+      void mutateOperatorStatus();
     }, 5000);
     return () => window.clearInterval(id);
-  }, [refreshIsRunning, mutateRefreshStatus, mutateOperatorStatus]);
+  }, [refreshIsRunning, mutateOperatorStatus]);
+
+  useEffect(() => {
+    if (refreshIsRunning) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void mutateOperatorStatus();
+    }, 60000);
+    return () => window.clearInterval(id);
+  }, [refreshIsRunning, mutateOperatorStatus]);
 
   async function handleRecalculateNow() {
     if (recomputeState === "running" || refreshIsRunning) return;
     setRecomputeState("running");
     try {
       await triggerRefresh("light");
-      await Promise.all([mutateRefreshStatus(), mutateOperatorStatus()]);
+      await mutateOperatorStatus();
       setRecomputeState("idle");
     } catch {
       setRecomputeState("failed");
@@ -146,7 +155,7 @@ export default function TabNav() {
     setSyncState("running");
     try {
       await triggerRefresh("light");
-      await Promise.all([mutateRefreshStatus(), mutateOperatorStatus()]);
+      await mutateOperatorStatus();
       setSyncState("idle");
     } catch {
       setSyncState("failed");
@@ -225,7 +234,7 @@ export default function TabNav() {
           type="button"
           onClick={() => {
             setSyncState("idle");
-            void Promise.all([mutateRefreshStatus(), mutateOperatorStatus()]);
+            void mutateOperatorStatus();
           }}
           title={signal.detail}
           aria-label={signal.aria}

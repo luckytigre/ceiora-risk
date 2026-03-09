@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query
 from backend import config
 from backend.api.routes.readiness import raise_cache_not_ready
 from backend.data.history_queries import load_factor_return_history
+from backend.data.serving_outputs import load_current_payload
 from backend.data.sqlite import cache_get
 
 router = APIRouter()
@@ -16,7 +17,12 @@ router = APIRouter()
 
 @router.get("/exposures")
 async def get_exposures(mode: str = Query("raw", pattern="^(raw|sensitivity|risk_contribution)$")):
-    data = cache_get("exposures")
+    if config.cloud_mode() and config.neon_surface_enabled("serving_outputs"):
+        data = load_current_payload("exposures")
+    elif config.serving_outputs_primary_reads_enabled() and config.neon_surface_enabled("serving_outputs"):
+        data = load_current_payload("exposures") or cache_get("exposures")
+    else:
+        data = cache_get("exposures") or load_current_payload("exposures")
     if data is None:
         raise_cache_not_ready(
             cache_key="exposures",

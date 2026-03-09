@@ -17,6 +17,10 @@ Implemented now:
 - `make operator-check` / `scripts/operator_check.sh` provide one-command backend/operator validation
 - holdings serving reads now prefer Neon whenever a Neon DSN is configured; in-code mock positions are bootstrap fallback only
 - refresh-driven `RECALC needed` state is backend-persisted and only clears after a successful serving refresh
+- serving payloads now persist into durable `serving_payload_current` rows so the cloud-serving path can read dashboard outputs without depending solely on local cache blobs
+- `cloud-serve` runtime now treats durable serving payloads as the effective serving authority
+- `cloud-serve` runtime now restricts refresh lanes to `serve-refresh` and blocks LSEG ingest
+- broad Neon mirror/parity/prune remain a `local-ingest` publish responsibility rather than a cloud-serving behavior
 
 Cold-core lessons now incorporated:
 - serving refresh must read live risk-engine cache keys, not only the active published snapshot
@@ -88,6 +92,7 @@ Rule:
 - Source tables can be current to latest available session.
 - They are not constrained by the cUSE4 lag policy.
 - Fundamentals and classification PIT backfills run monthly by default.
+- Only `local-ingest` should publish broad source/model updates into Neon.
 
 ### 3) Core cUSE4 Model Layer
 
@@ -123,6 +128,7 @@ Examples:
 Key rule:
 - Serving refreshes should be cheap and frequent.
 - They should not trigger full cUSE4 recompute unless explicitly requested.
+- The currently active serving payload set should be durable and mirrorable (`serving_payload_current`), not only present in the local cache layer.
 
 ## Canonical Event Types
 
@@ -203,11 +209,12 @@ Purpose:
 Does:
 - portfolio / risk / exposures / universe serving payloads
 - health payloads
-- Neon mirror/parity/prune if enabled
+- durable serving-payload write (`serving_payload_current`)
 
 Does not:
 - pull LSEG
 - recompute cUSE4 core
+- run broad Neon mirror/parity/prune in `cloud-serve`
 
 Primary trigger:
 - holdings edits
@@ -215,6 +222,7 @@ Primary trigger:
 
 Current implemented path:
 - `serve-refresh`
+- In `cloud-serve`, this is the only allowed refresh lane.
 
 ### 2) `source-daily`
 
@@ -235,6 +243,7 @@ Primary trigger:
 Current implemented path:
 - `source-daily`
 - actual live ingest still depends on `ORCHESTRATOR_ENABLE_INGEST=true`
+- This lane is intentionally unavailable in `cloud-serve`.
 
 ### 3) `source-daily-plus-core-if-due`
 

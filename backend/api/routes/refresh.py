@@ -10,12 +10,15 @@ from fastapi import status
 from fastapi.responses import JSONResponse
 
 from backend import config
+from backend.api.auth import require_role
 from backend.services.refresh_manager import get_refresh_status, start_refresh
 
 router = APIRouter()
 
 
 def _refresh_authorized(x_refresh_token: str | None, authorization: str | None) -> bool:
+    if config.cloud_mode():
+        return False
     expected = config.REFRESH_API_TOKEN
     if not expected:
         return True
@@ -40,7 +43,14 @@ async def refresh(
     x_refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
     authorization: str | None = Header(default=None),
 ):
-    if not _refresh_authorized(x_refresh_token, authorization):
+    if config.cloud_mode():
+        require_role(
+            "operator",
+            x_operator_token=x_refresh_token,
+            x_refresh_token=x_refresh_token,
+            authorization=authorization,
+        )
+    elif not _refresh_authorized(x_refresh_token, authorization):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     clean_mode = str(mode or "full").strip().lower()
     if clean_mode not in {"full", "light", "cold"}:
@@ -85,7 +95,14 @@ async def refresh_status(
     x_refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
     authorization: str | None = Header(default=None),
 ):
-    if not _refresh_authorized(x_refresh_token, authorization):
+    if config.cloud_mode():
+        require_role(
+            "operator",
+            x_operator_token=x_refresh_token,
+            x_refresh_token=x_refresh_token,
+            authorization=authorization,
+        )
+    elif not _refresh_authorized(x_refresh_token, authorization):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     return {
         "status": "ok",
