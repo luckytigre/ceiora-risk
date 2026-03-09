@@ -70,6 +70,7 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
   const holdingsSync = data?.holdings_sync;
   const sourceDates = data?.source_dates ?? {};
   const runtimeWarnings = data?.runtime?.warnings ?? [];
+  const allowedProfiles = new Set(data?.runtime?.allowed_profiles ?? []);
   const orderedLanes = useMemo(() => data?.lanes ?? [], [data?.lanes]);
   const liveStateRows = [
     ["Current refresh", data?.refresh?.status ?? "—"],
@@ -182,7 +183,8 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
           <tbody>
             {orderedLanes.map((lane) => {
               const state = actionState[lane.profile] || "idle";
-              const disabled = refreshRunning || state === "running" || lane.profile === "universe-add";
+              const laneAllowed = allowedProfiles.size === 0 || allowedProfiles.has(lane.profile);
+              const disabled = refreshRunning || state === "running" || lane.profile === "universe-add" || !laneAllowed;
               const help = LANE_HELP[lane.profile] || { plain: lane.description, math: lane.default_stages.join(" -> ") };
               return (
                 <tr key={lane.profile}>
@@ -228,6 +230,8 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
                   <td>
                     {lane.profile === "universe-add" ? (
                       <span style={{ color: "rgba(169,182,210,0.7)", fontSize: 12 }}>Manual with Codex</span>
+                    ) : !laneAllowed ? (
+                      <span style={{ color: "rgba(169,182,210,0.7)", fontSize: 12 }}>Local only</span>
                     ) : (
                       <button
                         className="btn btn-secondary"

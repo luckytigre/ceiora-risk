@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, triggerRefresh, triggerRefreshProfile } from "@/hooks/useApi";
+import { ApiError, triggerRefresh, triggerRefreshProfile, useOperatorStatus } from "@/hooks/useApi";
 
 function parseError(error: unknown): {
   message: string;
@@ -55,12 +55,17 @@ export default function ApiErrorState({
 }) {
   const [refreshState, setRefreshState] = useState<"idle" | "running" | "done" | "failed">("idle");
   const parsed = parseError(error);
+  const { data: operator } = useOperatorStatus();
+  const allowedProfiles = new Set(operator?.runtime?.allowed_profiles ?? []);
+  const onlyServeRefreshAllowed = allowedProfiles.size > 0 && allowedProfiles.size === 1 && allowedProfiles.has("serve-refresh");
 
   async function handleRefresh() {
     setRefreshState("running");
     try {
       if (parsed.refreshProfile) {
         await triggerRefreshProfile(parsed.refreshProfile);
+      } else if (onlyServeRefreshAllowed) {
+        await triggerRefreshProfile("serve-refresh");
       } else {
         await triggerRefresh(parsed.refreshMode || "light");
       }
@@ -85,6 +90,8 @@ export default function ApiErrorState({
               ? "Starting refresh..."
               : parsed.refreshProfile
                 ? `Run ${parsed.refreshProfile}`
+                : onlyServeRefreshAllowed
+                  ? "Run serve-refresh"
                 : `Run ${parsed.refreshMode || "light"} refresh`}
           </button>
           {refreshState === "done" && (

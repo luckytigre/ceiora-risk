@@ -432,6 +432,10 @@ export interface DataDiagnosticsData {
   status: string;
   database_path: string;
   cache_db_path: string;
+  diagnostic_scope?: {
+    source?: string;
+    plain_english?: string;
+  };
   exposure_source_table: string;
   exposure_source?: {
     table: string;
@@ -621,12 +625,19 @@ export interface OperatorStatusData {
   } | null;
   latest_parity_artifact?: string | null;
   runtime?: {
+    app_runtime_role?: string;
+    allowed_profiles?: string[];
     data_backend?: string;
     neon_database_configured?: boolean;
     neon_auto_sync_enabled?: boolean;
+    neon_auto_sync_enabled_effective?: boolean;
     neon_auto_parity_enabled?: boolean;
+    neon_auto_parity_enabled_effective?: boolean;
     neon_auto_prune_enabled?: boolean;
+    neon_auto_prune_enabled_effective?: boolean;
     neon_read_surfaces?: string[];
+    serving_outputs_primary_reads?: boolean;
+    serving_outputs_primary_reads_effective?: boolean;
     warnings?: string[];
   } | null;
 }

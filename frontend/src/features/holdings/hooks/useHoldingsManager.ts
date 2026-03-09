@@ -31,7 +31,6 @@ export function useHoldingsManager(selectedAccount: string, holdingsRows: Holdin
     await Promise.all([
       mutate(apiPath.holdingsAccounts()),
       mutate(apiPath.holdingsPositions(accountId)),
-      mutate(apiPath.portfolio()),
       mutate(apiPath.operatorStatus()),
     ]);
   }
