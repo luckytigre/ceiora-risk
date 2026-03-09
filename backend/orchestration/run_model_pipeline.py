@@ -16,7 +16,7 @@ import numpy as np
 
 from backend import config
 from backend.analytics.pipeline import RISK_ENGINE_METHOD_VERSION, run_refresh
-from backend.data import job_runs, postgres, rebuild_cross_section_snapshot, sqlite
+from backend.data import core_reads, job_runs, rebuild_cross_section_snapshot, sqlite
 from backend.risk_model import (
     build_factor_covariance_from_cache,
     build_specific_risk_from_cache,
@@ -284,7 +284,7 @@ def _risk_cache_ready() -> bool:
 def _resolved_as_of_date(user_as_of_date: str | None) -> str:
     if user_as_of_date and str(user_as_of_date).strip():
         return previous_or_same_xnys_session(str(user_as_of_date).strip())
-    source_dates = postgres.load_source_dates()
+    source_dates = core_reads.load_source_dates()
     return previous_or_same_xnys_session(
         str(
             source_dates.get("fundamentals_asof")

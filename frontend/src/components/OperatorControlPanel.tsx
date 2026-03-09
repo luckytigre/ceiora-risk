@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import HelpLabel from "@/components/HelpLabel";
 import ConfirmActionModal from "@/components/ConfirmActionModal";
 import LaneRunHistoryStrip from "@/components/operator/LaneRunHistoryStrip";
@@ -71,15 +71,6 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
   const sourceDates = data?.source_dates ?? {};
   const runtimeWarnings = data?.runtime?.warnings ?? [];
   const orderedLanes = useMemo(() => data?.lanes ?? [], [data?.lanes]);
-
-  useEffect(() => {
-    const intervalMs = refreshRunning ? 5000 : 60000;
-    const id = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void mutate();
-    }, intervalMs);
-    return () => window.clearInterval(id);
-  }, [refreshRunning, mutate]);
 
   async function runLane(profile: string) {
     setActionState((prev) => ({ ...prev, [profile]: "running" }));

@@ -20,7 +20,6 @@ import type {
   HealthDiagnosticsData,
   DataDiagnosticsData,
   OperatorStatusData,
-  RefreshStatusData,
 } from "@/lib/types";
 
 export { ApiError };
@@ -94,8 +93,8 @@ export function useUniverseFactors() {
   return useSWR<UniverseFactorsData>(apiPath.universeFactors(), apiFetch, SWR_OPTS);
 }
 
-export function useHealthDiagnostics() {
-  return useSWR<HealthDiagnosticsData>(apiPath.healthDiagnostics(), apiFetch, HEAVY_DIAGNOSTICS_OPTS);
+export function useHealthDiagnostics(enabled = true) {
+  return useSWR<HealthDiagnosticsData>(enabled ? apiPath.healthDiagnostics() : null, apiFetch, HEAVY_DIAGNOSTICS_OPTS);
 }
 
 export function useDataDiagnostics(opts?: { includeExactRowCounts?: boolean; includeExpensiveChecks?: boolean }) {
@@ -104,13 +103,6 @@ export function useDataDiagnostics(opts?: { includeExactRowCounts?: boolean; inc
 
 export function useOperatorStatus() {
   return useSWR<OperatorStatusData>(apiPath.operatorStatus(), apiFetch, {
-    ...SWR_OPTS,
-    refreshInterval: 0,
-  });
-}
-
-export function useRefreshStatus() {
-  return useSWR<RefreshStatusData>(apiPath.refreshStatus(), apiFetch, {
     ...SWR_OPTS,
     refreshInterval: 0,
   });

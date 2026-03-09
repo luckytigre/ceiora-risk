@@ -126,7 +126,7 @@ def test_pipeline_prefers_fundamentals_asof(monkeypatch: pytest.MonkeyPatch) -> 
         lambda *args, **kwargs: {"status": "ok", "mode": "current"},
     )
     monkeypatch.setattr(
-        pipeline.postgres,
+        pipeline.core_reads,
         "load_source_dates",
         lambda: {
             "fundamentals_asof": "2026-02-27",
@@ -135,15 +135,15 @@ def test_pipeline_prefers_fundamentals_asof(monkeypatch: pytest.MonkeyPatch) -> 
             "exposures_asof": "2026-03-07",
         },
     )
-    monkeypatch.setattr(pipeline.postgres, "load_latest_prices", lambda: pd.DataFrame())
+    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda: pd.DataFrame())
 
     def _load_latest_fundamentals(*, as_of_date: str | None = None, tickers=None):
         captured["as_of_date"] = as_of_date
         return pd.DataFrame()
 
-    monkeypatch.setattr(pipeline.postgres, "load_latest_fundamentals", _load_latest_fundamentals)
+    monkeypatch.setattr(pipeline.core_reads, "load_latest_fundamentals", _load_latest_fundamentals)
     monkeypatch.setattr(
-        pipeline.postgres,
+        pipeline.core_reads,
         "load_raw_cross_section_latest",
         lambda *args, **kwargs: (_ for _ in ()).throw(_StopRefresh()),
     )

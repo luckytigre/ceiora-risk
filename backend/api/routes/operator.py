@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
-from backend.data import job_runs, postgres, sqlite
+from backend.data import core_reads, job_runs, sqlite
 from backend import config
 from backend.orchestration.run_model_pipeline import (
     DATA_DB,
@@ -33,7 +33,7 @@ def get_operator_status():
     latest_runs = job_runs.latest_run_summary_by_profile(db_path=DATA_DB, profiles=profiles)
     recent_runs = job_runs.recent_run_summaries_by_profile(db_path=DATA_DB, profiles=profiles, limit_per_profile=8)
     try:
-        source_dates = postgres.load_source_dates()
+        source_dates = core_reads.load_source_dates()
     except Exception:
         source_dates = {
             "prices_asof": None,

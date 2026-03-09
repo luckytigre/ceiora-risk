@@ -319,7 +319,8 @@ function sortCoverageRows(rows: HealthCoverageFieldRow[], key: CoverageSortKey, 
 }
 
 export default function HealthPage() {
-  const { data, isLoading, error } = useHealthDiagnostics();
+  const [loadDiagnostics, setLoadDiagnostics] = useState(false);
+  const { data, isLoading, error } = useHealthDiagnostics(loadDiagnostics);
   const {
     data: operatorData,
     isLoading: operatorLoading,
@@ -381,12 +382,33 @@ export default function HealthPage() {
 
   const blockChartRef = useRef<ChartJS<"line"> | null>(null);
 
+  if (operatorLoading && !operatorData && !loadDiagnostics) {
+    return <AnalyticsLoadingViz message="Loading operator health..." />;
+  }
   if (isLoading && !operatorData) {
     return <AnalyticsLoadingViz message="Loading model health..." />;
   }
   const operatorSection = (
     <OperatorStatusSection data={operatorData} error={operatorError} isLoading={operatorLoading} />
   );
+  if (!loadDiagnostics) {
+    return (
+      <div className="health-wrap">
+        {operatorSection}
+        <div className="chart-card">
+          <div className="health-meta-row" style={{ marginBottom: 10 }}>
+            <h3 style={{ margin: 0 }}>Health Diagnostics</h3>
+            <button className="btn btn-secondary" onClick={() => setLoadDiagnostics(true)}>
+              Load diagnostics
+            </button>
+          </div>
+          <div className="detail-history-empty">
+            This page runs the heaviest diagnostic study in the app. It is now loaded on demand so regular dashboard use does not spend compute on charts you are not viewing.
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (error) {
     return (
       <div className="health-wrap">
