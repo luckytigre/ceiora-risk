@@ -393,38 +393,35 @@ def _save_daily_eligibility_summary(cache_db: Path, rows: list[dict]) -> None:
     conn.close()
 
 
-def _load_latest_structural_count(cache_db: Path, *, before_date: str | None = None) -> int | None:
+def _load_structural_counts(cache_db: Path) -> dict[str, int]:
     conn = sqlite3.connect(str(cache_db))
     try:
         conn.execute(_DAILY_ELIGIBILITY_SUMMARY_SCHEMA)
-        if before_date:
-            row = conn.execute(
-                """
-                SELECT structural_eligible_n
-                FROM daily_universe_eligibility_summary
-                WHERE date < ?
-                ORDER BY date DESC
-                LIMIT 1
-                """,
-                (str(before_date),),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                """
-                SELECT structural_eligible_n
-                FROM daily_universe_eligibility_summary
-                ORDER BY date DESC
-                LIMIT 1
-                """
-            ).fetchone()
+        rows = conn.execute(
+            """
+            SELECT date, structural_eligible_n
+            FROM daily_universe_eligibility_summary
+            WHERE date IS NOT NULL
+            ORDER BY date
+            """
+        ).fetchall()
     finally:
         conn.close()
-    if not row:
+    out: dict[str, int] = {}
+    for row in rows:
+        try:
+            date_key = str(row[0])
+            out[date_key] = int(row[1])
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _previous_structural_count(structural_counts: dict[str, int], date: str) -> int | None:
+    prev_dates = [key for key in structural_counts.keys() if key < str(date)]
+    if not prev_dates:
         return None
-    try:
-        return int(row[0])
-    except (TypeError, ValueError):
-        return None
+    return structural_counts[max(prev_dates)]
 
 
 def compute_daily_factor_returns(
@@ -536,10 +533,7 @@ def compute_daily_factor_returns(
         "missing_country": 0,
         "empty_dummies": 0,
     }
-    prev_structural_n = _load_latest_structural_count(
-        cache_db,
-        before_date=dates_to_compute[0],
-    )
+    structural_counts = _load_structural_counts(cache_db)
 
     for i, date in enumerate(dates_to_compute):
         # 1. Daily stock returns for this date
@@ -594,6 +588,7 @@ def compute_daily_factor_returns(
 
         structural_coverage = float(structural_n / max(1, exposure_n))
         regression_coverage = float(regression_n / max(1, structural_n))
+        prev_structural_n = _previous_structural_count(structural_counts, date)
         if prev_structural_n is None or prev_structural_n <= 0:
             drop_pct_from_prev = 0.0
         else:
@@ -611,7 +606,7 @@ def compute_daily_factor_returns(
                 structural_n,
                 drop_pct_from_prev * 100.0,
             )
-        prev_structural_n = structural_n
+        structural_counts[date] = structural_n
         batch_eligibility.append({
             "date": date,
             "exp_date": exp_date,

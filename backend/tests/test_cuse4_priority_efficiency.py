@@ -59,6 +59,15 @@ def test_load_cached_dates_requires_eligibility_rows(tmp_path: Path) -> None:
     assert dfr._load_cached_dates(cache_db) == set()
 
 
+def test_previous_structural_count_uses_latest_actual_prior_date() -> None:
+    structural_counts = {
+        "2025-12-05": 3500,
+        "2026-02-24": 3682,
+    }
+
+    assert dfr._previous_structural_count(structural_counts, "2026-02-25") == 3682
+
+
 def test_compute_daily_factor_returns_bounds_price_window_and_eligibility_dates(
     monkeypatch,
     tmp_path: Path,
