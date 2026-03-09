@@ -71,6 +71,27 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
   const sourceDates = data?.source_dates ?? {};
   const runtimeWarnings = data?.runtime?.warnings ?? [];
   const orderedLanes = useMemo(() => data?.lanes ?? [], [data?.lanes]);
+  const liveStateRows = [
+    ["Current refresh", data?.refresh?.status ?? "—"],
+    ["Core due", data ? (data.core_due.due ? `Yes (${data.core_due.reason})` : `No (${data.core_due.reason})`) : "—"],
+    ["Risk engine", data?.risk_engine?.method_version ?? "—"],
+    ["Active snapshot", data?.active_snapshot?.snapshot_id ?? "—"],
+    ["Holdings dirty", holdingsSync?.pending ? `Yes (${holdingsSync.pending_count || 0})` : "No"],
+    ["Dirty since", fmtTs(holdingsSync?.dirty_since)],
+    ["Last holdings change", holdingsSync?.last_mutation_summary ?? "—"],
+    ["Neon mirror", neonHealth?.mirror_status ?? neonHealth?.status ?? "—"],
+    ["Neon parity", neonHealth?.parity_status ?? "—"],
+    ["Parity artifact", data?.latest_parity_artifact ?? "—"],
+  ] satisfies Array<[string, string]>;
+  const sourceRecencyRows = [
+    ["Prices", sourceDates.prices_asof ?? "—"],
+    ["Fundamentals", sourceDates.fundamentals_asof ?? "—"],
+    ["Classification", sourceDates.classification_asof ?? "—"],
+    ["Cross section", sourceDates.exposures_asof ?? "—"],
+    ["Factor returns", data?.risk_engine?.factor_returns_latest_date ?? "—"],
+    ["Data backend", data?.runtime?.data_backend ?? "—"],
+    ["Neon read surfaces", (data?.runtime?.neon_read_surfaces ?? []).join(", ") || "—"],
+  ] satisfies Array<[string, string]>;
 
   async function runLane(profile: string) {
     setActionState((prev) => ({ ...prev, [profile]: "running" }));
@@ -110,26 +131,25 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
       <div className="health-grid-2-half" style={{ marginBottom: 14 }}>
         <div className="chart-card" style={{ margin: 0 }}>
           <h4 style={{ marginBottom: 8 }}>Live State</h4>
-          <div className="health-kpi-subrow"><strong>Current refresh:</strong> {data?.refresh?.status ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Core due:</strong> {data ? (data.core_due.due ? `Yes (${data.core_due.reason})` : `No (${data.core_due.reason})`) : "—"}</div>
-          <div className="health-kpi-subrow"><strong>Risk engine:</strong> {data?.risk_engine?.method_version ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Active snapshot:</strong> {data?.active_snapshot?.snapshot_id ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Holdings dirty:</strong> {holdingsSync?.pending ? `Yes (${holdingsSync.pending_count || 0})` : "No"}</div>
-          <div className="health-kpi-subrow"><strong>Dirty since:</strong> {fmtTs(holdingsSync?.dirty_since)}</div>
-          <div className="health-kpi-subrow"><strong>Last holdings change:</strong> {holdingsSync?.last_mutation_summary ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Neon mirror:</strong> {neonHealth?.mirror_status ?? neonHealth?.status ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Neon parity:</strong> {neonHealth?.parity_status ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Parity artifact:</strong> {data?.latest_parity_artifact ?? "—"}</div>
+          <div className="operator-kv-grid">
+            {liveStateRows.map(([label, value]) => (
+              <div className="operator-kv-row" key={label}>
+                <strong className="operator-kv-label">{label}</strong>
+                <span className="operator-kv-value">{value}</span>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="chart-card" style={{ margin: 0 }}>
           <h4 style={{ marginBottom: 8 }}>Source Recency</h4>
-          <div className="health-kpi-subrow"><strong>Prices:</strong> {sourceDates.prices_asof ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Fundamentals:</strong> {sourceDates.fundamentals_asof ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Classification:</strong> {sourceDates.classification_asof ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Cross section:</strong> {sourceDates.exposures_asof ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Factor returns:</strong> {data?.risk_engine?.factor_returns_latest_date ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Data backend:</strong> {data?.runtime?.data_backend ?? "—"}</div>
-          <div className="health-kpi-subrow"><strong>Neon read surfaces:</strong> {(data?.runtime?.neon_read_surfaces ?? []).join(", ") || "—"}</div>
+          <div className="operator-kv-grid">
+            {sourceRecencyRows.map(([label, value]) => (
+              <div className="operator-kv-row" key={label}>
+                <strong className="operator-kv-label">{label}</strong>
+                <span className="operator-kv-value">{value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       {error && !data && (
@@ -137,8 +157,17 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
           Operator status endpoint is unavailable.
         </div>
       )}
-      <div className="dash-table">
+      <div className={`dash-table operator-lane-table${compact ? " compact" : ""}`}>
         <table>
+          <colgroup>
+            <col style={{ width: compact ? "13%" : "14%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: compact ? "22%" : "24%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: compact ? "20%" : "19%" }} />
+            <col style={{ width: compact ? "16%" : "14%" }} />
+            <col style={{ width: "8%" }} />
+          </colgroup>
           <thead>
             <tr>
               <th>Lane</th>
@@ -172,11 +201,11 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
                   <td>
                     <span className={`status-pill ${tone(lane.latest_run.status)}`}>{lane.latest_run.status}</span>
                   </td>
-                  <td style={{ maxWidth: compact ? 240 : 340 }}>{help.plain}</td>
+                  <td className="operator-lane-copy">{help.plain}</td>
                   <td style={{ minWidth: 96 }}>
                     <LaneRunHistoryStrip runs={lane.recent_runs ?? []} />
                   </td>
-                  <td>
+                  <td className="operator-lane-copy">
                     <div style={{ marginBottom: 6 }}>{lane.default_stages.join(" -> ") || "—"}</div>
                     <details>
                       <summary style={{ cursor: "pointer", color: "rgba(169,182,210,0.82)" }}>
@@ -195,7 +224,7 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
                       </div>
                     </details>
                   </td>
-                  <td>{laneSummary(lane)}</td>
+                  <td className="operator-lane-copy">{laneSummary(lane)}</td>
                   <td>
                     {lane.profile === "universe-add" ? (
                       <span style={{ color: "rgba(169,182,210,0.7)", fontSize: 12 }}>Manual with Codex</span>

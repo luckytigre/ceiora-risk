@@ -56,7 +56,7 @@ export default function DataPage() {
 
   return (
     <div>
-      <OperatorControlPanel />
+      <OperatorControlPanel compact />
 
       <div className="kpi-row">
         <div className="kpi-card">

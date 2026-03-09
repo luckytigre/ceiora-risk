@@ -507,8 +507,16 @@ main {
 }
 
 /* Tables */
-.dash-table table {
+.dash-table {
   width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dash-table table {
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -601,6 +609,33 @@ main {
 .dash-table td strong {
   color: inherit;
   font-weight: 400;
+}
+
+.operator-lane-table table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.operator-lane-table tbody td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+.operator-lane-table td:nth-child(4) {
+  min-width: 96px;
+}
+
+.operator-lane-copy {
+  line-height: 1.42;
+}
+
+.operator-lane-table.compact td,
+.operator-lane-table.compact th {
+  padding-left: 9px;
+  padding-right: 9px;
 }
 
 .share-cell {
@@ -1227,6 +1262,33 @@ main {
 .health-kpi-subrow strong {
   color: rgba(232, 237, 249, 0.9);
   font-weight: 600;
+}
+
+.operator-kv-grid {
+  display: grid;
+  gap: 7px;
+}
+
+.operator-kv-row {
+  display: grid;
+  grid-template-columns: minmax(108px, 132px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  color: rgba(200, 212, 235, 0.82);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.operator-kv-label {
+  color: rgba(232, 237, 249, 0.9);
+  font-weight: 600;
+}
+
+.operator-kv-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .status-pill {
