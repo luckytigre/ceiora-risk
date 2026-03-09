@@ -249,6 +249,7 @@ def stage_refresh_cache_snapshot(
     exposure_modes: ExposureModesPayload,
     cuse4_foundation: dict[str, Any],
     light_mode: bool,
+    reuse_cached_static_payloads: bool = False,
     data_db: Path,
     cache_db: Path,
 ) -> StageRefreshSnapshotResult:
@@ -306,7 +307,13 @@ def stage_refresh_cache_snapshot(
     _stage_cache("universe_factors", universe_factors)
     _stage_cache("exposures", exposure_modes)
 
-    eligibility_summary = load_latest_eligibility_summary(cache_db)
+    eligibility_summary = (
+        sqlite.cache_get("eligibility")
+        if reuse_cached_static_payloads
+        else None
+    )
+    if not isinstance(eligibility_summary, dict) or not eligibility_summary:
+        eligibility_summary = load_latest_eligibility_summary(cache_db)
     _stage_cache("eligibility", eligibility_summary)
     sanity = build_model_sanity_report(
         risk_shares=risk_shares,

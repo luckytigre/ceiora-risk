@@ -245,6 +245,7 @@ Does:
 - health payloads
 - durable serving-payload write (`serving_payload_current`)
 - holdings-triggered refreshes may reuse the current published `universe_loadings` payload when source dates and the risk-engine fingerprint still match
+- on that reuse path, cached `eligibility`, `cov_matrix`, and `condition_number` may also be reused when present
 - on that reuse path, durable relational `model_outputs` persistence is intentionally skipped because the underlying factor/covariance/specific-risk state has not changed
 
 Does not:
@@ -435,6 +436,8 @@ Should show:
 - last `core-weekly`
 - last `cold-core`
 - last `universe-add`
+- latest run elapsed time and delta versus the previous run
+- slowest stage for the latest run
 - recent run history per lane
 - latest stage detail per lane
 - current stage, stage index, and stage count for any in-flight orchestrated run

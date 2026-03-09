@@ -27,6 +27,33 @@ def _today_session_date():
     ).date()
 
 
+def _enrich_run_deltas(run_summaries: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    normalized_durations: list[float | None] = []
+    for summary in run_summaries:
+        duration = summary.get("duration_seconds")
+        try:
+            normalized_durations.append(float(duration) if duration is not None else None)
+        except (TypeError, ValueError):
+            normalized_durations.append(None)
+    for idx, summary in enumerate(run_summaries):
+        item = dict(summary)
+        duration_val = normalized_durations[idx]
+        if duration_val is not None:
+            item["duration_seconds"] = round(duration_val, 3)
+        previous_duration = normalized_durations[idx + 1] if idx + 1 < len(normalized_durations) else None
+        if duration_val is not None and previous_duration is not None:
+            delta = round(duration_val - float(previous_duration), 3)
+            item["duration_delta_seconds"] = delta
+            if previous_duration > 0:
+                item["duration_delta_pct"] = round((delta / float(previous_duration)) * 100.0, 2)
+        else:
+            item["duration_delta_seconds"] = None
+            item["duration_delta_pct"] = None
+        out.append(item)
+    return out
+
+
 @router.get("/operator/status")
 def get_operator_status(
     x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
@@ -72,26 +99,39 @@ def get_operator_status(
     lanes = []
     for item in catalog:
         profile = str(item.get("profile") or "")
+        profile_recent_runs = _enrich_run_deltas(recent_runs.get(profile, []))
+        latest_run = dict(
+            latest_runs.get(
+                profile,
+                {
+                    "run_id": None,
+                    "profile": profile,
+                    "status": "missing",
+                    "started_at": None,
+                    "finished_at": None,
+                    "updated_at": None,
+                    "duration_seconds": None,
+                    "stage_count": 0,
+                    "completed_stage_count": 0,
+                    "failed_stage_count": 0,
+                    "running_stage_count": 0,
+                    "stage_duration_seconds_total": 0.0,
+                    "slowest_stage": None,
+                    "stages": [],
+                },
+            )
+        )
+        if profile_recent_runs and str(profile_recent_runs[0].get("run_id") or "") == str(latest_run.get("run_id") or ""):
+            latest_run["duration_delta_seconds"] = profile_recent_runs[0].get("duration_delta_seconds")
+            latest_run["duration_delta_pct"] = profile_recent_runs[0].get("duration_delta_pct")
+        else:
+            latest_run["duration_delta_seconds"] = None
+            latest_run["duration_delta_pct"] = None
         lanes.append(
             {
                 **item,
-                "recent_runs": recent_runs.get(profile, []),
-                "latest_run": latest_runs.get(
-                    profile,
-                    {
-                        "run_id": None,
-                        "profile": profile,
-                        "status": "missing",
-                        "started_at": None,
-                        "finished_at": None,
-                        "updated_at": None,
-                        "stage_count": 0,
-                        "completed_stage_count": 0,
-                        "failed_stage_count": 0,
-                        "running_stage_count": 0,
-                        "stages": [],
-                    },
-                ),
+                "recent_runs": profile_recent_runs,
+                "latest_run": latest_run,
             }
         )
 

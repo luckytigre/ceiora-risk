@@ -238,6 +238,10 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
                     "specific_vol": 0.1,
                 }
             },
+            "risk": {
+                "cov_matrix": {"factors": ["Beta"], "correlation": [[1.0]]},
+                "condition_number": 123.0,
+            },
             "universe_loadings": dict(cached_universe_loadings),
         }
         return payloads.get(key)
@@ -272,7 +276,10 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
     monkeypatch.setattr(
         pipeline,
         "stage_refresh_cache_snapshot",
-        lambda **kwargs: captured.update({"staged_universe_loadings": kwargs["universe_loadings"]}) or {
+        lambda **kwargs: captured.update({
+            "staged_universe_loadings": kwargs["universe_loadings"],
+            "reuse_cached_static_payloads": kwargs["reuse_cached_static_payloads"],
+        }) or {
             "snapshot_id": "snap_1",
             "risk_engine_state": {"status": "ok"},
             "sanity": {"status": "ok"},
@@ -306,6 +313,7 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
     assert out["universe_loadings_reuse_reason"] == "source_and_risk_engine_match"
     assert out["model_outputs_write"]["status"] == "skipped"
     assert out["model_outputs_write"]["reason"] == "holdings_only_fast_path"
+    assert captured["reuse_cached_static_payloads"] is True
     assert captured["published"] == "snap_1"
     assert isinstance(captured["staged_universe_loadings"], dict)
 
@@ -426,6 +434,10 @@ def test_pipeline_fallback_light_refresh_still_persists_model_outputs(
                     "specific_vol": 0.1,
                 }
             },
+            "risk": {
+                "cov_matrix": {"factors": ["Beta"], "correlation": [[1.0]]},
+                "condition_number": 123.0,
+            },
             "universe_loadings": dict(cached_universe_loadings),
         }
         return payloads.get(key)
@@ -471,7 +483,7 @@ def test_pipeline_fallback_light_refresh_still_persists_model_outputs(
     monkeypatch.setattr(
         pipeline,
         "stage_refresh_cache_snapshot",
-        lambda **kwargs: {
+        lambda **kwargs: captured.update({"reuse_cached_static_payloads": kwargs["reuse_cached_static_payloads"]}) or {
             "snapshot_id": "snap_2",
             "risk_engine_state": {"status": "ok"},
             "sanity": {"status": "ok"},
@@ -503,6 +515,7 @@ def test_pipeline_fallback_light_refresh_still_persists_model_outputs(
     assert out["status"] == "ok"
     assert out["universe_loadings_reused"] is False
     assert out["universe_loadings_reuse_reason"] == "rebuilt"
+    assert captured["reuse_cached_static_payloads"] is False
     assert captured["persisted_model_outputs"] is True
 
 

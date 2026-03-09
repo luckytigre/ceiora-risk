@@ -11,6 +11,7 @@ Implementation note:
   - `CUSE4-003` bounded factor-return price loading plus bounded eligibility snapshot loading
   - `CUSE4-006` explicit holdings-only light-refresh scope with safe reuse of published universe analytics when source/model fingerprints still match
   - follow-on safe performance trim: holdings-only fast path now skips redundant relational `model_outputs` persistence when the reused universe/model state is unchanged
+  - follow-on safe performance trim: operator status now surfaces additive run-duration deltas, and the holdings-only fast path reuses cached `eligibility`, `cov_matrix`, and `condition_number` when model/source state is unchanged
 - not yet implemented:
   - deeper eligibility memoization/vectorization follow-ons
   - style-score/raw-history structural optimizations

@@ -102,6 +102,23 @@ def _can_reuse_cached_universe_loadings(
     return True, "source_and_risk_engine_match"
 
 
+def _load_cached_risk_display_payload() -> tuple[CovarianceMatrixPayload, float] | None:
+    cached_risk = sqlite.cache_get("risk")
+    if not isinstance(cached_risk, dict):
+        return None
+    cov_matrix = cached_risk.get("cov_matrix")
+    condition_number = cached_risk.get("condition_number")
+    if not isinstance(cov_matrix, dict):
+        return None
+    try:
+        clean_condition = _finite_float(condition_number, np.nan)
+    except Exception:
+        clean_condition = np.nan
+    if not np.isfinite(clean_condition):
+        return None
+    return dict(cov_matrix), float(clean_condition)
+
+
 def _parse_iso_date(value: Any) -> date | None:
     if value is None:
         return None
@@ -512,9 +529,19 @@ def run_refresh(
             "idio": 0.0,
         }))
 
+    reuse_cached_risk_display = bool(
+        refresh_scope_key == "holdings_only"
+        and light_mode
+        and universe_loadings_reused
+        and not recomputed_this_refresh
+    )
+    cached_risk_display = _load_cached_risk_display_payload() if reuse_cached_risk_display else None
+
     # 7. Compute condition number from cov matrix
     condition_number = 0.0
-    if not cov.empty:
+    if cached_risk_display is not None:
+        condition_number = float(cached_risk_display[1])
+    elif not cov.empty:
         try:
             cn = float(np.linalg.cond(cov.to_numpy()))
             condition_number = cn if np.isfinite(cn) else 9999.99
@@ -540,7 +567,9 @@ def run_refresh(
         "Momentum", "Short-Term Reversal", "Residual Volatility",
     }
     cov_matrix: CovarianceMatrixPayload = {}
-    if not cov.empty:
+    if cached_risk_display is not None:
+        cov_matrix = cached_risk_display[0]
+    elif not cov.empty:
         all_factors = list(cov.columns)
         style_idx = [i for i, f in enumerate(all_factors) if f in STYLE_FACTOR_NAMES]
         if style_idx:
@@ -594,6 +623,12 @@ def run_refresh(
         exposure_modes=exposure_modes,
         cuse4_foundation=cuse4_foundation,
         light_mode=light_mode,
+        reuse_cached_static_payloads=bool(
+            refresh_scope_key == "holdings_only"
+            and light_mode
+            and universe_loadings_reused
+            and not recomputed_this_refresh
+        ),
         data_db=DATA_DB,
         cache_db=CACHE_DB,
     )

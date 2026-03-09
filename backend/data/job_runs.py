@@ -178,6 +178,39 @@ def run_rows(*, db_path: Path, run_id: str) -> list[dict[str, Any]]:
         conn.close()
 
 
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _duration_seconds(started_at: Any, completed_at: Any) -> float | None:
+    start_dt = _parse_iso_datetime(started_at)
+    end_dt = _parse_iso_datetime(completed_at)
+    if start_dt is None or end_dt is None:
+        return None
+    delta = (end_dt - start_dt).total_seconds()
+    if delta < 0:
+        return None
+    return round(float(delta), 3)
+
+
+def _details_payload(row: dict[str, Any]) -> dict[str, Any]:
+    raw = row.get("details_json")
+    if isinstance(raw, dict):
+        return raw
+    if not raw:
+        return {}
+    try:
+        decoded = json.loads(str(raw))
+    except Exception:
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
 def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return {
@@ -215,29 +248,69 @@ def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         return max(vals) if vals else None
 
     ordered = sorted(rows, key=lambda r: int(r.get("stage_order") or 0))
-    return {
-        "run_id": str(ordered[0].get("run_id") or ""),
-        "profile": str(ordered[0].get("profile") or ""),
-        "status": overall_status,
-        "started_at": _min_nonempty("started_at"),
-        "finished_at": _max_nonempty("completed_at"),
-        "updated_at": _max_nonempty("updated_at"),
-        "stage_count": int(len(ordered)),
-        "completed_stage_count": int(sum(1 for s in stage_statuses if s == "completed")),
-        "failed_stage_count": int(sum(1 for s in stage_statuses if s == "failed")),
-        "running_stage_count": int(sum(1 for s in stage_statuses if s == "running")),
-        "stages": [
+    started_at = _min_nonempty("started_at")
+    finished_at = _max_nonempty("completed_at")
+    stage_summaries: list[dict[str, Any]] = []
+    stage_duration_sum = 0.0
+    for r in ordered:
+        details = _details_payload(r)
+        stage_duration = details.get("duration_seconds")
+        if stage_duration is None:
+            stage_duration = _duration_seconds(r.get("started_at"), r.get("completed_at"))
+        if stage_duration is not None:
+            try:
+                stage_duration = round(float(stage_duration), 3)
+                stage_duration_sum += float(stage_duration)
+            except (TypeError, ValueError):
+                stage_duration = None
+        stage_summaries.append(
             {
                 "stage_name": str(r.get("stage_name") or ""),
                 "stage_order": int(r.get("stage_order") or 0),
                 "status": str(r.get("status") or ""),
                 "started_at": r.get("started_at"),
                 "completed_at": r.get("completed_at"),
+                "duration_seconds": stage_duration,
                 "error_type": r.get("error_type"),
                 "error_message": r.get("error_message"),
             }
-            for r in ordered
-        ],
+        )
+    run_duration = _duration_seconds(started_at, finished_at)
+    if run_duration is None and stage_duration_sum > 0:
+        run_duration = round(float(stage_duration_sum), 3)
+    completed_stage_durations = [
+        float(item["duration_seconds"])
+        for item in stage_summaries
+        if item.get("duration_seconds") is not None
+    ]
+    slowest_stage = None
+    if stage_summaries and completed_stage_durations:
+        slowest_stage = max(
+            (item for item in stage_summaries if item.get("duration_seconds") is not None),
+            key=lambda item: float(item["duration_seconds"]),
+        )
+    return {
+        "run_id": str(ordered[0].get("run_id") or ""),
+        "profile": str(ordered[0].get("profile") or ""),
+        "status": overall_status,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "updated_at": _max_nonempty("updated_at"),
+        "duration_seconds": run_duration,
+        "stage_count": int(len(ordered)),
+        "completed_stage_count": int(sum(1 for s in stage_statuses if s == "completed")),
+        "failed_stage_count": int(sum(1 for s in stage_statuses if s == "failed")),
+        "running_stage_count": int(sum(1 for s in stage_statuses if s == "running")),
+        "stage_duration_seconds_total": round(float(stage_duration_sum), 3),
+        "slowest_stage": (
+            {
+                "stage_name": str(slowest_stage.get("stage_name") or ""),
+                "duration_seconds": float(slowest_stage.get("duration_seconds") or 0.0),
+            }
+            if slowest_stage is not None
+            else None
+        ),
+        "stages": stage_summaries,
     }
 
 

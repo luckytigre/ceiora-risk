@@ -40,6 +40,7 @@
   - holdings-triggered light refreshes now pass an explicit `holdings_only` scope and may reuse the current published `universe_loadings` payload when both of these still match:
     - `source_dates`
     - stable risk-engine fingerprint (`method_version`, `last_recompute_date`, `factor_returns_latest_date`, snapshot-age/lookback settings, specific-risk count)
+  - on that same fast path, cached `eligibility`, `cov_matrix`, and `condition_number` are reused when present instead of being rebuilt from unchanged model state
   - when that reuse path is active, relational `model_outputs` persistence is skipped because the core model state is unchanged; serving payload persistence still runs normally
   - manual `serve-refresh` without that scope keeps the existing full serving-refresh behavior.
 - `source-daily`: latest-source ingest plus serving refresh only.
@@ -63,6 +64,8 @@ Runtime-role rule:
 - Operator lane cards show:
   - plain-English lane purpose
   - latest run state
+  - latest run elapsed time and delta versus the previous run
+  - slowest stage for the latest run
   - recent-run history strip
   - stage-level detail
   - separate Neon mirror and Neon parity status
@@ -125,6 +128,12 @@ Runtime-role rule:
   - for the holdings-only fast path, this now reports `status=skipped` with reason `holdings_only_fast_path`.
 - `refresh_status`: background orchestrator state snapshot.
   - includes current stage progress for in-flight runs (`current_stage`, `stage_index`, `stage_count`, `stage_started_at`) and the optional `refresh_scope` used by holdings-triggered refreshes.
+- operator lane summaries also expose additive persisted run-timing fields:
+  - `duration_seconds`
+  - `duration_delta_seconds`
+  - `duration_delta_pct`
+  - `stage_duration_seconds_total`
+  - `slowest_stage`
 
 ## Lookback Retention Policy
 - Think in terms of target factor-return history horizon `H` (years).
