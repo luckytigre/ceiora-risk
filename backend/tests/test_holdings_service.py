@@ -11,6 +11,23 @@ class _FakeConn:
         return None
 
 
+def test_trigger_light_refresh_passes_holdings_only_scope(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        holdings_service,
+        "start_refresh",
+        lambda **kwargs: captured.update(kwargs) or (True, {"status": "running"}),
+    )
+
+    out = holdings_service.trigger_light_refresh_if_requested(True)
+
+    assert out == {"started": True, "state": {"status": "running"}}
+    assert captured["mode"] == "light"
+    assert captured["force_risk_recompute"] is False
+    assert captured["refresh_scope"] == "holdings_only"
+
+
 def test_run_position_upsert_noop_skips_dirty_and_refresh(monkeypatch) -> None:
     calls = {"dirty": 0, "refresh": 0}
 

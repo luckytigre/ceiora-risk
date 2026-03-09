@@ -244,6 +244,7 @@ Does:
 - portfolio / risk / exposures / universe serving payloads
 - health payloads
 - durable serving-payload write (`serving_payload_current`)
+- holdings-triggered refreshes may reuse the current published `universe_loadings` payload when source dates and the risk-engine fingerprint still match
 
 Does not:
 - pull LSEG
@@ -257,6 +258,7 @@ Primary trigger:
 Current implemented path:
 - `serve-refresh`
 - In `cloud-serve`, this is the only allowed refresh lane.
+- manual `serve-refresh` keeps the existing full serving-refresh behavior; only holdings-triggered refreshes set the explicit `holdings_only` reuse hint
 
 ### 2) `source-daily`
 
@@ -312,6 +314,8 @@ Does not:
 
 Current implemented path:
 - `core-weekly`
+- daily factor-return recompute now resolves uncached dates before loading prices and only materializes the required price window plus the immediately prior session needed for return calculation
+- factor-return cache invalidation now also keys off the configured minimum exposure-snapshot age (`CROSS_SECTION_MIN_AGE_DAYS`)
 
 ### 5) `cold-core`
 
@@ -432,6 +436,7 @@ Should show:
 - last `universe-add`
 - recent run history per lane
 - latest stage detail per lane
+- current stage, stage index, and stage count for any in-flight orchestrated run
 - latest source dates:
   - prices
   - fundamentals

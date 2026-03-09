@@ -43,8 +43,13 @@ def _default_state() -> dict[str, Any]:
         "resume_run_id": None,
         "from_stage": None,
         "to_stage": None,
+        "refresh_scope": None,
         "force_core": False,
         "force_risk_recompute": False,
+        "current_stage": None,
+        "stage_index": None,
+        "stage_count": None,
+        "stage_started_at": None,
         "requested_at": None,
         "started_at": None,
         "finished_at": None,
@@ -147,8 +152,17 @@ def _run_in_background(
     from_stage: str | None,
     to_stage: str | None,
     force_core: bool,
+    refresh_scope: str | None = None,
 ) -> None:
     try:
+        def _stage_callback(event: dict[str, Any]) -> None:
+            _set_state(
+                current_stage=event.get("stage"),
+                stage_index=event.get("stage_index"),
+                stage_count=event.get("stage_count"),
+                stage_started_at=event.get("started_at"),
+            )
+
         result = run_model_pipeline(
             profile=profile,
             as_of_date=as_of_date,
@@ -157,12 +171,16 @@ def _run_in_background(
             from_stage=from_stage,
             to_stage=to_stage,
             force_core=bool(force_core),
+            refresh_scope=refresh_scope,
+            stage_callback=_stage_callback,
         )
         terminal = "ok" if str(result.get("status") or "") == "ok" else "failed"
         _set_state(
             status=terminal,
             pipeline_run_id=result.get("run_id"),
             finished_at=_now_iso(),
+            current_stage=None,
+            stage_started_at=None,
             result=result,
             error=None if terminal == "ok" else {
                 "type": "pipeline_failed",
@@ -184,6 +202,8 @@ def _run_in_background(
         _set_state(
             status="failed",
             finished_at=_now_iso(),
+            current_stage=None,
+            stage_started_at=None,
             error={
                 "type": type(exc).__name__,
                 "message": str(exc),
@@ -200,6 +220,7 @@ def start_refresh(
     mode: str,
     force_risk_recompute: bool,
     profile: str | None = None,
+    refresh_scope: str | None = None,
     as_of_date: str | None = None,
     resume_run_id: str | None = None,
     from_stage: str | None = None,
@@ -225,12 +246,17 @@ def start_refresh(
         profile=resolved_profile,
         requested_profile=(str(profile).strip().lower() if profile else None),
         mode=mode,
+        refresh_scope=(str(refresh_scope).strip().lower() if refresh_scope else None),
         as_of_date=(str(as_of_date).strip() if as_of_date else None),
         resume_run_id=(str(resume_run_id).strip() if resume_run_id else None),
         from_stage=stage_from,
         to_stage=stage_to,
         force_core=bool(force_core_effective),
         force_risk_recompute=bool(force_risk_recompute),
+        current_stage=None,
+        stage_index=None,
+        stage_count=None,
+        stage_started_at=None,
         requested_at=now,
         started_at=now,
         finished_at=None,
@@ -248,6 +274,7 @@ def start_refresh(
             "job_id": job_id,
             "profile": resolved_profile,
             "mode": str(mode),
+            "refresh_scope": (str(refresh_scope).strip().lower() if refresh_scope else None),
             "as_of_date": (str(as_of_date).strip() if as_of_date else None),
             "resume_run_id": (str(resume_run_id).strip() if resume_run_id else None),
             "from_stage": stage_from,

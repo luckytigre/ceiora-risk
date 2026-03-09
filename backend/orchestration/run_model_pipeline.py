@@ -10,7 +10,7 @@ import sqlite3
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -359,6 +359,7 @@ def _run_stage(
     raw_history_policy: str = "none",
     reset_core_cache: bool = False,
     enable_ingest: bool = False,
+    refresh_scope: str | None = None,
 ) -> dict[str, Any]:
     if stage == "ingest":
         bootstrap = bootstrap_cuse4_source_tables(
@@ -514,6 +515,7 @@ def _run_stage(
         out = run_refresh(
             mode=serving_mode,
             force_risk_recompute=False,
+            refresh_scope=refresh_scope,
             skip_snapshot_rebuild=True,
             skip_cuse4_foundation=True,
             skip_risk_engine=bool(skip_risk_engine),
@@ -537,6 +539,8 @@ def run_model_pipeline(
     from_stage: str | None = None,
     to_stage: str | None = None,
     force_core: bool = False,
+    refresh_scope: str | None = None,
+    stage_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     profile_key = resolve_profile_name(profile)
     if profile_key not in PROFILE_CONFIG:
@@ -608,12 +612,26 @@ def run_model_pipeline(
             stage_name=stage,
             stage_order=stage_order,
         )
+        stage_started_at = datetime.now(timezone.utc).isoformat()
+        if stage_callback is not None:
+            try:
+                stage_callback(
+                    {
+                        "stage": stage,
+                        "stage_index": idx,
+                        "stage_count": total_stages,
+                        "started_at": stage_started_at,
+                    }
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("Stage callback failed before stage start: %s", stage)
         try:
             out = _run_stage(
                 stage=stage,
                 as_of_date=as_of,
                 should_run_core=bool(should_run_core),
                 serving_mode=str(cfg["serving_mode"]),
+                refresh_scope=(str(refresh_scope).strip().lower() if refresh_scope else None),
                 force_core=bool(force_core),
                 core_reason=str(core_reason),
                 raw_history_policy=raw_history_policy,
@@ -622,12 +640,18 @@ def run_model_pipeline(
             )
             stage_status = "skipped" if str(out.get("status")) == "skipped" else "completed"
             elapsed = time.perf_counter() - stage_t0
+            stage_details = dict(out)
+            stage_details["duration_seconds"] = round(float(elapsed), 3)
+            stage_details["stage_order"] = int(stage_order)
+            stage_details["stage_index"] = int(idx)
+            stage_details["stage_count"] = int(total_stages)
+            stage_details["started_at"] = stage_started_at
             job_runs.finish_stage(
                 db_path=DATA_DB,
                 run_id=effective_run_id,
                 stage_name=stage,
                 status=stage_status,
-                details=out,
+                details=stage_details,
             )
             logger.info(
                 "Finished stage %s/%s: %s (%s) in %.1fs",
@@ -641,13 +665,20 @@ def run_model_pipeline(
                 {
                     "stage": stage,
                     "status": stage_status,
-                    "details": out,
+                    "details": stage_details,
                 }
             )
         except Exception as exc:  # noqa: BLE001
             overall_status = "failed"
             err = {"type": type(exc).__name__, "message": str(exc)}
             elapsed = time.perf_counter() - stage_t0
+            failed_details = {
+                "duration_seconds": round(float(elapsed), 3),
+                "stage_order": int(stage_order),
+                "stage_index": int(idx),
+                "stage_count": int(total_stages),
+                "started_at": stage_started_at,
+            }
             logger.exception(
                 "Stage failed %s/%s: %s after %.1fs",
                 idx,
@@ -660,13 +691,14 @@ def run_model_pipeline(
                 run_id=effective_run_id,
                 stage_name=stage,
                 status="failed",
-                details={},
+                details=failed_details,
                 error=err,
             )
             stage_results.append(
                 {
                     "stage": stage,
                     "status": "failed",
+                    "details": failed_details,
                     "error": err,
                 }
             )

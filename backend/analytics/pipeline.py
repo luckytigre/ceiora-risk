@@ -54,6 +54,15 @@ logger = logging.getLogger(__name__)
 DATA_DB = Path(config.DATA_DB_PATH)
 CACHE_DB = Path(config.SQLITE_PATH)
 RISK_ENGINE_METHOD_VERSION = "v4_trbc_l2_country_us_dummy_2026_03_08"
+_UNIVERSE_REUSE_RISK_KEYS = (
+    "status",
+    "method_version",
+    "last_recompute_date",
+    "factor_returns_latest_date",
+    "cross_section_min_age_days",
+    "lookback_days",
+    "specific_risk_ticker_count",
+)
 
 
 def _finite_float(value: Any, default: float = 0.0) -> float:
@@ -62,6 +71,35 @@ def _finite_float(value: Any, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return float(default)
     return out if np.isfinite(out) else float(default)
+
+
+def _risk_engine_reuse_signature(payload: dict[str, Any] | None) -> dict[str, Any]:
+    meta = dict(payload or {})
+    return {key: meta.get(key) for key in _UNIVERSE_REUSE_RISK_KEYS}
+
+
+def _can_reuse_cached_universe_loadings(
+    cached_payload: Any,
+    *,
+    source_dates: SourceDatesPayload,
+    risk_engine_meta: RiskEngineMetaPayload,
+) -> tuple[bool, str]:
+    if not isinstance(cached_payload, dict):
+        return False, "missing_cached_payload"
+    by_ticker = cached_payload.get("by_ticker")
+    if not isinstance(by_ticker, dict) or not by_ticker:
+        return False, "missing_by_ticker"
+    cached_source_dates = cached_payload.get("source_dates")
+    if not isinstance(cached_source_dates, dict):
+        return False, "missing_cached_source_dates"
+    if dict(cached_source_dates) != dict(source_dates):
+        return False, "source_dates_changed"
+    cached_risk = cached_payload.get("risk_engine")
+    if not isinstance(cached_risk, dict):
+        return False, "missing_cached_risk_engine"
+    if _risk_engine_reuse_signature(cached_risk) != _risk_engine_reuse_signature(risk_engine_meta):
+        return False, "risk_engine_state_changed"
+    return True, "source_and_risk_engine_match"
 
 
 def _parse_iso_date(value: Any) -> date | None:
@@ -200,6 +238,7 @@ def run_refresh(
     *,
     force_risk_recompute: bool = False,
     mode: str = "full",
+    refresh_scope: str | None = None,
     skip_snapshot_rebuild: bool = False,
     skip_cuse4_foundation: bool = False,
     skip_risk_engine: bool = False,
@@ -211,6 +250,7 @@ def run_refresh(
     """
     logger.info("Starting refresh pipeline...")
     refresh_mode = str(mode or "full").strip().lower()
+    refresh_scope_key = str(refresh_scope or "").strip().lower() or None
     if refresh_mode not in {"full", "light"}:
         refresh_mode = "full"
     light_mode = refresh_mode == "light"
@@ -234,21 +274,8 @@ def run_refresh(
             mode=str(config.CROSS_SECTION_SNAPSHOT_MODE or "current"),
         )
 
-    # 1. Fetch full-universe data from local data.db
-    logger.info("Fetching data from local database...")
     source_dates: SourceDatesPayload = core_reads.load_source_dates()
     fundamentals_asof = source_dates.get("fundamentals_asof") or source_dates.get("exposures_asof")
-    prices_universe_df = core_reads.load_latest_prices()
-    fundamentals_universe_df = core_reads.load_latest_fundamentals(
-        as_of_date=str(fundamentals_asof) if fundamentals_asof else None,
-    )
-    exposures_universe_df = core_reads.load_raw_cross_section_latest()
-    logger.info(
-        "Loaded source rows: prices=%s fundamentals=%s exposures=%s",
-        int(len(prices_universe_df)),
-        int(len(fundamentals_universe_df)),
-        int(len(exposures_universe_df)),
-    )
 
     # Optional cUSE4 foundation maintenance (additive, non-breaking).
     cuse4_foundation: dict[str, Any] = {"status": "disabled"}
@@ -378,20 +405,60 @@ def run_refresh(
     specific_risk_by_ticker = _specific_risk_by_ticker_view(specific_risk_by_security)
 
     # 3. Build/cached full-universe loadings first (portfolio is a final projection only).
-    logger.info("Building full-universe ticker loadings...")
-    universe_loadings = _build_universe_ticker_loadings(
-        exposures_universe_df,
-        fundamentals_universe_df,
-        prices_universe_df,
-        cov,
-        specific_risk_by_ticker=specific_risk_by_ticker,
+    universe_loadings_reused = False
+    universe_loadings_reuse_reason = "not_attempted"
+    cached_universe_loadings = (
+        sqlite.cache_get("universe_loadings")
+        if refresh_scope_key == "holdings_only" and light_mode and not recomputed_this_refresh
+        else None
     )
-    logger.info(
-        "Universe loadings built: ticker_count=%s eligible_ticker_count=%s factor_count=%s",
-        int(universe_loadings.get("ticker_count", 0)),
-        int(universe_loadings.get("eligible_ticker_count", 0)),
-        int(universe_loadings.get("factor_count", 0)),
-    )
+    if cached_universe_loadings is not None:
+        universe_loadings_reused, universe_loadings_reuse_reason = _can_reuse_cached_universe_loadings(
+            cached_universe_loadings,
+            source_dates=source_dates,
+            risk_engine_meta=risk_engine_meta,
+        )
+
+    if universe_loadings_reused:
+        universe_loadings = dict(cached_universe_loadings)
+        logger.info(
+            "Reusing cached universe loadings for light refresh (%s): ticker_count=%s eligible_ticker_count=%s factor_count=%s",
+            universe_loadings_reuse_reason,
+            int(universe_loadings.get("ticker_count", 0)),
+            int(universe_loadings.get("eligible_ticker_count", 0)),
+            int(universe_loadings.get("factor_count", 0)),
+        )
+    else:
+        logger.info(
+            "Fetching full-universe inputs from local database for rebuild (%s)...",
+            universe_loadings_reuse_reason,
+        )
+        prices_universe_df = core_reads.load_latest_prices()
+        fundamentals_universe_df = core_reads.load_latest_fundamentals(
+            as_of_date=str(fundamentals_asof) if fundamentals_asof else None,
+        )
+        exposures_universe_df = core_reads.load_raw_cross_section_latest()
+        logger.info(
+            "Loaded source rows: prices=%s fundamentals=%s exposures=%s",
+            int(len(prices_universe_df)),
+            int(len(fundamentals_universe_df)),
+            int(len(exposures_universe_df)),
+        )
+        logger.info("Building full-universe ticker loadings...")
+        universe_loadings = _build_universe_ticker_loadings(
+            exposures_universe_df,
+            fundamentals_universe_df,
+            prices_universe_df,
+            cov,
+            specific_risk_by_ticker=specific_risk_by_ticker,
+        )
+        universe_loadings_reuse_reason = "rebuilt"
+        logger.info(
+            "Universe loadings built: ticker_count=%s eligible_ticker_count=%s factor_count=%s",
+            int(universe_loadings.get("ticker_count", 0)),
+            int(universe_loadings.get("eligible_ticker_count", 0)),
+            int(universe_loadings.get("factor_count", 0)),
+        )
 
     # 4. Project held positions from full-universe cache
     logger.info("Projecting held positions from full-universe cache...")
@@ -606,11 +673,14 @@ def run_refresh(
         "positions": len(positions),
         "total_value": round(total_value, 2),
         "mode": refresh_mode,
+        "refresh_scope": refresh_scope_key,
         "cross_section_snapshot": snapshot_build,
         "risk_engine": risk_engine_state,
         "model_sanity": sanity,
         "cuse4_foundation": cuse4_foundation,
         "health_refreshed": bool(health_refreshed),
+        "universe_loadings_reused": bool(universe_loadings_reused),
+        "universe_loadings_reuse_reason": str(universe_loadings_reuse_reason),
         "model_outputs_write": model_outputs_write,
         "serving_outputs_write": serving_outputs_write,
     }

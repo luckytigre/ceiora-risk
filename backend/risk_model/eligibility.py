@@ -105,7 +105,11 @@ def load_trading_dates(data_db: Path) -> list[str]:
     return [str(r[0]) for r in rows if r and r[0]]
 
 
-def load_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, pd.DataFrame]]:
+def load_exposure_snapshots(
+    data_db: Path,
+    *,
+    dates: list[str] | None = None,
+) -> tuple[list[str], dict[str, pd.DataFrame]]:
     """Load exposure snapshots keyed by as_of_date (RIC-indexed)."""
     conn = sqlite3.connect(str(data_db))
     try:
@@ -117,13 +121,38 @@ def load_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, pd.Data
         style_cols = [c for c in STYLE_COLUMN_TO_LABEL.keys() if c in cols]
         industry_col = pick_trbc_industry_column(cols)
         industry_select = f"{industry_col} AS trbc_industry_group" if industry_col else "NULL AS trbc_industry_group"
+        requested_dates = sorted({str(d) for d in (dates or []) if str(d).strip()})
+        params: list[str] = []
+        lower_bound: str | None = None
+        upper_bound: str | None = None
+        if requested_dates:
+            upper_bound = requested_dates[-1]
+            snapshot_rows = conn.execute(
+                f"""
+                SELECT DISTINCT as_of_date
+                FROM {source_table}
+                WHERE as_of_date <= ?
+                ORDER BY as_of_date
+                """,
+                (upper_bound,),
+            ).fetchall()
+            snapshot_dates = [str(row[0]) for row in snapshot_rows if row and row[0]]
+            lower_bound = most_recent_date(snapshot_dates, requested_dates[0])
+            if lower_bound is None:
+                return [], {}
+            params.extend([lower_bound, upper_bound])
+            where_clause = "WHERE as_of_date >= ? AND as_of_date <= ?"
+        else:
+            where_clause = ""
         df = pd.read_sql_query(
             f"""
             SELECT UPPER(ric) AS ric, UPPER(ticker) AS ticker, as_of_date, {", ".join(style_cols)}, {industry_select}
             FROM {source_table}
+            {where_clause}
             ORDER BY as_of_date, ric
             """,
             conn,
+            params=params,
         )
     finally:
         conn.close()
@@ -367,13 +396,13 @@ def build_eligibility_context(
     *,
     dates: list[str] | None = None,
 ) -> EligibilityContext:
-    exposure_dates, snapshots = load_exposure_snapshots(data_db)
+    exposure_dates, snapshots = load_exposure_snapshots(data_db, dates=dates)
     if dates is None:
         trading_dates = load_trading_dates(data_db)
         # Include exposure dates so non-trading snapshot dates still resolve.
         merged_dates = sorted(set(trading_dates).union(exposure_dates))
     else:
-        merged_dates = sorted(set(str(d) for d in dates).union(exposure_dates))
+        merged_dates = sorted(set(str(d) for d in dates))
 
     market_cap_panel = _load_market_cap_panel(data_db, merged_dates)
     sector_panel, business_sector_panel, industry_panel, country_panel = _load_trbc_classification_panel(data_db, merged_dates)

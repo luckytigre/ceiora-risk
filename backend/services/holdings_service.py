@@ -24,6 +24,7 @@ def trigger_light_refresh_if_requested(trigger: bool) -> dict[str, Any] | None:
     started, state = start_refresh(
         mode="light",
         force_risk_recompute=False,
+        refresh_scope="holdings_only",
     )
     return {
         "started": bool(started),

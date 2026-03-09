@@ -1,8 +1,19 @@
 # cUSE4 Efficiency Implementation Plan
 
 Date: 2026-03-09
-Status: Draft
+Status: First-wave priorities partly implemented
 Owner: Shaun + Codex
+
+Implementation note:
+- implemented on branch `codex/cuse4-priority-efficiency`:
+  - `CUSE4-001` lightweight stage telemetry on existing orchestrator/job-run surfaces
+  - `CUSE4-002` cache invalidation now also tracks cross-section minimum-age policy for factor-return caches
+  - `CUSE4-003` bounded factor-return price loading plus bounded eligibility snapshot loading
+  - `CUSE4-006` explicit holdings-only light-refresh scope with safe reuse of published universe analytics when source/model fingerprints still match
+- not yet implemented:
+  - deeper eligibility memoization/vectorization follow-ons
+  - style-score/raw-history structural optimizations
+  - parallel regressions or SQLite staging changes
 
 ## Purpose
 

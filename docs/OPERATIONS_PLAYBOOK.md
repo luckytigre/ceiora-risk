@@ -37,9 +37,14 @@
 
 ## Refresh Paths (When To Use)
 - `serve-refresh`: quick serving refresh; no core recompute and no source ingest.
+  - holdings-triggered light refreshes now pass an explicit `holdings_only` scope and may reuse the current published `universe_loadings` payload when both of these still match:
+    - `source_dates`
+    - stable risk-engine fingerprint (`method_version`, `last_recompute_date`, `factor_returns_latest_date`, snapshot-age/lookback settings, specific-risk count)
+  - manual `serve-refresh` without that scope keeps the existing full serving-refresh behavior.
 - `source-daily`: latest-source ingest plus serving refresh only.
 - `source-daily-plus-core-if-due`: default daily maintenance lane; recomputes core only when cadence/version says due.
 - `core-weekly`: force core recompute without rebuilding full raw history.
+  - factor-return recompute now determines uncached dates before loading prices and only reads the bounded price window needed for those dates plus the immediately prior session.
 - `cold-core`: full historical reset for structural data changes (new/changed historical prices, volume, fundamentals, classification, or factor methodology).
   - This path rebuilds `barra_raw_cross_section_history` over full history and clears core cache tables before recomputing factor returns/risk.
   - UI now requires explicit confirmation before starting this lane from the operator deck.
@@ -110,12 +115,14 @@ Runtime-role rule:
   - This prevents partial live state if refresh fails mid-run.
   - Old staged snapshots are pruned automatically; tune with `SQLITE_CACHE_SNAPSHOT_RETENTION` (default `3`).
 - `risk_engine_meta`: recompute metadata (method version, last recompute date, latest factor-return date, settings).
+  - factor-return cache invalidation now also tracks `CROSS_SECTION_MIN_AGE_DAYS` so snapshot-age policy changes clear stale factor-return/residual/eligibility rows.
 - `risk_engine_cov`: serialized factor covariance matrix (weekly cache).
 - `risk_engine_specific_risk`: stock-level specific risk map (weekly cache).
 - `cuse4_foundation`: bootstrap + latest ESTU audit summary for cUSE4 transition layer.
 - `portfolio`, `risk`, `exposures`, `universe_loadings`, `universe_factors`, `health_diagnostics`, `eligibility`, `refresh_meta`: refreshed on each `/api/refresh` call.
 - `model_outputs_write`: latest relational model-output persistence status.
 - `refresh_status`: background orchestrator state snapshot.
+  - includes current stage progress for in-flight runs (`current_stage`, `stage_index`, `stage_count`, `stage_started_at`) and the optional `refresh_scope` used by holdings-triggered refreshes.
 
 ## Lookback Retention Policy
 - Think in terms of target factor-return history horizon `H` (years).
