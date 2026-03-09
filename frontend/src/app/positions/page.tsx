@@ -77,14 +77,6 @@ export default function PositionsPage() {
     if (!exact?.ric) return;
     setEditRic(String(exact.ric).toUpperCase());
   }, [tickerSearchQuery, editRic, ricTypeahead]);
-
-  if (pLoading) {
-    return <AnalyticsLoadingViz message="Loading positions..." />;
-  }
-  if (pError || accountError) {
-    return <ApiErrorState title="Positions Not Ready" error={pError || accountError} />;
-  }
-
   const positions = portfolio?.positions ?? [];
   const accountOptions = accountsData?.accounts ?? [];
   const holdingsRows = [...(holdingsData?.positions ?? [])].sort((a, b) => Math.abs(b.quantity) - Math.abs(a.quantity));
@@ -101,6 +93,13 @@ export default function PositionsPage() {
     handleRemove,
     setConfirmConfig,
   } = useHoldingsManager(selectedAccount, holdingsRows);
+
+  if (pLoading) {
+    return <AnalyticsLoadingViz message="Loading positions..." />;
+  }
+  if (pError || accountError) {
+    return <ApiErrorState title="Positions Not Ready" error={pError || accountError} />;
+  }
 
   return (
     <div>

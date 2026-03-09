@@ -43,7 +43,7 @@ def test_run_model_pipeline_runs_optional_neon_mirror(monkeypatch) -> None:
         lambda **_kwargs: {"status": "ok", "sync": {"status": "ok"}},
     )
 
-    out = run_model_pipeline.run_model_pipeline(profile="daily-fast")
+    out = run_model_pipeline.run_model_pipeline(profile="serve-refresh")
 
     assert out["status"] == "ok"
     assert out["neon_mirror"]["status"] == "ok"
@@ -73,7 +73,7 @@ def test_run_model_pipeline_fails_if_required_neon_mirror_mismatch(monkeypatch) 
         lambda **_kwargs: {"status": "mismatch"},
     )
 
-    out = run_model_pipeline.run_model_pipeline(profile="daily-fast")
+    out = run_model_pipeline.run_model_pipeline(profile="serve-refresh")
 
     assert out["neon_mirror"]["status"] == "mismatch"
     assert out["status"] == "failed"

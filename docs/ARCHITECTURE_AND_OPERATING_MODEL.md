@@ -8,7 +8,6 @@ Status: Canonical reference document
 
 Implemented now:
 - canonical orchestrator lane names are live in `run_model_pipeline`
-- legacy profile aliases still resolve for compatibility
 - `/api/operator/status` exposes lane status, source recency, core-due state, refresh state, and Neon parity health
 - `/api/operator/status` also carries backend-authoritative holdings dirty state, runtime warnings, and per-lane recent-run history
 - Data page now acts as the operator control deck with lane controls, plain-English popovers, recent-run history strips, stage detail, and fast/deep diagnostics

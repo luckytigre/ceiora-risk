@@ -394,14 +394,10 @@ Where this remains an approximation:
      - `source-daily`
      - `source-daily-plus-core-if-due`
      - `core-weekly`
-     - `cold-core`
-     - `universe-add`
-   - Stage checkpoints persist in `job_run_status`.
-   - `ingest` stage always runs canonical bootstrap checks; optional live LSEG ingest is controlled by `ORCHESTRATOR_ENABLE_INGEST`.
-   - Legacy profile names remain accepted as aliases during the transition:
-     - `daily-fast` -> `serve-refresh`
-     - `daily-with-core-if-due` -> `source-daily-plus-core-if-due`
-     - `weekly-core` -> `core-weekly`
+   - `cold-core`
+   - `universe-add`
+  - Stage checkpoints persist in `job_run_status`.
+  - `ingest` stage always runs canonical bootstrap checks; optional live LSEG ingest is controlled by `ORCHESTRATOR_ENABLE_INGEST`.
 9. Downstream usage:
    - Portfolio exposures/risk attribution and API caches read from processed model outputs, not raw ingest tables.
 

@@ -159,7 +159,6 @@ def _run_shard_with_retries(
                 rics_csv=rics_csv,
                 shard_count=int(shard_count),
                 shard_index=int(shard_idx),
-                skip_common_name_backfill=True,
                 write_fundamentals=bool(write_fundamentals),
                 write_prices=bool(write_prices),
                 write_classification=bool(write_classification),

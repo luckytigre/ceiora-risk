@@ -21,7 +21,7 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
                 "reset_core_cache": False,
                 "default_stages": ["serving_refresh"],
                 "enable_ingest": False,
-                "aliases": ["daily-fast"],
+                "aliases": [],
             }
         ],
     )

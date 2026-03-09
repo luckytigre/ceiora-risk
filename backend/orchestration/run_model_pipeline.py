@@ -107,18 +107,11 @@ PROFILE_CONFIG: dict[str, dict[str, Any]] = {
     },
 }
 
-PROFILE_ALIASES: dict[str, str] = {
-    "daily-fast": "serve-refresh",
-    "daily-with-core-if-due": "source-daily-plus-core-if-due",
-    "weekly-core": "core-weekly",
-}
-
-
 def resolve_profile_name(profile: str) -> str:
     clean = str(profile or "").strip().lower()
     if not clean:
         raise ValueError("profile is required")
-    return PROFILE_ALIASES.get(clean, clean)
+    return clean
 
 
 def profile_catalog() -> list[dict[str, Any]]:
@@ -133,7 +126,7 @@ def profile_catalog() -> list[dict[str, Any]]:
             "reset_core_cache": bool(cfg.get("reset_core_cache")),
             "default_stages": list(cfg.get("default_stages") or []),
             "enable_ingest": bool(cfg.get("enable_ingest")),
-            "aliases": [alias for alias, canonical in PROFILE_ALIASES.items() if canonical == profile],
+            "aliases": [],
         }
         for profile, cfg in PROFILE_CONFIG.items()
     ]
@@ -791,7 +784,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         required=True,
-        choices=sorted(set(PROFILE_CONFIG.keys()) | set(PROFILE_ALIASES.keys())),
+        choices=sorted(PROFILE_CONFIG.keys()),
         help="Execution profile for cadence and core-risk policy.",
     )
     parser.add_argument("--as-of-date", default=None, help="Optional as-of date (YYYY-MM-DD).")

@@ -328,17 +328,13 @@ def download_from_lseg(
     index: str | None = None,
     tickers_csv: str | None = None,
     rics_csv: str | None = None,
-    ric_suffix: str = ".O",  # kept for CLI compatibility (unused in canonical path)
     as_of_date: str | None = None,
     shard_count: int = 1,
     shard_index: int = 0,
-    skip_common_name_backfill: bool = False,  # kept for CLI compatibility (unused)
     write_fundamentals: bool = True,
     write_prices: bool = True,
     write_classification: bool = True,
 ) -> dict[str, Any]:
-    del ric_suffix, skip_common_name_backfill
-
     LsegClient = _load_lseg_client()
 
     raw_as_of = str(as_of_date or datetime.now(timezone.utc).date().isoformat())
@@ -634,11 +630,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--index", default=None, help="Index code (e.g. SPX, NDX). Constituents are filtered to security_master")
     p.add_argument("--tickers", default=None, help="Comma-separated tickers to ingest (must exist in security_master)")
     p.add_argument("--rics", default=None, help="Comma-separated RICs to ingest (must exist in security_master)")
-    p.add_argument("--ric-suffix", default=".O", help="Deprecated (kept for CLI compatibility)")
     p.add_argument("--as-of-date", default=None, help="Override as-of date (YYYY-MM-DD)")
     p.add_argument("--shard-count", type=int, default=1, help="Total number of ticker shards")
     p.add_argument("--shard-index", type=int, default=0, help="Zero-based shard index to process")
-    p.add_argument("--skip-common-name-backfill", action="store_true", help="Deprecated (kept for CLI compatibility)")
     p.add_argument("--skip-fundamentals", action="store_true", help="Skip writing fundamentals table")
     p.add_argument("--skip-prices", action="store_true", help="Skip writing prices table")
     p.add_argument("--skip-classification", action="store_true", help="Skip writing classification table")
@@ -652,11 +646,9 @@ if __name__ == "__main__":
         index=args.index,
         tickers_csv=args.tickers,
         rics_csv=args.rics,
-        ric_suffix=args.ric_suffix,
         as_of_date=args.as_of_date,
         shard_count=args.shard_count,
         shard_index=args.shard_index,
-        skip_common_name_backfill=bool(args.skip_common_name_backfill),
         write_fundamentals=not bool(args.skip_fundamentals),
         write_prices=not bool(args.skip_prices),
         write_classification=not bool(args.skip_classification),
