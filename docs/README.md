@@ -2,6 +2,10 @@
 
 ## Core Operations
 - `OPERATIONS_PLAYBOOK.md`: runbook for refresh, retention, validation, and recovery.
+  - canonical reference for the three horizons:
+    - active Barra model history
+    - risk-model lookback
+    - local/Neon source retention
 - `OPERATIONS_HARDENING_CHECKLIST.md`: pre-run hygiene, smoke checks, and rollback guardrails.
 - `ARCHITECTURE_AND_OPERATING_MODEL.md`: canonical project architecture, data flow, runtime roles, and operating model.
 - `specs/cUSE4_engine_spec.md`: cUSE4 model/foundation spec.

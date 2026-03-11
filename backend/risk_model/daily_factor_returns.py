@@ -211,6 +211,46 @@ def _load_trading_dates(data_db: Path) -> list[str]:
     return filter_xnys_sessions(trading_dates)
 
 
+def _active_model_history_start_date(data_db: Path) -> str | None:
+    """Return the active Barra-history floor derived from raw cross-sectional history."""
+    conn = sqlite3.connect(str(data_db))
+    try:
+        row = conn.execute(
+            """
+            SELECT MIN(as_of_date)
+            FROM barra_raw_cross_section_history
+            WHERE as_of_date IS NOT NULL
+            """
+        ).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return None
+    return str(row[0])
+
+
+def _first_usable_model_date(
+    trading_dates: list[str],
+    *,
+    model_history_start_date: str | None,
+    min_cross_section_age_days: int,
+) -> str | None:
+    if not trading_dates:
+        return None
+    if not model_history_start_date:
+        return trading_dates[0]
+    ts = pd.to_datetime(str(model_history_start_date), errors="coerce")
+    if pd.isna(ts):
+        return str(model_history_start_date)
+    threshold = (ts + pd.Timedelta(days=max(0, int(min_cross_section_age_days)))).date().isoformat()
+    for date_key in trading_dates:
+        if str(date_key) >= threshold:
+            return str(date_key)
+    return None
+
+
 def _load_cached_dates(cache_db: Path) -> set[str]:
     """Return dates that are complete in cache for factors, residuals, and eligibility."""
     conn = sqlite3.connect(str(cache_db))
@@ -254,7 +294,27 @@ def _ensure_cache_version(cache_db: Path, *, min_cross_section_age_days: int):
             tuple(required_meta.keys()),
         ).fetchall()
     }
-    if current_meta != required_meta:
+    missing_keys = sorted(key for key in required_meta.keys() if key not in current_meta)
+    has_conflicting_values = any(
+        str(current_meta.get(key)) != str(value)
+        for key, value in required_meta.items()
+        if key in current_meta
+    )
+    if current_meta and not has_conflicting_values and missing_keys:
+        conn.executemany(
+            """
+            INSERT INTO daily_factor_returns_meta(key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            [(key, value) for key, value in required_meta.items()],
+        )
+        conn.commit()
+        logger.info(
+            "Backfilled missing daily_factor_returns cache metadata keys without invalidating cache: %s",
+            missing_keys,
+        )
+    elif current_meta != required_meta:
         conn.execute("DROP TABLE IF EXISTS daily_factor_returns")
         conn.execute("DROP TABLE IF EXISTS daily_specific_residuals")
         conn.execute("DROP TABLE IF EXISTS daily_universe_eligibility_summary")
@@ -451,24 +511,50 @@ def compute_daily_factor_returns(
         cache_db,
         min_cross_section_age_days=min_cross_section_age_days,
     )
-    trading_dates = _load_trading_dates(data_db)
+    all_trading_dates = _load_trading_dates(data_db)
+    model_history_start_date = _active_model_history_start_date(data_db)
+    factor_history_start_date = _first_usable_model_date(
+        all_trading_dates,
+        model_history_start_date=model_history_start_date,
+        min_cross_section_age_days=min_cross_section_age_days,
+    )
+    trading_dates = list(all_trading_dates)
+    if factor_history_start_date:
+        trading_dates = [d for d in trading_dates if d >= factor_history_start_date]
     if lookback_days > 0:
         trading_dates = trading_dates[-lookback_days:]
-    logger.info("Resolved trading date window: total_dates=%s lookback_days=%s", len(trading_dates), lookback_days)
+    logger.info(
+        "Resolved trading date window: total_dates=%s lookback_days=%s model_history_start=%s factor_history_start=%s",
+        len(trading_dates),
+        lookback_days,
+        model_history_start_date,
+        factor_history_start_date,
+    )
+    if not trading_dates:
+        logger.warning("No trading dates inside active Barra-history window — cannot compute daily factor returns")
+        return _load_all_from_cache(
+            cache_db,
+            lookback_days,
+            model_history_start_date=factor_history_start_date,
+        )
     cached_dates = _load_cached_dates(cache_db)
     dates_to_compute = [d for d in trading_dates if d not in cached_dates]
 
     if not dates_to_compute:
         logger.info("All dates already cached, loading from cache")
-        return _load_all_from_cache(cache_db, lookback_days)
+        return _load_all_from_cache(
+            cache_db,
+            lookback_days,
+            model_history_start_date=factor_history_start_date,
+        )
 
     logger.info(
         f"Computing daily factor returns: {len(dates_to_compute)} new dates "
         f"({len(cached_dates)} already cached)"
     )
 
-    first_compute_idx = trading_dates.index(dates_to_compute[0])
-    price_start_date = trading_dates[max(0, first_compute_idx - 1)]
+    first_compute_idx = all_trading_dates.index(dates_to_compute[0])
+    price_start_date = all_trading_dates[max(0, first_compute_idx - 1)]
     price_end_date = dates_to_compute[-1]
     prices_df = _load_prices_for_window(
         data_db,
@@ -797,20 +883,36 @@ def compute_daily_factor_returns(
         skip_counts,
     )
 
-    return _load_all_from_cache(cache_db, lookback_days)
+    return _load_all_from_cache(
+        cache_db,
+        lookback_days,
+        model_history_start_date=factor_history_start_date,
+    )
 
 
-def _load_all_from_cache(cache_db: Path, lookback_days: int = 0) -> pd.DataFrame:
+def _load_all_from_cache(
+    cache_db: Path,
+    lookback_days: int = 0,
+    *,
+    model_history_start_date: str | None = None,
+) -> pd.DataFrame:
     """Load all daily factor returns from the cache."""
     conn = sqlite3.connect(str(cache_db))
     conn.execute(_DAILY_FR_SCHEMA)
     conn.execute(_DAILY_FR_META_SCHEMA)
+    where_clause = ""
+    params: list[object] = []
+    if model_history_start_date:
+        where_clause = "WHERE date >= ?"
+        params.append(str(model_history_start_date))
     if lookback_days > 0:
         df = pd.read_sql_query(
-            """SELECT date, factor_name, factor_return, r_squared, residual_vol
+            f"""SELECT date, factor_name, factor_return, r_squared, residual_vol
                FROM daily_factor_returns
+               {where_clause}
                ORDER BY date DESC""",
             conn,
+            params=params,
         )
         # Get the last N unique dates
         unique_dates = df["date"].unique()
@@ -820,10 +922,12 @@ def _load_all_from_cache(cache_db: Path, lookback_days: int = 0) -> pd.DataFrame
         df = df.sort_values(["date", "factor_name"]).reset_index(drop=True)
     else:
         df = pd.read_sql_query(
-            """SELECT date, factor_name, factor_return, r_squared, residual_vol
+            f"""SELECT date, factor_name, factor_return, r_squared, residual_vol
                FROM daily_factor_returns
+               {where_clause}
                ORDER BY date, factor_name""",
             conn,
+            params=params,
         )
     conn.close()
     return df
