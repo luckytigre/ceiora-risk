@@ -117,6 +117,14 @@ export async function triggerRefreshProfile(profile: string): Promise<{ status: 
   return apiFetch<{ status: string }>(apiPath.refreshProfile(profile), { method: "POST" });
 }
 
+export async function triggerServeRefresh(): Promise<{ status: string }> {
+  return triggerRefreshProfile("serve-refresh");
+}
+
+export async function triggerDailyMaintenanceRefresh(): Promise<{ status: string }> {
+  return triggerRefreshProfile("source-daily-plus-core-if-due");
+}
+
 export async function triggerHoldingsImport(payload: {
   account_id: string;
   mode: HoldingsImportMode;

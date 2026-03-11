@@ -68,3 +68,6 @@ def test_data_diagnostics_uses_canonical_source_table_keys(monkeypatch, tmp_path
     assert "fundamental_history" not in source_tables
     assert "trbc_history" not in source_tables
     assert "price_history" not in source_tables
+    assert body["truth_surfaces"]["dashboard_serving"]["source"] == "durable_serving_payloads"
+    assert body["truth_surfaces"]["operator_status"]["source"] == "runtime_status_and_job_runs"
+    assert body["truth_surfaces"]["local_diagnostics"]["source"] == "local_sqlite_and_cache"

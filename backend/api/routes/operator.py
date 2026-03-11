@@ -95,6 +95,8 @@ def get_operator_status(
         runtime_warnings.append("Neon auto-parity is disabled; post-run parity evidence will be incomplete.")
     if not bool(config.neon_auto_prune_enabled_effective()):
         runtime_warnings.append("Neon auto-prune is disabled; retained history may exceed the cloud retention window.")
+    allowed_profiles = sorted(_runtime_allowed_profiles())
+    local_only_profiles = sorted(set(profiles) - set(allowed_profiles))
 
     lanes = []
     for item in catalog:
@@ -152,7 +154,19 @@ def get_operator_status(
         "latest_parity_artifact": neon_sync_health.get("artifact_path") if isinstance(neon_sync_health, dict) else None,
         "runtime": {
             "app_runtime_role": str(config.APP_RUNTIME_ROLE),
-            "allowed_profiles": sorted(_runtime_allowed_profiles()),
+            "allowed_profiles": allowed_profiles,
+            "local_only_profiles": local_only_profiles,
+            "canonical_serving_profile": "serve-refresh",
+            "dashboard_truth_surface": "durable_serving_payloads",
+            "dashboard_truth_plain_english": (
+                "Dashboard pages should read durable serving payloads plus live holdings/runtime state, "
+                "not rebuild directly from raw source tables in the browser."
+            ),
+            "diagnostics_scope": "local_sqlite_and_cache",
+            "diagnostics_scope_plain_english": (
+                "Detailed diagnostics are local-instance diagnostics. Operator status, refresh state, holdings dirty state, "
+                "and Neon mirror/parity health are the live operator truth surfaces."
+            ),
             "data_backend": str(config.DATA_BACKEND),
             "neon_database_configured": bool(str(config.NEON_DATABASE_URL).strip()),
             "neon_auto_sync_enabled": bool(config.NEON_AUTO_SYNC_ENABLED),

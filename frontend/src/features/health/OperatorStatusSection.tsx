@@ -24,6 +24,16 @@ export default function OperatorStatusSection({
           Core due: {data ? (data.core_due.due ? `Yes (${data.core_due.reason})` : `No (${data.core_due.reason})`) : "—"}
         </span>
       </div>
+      {data?.runtime?.dashboard_truth_plain_english && (
+        <div className="detail-history-empty" style={{ marginTop: 10 }}>
+          {data.runtime.dashboard_truth_plain_english}
+        </div>
+      )}
+      {data?.runtime?.diagnostics_scope_plain_english && (
+        <div className="detail-history-empty" style={{ marginTop: 10 }}>
+          {data.runtime.diagnostics_scope_plain_english}
+        </div>
+      )}
       {Boolean(error) && !data && (
         <div className="detail-history-empty" style={{ marginTop: 10 }}>
           Operator status endpoint is unavailable.

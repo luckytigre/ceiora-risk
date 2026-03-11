@@ -34,7 +34,7 @@ def _refresh_authorized(x_refresh_token: str | None, authorization: str | None) 
 async def refresh(
     force_risk_recompute: bool = Query(False),
     force_core: bool = Query(False),
-    mode: str = Query("full"),
+    mode: str | None = Query(None),
     profile: str | None = Query(None),
     as_of_date: str | None = Query(None),
     resume_run_id: str | None = Query(None),
@@ -52,15 +52,20 @@ async def refresh(
         )
     elif not _refresh_authorized(x_refresh_token, authorization):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-    clean_mode = str(mode or "full").strip().lower()
+    requested_mode = str(mode).strip().lower() if mode is not None else None
+    clean_mode = requested_mode or "full"
     if clean_mode not in {"full", "light", "cold"}:
         clean_mode = "full"
+    effective_profile = profile
+    if config.cloud_mode() and not str(profile or "").strip() and requested_mode is None:
+        effective_profile = "serve-refresh"
+        clean_mode = "light"
     try:
         started, state = start_refresh(
             force_risk_recompute=bool(force_risk_recompute),
             force_core=bool(force_core),
             mode=clean_mode,
-            profile=profile,
+            profile=effective_profile,
             as_of_date=as_of_date,
             resume_run_id=resume_run_id,
             from_stage=from_stage,

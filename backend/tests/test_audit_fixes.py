@@ -357,6 +357,27 @@ def test_cached_dates_require_factor_and_residual_rows(tmp_path: Path) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE daily_universe_eligibility_summary (
+            date TEXT PRIMARY KEY,
+            exp_date TEXT,
+            exposure_n INTEGER NOT NULL DEFAULT 0,
+            structural_eligible_n INTEGER NOT NULL DEFAULT 0,
+            regression_member_n INTEGER NOT NULL DEFAULT 0,
+            structural_coverage REAL NOT NULL DEFAULT 0.0,
+            regression_coverage REAL NOT NULL DEFAULT 0.0,
+            drop_pct_from_prev REAL NOT NULL DEFAULT 0.0,
+            alert_level TEXT NOT NULL DEFAULT '',
+            missing_style_n INTEGER NOT NULL DEFAULT 0,
+            missing_market_cap_n INTEGER NOT NULL DEFAULT 0,
+            missing_trbc_economic_sector_short_n INTEGER NOT NULL DEFAULT 0,
+            missing_trbc_industry_n INTEGER NOT NULL DEFAULT 0,
+            non_equity_n INTEGER NOT NULL DEFAULT 0,
+            missing_return_n INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
     conn.executemany(
         """
         INSERT INTO daily_factor_returns
@@ -370,6 +391,13 @@ def test_cached_dates_require_factor_and_residual_rows(tmp_path: Path) -> None:
         INSERT INTO daily_specific_residuals
         (date, ric, ticker, residual, market_cap, trbc_industry_group)
         VALUES ('2026-03-02', 'AAPL.OQ', 'AAPL', 0.01, 1000000000, 'Tech')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO daily_universe_eligibility_summary
+        (date, exp_date, exposure_n, structural_eligible_n, regression_member_n, structural_coverage, regression_coverage, drop_pct_from_prev, alert_level, missing_style_n, missing_market_cap_n, missing_trbc_economic_sector_short_n, missing_trbc_industry_n, non_equity_n, missing_return_n)
+        VALUES ('2026-03-02', '2026-03-02', 100, 90, 90, 0.9, 0.9, 0.0, '', 0, 0, 0, 0, 0, 0)
         """
     )
     conn.commit()

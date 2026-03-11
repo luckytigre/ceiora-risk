@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { triggerRefresh, triggerRefreshProfile, useOperatorStatus, usePortfolio, useRisk } from "@/hooks/useApi";
+import {
+  triggerDailyMaintenanceRefresh,
+  triggerServeRefresh,
+  useOperatorStatus,
+  usePortfolio,
+  useRisk,
+} from "@/hooks/useApi";
 import KpiCard from "@/components/KpiCard";
 import RiskDecompChart from "@/components/RiskDecompChart";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
@@ -71,9 +77,9 @@ export default function OverviewPage() {
     setRefreshState("running");
     try {
       if (onlyServeRefreshAllowed) {
-        await triggerRefreshProfile("serve-refresh");
+        await triggerServeRefresh();
       } else {
-        await triggerRefresh("full");
+        await triggerDailyMaintenanceRefresh();
       }
       setRefreshState("done");
     } catch {

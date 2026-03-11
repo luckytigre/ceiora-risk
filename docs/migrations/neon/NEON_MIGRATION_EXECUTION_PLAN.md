@@ -28,6 +28,8 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
   - analytics tables: `NEON_ANALYTICS_RETENTION_YEARS` (default 5).
 - This pruning is applied in Neon only.
 - Local SQLite is unchanged by this flow.
+- Local source archives may intentionally extend beyond Neon's 10-year publish window.
+- The active Barra model-history floor still comes from retained `barra_raw_cross_section_history`, not from Neon retention or the deepest local source archive.
 
 ### 3) Controlled read cutover (no silent fallback)
 - Added read-surface routing via `NEON_READ_SURFACES`:
@@ -43,6 +45,7 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 - `backend/portfolio/positions_store.py` now reads from Neon `holdings_positions_current` when `DATA_BACKEND=neon`.
 - In non-Neon mode, existing in-code mock positions remain the local fallback.
 - Neon mode intentionally does not fall back to in-code mocks on query failure.
+- If Neon holdings reads fail during serving projection, refresh now fails instead of publishing an empty successful portfolio.
 
 ### 4b) Durable serving-output cutover
 - `serving_payload_current` now holds the latest persisted dashboard-serving payloads (`portfolio`, `risk`, `exposures`, `universe_loadings`, `universe_factors`, `model_sanity`, `refresh_meta`, `eligibility`).
@@ -93,6 +96,7 @@ Use local SQLite as the full historical ingest/source authority while Neon opera
 - Neon is expected to be the serving-oriented windowed store.
 - In `local-ingest`, broad post-run mirror/parity/prune remain the publish path.
 - In `cloud-serve`, broad mirror/parity/prune are intentionally skipped; serving payloads are written directly and holdings stay Neon-authoritative.
+- In `cloud-serve`, a bare `POST /api/refresh` defaults to `serve-refresh`; deeper lanes still require explicit local/operator execution.
 - Manual emergency mirror still available via:
   - `python3 -m backend.scripts.neon_sync_from_sqlite --mode incremental --json`
   - `python3 -m backend.scripts.neon_parity_audit --json`
