@@ -19,7 +19,12 @@ from backend.risk_model.risk_attribution import (
     portfolio_factor_exposure,
     systematic_variance_by_category,
 )
-from backend.portfolio.positions_store import get_position_meta, get_shares, get_tickers
+from backend.portfolio.positions_store import (
+    DEFAULT_ACCOUNT,
+    DEFAULT_SLEEVE,
+    DEFAULT_SOURCE,
+    load_positions_snapshot,
+)
 
 
 def _finite_float(value: Any, default: float = 0.0) -> float:
@@ -59,8 +64,8 @@ def build_positions_from_universe(
     universe_by_ticker: dict[str, dict[str, Any]],
 ) -> tuple[list[PositionPayload], float]:
     """Project held positions from full-universe cached analytics."""
-    shares_map = get_shares()
-    tickers = get_tickers()
+    shares_map, dynamic_meta = load_positions_snapshot()
+    tickers = list(shares_map.keys())
 
     positions: list[PositionPayload] = []
     total_value = 0.0
@@ -71,7 +76,12 @@ def build_positions_from_universe(
         price = _finite_float(base.get("price"), 0.0)
         mv = shares * price
         total_value += mv
-        meta = get_position_meta(t)
+        meta_base = dynamic_meta.get(t, {})
+        meta = {
+            "account": str(meta_base.get("account") or DEFAULT_ACCOUNT),
+            "sleeve": str(meta_base.get("sleeve") or DEFAULT_SLEEVE),
+            "source": str(meta_base.get("source") or DEFAULT_SOURCE),
+        }
         positions.append({
             "ticker": t,
             "name": str(base.get("name") or ""),

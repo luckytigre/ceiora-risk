@@ -127,6 +127,9 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
     assert body["lanes"][0]["latest_run"]["slowest_stage"]["stage_name"] == "serving_refresh"
     assert body["source_dates"]["prices_asof"] == "2026-03-07"
     assert body["latest_parity_artifact"] == "/tmp/report.json"
+    assert body["runtime"]["canonical_serving_profile"] == "serve-refresh"
+    assert body["runtime"]["dashboard_truth_surface"] == "durable_serving_payloads"
+    assert body["runtime"]["diagnostics_scope"] == "local_sqlite_and_cache"
 
 
 def test_latest_run_summary_by_profile_handles_empty_db(tmp_path) -> None:
@@ -150,3 +153,4 @@ def test_operator_status_reports_cloud_allowed_profiles(monkeypatch) -> None:
 
     assert res.status_code == 200
     assert res.json()["runtime"]["allowed_profiles"] == ["serve-refresh"]
+    assert "source-daily" in res.json()["runtime"]["local_only_profiles"]

@@ -43,10 +43,13 @@ export default function HealthPage() {
               Load diagnostics
             </button>
           </div>
-          <div className="detail-history-empty">
-            This page runs the heaviest diagnostic study in the app. It is loaded on demand and sections mount as you scroll so routine dashboard use does not spend compute on charts you are not viewing.
-          </div>
+        <div className="detail-history-empty">
+          This page runs the heaviest diagnostic study in the app. It is loaded on demand and sections mount as you scroll so routine dashboard use does not spend compute on charts you are not viewing.
         </div>
+        <div className="detail-history-empty" style={{ marginTop: 10 }}>
+          Operator Status above is the live control-room truth. The diagnostics below are a deeper local maintenance study and may lag the cloud-serving view.
+        </div>
+      </div>
       </div>
     );
   }

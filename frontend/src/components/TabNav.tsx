@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useBackground, type BgMode } from "./BackgroundContext";
-import { triggerRefresh, useOperatorStatus } from "@/hooks/useApi";
+import { triggerServeRefresh, useOperatorStatus } from "@/hooks/useApi";
 
 const TABS = [
   { href: "/overview", label: "Overview" },
@@ -42,23 +42,6 @@ function formatAgeFromIso(iso: string | null | undefined, nowMs: number): string
   return formatAgeFromMs(ms, nowMs);
 }
 
-function getNeonMirrorStatus(result: unknown): { mirror: string; parity: string } {
-  if (!result || typeof result !== "object") {
-    return { mirror: "", parity: "" };
-  }
-  const mirrorObj = (result as Record<string, unknown>).neon_mirror;
-  if (!mirrorObj || typeof mirrorObj !== "object") {
-    return { mirror: "", parity: "" };
-  }
-  const mirror = String((mirrorObj as Record<string, unknown>).status || "").toLowerCase();
-  const parityObj = (mirrorObj as Record<string, unknown>).parity;
-  const parity =
-    parityObj && typeof parityObj === "object"
-      ? String((parityObj as Record<string, unknown>).status || "").toLowerCase()
-      : "";
-  return { mirror, parity };
-}
-
 export default function TabNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -70,6 +53,7 @@ export default function TabNav() {
   const { mode, setMode } = useBackground();
   const { data: operatorStatusData, mutate: mutateOperatorStatus } = useOperatorStatus();
   const holdingsSync = operatorStatusData?.holdings_sync;
+  const neonSyncHealth = operatorStatusData?.neon_sync_health;
   const pending = Boolean(holdingsSync?.pending);
   const pendingCount = Number(holdingsSync?.pending_count || 0);
   const dirtySince = holdingsSync?.dirty_since || null;
@@ -149,7 +133,7 @@ export default function TabNav() {
     if (recomputeState === "running" || refreshIsRunning) return;
     setRecomputeState("running");
     try {
-      await triggerRefresh("light");
+      await triggerServeRefresh();
       await mutateOperatorStatus();
       setRecomputeState("idle");
     } catch {
@@ -161,7 +145,7 @@ export default function TabNav() {
     if (syncState === "running" || refreshIsRunning) return;
     setSyncState("running");
     try {
-      await triggerRefresh("light");
+      await triggerServeRefresh();
       await mutateOperatorStatus();
       setSyncState("idle");
     } catch {
@@ -173,9 +157,12 @@ export default function TabNav() {
     const lastSyncIso = refreshState?.finished_at || refreshState?.started_at || null;
     const lastSyncAge = formatAgeFromIso(lastSyncIso, clockMs);
     const pendingAge = pending && dirtySince ? formatAgeFromIso(dirtySince, clockMs) : null;
-    const neon = getNeonMirrorStatus(refreshState?.result ?? null);
-    const neonMirrorError = neon.mirror === "failed" || neon.mirror === "mismatch";
-    const neonParityError = neon.parity === "failed" || neon.parity === "mismatch";
+    const neonMirror = String(
+      neonSyncHealth?.mirror_status || neonSyncHealth?.status || "",
+    ).toLowerCase();
+    const neonParity = String(neonSyncHealth?.parity_status || "").toLowerCase();
+    const neonMirrorError = neonMirror === "failed" || neonMirror === "mismatch";
+    const neonParityError = neonParity === "failed" || neonParity === "mismatch";
     let tone: "success" | "warning" | "error" = "success";
     if (
       syncState === "failed" ||
@@ -210,14 +197,14 @@ export default function TabNav() {
     if (refreshStatus === "running") segments.push("Sync status: running");
     if (refreshStatus === "failed") segments.push("Sync status: failed");
     if (syncState === "failed") segments.push("Latest sync attempt did not start");
-    if (neon.mirror) segments.push(`Neon mirror: ${neon.mirror}`);
-    if (neon.parity) segments.push(`Neon parity: ${neon.parity}`);
+    if (neonMirror) segments.push(`Neon mirror: ${neonMirror}`);
+    if (neonParity) segments.push(`Neon parity: ${neonParity}`);
     return {
       tone,
       detail: segments.join(" | "),
       aria: `Health ${tone}. ${segments.join(". ")}`,
     };
-  }, [refreshState, refreshStatus, pending, pendingCount, dirtySince, clockMs, syncState]);
+  }, [refreshState, refreshStatus, pending, pendingCount, dirtySince, clockMs, syncState, neonSyncHealth]);
 
   return (
     <nav ref={navRef} className="dash-tabs">
@@ -264,7 +251,7 @@ export default function TabNav() {
           type="button"
           onClick={handleSyncNow}
           disabled={syncState === "running" || refreshIsRunning}
-          title="Run a light sync refresh"
+          title="Run serve-refresh"
           aria-label="Sync"
         >
           <svg

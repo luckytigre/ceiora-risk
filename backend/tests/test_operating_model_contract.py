@@ -48,6 +48,48 @@ def test_positions_store_mock_fallback_without_neon(monkeypatch: pytest.MonkeyPa
     assert meta == positions_store.POSITION_META
 
 
+def test_positions_store_raises_when_neon_expected_but_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(positions_store.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(positions_store.config, "NEON_DATABASE_URL", "postgres://example")
+    monkeypatch.setattr(
+        positions_store,
+        "_load_positions_from_neon",
+        lambda: (_ for _ in ()).throw(RuntimeError("dsn failed")),
+    )
+
+    with pytest.raises(positions_store.HoldingsUnavailableError):
+        positions_store._load_positions()
+
+
+def test_build_positions_from_universe_loads_holdings_snapshot_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    def _load_once():
+        calls["count"] += 1
+        return (
+            {"AAPL": 10.0, "MSFT": -5.0},
+            {
+                "AAPL": {"account": "MAIN", "sleeve": "NEON HOLDINGS", "source": "NEON"},
+                "MSFT": {"account": "MAIN", "sleeve": "NEON HOLDINGS", "source": "NEON"},
+            },
+        )
+
+    from backend.analytics.services import risk_views
+
+    monkeypatch.setattr(risk_views, "load_positions_snapshot", _load_once)
+
+    positions, total_value = risk_views.build_positions_from_universe(
+        {
+            "AAPL": {"price": 100.0, "name": "Apple"},
+            "MSFT": {"price": 50.0, "name": "Microsoft"},
+        }
+    )
+
+    assert calls["count"] == 1
+    assert len(positions) == 2
+    assert total_value == 750.0
+
+
 def test_holdings_runtime_state_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(holdings_runtime_state, "cache_get", lambda key: None if key != "holdings_sync_state" else None)
     recorded: dict[str, object] = {}

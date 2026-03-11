@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, triggerRefresh, triggerRefreshProfile, useOperatorStatus } from "@/hooks/useApi";
+import {
+  ApiError,
+  triggerDailyMaintenanceRefresh,
+  triggerRefreshProfile,
+  triggerServeRefresh,
+  useOperatorStatus,
+} from "@/hooks/useApi";
 
 function parseError(error: unknown): {
   message: string;
@@ -65,9 +71,15 @@ export default function ApiErrorState({
       if (parsed.refreshProfile) {
         await triggerRefreshProfile(parsed.refreshProfile);
       } else if (onlyServeRefreshAllowed) {
-        await triggerRefreshProfile("serve-refresh");
+        await triggerServeRefresh();
       } else {
-        await triggerRefresh(parsed.refreshMode || "light");
+        if (parsed.refreshMode === "cold") {
+          await triggerRefreshProfile("cold-core");
+        } else if (parsed.refreshMode === "full") {
+          await triggerDailyMaintenanceRefresh();
+        } else {
+          await triggerServeRefresh();
+        }
       }
       setRefreshState("done");
     } catch {
@@ -92,7 +104,11 @@ export default function ApiErrorState({
                 ? `Run ${parsed.refreshProfile}`
                 : onlyServeRefreshAllowed
                   ? "Run serve-refresh"
-                : `Run ${parsed.refreshMode || "light"} refresh`}
+                : parsed.refreshMode === "cold"
+                  ? "Run cold-core"
+                  : parsed.refreshMode === "full"
+                    ? "Run source-daily-plus-core-if-due"
+                    : "Run serve-refresh"}
           </button>
           {refreshState === "done" && (
             <div style={{ marginTop: 8, color: "rgba(169,182,210,0.8)", fontSize: 12 }}>

@@ -11,6 +11,11 @@ from collections import defaultdict
 from backend import config
 from backend.data.neon import connect, resolve_dsn
 
+
+class HoldingsUnavailableError(RuntimeError):
+    """Raised when Neon-backed holdings are expected but cannot be loaded."""
+
+
 # ticker -> shares held
 PORTFOLIO_POSITIONS: dict[str, float] = {
     "AAPL": 6.75,
@@ -53,12 +58,12 @@ PORTFOLIO_POSITIONS: dict[str, float] = {
 
 
 def get_tickers() -> list[str]:
-    shares, _ = _load_positions()
+    shares, _ = load_positions_snapshot()
     return list(shares.keys())
 
 
 def get_shares() -> dict[str, float]:
-    shares, _ = _load_positions()
+    shares, _ = load_positions_snapshot()
     return dict(shares)
 
 
@@ -77,7 +82,7 @@ POSITION_META: dict[str, dict[str, str]] = {
 
 def get_position_meta(ticker: str) -> dict[str, str]:
     t = ticker.upper().strip()
-    _, dynamic_meta = _load_positions()
+    _, dynamic_meta = load_positions_snapshot()
     base = dynamic_meta.get(t) or POSITION_META.get(t, {})
     return {
         "account": str(base.get("account") or DEFAULT_ACCOUNT),
@@ -86,14 +91,16 @@ def get_position_meta(ticker: str) -> dict[str, str]:
     }
 
 
+def load_positions_snapshot() -> tuple[dict[str, float], dict[str, dict[str, str]]]:
+    return _load_positions()
+
+
 def _load_positions() -> tuple[dict[str, float], dict[str, dict[str, str]]]:
     try:
         return _load_positions_from_neon()
-    except Exception:
+    except Exception as exc:
         if str(config.DATA_BACKEND).strip().lower() == "neon" or str(config.NEON_DATABASE_URL).strip():
-            # In Neon-backed runtime, fail closed to avoid mixing stale mock data
-            # with live holdings writes.
-            return {}, {}
+            raise HoldingsUnavailableError(f"Neon holdings unavailable: {exc}") from exc
         return dict(PORTFOLIO_POSITIONS), dict(POSITION_META)
 
 

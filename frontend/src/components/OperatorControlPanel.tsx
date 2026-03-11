@@ -91,6 +91,7 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
     ["Cross section", sourceDates.exposures_asof ?? "—"],
     ["Factor returns", data?.risk_engine?.factor_returns_latest_date ?? "—"],
     ["Data backend", data?.runtime?.data_backend ?? "—"],
+    ["Allowed lanes", (data?.runtime?.allowed_profiles ?? []).join(", ") || "—"],
     ["Neon read surfaces", (data?.runtime?.neon_read_surfaces ?? []).join(", ") || "—"],
   ] satisfies Array<[string, string]>;
 
@@ -124,6 +125,16 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
       <div className="detail-history-empty" style={{ marginBottom: 14 }}>
         This page is the plain-English control room for your backend. Each lane below is a specific kind of update, with clear scope and current status.
       </div>
+      {data?.runtime?.dashboard_truth_plain_english && (
+        <div className="detail-history-empty" style={{ marginBottom: 14 }}>
+          {data.runtime.dashboard_truth_plain_english}
+        </div>
+      )}
+      {data?.runtime?.diagnostics_scope_plain_english && (
+        <div className="detail-history-empty" style={{ marginBottom: 14 }}>
+          {data.runtime.diagnostics_scope_plain_english}
+        </div>
+      )}
       {runtimeWarnings.length > 0 && (
         <div className="detail-history-empty" style={{ marginBottom: 14, color: "rgba(224,190,92,0.92)" }}>
           Runtime warnings: {runtimeWarnings.join(" | ")}

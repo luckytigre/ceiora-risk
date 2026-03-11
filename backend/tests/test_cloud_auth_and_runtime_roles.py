@@ -124,6 +124,32 @@ def test_cloud_runtime_role_allows_only_serve_refresh(monkeypatch) -> None:
     assert "Allowed profiles: serve-refresh" in res.json()["message"]
 
 
+def test_cloud_refresh_defaults_to_serve_refresh_when_profile_omitted(monkeypatch) -> None:
+    monkeypatch.setattr(refresh_routes.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(refresh_routes.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(refresh_manager.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(
+        refresh_routes,
+        "start_refresh",
+        lambda **kwargs: (
+            True,
+            {
+                "status": "running",
+                "profile": kwargs.get("profile"),
+                "mode": kwargs.get("mode"),
+            },
+        ),
+    )
+
+    with TestClient(app) as client:
+        res = client.post("/api/refresh", headers={"X-Refresh-Token": "op-secret"})
+
+    assert res.status_code == 202
+    body = res.json()
+    assert body["refresh"]["profile"] == "serve-refresh"
+    assert body["refresh"]["mode"] == "light"
+
+
 def test_invalid_runtime_role_defaults_fail_closed() -> None:
     import backend.config as config_module
 

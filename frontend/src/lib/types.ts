@@ -436,6 +436,20 @@ export interface DataDiagnosticsData {
     source?: string;
     plain_english?: string;
   };
+  truth_surfaces?: {
+    dashboard_serving?: {
+      source?: string;
+      plain_english?: string;
+    };
+    operator_status?: {
+      source?: string;
+      plain_english?: string;
+    };
+    local_diagnostics?: {
+      source?: string;
+      plain_english?: string;
+    };
+  };
   exposure_source_table: string;
   exposure_source?: {
     table: string;
@@ -627,6 +641,12 @@ export interface OperatorStatusData {
   runtime?: {
     app_runtime_role?: string;
     allowed_profiles?: string[];
+    local_only_profiles?: string[];
+    canonical_serving_profile?: string;
+    dashboard_truth_surface?: string;
+    dashboard_truth_plain_english?: string;
+    diagnostics_scope?: string;
+    diagnostics_scope_plain_english?: string;
     data_backend?: string;
     neon_database_configured?: boolean;
     neon_auto_sync_enabled?: boolean;

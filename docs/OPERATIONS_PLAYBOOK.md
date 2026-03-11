@@ -55,12 +55,16 @@
 Runtime-role rule:
 - `local-ingest`: all lanes may be used.
 - `cloud-serve`: only `serve-refresh` is allowed.
+- In `cloud-serve`, a bare `POST /api/refresh` now defaults safely to `serve-refresh`.
+- Explicit deeper lanes remain blocked in `cloud-serve` even if requested by old mode-based callers.
 
 ## Operator UI Policy
 - Data page is the primary control room.
 - Fast diagnostics are the default because they are cheap and always available.
 - Deep diagnostics are on-demand and compute exact row counts, ticker counts, duplicate checks, and update metadata.
 - Health page is for deeper model diagnostics, not routine operator actions.
+- Operator Status and header health are the live runtime truth.
+- Data/Health diagnostics are deeper local-instance maintenance panels and may lag the cloud-serving view.
 - Operator lane cards show:
   - plain-English lane purpose
   - latest run state
@@ -124,6 +128,7 @@ Runtime-role rule:
 - `risk_engine_specific_risk`: stock-level specific risk map (weekly cache).
 - `cuse4_foundation`: bootstrap + latest ESTU audit summary for cUSE4 transition layer.
 - `portfolio`, `risk`, `exposures`, `universe_loadings`, `universe_factors`, `health_diagnostics`, `eligibility`, `refresh_meta`: refreshed on each `/api/refresh` call.
+- if Neon-backed holdings cannot be read during serving projection, refresh fails instead of publishing an empty-success portfolio payload
 - `model_outputs_write`: latest relational model-output persistence status.
   - for the holdings-only fast path, this now reports `status=skipped` with reason `holdings_only_fast_path`.
 - `refresh_status`: background orchestrator state snapshot.
@@ -136,6 +141,12 @@ Runtime-role rule:
   - `slowest_stage`
 
 ## Lookback Retention Policy
+- Treat three horizons separately:
+  - active Barra model history: the retained `barra_raw_cross_section_history` window that drives factor-return recomputes
+  - risk-model lookback: the rolling covariance/specific-risk window (`LOOKBACK_DAYS`, currently ~2 trading years)
+  - source archive retention: deeper local history plus Neon publish retention
+- Ordinary `core-weekly` recomputes respect the active Barra model-history floor from `barra_raw_cross_section_history`; they do not try to backfill the full price archive.
+- The first usable factor-return date may be a few sessions later than raw-history start because cross-sectional regressions honor `CROSS_SECTION_MIN_AGE_DAYS`.
 - Think in terms of target factor-return history horizon `H` (years).
 - If you need to recompute and keep `H` years of factor returns, retain at least `H` years in:
   - `barra_raw_cross_section_history`
@@ -151,6 +162,10 @@ Runtime-role rule:
 - Practical rule:
   - For a 5-year history target (example: as of 2026-03-05, keep data from ~2021-03-05 onward), keep at least 5 years in the source/raw tables.
   - Add extra buffer if you rebuild raw descriptors from prices (rolling feature construction benefits from pre-window data).
+  - Deeper local source archives are allowed and expected; they do not, by themselves, widen the active Barra model window.
+  - Neon is the pruned publish surface:
+    - source tables: rolling 10 years
+    - analytics tables: rolling 5 years
 
 ### Storage vs Recompute Tradeoff
 - Keep long source/raw history:

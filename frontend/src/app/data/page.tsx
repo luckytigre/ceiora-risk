@@ -44,6 +44,7 @@ export default function DataPage() {
   const elig = data?.cross_section_usage?.eligibility_summary;
   const cross = data?.cross_section_usage?.factor_cross_section;
   const cacheRows = data?.cache_outputs ?? [];
+  const truth = data?.truth_surfaces;
   const refreshRows: Array<{ label: string; table: DataTableStats | null | undefined }> = [
     { label: "Security Master", table: src?.security_master },
     { label: "Fundamentals PIT", table: src?.security_fundamentals_pit },
@@ -97,6 +98,20 @@ export default function DataPage() {
         </div>
         <div className="detail-history-empty" style={{ marginBottom: 12 }}>
           {data?.diagnostic_scope?.plain_english || "Diagnostics reflect the current backend instance."}
+        </div>
+        <div className="health-grid-2-half" style={{ marginBottom: 12 }}>
+          <div className="chart-card" style={{ margin: 0 }}>
+            <h4 style={{ marginBottom: 8 }}>Dashboard Truth Surface</h4>
+            <div className="health-kpi-subrow"><strong>Source:</strong> {truth?.dashboard_serving?.source || "—"}</div>
+            <div className="health-kpi-subrow">{truth?.dashboard_serving?.plain_english || "—"}</div>
+          </div>
+          <div className="chart-card" style={{ margin: 0 }}>
+            <h4 style={{ marginBottom: 8 }}>Operator vs Maintenance Panels</h4>
+            <div className="health-kpi-subrow"><strong>Operator truth:</strong> {truth?.operator_status?.source || "—"}</div>
+            <div className="health-kpi-subrow">{truth?.operator_status?.plain_english || "—"}</div>
+            <div className="health-kpi-subrow" style={{ marginTop: 8 }}><strong>Deep diagnostics:</strong> {truth?.local_diagnostics?.source || "—"}</div>
+            <div className="health-kpi-subrow">{truth?.local_diagnostics?.plain_english || "—"}</div>
+          </div>
         </div>
         <div className="dash-table">
           <table>

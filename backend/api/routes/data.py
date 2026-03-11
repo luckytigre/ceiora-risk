@@ -378,6 +378,29 @@ def get_data_diagnostics(
                     "Use operator status above for cloud-serving truth, lane status, and Neon health."
                 ),
             },
+            "truth_surfaces": {
+                "dashboard_serving": {
+                    "source": "durable_serving_payloads",
+                    "plain_english": (
+                        "Overview, Risk, Explore, and other user-facing pages should read compact durable serving payloads "
+                        "instead of rebuilding directly from raw source tables."
+                    ),
+                },
+                "operator_status": {
+                    "source": "runtime_status_and_job_runs",
+                    "plain_english": (
+                        "Operator status is the live control-room truth for lane status, holdings dirty state, active snapshot, "
+                        "and Neon mirror/parity health."
+                    ),
+                },
+                "local_diagnostics": {
+                    "source": "local_sqlite_and_cache",
+                    "plain_english": (
+                        "This diagnostics endpoint inspects the current backend instance and its local SQLite/cache files. "
+                        "Treat it as a deep maintenance panel, not the primary cloud-serving truth."
+                    ),
+                },
+            },
             "exposure_source_table": exposure_source_table,
             "exposure_source": exposure_source,
             "source_tables": source_tables,
