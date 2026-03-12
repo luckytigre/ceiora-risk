@@ -1,13 +1,14 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import ApiErrorState from "@/components/ApiErrorState";
-import type { HoldingsPosition } from "@/lib/types";
-import { fmtQty } from "../lib/csv";
+import TableRowToggle from "@/components/TableRowToggle";
+import type { HoldingsPosition, Position } from "@/lib/types";
 import InlineShareDraftEditor from "./InlineShareDraftEditor";
 
 interface HoldingsLedgerSectionProps {
-  selectedAccount: string;
   holdingsRows: HoldingsPosition[];
+  modeledPositions: Position[];
   holdingsError?: unknown;
   busy: boolean;
   getDraftQuantityText: (row: HoldingsPosition) => string;
@@ -15,12 +16,41 @@ interface HoldingsLedgerSectionProps {
   isDraftInvalidForRow: (row: HoldingsPosition) => boolean;
   onAdjust: (row: HoldingsPosition, delta: number) => void;
   onDraftQuantityChange: (row: HoldingsPosition, value: string) => void;
-  onRemove: (row: HoldingsPosition) => void;
+}
+
+type SortKey =
+  | "ticker"
+  | "instrument_type"
+  | "quantity"
+  | "price"
+  | "market_value"
+  | "source"
+  | "account_id";
+
+const COLLAPSED_ROWS = 18;
+
+function normalizeAccountId(value: string | null | undefined): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeTicker(value: string | null | undefined): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function fmtQty(n: number): string {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+function fmtCurrency(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "—";
+  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${n.toFixed(2)}`;
 }
 
 export default function HoldingsLedgerSection({
-  selectedAccount,
   holdingsRows,
+  modeledPositions,
   holdingsError,
   busy,
   getDraftQuantityText,
@@ -28,84 +58,146 @@ export default function HoldingsLedgerSection({
   isDraftInvalidForRow,
   onAdjust,
   onDraftQuantityChange,
-  onRemove,
 }: HoldingsLedgerSectionProps) {
+  const [sortKey, setSortKey] = useState<SortKey>("market_value");
+  const [sortAsc, setSortAsc] = useState(false);
+  const [showAllRows, setShowAllRows] = useState(false);
+
+  const modeledMap = useMemo(() => {
+    const out = new Map<string, Position>();
+    for (const pos of modeledPositions) {
+      out.set(`${normalizeAccountId(pos.account)}::${normalizeTicker(pos.ticker)}`, pos);
+    }
+    return out;
+  }, [modeledPositions]);
+
+  const enrichedRows = useMemo(() => {
+    return holdingsRows.map((row) => {
+      const modeled = modeledMap.get(`${normalizeAccountId(row.account_id)}::${normalizeTicker(row.ticker)}`);
+      return {
+        row,
+        modeled,
+        price: modeled?.price ?? null,
+        marketValue: modeled?.price != null ? Number(row.quantity || 0) * Number(modeled.price || 0) : (modeled?.market_value ?? null),
+      };
+    });
+  }, [holdingsRows, modeledMap]);
+
+  const sortedRows = useMemo(() => {
+    const rows = [...enrichedRows];
+    rows.sort((a, b) => {
+      const valueFor = (item: (typeof rows)[number]) => {
+        switch (sortKey) {
+          case "ticker":
+            return item.row.ticker || item.row.ric;
+          case "instrument_type":
+            return item.row.instrument_type || "";
+          case "quantity":
+            return Number(item.row.quantity || 0);
+          case "price":
+            return item.price ?? Number.NEGATIVE_INFINITY;
+          case "market_value":
+            return item.marketValue ?? Number.NEGATIVE_INFINITY;
+          case "source":
+            return item.row.source || "";
+          case "account_id":
+            return item.row.account_id || "";
+        }
+      };
+      const av = valueFor(a);
+      const bv = valueFor(b);
+      if (typeof av === "number" && typeof bv === "number") {
+        return sortAsc ? av - bv : bv - av;
+      }
+      return sortAsc
+        ? String(av).localeCompare(String(bv))
+        : String(bv).localeCompare(String(av));
+    });
+    return rows;
+  }, [enrichedRows, sortAsc, sortKey]);
+
+  const visibleRows = showAllRows ? sortedRows : sortedRows.slice(0, COLLAPSED_ROWS);
+
+  function handleSort(nextKey: SortKey) {
+    if (nextKey === sortKey) {
+      setSortAsc((prev) => !prev);
+      return;
+    }
+    setSortKey(nextKey);
+    setSortAsc(false);
+  }
+
+  function arrow(key: SortKey): string {
+    return sortKey === key ? (sortAsc ? " ↑" : " ↓") : "";
+  }
+
+  if (holdingsError) {
+    return (
+      <div className="chart-card mb-4">
+        <h3>Portfolio Holdings</h3>
+        <ApiErrorState title="Holdings Not Ready" error={holdingsError} />
+      </div>
+    );
+  }
+
   return (
     <div className="chart-card mb-4">
-      <h3>
-        Current Holdings
-        {selectedAccount ? ` (${selectedAccount})` : ""}
-        {" "}
-        [{holdingsRows.length}]
-      </h3>
-      <div className="detail-history-empty" style={{ marginBottom: 10 }}>
-        This table is the live holdings ledger. The model portfolio table below refreshes after a serving update, so temporary differences are expected until `RECALC` runs.
+      <h3>Portfolio Holdings [{holdingsRows.length}]</h3>
+      <div className="section-subtitle">
+        Live Neon-backed holdings across all accounts. Inline changes stay local until `RECALC`, then the batch is written once and the modeled snapshot refreshes afterward.
       </div>
-      {holdingsError ? (
-        <ApiErrorState title="Holdings Not Ready" error={holdingsError} />
-      ) : (
-        <div className="dash-table" style={{ overflowX: "auto" }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Account</th>
-                <th>Ticker</th>
-                <th>RIC</th>
-                <th className="text-right">Quantity</th>
-                <th>Source</th>
-                <th>Updated</th>
-                <th>Action</th>
+      <div className="dash-table">
+        <table>
+          <thead>
+            <tr>
+              <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
+              <th onClick={() => handleSort("instrument_type")}>Type{arrow("instrument_type")}</th>
+              <th className="text-right" onClick={() => handleSort("quantity")}>Quantity{arrow("quantity")}</th>
+              <th className="text-right" onClick={() => handleSort("price")}>Price{arrow("price")}</th>
+              <th className="text-right" onClick={() => handleSort("market_value")}>Mkt Val{arrow("market_value")}</th>
+              <th onClick={() => handleSort("source")}>Source{arrow("source")}</th>
+              <th onClick={() => handleSort("account_id")}>Account{arrow("account_id")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.map(({ row, price, marketValue }) => (
+              <tr key={`${row.account_id}:${row.ric || row.ticker}`}>
+                <td>{row.ticker || "—"}</td>
+                <td>{row.instrument_type || "—"}</td>
+                <td className="text-right">
+                  <InlineShareDraftEditor
+                    quantityText={getDraftQuantityText(row)}
+                    disabled={busy}
+                    draftActive={hasDraftForRow(row)}
+                    invalid={isDraftInvalidForRow(row)}
+                    titleBase={row.ticker || row.ric}
+                    onQuantityTextChange={(value) => onDraftQuantityChange(row, value)}
+                    onStep={(step) => onAdjust(row, step)}
+                  />
+                </td>
+                <td className="text-right">{fmtCurrency(price)}</td>
+                <td className="text-right">{fmtCurrency(marketValue)}</td>
+                <td>{row.source || "—"}</td>
+                <td>{row.account_id}</td>
               </tr>
-            </thead>
-            <tbody>
-              {holdingsRows.map((row) => (
-                <tr key={`${row.account_id}:${row.ric}`}>
-                  <td>{row.account_id}</td>
-                  <td>{row.ticker || "—"}</td>
-                  <td>{row.ric}</td>
-                  <td className="text-right">
-                    <InlineShareDraftEditor
-                      quantityText={getDraftQuantityText(row)}
-                      disabled={busy}
-                      draftActive={hasDraftForRow(row)}
-                      invalid={isDraftInvalidForRow(row)}
-                      titleBase={row.ticker || row.ric}
-                      onQuantityTextChange={(value) => onDraftQuantityChange(row, value)}
-                      onStep={(delta) => onAdjust(row, delta)}
-                    />
-                    {hasDraftForRow(row) && !isDraftInvalidForRow(row) && (
-                      <div style={{ marginTop: 4, fontSize: 11, color: "rgba(224, 190, 92, 0.9)" }}>
-                        Draft: {fmtQty(Number.parseFloat(getDraftQuantityText(row)) || 0)}
-                      </div>
-                    )}
-                  </td>
-                  <td>{row.source || "—"}</td>
-                  <td>{row.updated_at || "—"}</td>
-                  <td>
-                    <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-                      <button
-                        className="explore-search-btn"
-                        onClick={() => onRemove(row)}
-                        disabled={busy}
-                        style={{ padding: 0 }}
-                      >
-                        Stage Remove
-                      </button>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {holdingsRows.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ color: "rgba(169,182,210,0.75)" }}>
-                    No positions for this account yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+            {visibleRows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="holdings-empty-row">
+                  No holdings are loaded yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        <TableRowToggle
+          totalRows={sortedRows.length}
+          collapsedRows={COLLAPSED_ROWS}
+          expanded={showAllRows}
+          onToggle={() => setShowAllRows((prev) => !prev)}
+          label="holdings"
+        />
+      </div>
     </div>
   );
 }

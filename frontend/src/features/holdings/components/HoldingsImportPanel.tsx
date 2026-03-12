@@ -34,69 +34,85 @@ export default function HoldingsImportPanel({
   modeHelp,
 }: HoldingsImportPanelProps) {
   return (
-    <div className="holdings-grid">
-      <div className="holdings-form-block">
-        <label htmlFor="account-id">Account ID</label>
-        <input
-          id="account-id"
-          className="explore-input holdings-compact-input"
-          list="account-id-options"
-          placeholder="ACCT-CORE"
-          value={selectedAccount}
-          onChange={(e) => onAccountChange(e.target.value.toUpperCase())}
-        />
-        <datalist id="account-id-options">
-          {accountOptions.map((a) => (
-            <option key={a.account_id} value={a.account_id}>
-              {a.account_name}
-            </option>
-          ))}
-        </datalist>
+    <div className="holdings-panel">
+      <div className="holdings-panel-header">
+        <div className="holdings-panel-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="12" y1="18" x2="12" y2="12" />
+            <line x1="9" y1="15" x2="15" y2="15" />
+          </svg>
+        </div>
+        <div>
+          <div className="holdings-panel-title">CSV Import</div>
+          <div className="holdings-panel-desc">Upload a CSV to stage positions</div>
+        </div>
       </div>
 
-      <div className="holdings-form-block">
-        <label htmlFor="import-mode">CSV Mode</label>
-        <select
-          id="import-mode"
-          className="health-select"
-          value={mode}
-          onChange={(e) => onModeChange(e.target.value as HoldingsImportMode)}
-        >
-          {modeOptions.map((m) => (
-            <option key={m} value={m}>{modeLabel(m)}</option>
-          ))}
-        </select>
-        <div style={{ color: "rgba(169,182,210,0.8)", fontSize: 11 }}>{modeHelp(mode)}</div>
+      <div className="holdings-grid-2col">
+        <div className="holdings-form-block">
+          <label htmlFor="account-id">Account</label>
+          <input
+            id="account-id"
+            className="explore-input holdings-compact-input"
+            list="account-id-options"
+            placeholder="ACCT-CORE"
+            value={selectedAccount}
+            onChange={(e) => onAccountChange(e.target.value.toLowerCase())}
+          />
+          <datalist id="account-id-options">
+            {accountOptions.map((a) => (
+              <option key={a.account_id} value={a.account_id}>
+                {a.account_name}
+              </option>
+            ))}
+          </datalist>
+        </div>
+
+        <div className="holdings-form-block">
+          <label htmlFor="import-mode">Mode</label>
+          <select
+            id="import-mode"
+            className="health-select"
+            value={mode}
+            onChange={(e) => onModeChange(e.target.value as HoldingsImportMode)}
+          >
+            {modeOptions.map((m) => (
+              <option key={m} value={m}>{modeLabel(m)}</option>
+            ))}
+          </select>
+          <div className="holdings-mode-help">{modeHelp(mode)}</div>
+        </div>
+
+        <div className="holdings-form-block">
+          <label htmlFor="csv-source">Source Tag</label>
+          <input
+            id="csv-source"
+            className="explore-input holdings-compact-input"
+            value={csvSource}
+            onChange={(e) => onSourceChange(e.target.value)}
+            placeholder="csv_upload"
+          />
+        </div>
+
+        <div className="holdings-form-block">
+          <label htmlFor="csv-file">File</label>
+          <input
+            id="csv-file"
+            className="holdings-file-input"
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+          />
+        </div>
       </div>
 
-      <div className="holdings-form-block">
-        <label htmlFor="csv-source">Source Tag</label>
-        <input
-          id="csv-source"
-          className="explore-input holdings-compact-input"
-          value={csvSource}
-          onChange={(e) => onSourceChange(e.target.value)}
-          placeholder="csv_upload"
-        />
-      </div>
-
-      <div className="holdings-form-block">
-        <label htmlFor="csv-file">Import CSV</label>
-        <input
-          id="csv-file"
-          className="holdings-file-input"
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
-        />
-      </div>
-
-      <div className="holdings-form-block">
+      <div className="holdings-form-actions" style={{ marginTop: 12 }}>
         <button
-          className="explore-search-btn"
+          className="btn-action"
           onClick={onRunImport}
           disabled={busy}
-          style={{ width: "fit-content", paddingLeft: 0 }}
         >
           {busy ? "Running..." : "Run CSV Import"}
         </button>

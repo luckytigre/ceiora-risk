@@ -175,6 +175,7 @@ ensure_backend_env() {
 
 ensure_frontend_build() {
   log "Building frontend"
+  rm -rf "${ROOT_DIR}/frontend/.next"
   (cd "${ROOT_DIR}" && npm --prefix frontend run build) >>"${FRONTEND_LOG}" 2>&1
 }
 

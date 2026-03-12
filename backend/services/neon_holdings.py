@@ -865,30 +865,49 @@ def list_holdings_positions(pg_conn, *, account_id: str | None = None) -> list[d
         if acct:
             cur.execute(
                 """
-                SELECT account_id, ric, ticker, quantity, source, updated_at
-                FROM holdings_positions_current
+                SELECT
+                    p.account_id,
+                    p.ric,
+                    COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker,
+                    p.quantity,
+                    sm.instrument_type,
+                    p.source,
+                    p.updated_at
+                FROM holdings_positions_current p
+                LEFT JOIN security_master sm
+                  ON sm.ric = p.ric
                 WHERE account_id = %s
-                ORDER BY account_id, ticker, ric
+                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
                 """,
                 (acct,),
             )
         else:
             cur.execute(
                 """
-                SELECT account_id, ric, ticker, quantity, source, updated_at
-                FROM holdings_positions_current
-                ORDER BY account_id, ticker, ric
+                SELECT
+                    p.account_id,
+                    p.ric,
+                    COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker,
+                    p.quantity,
+                    sm.instrument_type,
+                    p.source,
+                    p.updated_at
+                FROM holdings_positions_current p
+                LEFT JOIN security_master sm
+                  ON sm.ric = p.ric
+                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
                 """
             )
         rows = cur.fetchall()
     out: list[dict[str, Any]] = []
-    for account_id, ric, ticker, quantity, source, updated_at in rows:
+    for account_id, ric, ticker, quantity, instrument_type, source, updated_at in rows:
         out.append(
             {
                 "account_id": str(account_id),
                 "ric": _normalize_ric(ric),
                 "ticker": _normalize_ticker(ticker),
                 "quantity": float(quantity or 0.0),
+                "instrument_type": str(instrument_type) if instrument_type is not None else None,
                 "source": str(source or ""),
                 "updated_at": str(updated_at) if updated_at is not None else None,
             }

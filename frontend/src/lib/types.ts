@@ -62,6 +62,7 @@ export interface HoldingsPosition {
   ric: string;
   ticker: string;
   quantity: number;
+  instrument_type?: string | null;
   source: string;
   updated_at: string | null;
 }
