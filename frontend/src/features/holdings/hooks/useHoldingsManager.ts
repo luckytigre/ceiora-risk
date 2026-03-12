@@ -85,6 +85,7 @@ export function useHoldingsManager(selectedAccount: string, holdingsRows: Holdin
     const uniqueAccounts = [...new Set(accountIds.map(normalizeAccountId).filter(Boolean))];
     await Promise.all([
       mutate(apiPath.holdingsAccounts()),
+      mutate(apiPath.holdingsPositions(null)),
       ...uniqueAccounts.map((accountId) => mutate(apiPath.holdingsPositions(accountId))),
       mutate(apiPath.operatorStatus()),
     ]);
