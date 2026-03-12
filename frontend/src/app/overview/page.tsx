@@ -22,6 +22,18 @@ function fmt(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+function fmtMarketValue(n: number): string {
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return n.toFixed(2);
+}
+
+function marketValueTone(n: number): string {
+  if (n > 0) return "positive";
+  if (n < 0) return "negative";
+  return "";
+}
+
 function fmtAsOfDate(isoDate?: string): string {
   if (!isoDate) return "N/A";
   const d = new Date(`${isoDate}T00:00:00Z`);
@@ -167,7 +179,7 @@ export default function OverviewPage() {
               {visibleHoldings.map((pos) => (
                 <tr key={pos.ticker}>
                   <td><strong>{pos.ticker}</strong></td>
-                  <td className="text-right">{fmt(pos.market_value)}</td>
+                  <td className={`text-right ${marketValueTone(pos.market_value)}`.trim()}>{fmtMarketValue(pos.market_value)}</td>
                   <td className="text-right">{(pos.weight * 100).toFixed(2)}%</td>
                   <td>{pos.trbc_economic_sector_short || "—"}</td>
                   <td className="text-right">{pos.risk_contrib_pct.toFixed(2)}%</td>

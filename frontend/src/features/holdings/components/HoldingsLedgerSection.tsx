@@ -20,12 +20,13 @@ interface HoldingsLedgerSectionProps {
 
 type SortKey =
   | "ticker"
-  | "instrument_type"
   | "quantity"
   | "price"
   | "market_value"
   | "source"
   | "account_id";
+
+type MarketValueSortMode = "abs" | "signed";
 
 const COLLAPSED_ROWS = 18;
 
@@ -48,6 +49,20 @@ function fmtCurrency(n: number | null): string {
   return `$${n.toFixed(2)}`;
 }
 
+function fmtMarketValue(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "—";
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return n.toFixed(2);
+}
+
+function marketValueTone(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "";
+  if (n > 0) return "positive";
+  if (n < 0) return "negative";
+  return "";
+}
+
 export default function HoldingsLedgerSection({
   holdingsRows,
   modeledPositions,
@@ -61,6 +76,7 @@ export default function HoldingsLedgerSection({
 }: HoldingsLedgerSectionProps) {
   const [sortKey, setSortKey] = useState<SortKey>("market_value");
   const [sortAsc, setSortAsc] = useState(false);
+  const [marketValueSortMode, setMarketValueSortMode] = useState<MarketValueSortMode>("abs");
   const [showAllRows, setShowAllRows] = useState(false);
 
   const modeledMap = useMemo(() => {
@@ -90,14 +106,14 @@ export default function HoldingsLedgerSection({
         switch (sortKey) {
           case "ticker":
             return item.row.ticker || item.row.ric;
-          case "instrument_type":
-            return item.row.instrument_type || "";
           case "quantity":
             return Number(item.row.quantity || 0);
           case "price":
             return item.price ?? Number.NEGATIVE_INFINITY;
           case "market_value":
-            return item.marketValue ?? Number.NEGATIVE_INFINITY;
+            return marketValueSortMode === "abs"
+              ? Math.abs(item.marketValue ?? Number.NEGATIVE_INFINITY)
+              : item.marketValue ?? Number.NEGATIVE_INFINITY;
           case "source":
             return item.row.source || "";
           case "account_id":
@@ -114,11 +130,35 @@ export default function HoldingsLedgerSection({
         : String(bv).localeCompare(String(av));
     });
     return rows;
-  }, [enrichedRows, sortAsc, sortKey]);
+  }, [enrichedRows, marketValueSortMode, sortAsc, sortKey]);
 
   const visibleRows = showAllRows ? sortedRows : sortedRows.slice(0, COLLAPSED_ROWS);
 
   function handleSort(nextKey: SortKey) {
+    if (nextKey === "market_value") {
+      if (sortKey !== "market_value") {
+        setSortKey("market_value");
+        setMarketValueSortMode("abs");
+        setSortAsc(false);
+        return;
+      }
+      if (marketValueSortMode === "abs" && !sortAsc) {
+        setSortAsc(true);
+        return;
+      }
+      if (marketValueSortMode === "abs" && sortAsc) {
+        setMarketValueSortMode("signed");
+        setSortAsc(false);
+        return;
+      }
+      if (marketValueSortMode === "signed" && !sortAsc) {
+        setSortAsc(true);
+        return;
+      }
+      setMarketValueSortMode("abs");
+      setSortAsc(false);
+      return;
+    }
     if (nextKey === sortKey) {
       setSortAsc((prev) => !prev);
       return;
@@ -128,6 +168,10 @@ export default function HoldingsLedgerSection({
   }
 
   function arrow(key: SortKey): string {
+    if (key === "market_value" && sortKey === "market_value") {
+      const mode = marketValueSortMode === "abs" ? "abs" : "sgn";
+      return sortAsc ? ` (${mode}) ↑` : ` (${mode}) ↓`;
+    }
     return sortKey === key ? (sortAsc ? " ↑" : " ↓") : "";
   }
 
@@ -151,19 +195,17 @@ export default function HoldingsLedgerSection({
           <thead>
             <tr>
               <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
-              <th onClick={() => handleSort("instrument_type")}>Type{arrow("instrument_type")}</th>
               <th className="text-right" onClick={() => handleSort("quantity")}>Quantity{arrow("quantity")}</th>
               <th className="text-right" onClick={() => handleSort("price")}>Price{arrow("price")}</th>
               <th className="text-right" onClick={() => handleSort("market_value")}>Mkt Val{arrow("market_value")}</th>
-              <th onClick={() => handleSort("source")}>Source{arrow("source")}</th>
-              <th onClick={() => handleSort("account_id")}>Account{arrow("account_id")}</th>
+              <th className="text-right" onClick={() => handleSort("source")}>Source{arrow("source")}</th>
+              <th className="text-right" onClick={() => handleSort("account_id")}>Account{arrow("account_id")}</th>
             </tr>
           </thead>
           <tbody>
             {visibleRows.map(({ row, price, marketValue }) => (
               <tr key={`${row.account_id}:${row.ric || row.ticker}`}>
                 <td>{row.ticker || "—"}</td>
-                <td>{row.instrument_type || "—"}</td>
                 <td className="text-right">
                   <InlineShareDraftEditor
                     quantityText={getDraftQuantityText(row)}
@@ -176,14 +218,14 @@ export default function HoldingsLedgerSection({
                   />
                 </td>
                 <td className="text-right">{fmtCurrency(price)}</td>
-                <td className="text-right">{fmtCurrency(marketValue)}</td>
-                <td>{row.source || "—"}</td>
-                <td>{row.account_id}</td>
+                <td className={`text-right ${marketValueTone(marketValue)}`.trim()}>{fmtMarketValue(marketValue)}</td>
+                <td className="text-right">{row.source || "—"}</td>
+                <td className="text-right">{row.account_id}</td>
               </tr>
             ))}
             {visibleRows.length === 0 && (
               <tr>
-                <td colSpan={7} className="holdings-empty-row">
+                <td colSpan={6} className="holdings-empty-row">
                   No holdings are loaded yet.
                 </td>
               </tr>

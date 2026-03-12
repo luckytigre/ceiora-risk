@@ -37,19 +37,19 @@ export default function HealthPage() {
       <div className="health-wrap">
         {operatorSection}
         <div className="chart-card">
-          <div className="health-meta-row" style={{ marginBottom: 10 }}>
-            <h3 style={{ margin: 0 }}>Health Diagnostics</h3>
-            <button className="btn btn-secondary" onClick={() => setLoadDiagnostics(true)}>
-              Load diagnostics
+          <h3 style={{ margin: "0 0 4px" }}>Model Health Diagnostics</h3>
+          <div className="health-load-prompt">
+            <div className="section-subtitle">
+              This page runs the heaviest diagnostic study in the app. Sections mount lazily as you scroll so routine dashboard use stays fast.
+            </div>
+            <div className="section-subtitle" style={{ marginBottom: 0 }}>
+              Operator Status above is the live control-room truth. Diagnostics below are a deeper local maintenance study and may lag the cloud-serving view.
+            </div>
+            <button className="health-load-btn" onClick={() => setLoadDiagnostics(true)}>
+              Load Diagnostics
             </button>
           </div>
-        <div className="detail-history-empty">
-          This page runs the heaviest diagnostic study in the app. It is loaded on demand and sections mount as you scroll so routine dashboard use does not spend compute on charts you are not viewing.
         </div>
-        <div className="detail-history-empty" style={{ marginTop: 10 }}>
-          Operator Status above is the live control-room truth. The diagnostics below are a deeper local maintenance study and may lag the cloud-serving view.
-        </div>
-      </div>
       </div>
     );
   }

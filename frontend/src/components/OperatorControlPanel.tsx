@@ -72,18 +72,23 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
   const runtimeWarnings = data?.runtime?.warnings ?? [];
   const allowedProfiles = new Set(data?.runtime?.allowed_profiles ?? []);
   const orderedLanes = useMemo(() => data?.lanes ?? [], [data?.lanes]);
-  const liveStateRows = [
-    ["Current refresh", data?.refresh?.status ?? "—"],
-    ["Core due", data ? (data.core_due.due ? `Yes (${data.core_due.reason})` : `No (${data.core_due.reason})`) : "—"],
-    ["Risk engine", data?.risk_engine?.method_version ?? "—"],
-    ["Active snapshot", data?.active_snapshot?.snapshot_id ?? "—"],
-    ["Holdings dirty", holdingsSync?.pending ? `Yes (${holdingsSync.pending_count || 0})` : "No"],
-    ["Dirty since", fmtTs(holdingsSync?.dirty_since)],
-    ["Last holdings change", holdingsSync?.last_mutation_summary ?? "—"],
-    ["Neon mirror", neonHealth?.mirror_status ?? neonHealth?.status ?? "—"],
-    ["Neon parity", neonHealth?.parity_status ?? "—"],
-    ["Parity artifact", data?.latest_parity_artifact ?? "—"],
-  ] satisfies Array<[string, string]>;
+  type LiveRow = [string, string, "success" | "warning" | "error" | "neutral"];
+  const refreshStatus = String(data?.refresh?.status ?? "").toLowerCase();
+  const mirrorStatus = String(neonHealth?.mirror_status ?? neonHealth?.status ?? "").toLowerCase();
+  const parityStatus = String(neonHealth?.parity_status ?? "").toLowerCase();
+
+  const liveStateRows: LiveRow[] = [
+    ["Current refresh", data?.refresh?.status ?? "—", refreshStatus === "running" ? "warning" : refreshStatus === "idle" || refreshStatus === "ok" || refreshStatus === "completed" ? "success" : "neutral"],
+    ["Core due", data ? (data.core_due.due ? `Yes (${data.core_due.reason})` : `No (${data.core_due.reason})`) : "—", data?.core_due.due ? "warning" : "success"],
+    ["Risk engine", data?.risk_engine?.method_version ?? "—", "neutral"],
+    ["Active snapshot", data?.active_snapshot?.snapshot_id ?? "—", "neutral"],
+    ["Holdings dirty", holdingsSync?.pending ? `Yes (${holdingsSync.pending_count || 0})` : "No", holdingsSync?.pending ? "warning" : "success"],
+    ["Dirty since", fmtTs(holdingsSync?.dirty_since), holdingsSync?.pending ? "warning" : "neutral"],
+    ["Last holdings change", holdingsSync?.last_mutation_summary ?? "—", "neutral"],
+    ["Neon mirror", neonHealth?.mirror_status ?? neonHealth?.status ?? "—", mirrorStatus === "ok" || mirrorStatus === "synced" ? "success" : mirrorStatus === "—" || !mirrorStatus ? "neutral" : "warning"],
+    ["Neon parity", neonHealth?.parity_status ?? "—", parityStatus === "ok" || parityStatus === "match" ? "success" : parityStatus === "—" || !parityStatus ? "neutral" : "error"],
+    ["Parity artifact", data?.latest_parity_artifact ?? "—", "neutral"],
+  ];
   const sourceRecencyRows = [
     ["Prices", sourceDates.prices_asof ?? "—"],
     ["Fundamentals", sourceDates.fundamentals_asof ?? "—"],
@@ -122,19 +127,11 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
           {isLoading ? "Loading operator state..." : data ? `Updated ${fmtTs(data.generated_at)}` : "Operator state unavailable"}
         </span>
       </div>
-      <div className="detail-history-empty" style={{ marginBottom: 14 }}>
+      <div className="section-subtitle" style={{ marginBottom: 14 }}>
         This page is the plain-English control room for your backend. Each lane below is a specific kind of update, with clear scope and current status.
+        {data?.runtime?.dashboard_truth_plain_english && (<> {data.runtime.dashboard_truth_plain_english}</>)}
+        {data?.runtime?.diagnostics_scope_plain_english && (<> {data.runtime.diagnostics_scope_plain_english}</>)}
       </div>
-      {data?.runtime?.dashboard_truth_plain_english && (
-        <div className="detail-history-empty" style={{ marginBottom: 14 }}>
-          {data.runtime.dashboard_truth_plain_english}
-        </div>
-      )}
-      {data?.runtime?.diagnostics_scope_plain_english && (
-        <div className="detail-history-empty" style={{ marginBottom: 14 }}>
-          {data.runtime.diagnostics_scope_plain_english}
-        </div>
-      )}
       {runtimeWarnings.length > 0 && (
         <div className="detail-history-empty" style={{ marginBottom: 14, color: "rgba(224,190,92,0.92)" }}>
           Runtime warnings: {runtimeWarnings.join(" | ")}
@@ -144,10 +141,10 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
         <div className="chart-card" style={{ margin: 0 }}>
           <h4 style={{ marginBottom: 8 }}>Live State</h4>
           <div className="operator-kv-grid">
-            {liveStateRows.map(([label, value]) => (
+            {liveStateRows.map(([label, value, colorTone]) => (
               <div className="operator-kv-row" key={label}>
                 <strong className="operator-kv-label">{label}</strong>
-                <span className="operator-kv-value">{value}</span>
+                <span className={`operator-kv-value${colorTone !== "neutral" ? ` status-${colorTone}` : ""}`}>{value}</span>
               </div>
             ))}
           </div>
@@ -172,11 +169,11 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
       <div className={`dash-table operator-lane-table${compact ? " compact" : ""}`}>
         <table>
           <colgroup>
-            <col style={{ width: compact ? "13%" : "14%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: compact ? "22%" : "24%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: compact ? "20%" : "19%" }} />
+            <col style={{ width: compact ? "13%" : "13%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: compact ? "26%" : "28%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: compact ? "18%" : "17%" }} />
             <col style={{ width: compact ? "16%" : "14%" }} />
             <col style={{ width: "8%" }} />
           </colgroup>
@@ -214,8 +211,8 @@ export default function OperatorControlPanel({ compact = false }: { compact?: bo
                   <td>
                     <span className={`status-pill ${tone(lane.latest_run.status)}`}>{lane.latest_run.status}</span>
                   </td>
-                  <td className="operator-lane-copy">{help.plain}</td>
-                  <td style={{ minWidth: 96 }}>
+                  <td className="operator-lane-copy" style={{ fontSize: 11, lineHeight: 1.4 }}>{help.plain}</td>
+                  <td>
                     <LaneRunHistoryStrip runs={lane.recent_runs ?? []} />
                   </td>
                   <td className="operator-lane-copy">

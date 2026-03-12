@@ -37,29 +37,13 @@ export default function ConfirmActionModal({
   const confirmEnabled = !requiresTypedConfirm || typed.trim().toUpperCase() === String(confirmValue).trim().toUpperCase();
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(6, 8, 12, 0.66)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: 16,
-      }}
-      onClick={onCancel}
-    >
-      <div
-        className="chart-card"
-        style={{ width: "min(520px, 100%)", margin: 0, borderColor: "rgba(224, 87, 127, 0.28)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={{ marginTop: 0, marginBottom: 10 }}>{title}</h3>
-        <div style={{ color: "rgba(232,237,249,0.82)", lineHeight: 1.5, marginBottom: 12 }}>{body}</div>
+    <div className="confirm-modal-backdrop" onClick={onCancel}>
+      <div className="confirm-modal-card" onClick={(e) => e.stopPropagation()}>
+        <h3>{title}</h3>
+        <div className="confirm-modal-body">{body}</div>
         {requiresTypedConfirm && (
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 12, color: "rgba(169,182,210,0.78)", marginBottom: 6 }}>
+          <div className="confirm-modal-input-group">
+            <label>
               {confirmLabel}: <strong>{confirmValue}</strong>
             </label>
             <input
@@ -71,15 +55,14 @@ export default function ConfirmActionModal({
             />
           </div>
         )}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button className="btn btn-secondary" onClick={onCancel}>
+        <div className="confirm-modal-actions">
+          <button className="btn-action" onClick={onCancel}>
             Cancel
           </button>
           <button
-            className="explore-search-btn"
+            className="btn-danger"
             onClick={() => void onConfirm()}
             disabled={!confirmEnabled}
-            style={{ paddingLeft: 14, paddingRight: 14 }}
           >
             {dangerText}
           </button>

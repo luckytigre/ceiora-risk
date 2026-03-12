@@ -125,6 +125,42 @@ def test_build_positions_from_universe_uses_signed_gross_weights_for_long_short_
     assert by_ticker["WMT"]["weight"] == pytest.approx(-25.0 / 425.0, abs=1e-6)
 
 
+def test_compute_position_total_risk_contributions_sums_to_total_variance_pct() -> None:
+    import pandas as pd
+    from backend.analytics.services import risk_views
+
+    positions = [
+        {
+            "ticker": "LONG1",
+            "weight": 0.6,
+            "exposures": {"Beta": 1.0, "Value": 0.5},
+        },
+        {
+            "ticker": "SHORT1",
+            "weight": -0.4,
+            "exposures": {"Beta": 0.8, "Value": -0.2},
+        },
+    ]
+    cov = pd.DataFrame(
+        [[0.04, 0.01], [0.01, 0.09]],
+        index=["Beta", "Value"],
+        columns=["Beta", "Value"],
+    )
+    specific = {
+        "LONG1": {"specific_var": 0.02},
+        "SHORT1": {"specific_var": 0.03},
+    }
+
+    contrib = risk_views.compute_position_total_risk_contributions(
+        positions,
+        cov,
+        specific_risk_by_ticker=specific,
+    )
+
+    assert set(contrib) == {"LONG1", "SHORT1"}
+    assert sum(contrib.values()) == pytest.approx(100.0, abs=0.05)
+
+
 def test_holdings_runtime_state_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(holdings_runtime_state, "cache_get", lambda key: None if key != "holdings_sync_state" else None)
     recorded: dict[str, object] = {}

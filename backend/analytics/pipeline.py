@@ -33,6 +33,7 @@ from backend.analytics.services.risk_views import (
     build_positions_from_universe as _build_positions_from_universe_impl,
     compute_exposures_modes as _compute_exposures_modes_impl,
     compute_position_risk_mix as _compute_position_risk_mix_impl,
+    compute_position_total_risk_contributions as _compute_position_total_risk_contributions_impl,
     specific_risk_by_ticker_view as _specific_risk_by_ticker_view_impl,
 )
 from backend.analytics.services.universe_loadings import (
@@ -245,6 +246,18 @@ def _compute_position_risk_mix(
 ) -> dict[str, PositionRiskMixPayload]:
     """Per-position risk split using Barra-style factor + specific variance."""
     return _compute_position_risk_mix_impl(
+        positions,
+        cov,
+        specific_risk_by_ticker=specific_risk_by_ticker,
+    )
+
+
+def _compute_position_total_risk_contributions(
+    positions: list[PositionPayload],
+    cov,
+    specific_risk_by_ticker: dict[str, SpecificRiskPayload] | None = None,
+) -> dict[str, float]:
+    return _compute_position_total_risk_contributions_impl(
         positions,
         cov,
         specific_risk_by_ticker=specific_risk_by_ticker,
@@ -513,16 +526,17 @@ def run_refresh(
         cov=cov,
         specific_risk_by_ticker=specific_risk_by_ticker,
     )
+    position_risk_contrib = _compute_position_total_risk_contributions(
+        positions=positions,
+        cov=cov,
+        specific_risk_by_ticker=specific_risk_by_ticker,
+    )
 
     # 6. Compute per-position risk contributions
     for pos in positions:
-        exps = pos.get("exposures", {})
-        risk_score = sum(
-            abs(float(exps.get(d["factor"], 0.0)) * d["sensitivity"])
-            for d in factor_details
-        )
-        pos["risk_contrib_pct"] = round(risk_score * pos["weight"] * 100, 2)
-        pos["risk_mix"] = dict(position_risk_mix.get(str(pos.get("ticker", "")).upper(), {
+        ticker = str(pos.get("ticker", "")).upper()
+        pos["risk_contrib_pct"] = float(position_risk_contrib.get(ticker, 0.0))
+        pos["risk_mix"] = dict(position_risk_mix.get(ticker, {
             "country": 0.0,
             "industry": 0.0,
             "style": 0.0,

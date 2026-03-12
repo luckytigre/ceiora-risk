@@ -60,6 +60,7 @@ export default function PositionsPage() {
   const [editTicker, setEditTicker] = useState("");
   const [editQty, setEditQty] = useState("");
   const [editSource, setEditSource] = useState("ui_edit");
+  const [holdingsManagerExpanded, setHoldingsManagerExpanded] = useState(true);
 
   const tickerSearchQuery = editTicker.trim().toUpperCase();
   const debouncedTickerSearchQuery = useDebouncedValue(tickerSearchQuery, 220);
@@ -215,80 +216,95 @@ export default function PositionsPage() {
   return (
     <div>
       <div className="chart-card mb-4">
-        <h3>Holdings Manager</h3>
-
-        <div className="holdings-manager-grid">
-          <HoldingsImportPanel
-            selectedAccount={selectedAccount}
-            accountOptions={accountOptions}
-            mode={mode}
-            csvSource={csvSource}
-            busy={busy}
-            modeOptions={modesData?.modes ?? ["replace_account", "upsert_absolute", "increment_delta"]}
-            onAccountChange={setSelectedAccount}
-            onModeChange={setMode}
-            onSourceChange={setCsvSource}
-            onFileChange={setCsvFile}
-            onRunImport={() => void handleCsvImport({ csvFile, csvSource, mode })}
-            modeLabel={modeLabel}
-            modeHelp={modeHelp}
-          />
-
-          <ManualPositionEditor
-            selectedAccount={selectedAccount}
-            accountOptions={accountOptions}
-            busy={busy}
-            editTicker={editTicker}
-            editRic={editRic}
-            editQty={editQty}
-            editSource={editSource}
-            ricTypeahead={ricTypeahead}
-            onAccountChange={setSelectedAccount}
-            onTickerChange={setEditTicker}
-            onRicChange={setEditRic}
-            onQtyChange={setEditQty}
-            onSourceChange={setEditSource}
-            onUpsert={() => {
-              const staged = handleManualUpsert({
-                editRic,
-                editTicker,
-                editQty,
-                editSource,
-              });
-              if (staged) {
-                setEditTicker("");
-                setEditRic("");
-                setEditQty("");
-              }
-            }}
-            actionLabel="Stage Position"
-          />
+        <div className="holdings-section-header">
+          <h3>Holdings Manager</h3>
+          <button
+            type="button"
+            className="holdings-panel-toggle"
+            aria-expanded={holdingsManagerExpanded}
+            onClick={() => setHoldingsManagerExpanded((prev) => !prev)}
+          >
+            {holdingsManagerExpanded ? "Collapse" : "Expand"}
+            <span className={`kpi-toggle-glyph ${holdingsManagerExpanded ? "open" : ""}`}>+</span>
+          </button>
         </div>
 
-        {draftCount > 0 && (
-          <div className="draft-banner">
-            <div className="draft-banner-text">
-              {draftCount} staged edit{draftCount === 1 ? "" : "s"} pending
-              {draftDeleteCount > 0 ? `, including ${draftDeleteCount} staged remove${draftDeleteCount === 1 ? "" : "s"}` : ""}.
-              Nothing is written to Neon until you hit `RECALC`.
+        {holdingsManagerExpanded && (
+          <>
+            <div className="holdings-manager-grid">
+              <ManualPositionEditor
+                selectedAccount={selectedAccount}
+                accountOptions={accountOptions}
+                busy={busy}
+                editTicker={editTicker}
+                editRic={editRic}
+                editQty={editQty}
+                editSource={editSource}
+                ricTypeahead={ricTypeahead}
+                onAccountChange={setSelectedAccount}
+                onTickerChange={setEditTicker}
+                onRicChange={setEditRic}
+                onQtyChange={setEditQty}
+                onSourceChange={setEditSource}
+                onUpsert={() => {
+                  const staged = handleManualUpsert({
+                    editRic,
+                    editTicker,
+                    editQty,
+                    editSource,
+                  });
+                  if (staged) {
+                    setEditTicker("");
+                    setEditRic("");
+                    setEditQty("");
+                  }
+                }}
+                actionLabel="Stage Position"
+              />
+
+              <HoldingsImportPanel
+                selectedAccount={selectedAccount}
+                accountOptions={accountOptions}
+                mode={mode}
+                csvSource={csvSource}
+                busy={busy}
+                modeOptions={modesData?.modes ?? ["replace_account", "upsert_absolute", "increment_delta"]}
+                onAccountChange={setSelectedAccount}
+                onModeChange={setMode}
+                onSourceChange={setCsvSource}
+                onFileChange={setCsvFile}
+                onRunImport={() => void handleCsvImport({ csvFile, csvSource, mode })}
+                modeLabel={modeLabel}
+                modeHelp={modeHelp}
+              />
             </div>
-            <div className="draft-banner-actions">
-              <button className="btn-action" onClick={() => void handleApplyDrafts()} disabled={busy}>
-                {busy ? "Applying..." : `RECALC ${draftCount > 0 ? `(${draftCount})` : ""}`}
-              </button>
-              <button className="btn-action" onClick={discardDrafts} disabled={busy}>
-                Discard Drafts
-              </button>
-            </div>
-          </div>
+
+            {draftCount > 0 && (
+              <div className="draft-banner">
+                <div className="draft-banner-text">
+                  {draftCount} staged edit{draftCount === 1 ? "" : "s"} pending
+                  {draftDeleteCount > 0 ? `, including ${draftDeleteCount} staged remove${draftDeleteCount === 1 ? "" : "s"}` : ""}.
+                  Nothing is written to Neon until you hit `RECALC`.
+                </div>
+                <div className="draft-banner-actions">
+                  <button className="btn-action" onClick={() => void handleApplyDrafts()} disabled={busy}>
+                    {busy ? "Applying..." : `RECALC ${draftCount > 0 ? `(${draftCount})` : ""}`}
+                  </button>
+                  <button className="btn-action" onClick={discardDrafts} disabled={busy}>
+                    Discard Drafts
+                  </button>
+                </div>
+              </div>
+            )}
+            <HoldingsMutationFeedback
+              resultMessage={resultMessage}
+              errorMessage={errorMessage}
+              rejectionPreview={rejectionPreview}
+              draftCount={draftCount}
+              draftDeleteCount={draftDeleteCount}
+            />
+          </>
         )}
-        <HoldingsMutationFeedback
-          resultMessage={resultMessage}
-          errorMessage={errorMessage}
-          rejectionPreview={rejectionPreview}
-          draftCount={draftCount}
-          draftDeleteCount={draftDeleteCount}
-        />
       </div>
 
       <HoldingsLedgerSection

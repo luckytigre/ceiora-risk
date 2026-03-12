@@ -15,16 +15,23 @@ interface ExposurePositionsTableProps {
 }
 
 type SortKey = "ticker" | "trbc_industry_group" | "shares" | "market_value" | "risk_mix";
+type MarketValueSortMode = "abs" | "signed";
 const COLLAPSED_ROWS = 14;
 
-function fmtCurrency(n: number): string {
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
+function fmtMarketValue(n: number): string {
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return n.toFixed(2);
 }
 
 function fmtShares(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
+
+function marketValueTone(n: number): string {
+  if (n > 0) return "positive";
+  if (n < 0) return "negative";
+  return "";
 }
 
 function normalizeRiskMix(pos: Position) {
@@ -57,6 +64,7 @@ export default function ExposurePositionsTable({
 }: ExposurePositionsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("market_value");
   const [sortAsc, setSortAsc] = useState(false);
+  const [marketValueSortMode, setMarketValueSortMode] = useState<MarketValueSortMode>("abs");
   const [showAllRows, setShowAllRows] = useState(false);
 
   const sorted = [...positions].sort((a, b) => {
@@ -68,6 +76,9 @@ export default function ExposurePositionsTable({
     const av = a[sortKey];
     const bv = b[sortKey];
     if (typeof av === "number" && typeof bv === "number") {
+      if (sortKey === "market_value" && marketValueSortMode === "abs") {
+        return sortAsc ? Math.abs(av) - Math.abs(bv) : Math.abs(bv) - Math.abs(av);
+      }
       return sortAsc ? av - bv : bv - av;
     }
     return sortAsc
@@ -76,13 +87,43 @@ export default function ExposurePositionsTable({
   });
 
   const handleSort = (key: SortKey) => {
+    if (key === "market_value") {
+      if (sortKey !== "market_value") {
+        setSortKey("market_value");
+        setMarketValueSortMode("abs");
+        setSortAsc(false);
+        return;
+      }
+      if (marketValueSortMode === "abs" && !sortAsc) {
+        setSortAsc(true);
+        return;
+      }
+      if (marketValueSortMode === "abs" && sortAsc) {
+        setMarketValueSortMode("signed");
+        setSortAsc(false);
+        return;
+      }
+      if (marketValueSortMode === "signed" && !sortAsc) {
+        setSortAsc(true);
+        return;
+      }
+      setMarketValueSortMode("abs");
+      setSortAsc(false);
+      return;
+    }
     if (key === sortKey) setSortAsc((prev) => !prev);
     else {
       setSortKey(key);
       setSortAsc(false);
     }
   };
-  const arrow = (key: SortKey) => (sortKey === key ? (sortAsc ? " ↑" : " ↓") : "");
+  const arrow = (key: SortKey) => {
+    if (key === "market_value" && sortKey === "market_value") {
+      const mode = marketValueSortMode === "abs" ? "abs" : "sgn";
+      return sortAsc ? ` (${mode}) ↑` : ` (${mode}) ↓`;
+    }
+    return sortKey === key ? (sortAsc ? " ↑" : " ↓") : "";
+  };
   const visibleRows = showAllRows ? sorted : sorted.slice(0, COLLAPSED_ROWS);
 
   return (
@@ -119,7 +160,7 @@ export default function ExposurePositionsTable({
                   fmtShares(pos.shares)
                 )}
               </td>
-              <td className="text-right">{fmtCurrency(pos.market_value)}</td>
+              <td className={`text-right ${marketValueTone(pos.market_value)}`.trim()}>{fmtMarketValue(pos.market_value)}</td>
               <td className="text-right">{riskMixLabel(pos)}</td>
             </tr>
           ))}
