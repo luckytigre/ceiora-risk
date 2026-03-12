@@ -3,10 +3,15 @@
 import { useState } from "react";
 import type { Position } from "@/lib/types";
 import TableRowToggle from "@/components/TableRowToggle";
-import ShareAdjuster from "@/components/ShareAdjuster";
+import InlineShareDraftEditor from "@/features/holdings/components/InlineShareDraftEditor";
 
 interface PositionTableProps {
   positions: Position[];
+  getDraftQuantityText?: (position: Position) => string;
+  hasDraftForPosition?: (position: Position) => boolean;
+  isDraftInvalidForPosition?: (position: Position) => boolean;
+  onDraftQuantityChange?: (position: Position, value: string) => void;
+  onAdjust?: (position: Position, delta: number) => void;
 }
 
 type SortKey =
@@ -32,7 +37,14 @@ function fmtShares(n: number): string {
   return Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-export default function PositionTable({ positions }: PositionTableProps) {
+export default function PositionTable({
+  positions,
+  getDraftQuantityText,
+  hasDraftForPosition,
+  isDraftInvalidForPosition,
+  onDraftQuantityChange,
+  onAdjust,
+}: PositionTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("market_value");
   const [sortAsc, setSortAsc] = useState(false);
   const [showAllRows, setShowAllRows] = useState(false);
@@ -86,10 +98,19 @@ export default function PositionTable({ positions }: PositionTableProps) {
               </td>
               <td>{pos.trbc_economic_sector_short || "—"}</td>
               <td className="text-right">
-                <span className="share-cell">
-                  <span>{fmtShares(pos.shares)}</span>
-                  <ShareAdjuster ticker={pos.ticker} currentShares={pos.shares} accountId={pos.account} />
-                </span>
+                {getDraftQuantityText && onDraftQuantityChange && onAdjust ? (
+                  <InlineShareDraftEditor
+                    quantityText={getDraftQuantityText(pos)}
+                    disabled={!pos.account || String(pos.account).trim().toLowerCase() === "multi"}
+                    draftActive={Boolean(hasDraftForPosition?.(pos))}
+                    invalid={Boolean(isDraftInvalidForPosition?.(pos))}
+                    titleBase={pos.ticker}
+                    onQuantityTextChange={(value) => onDraftQuantityChange(pos, value)}
+                    onStep={(delta) => onAdjust(pos, delta)}
+                  />
+                ) : (
+                  fmtShares(pos.shares)
+                )}
               </td>
               <td className="text-right">{fmt(pos.price)}</td>
               <td className="text-right">{fmt(pos.market_value)}</td>

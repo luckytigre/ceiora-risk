@@ -14,6 +14,7 @@ interface ManualPositionEditorProps {
   onQtyChange: (value: string) => void;
   onSourceChange: (value: string) => void;
   onUpsert: () => void;
+  actionLabel?: string;
 }
 
 export default function ManualPositionEditor({
@@ -28,6 +29,7 @@ export default function ManualPositionEditor({
   onQtyChange,
   onSourceChange,
   onUpsert,
+  actionLabel = "Stage Position",
 }: ManualPositionEditorProps) {
   return (
     <div className="holdings-grid" style={{ marginTop: 14 }}>
@@ -87,7 +89,7 @@ export default function ManualPositionEditor({
           disabled={busy}
           style={{ width: "fit-content", paddingLeft: 0 }}
         >
-          {busy ? "Saving..." : "Upsert Position"}
+          {busy ? "Applying..." : actionLabel}
         </button>
       </div>
     </div>

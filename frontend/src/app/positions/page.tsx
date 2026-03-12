@@ -79,20 +79,89 @@ export default function PositionsPage() {
   }, [tickerSearchQuery, editRic, ricTypeahead]);
   const positions = portfolio?.positions ?? [];
   const accountOptions = accountsData?.accounts ?? [];
-  const holdingsRows = [...(holdingsData?.positions ?? [])].sort((a, b) => Math.abs(b.quantity) - Math.abs(a.quantity));
+  const liveHoldingsRows = holdingsData?.positions ?? [];
 
   const {
     busy,
     confirmConfig,
+    draftCount,
+    draftDeleteCount,
     errorMessage,
+    getDraftQuantityText,
+    hasDraftForTarget,
+    isDraftInvalid,
     rejectionPreview,
     resultMessage,
+    selectedAccountDrafts,
     handleAdjust,
+    handleApplyDrafts,
     handleCsvImport,
+    handleDraftQuantityChange,
     handleManualUpsert,
     handleRemove,
+    discardDrafts,
     setConfirmConfig,
-  } = useHoldingsManager(selectedAccount, holdingsRows);
+  } = useHoldingsManager(selectedAccount, liveHoldingsRows);
+
+  const holdingsRows = useMemo(() => {
+    const liveKeys = new Set(
+      liveHoldingsRows.map((row) => `${row.account_id}:${row.ric || row.ticker}`),
+    );
+    const stagedOnlyRows = selectedAccountDrafts
+      .filter((entry) => !liveKeys.has(`${entry.account_id}:${entry.ric || entry.ticker}`))
+      .map((entry) => ({
+        account_id: entry.account_id,
+        ric: entry.ric || "",
+        ticker: entry.ticker || "",
+        quantity: 0,
+        source: entry.source,
+        updated_at: "staged",
+      }));
+    return [...liveHoldingsRows, ...stagedOnlyRows].sort(
+      (a, b) => Math.abs(b.quantity) - Math.abs(a.quantity),
+    );
+  }, [liveHoldingsRows, selectedAccountDrafts]);
+
+  const getLedgerDraftQuantityText = (row: (typeof holdingsRows)[number]) =>
+    getDraftQuantityText({
+      account_id: row.account_id,
+      ric: row.ric,
+      ticker: row.ticker,
+      current_quantity: row.quantity,
+    });
+
+  const hasLedgerDraft = (row: (typeof holdingsRows)[number]) =>
+    hasDraftForTarget({
+      account_id: row.account_id,
+      ric: row.ric,
+      ticker: row.ticker,
+    });
+
+  const isLedgerDraftInvalid = (row: (typeof holdingsRows)[number]) =>
+    isDraftInvalid({
+      account_id: row.account_id,
+      ric: row.ric,
+      ticker: row.ticker,
+    });
+
+  const getPositionDraftQuantityText = (pos: (typeof positions)[number]) =>
+    getDraftQuantityText({
+      account_id: pos.account,
+      ticker: pos.ticker,
+      current_quantity: pos.shares,
+    });
+
+  const hasPositionDraft = (pos: (typeof positions)[number]) =>
+    hasDraftForTarget({
+      account_id: pos.account,
+      ticker: pos.ticker,
+    });
+
+  const isPositionDraftInvalid = (pos: (typeof positions)[number]) =>
+    isDraftInvalid({
+      account_id: pos.account,
+      ticker: pos.ticker,
+    });
 
   if (pLoading) {
     return <AnalyticsLoadingViz message="Loading positions..." />;
@@ -131,19 +200,53 @@ export default function PositionsPage() {
           onRicChange={setEditRic}
           onQtyChange={setEditQty}
           onSourceChange={setEditSource}
-          onUpsert={() =>
-            handleManualUpsert({
+          onUpsert={() => {
+            const staged = handleManualUpsert({
               editRic,
               editTicker,
               editQty,
               editSource,
-            })
-          }
+            });
+            if (staged) {
+              setEditTicker("");
+              setEditRic("");
+              setEditQty("");
+            }
+          }}
+          actionLabel="Stage Position"
         />
+        {draftCount > 0 && (
+          <div
+            style={{
+              marginTop: 14,
+              padding: "12px 14px",
+              border: "1px solid rgba(224, 190, 92, 0.28)",
+              background: "rgba(224, 190, 92, 0.06)",
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ color: "rgba(232, 237, 249, 0.9)", fontSize: 13, lineHeight: 1.5 }}>
+              {draftCount} staged edit{draftCount === 1 ? "" : "s"} pending
+              {draftDeleteCount > 0 ? `, including ${draftDeleteCount} staged remove${draftDeleteCount === 1 ? "" : "s"}` : ""}.
+              Nothing is written to Neon until you hit `RECALC`.
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button className="btn btn-secondary" onClick={() => void handleApplyDrafts()} disabled={busy}>
+                {busy ? "Applying..." : `RECALC ${draftCount > 0 ? `(${draftCount})` : ""}`}
+              </button>
+              <button className="btn btn-secondary" onClick={discardDrafts} disabled={busy}>
+                Discard Drafts
+              </button>
+            </div>
+          </div>
+        )}
         <HoldingsMutationFeedback
           resultMessage={resultMessage}
           errorMessage={errorMessage}
           rejectionPreview={rejectionPreview}
+          draftCount={draftCount}
+          draftDeleteCount={draftDeleteCount}
         />
       </div>
 
@@ -152,13 +255,48 @@ export default function PositionsPage() {
         holdingsRows={holdingsRows}
         holdingsError={holdingsError}
         busy={busy}
+        getDraftQuantityText={getLedgerDraftQuantityText}
+        hasDraftForRow={hasLedgerDraft}
+        isDraftInvalidForRow={isLedgerDraftInvalid}
         onAdjust={handleAdjust}
+        onDraftQuantityChange={handleDraftQuantityChange}
         onRemove={handleRemove}
       />
 
       <div className="chart-card mb-4">
         <h3>Model Portfolio Positions ({positions.length})</h3>
-        <PositionTable positions={positions} />
+        <PositionTable
+          positions={positions}
+          getDraftQuantityText={getPositionDraftQuantityText}
+          hasDraftForPosition={hasPositionDraft}
+          isDraftInvalidForPosition={isPositionDraftInvalid}
+          onDraftQuantityChange={(position, value) =>
+            handleDraftQuantityChange(
+              {
+                account_id: position.account,
+                ric: "",
+                ticker: position.ticker,
+                quantity: position.shares,
+                source: position.source,
+                updated_at: null,
+              },
+              value,
+            )
+          }
+          onAdjust={(position, delta) =>
+            handleAdjust(
+              {
+                account_id: position.account,
+                ric: "",
+                ticker: position.ticker,
+                quantity: position.shares,
+                source: position.source,
+                updated_at: null,
+              },
+              delta,
+            )
+          }
+        />
       </div>
 
       <ConfirmActionModal
