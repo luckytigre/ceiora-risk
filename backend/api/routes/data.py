@@ -9,7 +9,7 @@ from typing import Any
 
 from backend import config
 from backend.api.auth import require_role
-from backend.data.sqlite import cache_get
+from backend.data.sqlite import cache_get, cache_get_live_first
 
 from fastapi import APIRouter, Header, Query
 
@@ -375,14 +375,14 @@ def get_data_diagnostics(
                 "source": "local_sqlite_and_cache",
                 "plain_english": (
                     "Detailed diagnostics reflect this backend instance's local SQLite/cache state. "
-                    "Use operator status above for cloud-serving truth, lane status, and Neon health."
+                    "Use the Health page for live operator truth, lane status, and Neon health."
                 ),
             },
             "truth_surfaces": {
                 "dashboard_serving": {
                     "source": "durable_serving_payloads",
                     "plain_english": (
-                        "Overview, Risk, Explore, and other user-facing pages should read compact durable serving payloads "
+                        "Risk, Explore, Positions, Health, and other user-facing pages should read compact durable serving payloads "
                         "instead of rebuilding directly from raw source tables."
                     ),
                 },
@@ -397,7 +397,7 @@ def get_data_diagnostics(
                     "source": "local_sqlite_and_cache",
                     "plain_english": (
                         "This diagnostics endpoint inspects the current backend instance and its local SQLite/cache files. "
-                        "Treat it as a deep maintenance panel, not the primary cloud-serving truth."
+                        "Treat it as a deep diagnostics panel, not the live operator control room."
                     ),
                 },
             },
@@ -409,7 +409,7 @@ def get_data_diagnostics(
                 "eligibility_summary": elig_summary,
                 "factor_cross_section": factor_cross_section,
             },
-            "risk_engine_meta": cache_get("risk_engine_meta") or {},
+            "risk_engine_meta": cache_get_live_first("risk_engine_meta") or {},
             "cuse4_foundation": cache_get("cuse4_foundation") or {},
             "cache_outputs": _cache_rows(),
         }

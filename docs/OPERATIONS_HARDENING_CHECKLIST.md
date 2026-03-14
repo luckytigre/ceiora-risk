@@ -24,13 +24,18 @@ Use this checklist before and after backend/frontend refreshes to keep runtime s
   - `make smoke-check`
 - Pass criteria:
   - backend endpoints are `200`
-  - frontend routes render (`/overview`, `/positions`, `/exposures`, `/explore`, `/health`)
+  - root and legacy overview routes redirect cleanly (`/`, `/overview`)
+  - frontend routes render (`/exposures`, `/data`, `/positions`, `/explore`, `/health`)
   - frontend API proxies return expected keys (`refresh`, `positions`, `risk_shares`)
 
 ## 4) Release Readiness (Local)
 - Run targeted tests for touched behavior:
-  - `pytest -q backend/tests/test_universe_search_route.py`
+  - `pytest -q backend/tests/test_serving_output_route_preference.py`
+  - `pytest -q backend/tests/test_cache_publisher_service.py`
+  - `pytest -q backend/tests/test_neon_parity_value_checks.py`
 - If refresh/holdings flows changed, add/execute a matching targeted test.
+- If health/risk math changed, also run a broader backend slice before considering the runtime clean.
+- If factor definitions or style membership changed, run `cold-core` once to rebuild factor history and then a follow-up `serve-refresh` to confirm the lightweight path serves the new factor set cleanly.
 - Verify no accidental transient files are staged (`frontend/.next*`, temp exports, logs).
 
 ## 5) Rollback Pointers
@@ -40,3 +45,6 @@ Use this checklist before and after backend/frontend refreshes to keep runtime s
   3. Restart with pinned host/port config
 - If backend cache readiness errors appear:
   - Run refresh and verify `/api/refresh/status` moves to healthy state.
+- If Health page semantics look stale:
+  - verify `/api/health/diagnostics` is reading the expected durable current payload
+  - verify the latest refresh staged and published `health_diagnostics`

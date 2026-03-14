@@ -27,7 +27,9 @@ else
   printf 'backend_health=down\n'
 fi
 
-if curl -fsS "${FRONTEND_URL}/overview" >/dev/null 2>&1; then
+if curl -LfsS "${FRONTEND_URL}/" >/dev/null 2>&1 \
+  && curl -LfsS "${FRONTEND_URL}/overview" >/dev/null 2>&1 \
+  && curl -fsS "${FRONTEND_URL}/exposures" >/dev/null 2>&1; then
   printf 'frontend_health=ok\n'
 else
   printf 'frontend_health=down\n'

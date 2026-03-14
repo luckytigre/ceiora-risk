@@ -6,6 +6,7 @@
 - Risk engine recompute cadence: weekly (`RISK_RECOMPUTE_INTERVAL_DAYS=7` by default).
 - Cross-section recency guard: regressions only use exposure snapshots at least 7 calendar days old (`CROSS_SECTION_MIN_AGE_DAYS=7`).
 - Loadings/UI cache refresh: can run daily; it reuses latest weekly risk-engine state unless recompute is due.
+- Current live factor set: 45 total factors, including 14 style factors. `Book-to-Price` and `Earnings Yield` remain; there is no standalone `Value` factor.
 - Execution model: one orchestrator framework with profile-specific cadence:
   - `serve-refresh`
   - `source-daily`
@@ -37,6 +38,7 @@
 
 ## Refresh Paths (When To Use)
 - `serve-refresh`: quick serving refresh; no core recompute and no source ingest.
+  - it skips the risk-engine stages only when the live cache is both present and current for the active method version; stale or method-drifted caches force a core lane instead of silently reusing old factors
   - holdings-triggered light refreshes now pass an explicit `holdings_only` scope and may reuse the current published `universe_loadings` payload when both of these still match:
     - `source_dates`
     - stable risk-engine fingerprint (`method_version`, `last_recompute_date`, `factor_returns_latest_date`, snapshot-age/lookback settings, specific-risk count)
@@ -59,10 +61,10 @@ Runtime-role rule:
 - Explicit deeper lanes remain blocked in `cloud-serve` even if requested by old mode-based callers.
 
 ## Operator UI Policy
-- Data page is the primary control room.
+- Health page is the primary control room.
 - Fast diagnostics are the default because they are cheap and always available.
 - Deep diagnostics are on-demand and compute exact row counts, ticker counts, duplicate checks, and update metadata.
-- Health page is for deeper model diagnostics, not routine operator actions.
+- Data page is for source-table lineage, coverage, cache surfaces, and integrity diagnostics.
 - Operator Status and header health are the live runtime truth.
 - Data/Health diagnostics are deeper local-instance maintenance panels and may lag the cloud-serving view.
 - Operator lane cards show:
@@ -126,8 +128,12 @@ Runtime-role rule:
   - factor-return cache invalidation now also tracks `CROSS_SECTION_MIN_AGE_DAYS` so snapshot-age policy changes clear stale factor-return/residual/eligibility rows.
 - `risk_engine_cov`: serialized factor covariance matrix (weekly cache).
 - `risk_engine_specific_risk`: stock-level specific risk map (weekly cache).
+- `daily_factor_returns`: factor-return workspace table in `cache.db`, now including `robust_se` and `t_stat`.
+- `daily_specific_residuals`: residual workspace table in `cache.db`, now storing both `model_residual` and `raw_residual`.
 - `cuse4_foundation`: bootstrap + latest ESTU audit summary for cUSE4 transition layer.
 - `portfolio`, `risk`, `exposures`, `universe_loadings`, `universe_factors`, `health_diagnostics`, `eligibility`, `refresh_meta`: refreshed on each `/api/refresh` call.
+  - `health_diagnostics` is now recomputed during every refresh staging pass and persisted into the durable serving surface.
+  - `/api/health/diagnostics` prefers the durable current payload before falling back to cache.
 - if Neon-backed holdings cannot be read during serving projection, refresh fails instead of publishing an empty-success portfolio payload
 - `model_outputs_write`: latest relational model-output persistence status.
   - for the holdings-only fast path, this now reports `status=skipped` with reason `holdings_only_fast_path`.
@@ -139,6 +145,16 @@ Runtime-role rule:
   - `duration_delta_pct`
   - `stage_duration_seconds_total`
   - `slowest_stage`
+
+## Factor-Return Durability And Parity
+- Durable SQLite factor-return persistence now replaces stale date slices instead of only writing rows from the latest durable date forward.
+- Durable SQLite covariance persistence now prunes retired factor names from `model_factor_covariance_daily` so removed factors do not survive across later runs.
+- Neon factor-return sync now carries `robust_se` and `t_stat` into `model_factor_returns_daily`.
+- Bounded Neon parity for factor returns now checks:
+  - required column presence
+  - non-null coverage for inference columns
+  - per-date factor-count parity on sampled dates
+  - sampled row-value equality, not just row counts and date windows
 
 ## Lookback Retention Policy
 - Treat three horizons separately:
@@ -200,8 +216,8 @@ Runtime-role rule:
   - `sqlite3 backend/runtime/cache.db "SELECT date,exp_date,regression_member_n,structural_coverage,regression_coverage FROM daily_universe_eligibility_summary ORDER BY date DESC LIMIT 10;"`
 - Verify no compatibility views remain:
   - `sqlite3 backend/runtime/data.db "SELECT COUNT(*) FROM sqlite_master WHERE type='view';"`
-- Verify no `sid` column remains in canonical time-series tables:
-  - `sqlite3 backend/runtime/data.db "SELECT 'security_prices_eod', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_prices_eod') UNION ALL SELECT 'security_fundamentals_pit', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_fundamentals_pit') UNION ALL SELECT 'security_classification_pit', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('security_classification_pit') UNION ALL SELECT 'estu_membership_daily', SUM(CASE WHEN name='sid' THEN 1 ELSE 0 END) FROM pragma_table_info('estu_membership_daily');"`
+- Verify `security_master` no longer carries deprecated compatibility metadata:
+  - `sqlite3 backend/runtime/data.db "SELECT name FROM pragma_table_info('security_master') WHERE name IN ('sid','permid','instrument_type','asset_category_description');"`
 
 ## Rollback
 - Create checkpoint before major changes:
@@ -218,7 +234,7 @@ Runtime-role rule:
   - Live ingest remains opt-in via `ORCHESTRATOR_ENABLE_INGEST=true`.
 - Security master key policy:
   - `security_master` is physically keyed by `ric`.
-  - `sid`/`permid` are optional metadata only (not required for eligibility).
+  - deprecated `sid`/`permid` and dead instrument metadata were removed from the canonical schema.
 - Price schema policy:
   - `security_prices_eod` canonical columns are `open/high/low/close/adj_close/volume/currency` (no `exchange` field).
 - Risk API readiness gate:
@@ -240,7 +256,7 @@ Runtime-role rule:
 
 ### Quick Health Checks
 - Style-score completeness (recent):
-  - `sqlite3 backend/runtime/data.db "SELECT as_of_date, ROUND(100.0*AVG(CASE WHEN beta_score IS NOT NULL AND momentum_score IS NOT NULL AND size_score IS NOT NULL AND value_score IS NOT NULL THEN 1 ELSE 0 END),2) FROM barra_raw_cross_section_history GROUP BY as_of_date ORDER BY as_of_date DESC LIMIT 10;"`
+  - `sqlite3 backend/runtime/data.db "SELECT as_of_date, ROUND(100.0*AVG(CASE WHEN beta_score IS NOT NULL AND momentum_score IS NOT NULL AND size_score IS NOT NULL AND book_to_price_score IS NOT NULL THEN 1 ELSE 0 END),2) FROM barra_raw_cross_section_history GROUP BY as_of_date ORDER BY as_of_date DESC LIMIT 10;"`
 - Eligibility coverage (recent):
   - `sqlite3 backend/runtime/cache.db "SELECT date, structural_eligible_n, regression_member_n, ROUND(100.0*regression_coverage,2) FROM daily_universe_eligibility_summary ORDER BY date DESC LIMIT 10;"`
 

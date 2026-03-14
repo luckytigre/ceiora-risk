@@ -10,8 +10,8 @@ Implemented now:
 - canonical orchestrator lane names are live in `run_model_pipeline`
 - `/api/operator/status` exposes lane status, source recency, core-due state, refresh state, and Neon parity health
 - `/api/operator/status` also carries backend-authoritative holdings dirty state, runtime warnings, and per-lane recent-run history
-- Data page now acts as the operator control deck with lane controls, plain-English popovers, recent-run history strips, stage detail, and fast/deep diagnostics
-- Health page also surfaces operator cards for redundancy
+- Health page now acts as the live operator control deck and freshness/model-quality surface
+- Data page now acts as the source-table/cache diagnostics surface
 - Health page is now split into a shell plus lazily mounted diagnostics sections so heavy chart bundles load only after explicit user intent
 - source recency now explicitly tracks prices, fundamentals, classification, and raw cross-section dates
 - `make operator-check` / `scripts/operator_check.sh` provide one-command backend/operator validation
@@ -19,6 +19,7 @@ Implemented now:
 - refresh-driven `RECALC needed` state is backend-persisted and only clears after a successful serving refresh
 - serving payloads now persist into durable `serving_payload_current` rows so the cloud-serving path can read dashboard outputs without depending solely on local cache blobs
 - `cloud-serve` runtime now treats durable serving payloads as the effective serving authority
+- `/api/health/diagnostics` now follows the same durable-serving-first discipline as the main dashboard truth surfaces
 - `cloud-serve` runtime now restricts refresh lanes to `serve-refresh` and blocks LSEG ingest
 - a bare cloud `POST /api/refresh` now resolves safely to `serve-refresh`; deeper lanes still require explicit local/operator intent
 - broad Neon mirror/parity/prune remain a `local-ingest` publish responsibility rather than a cloud-serving behavior
@@ -26,6 +27,11 @@ Implemented now:
 - the Positions page now composes feature-level holdings modules (`features/holdings`) rather than owning CSV parsing, mutation orchestration, and tables inline
 - holdings projection now loads one holdings snapshot per refresh build instead of re-querying holdings metadata repeatedly
 - Neon holdings read failures now stop serving-refresh projection work instead of silently degrading to an empty successful portfolio
+- Health diagnostics are now recomputed on every refresh from staged inputs, then published durably alongside the rest of the serving payload set
+- factor-return persistence now replaces stale history slices in durable SQLite and Neon instead of only appending from the latest durable date
+- durable covariance persistence now prunes retired factor names so removed factors do not linger in historical covariance rows
+- Neon factor-return parity now checks sampled row values and inference-field coverage, not only row counts and date windows
+- the active model now carries 45 factors in total, including 14 style factors; there is no standalone `Value` factor in the live style set
 
 Cold-core lessons now incorporated:
 - serving refresh must read live risk-engine cache keys, not only the active published snapshot
@@ -59,6 +65,7 @@ This plan is intentionally operational rather than theoretical. It maps directly
 - cUSE4 core model state is slower-moving than source data.
 - Frontend-facing caches are cheap projections and should refresh more often than the core model.
 - Holdings changes, price updates, source-data refreshes, and core model recalculations must be treated as different operational events.
+- A factor-set change is a core-model change. `serve-refresh` may reuse risk-engine artifacts only when the live cache is both present and current for the active method version.
 
 ## Four-Layer Operating Model
 
@@ -143,24 +150,21 @@ Examples:
 The dashboard should stay thin. Each page should read one of a small number of serving surfaces rather than rebuilding logic in the browser.
 
 Canonical page-to-backend wiring:
-- `Overview`
-  - reads: `/api/portfolio`, `/api/risk`
-  - purpose: high-level portfolio, risk split, top holdings
 - `Risk` (`/exposures`)
   - reads: `/api/exposures`, `/api/risk`, `/api/portfolio`
-  - purpose: factor-level portfolio views plus per-position drilldown
+  - purpose: factor-level portfolio views plus portfolio risk split and per-position drilldown
 - `Explore`
   - reads: `/api/universe/search`, `/api/universe/ticker/{ticker}`, `/api/universe/ticker/{ticker}/history`, `/api/universe/factors`, `/api/portfolio`, `/api/portfolio/whatif`
-  - purpose: single-name inspection plus account-aware what-if preview against the current live holdings ledger
+  - purpose: single-name inspection plus account-aware what-if preview against the current live holdings ledger, with optional apply + `serve-refresh` once a scenario is accepted
 - `Positions`
   - reads: `/api/holdings/*`, `/api/portfolio`, `/api/universe/search`
   - purpose: holdings editing/import and current model portfolio view
 - `Data`
-  - reads: `/api/operator/status`, `/api/data/diagnostics`
-  - purpose: operator control deck and source/serving diagnostics
+  - reads: `/api/data/diagnostics`
+  - purpose: source-table lineage, coverage, cache surfaces, and integrity diagnostics
 - `Health`
-  - reads: `/api/operator/status`, `/api/health/diagnostics`
-  - purpose: deeper model-diagnostics study, loaded on demand because it is the heaviest dashboard page
+  - reads: `/api/operator/status`, `/api/risk`, `/api/health/diagnostics`
+  - purpose: live operator control-room status plus top-level model quality and deeper model-diagnostics study, loaded on demand because it is the heaviest dashboard page
 
 Efficiency rules now in force:
 - operator state is fetched on demand plus fast-polled only while a refresh is actively running; pages should not each invent their own background loop
@@ -168,7 +172,7 @@ Efficiency rules now in force:
 - ticker/RIC typeahead is debounced before hitting `/api/universe/search`
 - Health diagnostics are no longer fetched automatically on page load, and heavy sections mount only as the user scrolls
 - user-facing dashboard pages should consume durable serving outputs first rather than piecing together raw source tables in the browser
-- the Explore what-if preview is intentionally read-only and ephemeral; scenario rows live in browser state and are posted once to `/api/portfolio/whatif` for in-memory comparison only
+- the Explore what-if preview is intentionally ephemeral until explicit apply; staged trade deltas live in browser state and are posted once to `/api/portfolio/whatif` for in-memory comparison only, then can be written only through explicit `Apply + RECALC`
 - in `local-ingest`, old local cache blobs remain bootstrap fallback only when a serving payload snapshot does not yet exist
 - in `cloud-serve`, serving routes fail closed instead of falling back to local cache/SQLite state
 - universe explore/search outputs
@@ -259,6 +263,7 @@ Does:
 - portfolio / risk / exposures / universe serving payloads
 - health payloads
 - durable serving-payload write (`serving_payload_current`)
+- staged `health_diagnostics` computation against the same refresh-run inputs that are about to be published
 - holdings-triggered refreshes may reuse the current published `universe_loadings` payload when source dates and the risk-engine fingerprint still match
 - on that reuse path, cached `eligibility`, `cov_matrix`, and `condition_number` may also be reused when present
 - on that reuse path, durable relational `model_outputs` persistence is intentionally skipped because the underlying factor/covariance/specific-risk state has not changed
@@ -381,7 +386,7 @@ For every new ticker batch:
 
 1. Merge identifiers into `security_master`
 - required: `ric`, `ticker`
-- preferred metadata: `isin`, `exchange_name`, optional `sid`/`permid`
+- preferred metadata: `isin`, `exchange_name`
 - set `classification_ok` and `is_equity_eligible` deliberately
 
 2. Validate the merge

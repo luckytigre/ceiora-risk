@@ -24,7 +24,7 @@ Scope note:
 
 - Country factor is segmented as `US` vs `non-US` (binary structural block).
 - Industry handling uses weighted sum-to-zero constraints (not dropped dummy baseline).
-- Current runtime implementation carries country as a simple `Country: US` dummy in phase A.
+- Current runtime implementation carries country as a simple `Country: US` dummy in phase A, estimated separately from the constrained industry block.
 - Factor covariance will include both:
   - Newey-West adjustment, and
   - shrinkage (toward a structured/shrunk target).
@@ -35,7 +35,7 @@ Scope note:
 Current implemented state:
 - Universe definition is centralized in `security_master` (identity hub; canonical time-series joins are RIC-keyed).
 - Holdings dirty / `RECALC needed` state is backend-persisted and visible in the operator UI.
-- Data page is the primary operator cockpit, with lane controls, lane history, stage detail, and fast/deep diagnostics.
+- Health page is the primary operator cockpit, while Data is the source-table/cache diagnostics surface.
 - Eligible investable set is controlled by:
   - `classification_ok = 1`
   - `is_equity_eligible = 1`
@@ -105,11 +105,7 @@ Persist ESTU audit artifacts per `(date, ric)`.
 Metadata columns:
 - `ric`
 - `ticker`
-- `sid` (optional metadata, not the physical key)
-- `permid` (optional metadata)
 - `isin`
-- `instrument_type`
-- `asset_category_description`
 - `exchange_name`
 - `classification_ok`
 - `is_equity_eligible`
@@ -239,13 +235,13 @@ Structural blocks in regression:
 Style factors:
 - Size: `ln(market_cap)`
 - Nonlinear Size: stable nonlinear transform of standardized size
-- Beta: EW rolling beta vs market proxy, shrunk toward 1.0
+- Beta: rolling beta vs a lagged-cap-weighted market proxy using names with valid lagged cap and a price floor
 - Momentum: 12-1 return
 - Short-term Reversal: 1M reversal proxy
 - Residual Volatility: EWMA volatility of residual returns
 - Liquidity: equal-weight composite of turnover horizons
   - built from daily `security_prices_eod.volume` (`TR.Volume`) via rolling turnover and ADV transforms
-- Value: `book_to_price = BVPS / Price`
+- Book-to-Price: `book_to_price = BVPS / Price`
 - Earnings Yield: 50/50 blend of trailing E/P and forward E/P
 - Leverage: `debt_to_assets`
 - Growth: 50/50 blend of sales growth and earnings growth
@@ -254,6 +250,9 @@ Style factors:
 - Profitability: equal-weight composite:
   - 50% ROE
   - 50% Sales Margin (operating margin proxy)
+
+Implementation note:
+- The live engine does not include a separate composite `Value` factor. Value-oriented style exposure is represented through `Book-to-Price` and `Earnings Yield`.
 
 ## 6) Data Treatment and Orthogonalization Strategy
 
@@ -271,7 +270,7 @@ Per date on ESTU:
    - Liquidity ⟂ Size
    - Residual Volatility ⟂ (Size, Beta)
    - Short-term Reversal ⟂ Momentum
-   - optional fixed policy toggles: Growth ⟂ Value, Investment ⟂ Growth
+   - optional fixed policy toggles: Growth ⟂ Book-to-Price, Investment ⟂ Growth
 7. Re-standardize after each orth step and final style pass.
 
 Implementation note (current code path):
@@ -308,13 +307,24 @@ Descriptor-specific rules:
 Daily cross-sectional model on ESTU:
 - `r_i,t = CountryBlock_i,t + IndustryBlock_i,t + StyleBlock_i,t + eps_i,t`
 - WLS weights: cap-based, stable policy (recommended `sqrt(mcap)`).
+- Daily returns are winsorized cross-sectionally before estimation; current runtime default is configurable and set through `RETURNS_WINSOR_PCT` (currently `1%` each tail).
 - Industry coefficients are estimated with weighted sum-to-zero constraints.
-- Country currently enters as a simple structural dummy factor (`Country: US`) in the phase-A block.
+- Country currently enters as a simple structural dummy factor (`Country: US`) in the phase-A block, outside the industry sum-to-zero restriction.
 
 Persist:
 - factor returns by date/factor
+- robust coefficient inference by date/factor:
+  - `robust_se`
+  - `t_stat`
 - specific returns by date/security
+- both model-fit and raw-return residual histories in cache for downstream risk use
 - regression diagnostics (R², condition number, etc.)
+
+Regression diagnostics policy:
+
+- `r_squared` is reported on the solved objective using cap-weighted SSE/TSS and is not clipped to `[0, 1]`.
+- `residual_vol` remains a date-level residual-dispersion diagnostic; it is not a factor-specific coefficient standard error.
+- The current runtime inference method is heteroskedasticity-robust `HC1` on the sequential two-phase estimator.
 
 Covariance:
 - Base: EWMA factor covariance on factor returns.
@@ -377,8 +387,10 @@ Where this remains an approximation:
    - Build and persist per-date ESTU membership/drop reasons to `estu_membership_daily`.
 6. Factor return and risk-engine stages:
    - Compute daily factor returns from lagged cross-sections on ESTU.
+   - Estimate `Country: US` separately from constrained industries, then estimate styles on phase-A residuals.
+   - Persist true robust coefficient t-stats and standard errors with each factor-return row.
    - Build covariance (EWMA + Newey-West + shrinkage policy).
-   - Build specific risk from residual history.
+   - Build specific risk from raw residual history, while retaining model residual history for fit diagnostics.
    - Residual/specific-risk persistence is keyed by `ric` with `ticker` retained as metadata.
 7. Relational model output persistence:
    - Persist into:
@@ -443,7 +455,7 @@ The following implementation defects were closed and verified:
 - Refresh/model-output writes fail hard on empty required outputs.
 - Price ingest/backfill requests richer OHLCV/currency fields, and volume-repair mode uses `TR.Volume`.
 - Raw cross-section + residual/specific-risk relational persistence now use `ric` physical keys.
-- `security_master` now uses `ric` as primary key; synthetic `sid/permid` placeholders are normalized out.
+- `security_master` now uses a trimmed canonical field set keyed by `ric`; deprecated `sid`/`permid` and dead instrument metadata were removed.
 - Orchestrator ingest stage is active (`bootstrap_only` baseline, opt-in live ingest).
 - Regression tests added for schema/key/quality-gate and ingest behavior.
 - SQLite maintenance path added (`compact_sqlite_databases.py`) and operationalized.

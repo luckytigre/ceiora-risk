@@ -149,7 +149,9 @@ wait_for_frontend() {
   local start_ts
   start_ts="$(date +%s)"
   while true; do
-    if curl -fsS "${FRONTEND_URL}/overview" >/dev/null 2>&1; then
+    if curl -LfsS "${FRONTEND_URL}/" >/dev/null 2>&1 \
+      && curl -LfsS "${FRONTEND_URL}/overview" >/dev/null 2>&1 \
+      && curl -fsS "${FRONTEND_URL}/exposures" >/dev/null 2>&1; then
       return 0
     fi
     if (( "$(date +%s)" - start_ts >= timeout_seconds )); then

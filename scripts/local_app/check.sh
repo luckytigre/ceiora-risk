@@ -26,7 +26,9 @@ if ! pid_alive "${frontend_pid}"; then
 fi
 
 curl -fsS "${BACKEND_URL}/api/health" >/dev/null
-curl -fsS "${FRONTEND_URL}/overview" >/dev/null
+curl -LfsS "${FRONTEND_URL}/" >/dev/null
+curl -LfsS "${FRONTEND_URL}/overview" >/dev/null
+curl -fsS "${FRONTEND_URL}/exposures" >/dev/null
 curl -fsS "${FRONTEND_URL}/data" >/dev/null
 curl -fsS "${FRONTEND_URL}/api/portfolio" >/dev/null
 curl -fsS "${FRONTEND_URL}/api/risk" >/dev/null

@@ -17,6 +17,17 @@ check_http() {
   echo "[OK]   ${url}"
 }
 
+check_http_follow() {
+  local url="$1"
+  local code
+  code="$(curl -Ls -o /dev/null -w "%{http_code}" "$url")"
+  if [[ "$code" != "200" ]]; then
+    echo "[FAIL] ${url} -> HTTP ${code} after redirects"
+    return 1
+  fi
+  echo "[OK]   ${url} (redirects)"
+}
+
 check_json_key() {
   local url="$1"
   local key="$2"
@@ -35,10 +46,11 @@ check_json_key "${BACKEND_ORIGIN}/api/portfolio" "positions"
 check_json_key "${BACKEND_ORIGIN}/api/risk" "risk_shares"
 check_json_key "${BACKEND_ORIGIN}/api/operator/status" "lanes"
 
-check_http "${FRONTEND_ORIGIN}/overview"
+check_http_follow "${FRONTEND_ORIGIN}/"
+check_http_follow "${FRONTEND_ORIGIN}/overview"
+check_http "${FRONTEND_ORIGIN}/exposures"
 check_http "${FRONTEND_ORIGIN}/data"
 check_http "${FRONTEND_ORIGIN}/positions"
-check_http "${FRONTEND_ORIGIN}/exposures"
 check_http "${FRONTEND_ORIGIN}/explore"
 check_http "${FRONTEND_ORIGIN}/health"
 
