@@ -1,5 +1,5 @@
-import OverviewPage from "./overview/page";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <OverviewPage />;
+  redirect("/exposures");
 }

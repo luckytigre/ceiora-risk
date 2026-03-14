@@ -7,6 +7,7 @@ import FactorDrilldown from "@/components/FactorDrilldown";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ExposurePositionsTable from "@/components/ExposurePositionsTable";
 import CovarianceHeatmap from "@/components/CovarianceHeatmap";
+import RiskDecompChart from "@/components/RiskDecompChart";
 import TableRowToggle from "@/components/TableRowToggle";
 import HelpLabel from "@/components/HelpLabel";
 import ApiErrorState from "@/components/ApiErrorState";
@@ -21,7 +22,7 @@ const MODES = [
   { key: "risk_contribution", label: "Risk Contrib" },
 ] as const;
 type SortKey = keyof FactorDetail;
-const COLLAPSED_ROWS = 14;
+const COLLAPSED_ROWS = 10;
 
 export default function ExposuresPage() {
   const [mode, setMode] = useState<string>("raw");
@@ -35,7 +36,13 @@ export default function ExposuresPage() {
   const factors = data?.factors ?? [];
   const positions = portfolioData?.positions ?? [];
   const riskDetails = riskData?.factor_details ?? [];
-  const cov = riskData?.cov_matrix ?? { factors: [], correlation: [] };
+  const riskShares = riskData?.risk_shares ?? { country: 0, industry: 0, style: 0, idio: 100 };
+  const cov = riskData?.cov_matrix
+    ? {
+        factors: riskData.cov_matrix.factors ?? [],
+        correlation: riskData.cov_matrix.correlation ?? riskData.cov_matrix.matrix ?? [],
+      }
+    : { factors: [], correlation: [] };
 
   // Extract cross-section summary from the factor data
   const crossSection = useMemo(() => {
@@ -387,6 +394,18 @@ export default function ExposuresPage() {
               label="factors"
             />
           </div>
+        )}
+      </div>
+
+      <div className="chart-card mb-4" style={{ marginTop: 12 }}>
+        <h3>Risk Decomposition</h3>
+        <div className="section-subtitle">
+          Share of total portfolio risk split across country, industry, style, and idiosyncratic components.
+        </div>
+        {riskLoading ? (
+          <AnalyticsLoadingViz message="Loading portfolio risk mix..." />
+        ) : (
+          <RiskDecompChart shares={riskShares} />
         )}
       </div>
 
