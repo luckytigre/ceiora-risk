@@ -63,6 +63,7 @@ def begin_stage(
     profile: str,
     stage_name: str,
     stage_order: int,
+    details: dict[str, Any] | None = None,
 ) -> None:
     conn = _connect(db_path)
     now_iso = _now_iso()
@@ -91,7 +92,7 @@ def begin_stage(
                 "running",
                 now_iso,
                 None,
-                None,
+                json.dumps(details or {}, sort_keys=True),
                 None,
                 None,
                 now_iso,
@@ -139,6 +140,116 @@ def finish_stage(
             ),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def heartbeat_stage(
+    *,
+    db_path: Path,
+    run_id: str,
+    stage_name: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    conn = _connect(db_path)
+    now_iso = _now_iso()
+    try:
+        row = conn.execute(
+            f"""
+            SELECT details_json
+            FROM {TABLE}
+            WHERE run_id = ?
+              AND stage_name = ?
+            """,
+            (str(run_id), str(stage_name)),
+        ).fetchone()
+        merged_details: dict[str, Any] = {}
+        if row and row[0]:
+            try:
+                decoded = json.loads(str(row[0]))
+                if isinstance(decoded, dict):
+                    merged_details.update(decoded)
+            except Exception:
+                merged_details = {}
+        merged_details.update(details or {})
+        merged_details["heartbeat_at"] = now_iso
+        conn.execute(
+            f"""
+            UPDATE {TABLE}
+            SET
+                details_json = ?,
+                updated_at = ?
+            WHERE run_id = ?
+              AND stage_name = ?
+            """,
+            (
+                json.dumps(merged_details, sort_keys=True),
+                now_iso,
+                str(run_id),
+                str(stage_name),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def fail_stale_running_stages(
+    *,
+    db_path: Path,
+    stale_after_seconds: int = 6 * 60 * 60,
+) -> int:
+    """Mark long-abandoned running stages as failed so status summaries stay truthful."""
+    if stale_after_seconds <= 0:
+        return 0
+    conn = _connect(db_path)
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    updated = 0
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT run_id, stage_name, started_at, updated_at
+            FROM {TABLE}
+            WHERE status = 'running'
+            """
+        ).fetchall()
+        for run_id, stage_name, started_at, updated_at in rows:
+            anchor_raw = started_at or updated_at
+            try:
+                anchor = datetime.fromisoformat(str(anchor_raw))
+            except (TypeError, ValueError):
+                anchor = None
+            if anchor is None:
+                continue
+            age_seconds = (now - anchor).total_seconds()
+            if age_seconds < float(stale_after_seconds):
+                continue
+            conn.execute(
+                f"""
+                UPDATE {TABLE}
+                SET
+                    status = 'failed',
+                    completed_at = ?,
+                    error_type = ?,
+                    error_message = ?,
+                    updated_at = ?
+                WHERE run_id = ?
+                  AND stage_name = ?
+                  AND status = 'running'
+                """,
+                (
+                    now_iso,
+                    "stale_running_stage",
+                    "Marked failed after exceeding stale running-stage threshold.",
+                    now_iso,
+                    str(run_id),
+                    str(stage_name),
+                ),
+            )
+            updated += int(conn.total_changes > 0)
+        conn.commit()
+        return updated
     finally:
         conn.close()
 
@@ -224,6 +335,7 @@ def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "completed_stage_count": 0,
             "failed_stage_count": 0,
             "running_stage_count": 0,
+            "current_stage": None,
             "stages": [],
         }
 
@@ -252,11 +364,15 @@ def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     finished_at = _max_nonempty("completed_at")
     stage_summaries: list[dict[str, Any]] = []
     stage_duration_sum = 0.0
+    now_iso = _now_iso()
     for r in ordered:
         details = _details_payload(r)
         stage_duration = details.get("duration_seconds")
         if stage_duration is None:
-            stage_duration = _duration_seconds(r.get("started_at"), r.get("completed_at"))
+            duration_end = r.get("completed_at")
+            if str(r.get("status") or "") == "running" and not duration_end:
+                duration_end = now_iso
+            stage_duration = _duration_seconds(r.get("started_at"), duration_end)
         if stage_duration is not None:
             try:
                 stage_duration = round(float(stage_duration), 3)
@@ -271,6 +387,8 @@ def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "started_at": r.get("started_at"),
                 "completed_at": r.get("completed_at"),
                 "duration_seconds": stage_duration,
+                "heartbeat_at": details.get("heartbeat_at") or r.get("updated_at"),
+                "details": details,
                 "error_type": r.get("error_type"),
                 "error_message": r.get("error_message"),
             }
@@ -289,6 +407,7 @@ def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             (item for item in stage_summaries if item.get("duration_seconds") is not None),
             key=lambda item: float(item["duration_seconds"]),
         )
+    current_stage = next((item for item in stage_summaries if item.get("status") == "running"), None)
     return {
         "run_id": str(ordered[0].get("run_id") or ""),
         "profile": str(ordered[0].get("profile") or ""),
@@ -302,6 +421,7 @@ def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "failed_stage_count": int(sum(1 for s in stage_statuses if s == "failed")),
         "running_stage_count": int(sum(1 for s in stage_statuses if s == "running")),
         "stage_duration_seconds_total": round(float(stage_duration_sum), 3),
+        "current_stage": current_stage,
         "slowest_stage": (
             {
                 "stage_name": str(slowest_stage.get("stage_name") or ""),
@@ -320,6 +440,7 @@ def latest_run_summary_by_profile(
     profiles: list[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     ensure_schema(db_path)
+    fail_stale_running_stages(db_path=db_path)
     conn = _connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
@@ -370,6 +491,7 @@ def recent_run_summaries_by_profile(
     limit_per_profile: int = 8,
 ) -> dict[str, list[dict[str, Any]]]:
     ensure_schema(db_path)
+    fail_stale_running_stages(db_path=db_path)
     conn = _connect(db_path)
     conn.row_factory = sqlite3.Row
     try:

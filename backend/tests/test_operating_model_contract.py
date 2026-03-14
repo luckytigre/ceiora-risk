@@ -133,18 +133,18 @@ def test_compute_position_total_risk_contributions_sums_to_total_variance_pct() 
         {
             "ticker": "LONG1",
             "weight": 0.6,
-            "exposures": {"Beta": 1.0, "Value": 0.5},
+            "exposures": {"Beta": 1.0, "Book-to-Price": 0.5},
         },
         {
             "ticker": "SHORT1",
             "weight": -0.4,
-            "exposures": {"Beta": 0.8, "Value": -0.2},
+            "exposures": {"Beta": 0.8, "Book-to-Price": -0.2},
         },
     ]
     cov = pd.DataFrame(
         [[0.04, 0.01], [0.01, 0.09]],
-        index=["Beta", "Value"],
-        columns=["Beta", "Value"],
+        index=["Beta", "Book-to-Price"],
+        columns=["Beta", "Book-to-Price"],
     )
     specific = {
         "LONG1": {"specific_var": 0.02},
@@ -361,6 +361,7 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
 
     monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key: _cache_get(key))
     monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
     monkeypatch.setattr(
         pipeline,
         "_build_positions_from_universe",
@@ -557,6 +558,7 @@ def test_pipeline_fallback_light_refresh_still_persists_model_outputs(
 
     monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key: _cache_get(key))
     monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
     monkeypatch.setattr(
         pipeline,
         "_build_universe_ticker_loadings",
@@ -632,15 +634,172 @@ def test_pipeline_fallback_light_refresh_still_persists_model_outputs(
     assert captured["persisted_model_outputs"] is True
 
 
+def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    stale_meta = {
+        "status": "ok",
+        "method_version": "stale_snapshot",
+        "last_recompute_date": "2026-03-01",
+        "factor_returns_latest_date": "2026-03-01",
+        "cross_section_min_age_days": 7,
+        "lookback_days": 504,
+        "recompute_interval_days": 7,
+        "specific_risk_ticker_count": 1,
+        "latest_r2": 0.11,
+    }
+    fresh_meta = {
+        "status": "ok",
+        "method_version": "fresh_live",
+        "last_recompute_date": "2026-03-08",
+        "factor_returns_latest_date": "2026-03-07",
+        "cross_section_min_age_days": 7,
+        "lookback_days": 504,
+        "recompute_interval_days": 7,
+        "specific_risk_ticker_count": 2,
+        "latest_r2": 0.33,
+    }
+    fresh_cov = {"factors": ["Beta"], "matrix": [[1.0]]}
+    fresh_specific = {"AAPL.OQ": {"ticker": "AAPL", "specific_var": 0.01}}
+
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_source_dates",
+        lambda: {
+            "prices_asof": "2026-03-07",
+            "fundamentals_asof": "2026-03-07",
+            "classification_asof": "2026-03-07",
+            "exposures_asof": "2026-03-07",
+        },
+    )
+    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda: pd.DataFrame({"ticker": ["AAPL"]}))
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_latest_fundamentals",
+        lambda as_of_date=None: pd.DataFrame({"ticker": ["AAPL"]}),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_raw_cross_section_latest",
+        lambda: pd.DataFrame({"ticker": ["AAPL"], "Beta": [1.0]}),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_build_positions_from_universe",
+        lambda universe_by_ticker: ([{"ticker": "AAPL", "weight": 1.0, "market_value": 100.0}], 100.0),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_compute_position_total_risk_contributions",
+        lambda *args, **kwargs: {"AAPL": 100.0},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "risk_decomposition",
+        lambda *args, **kwargs: (
+            {"country": 0.0, "industry": 20.0, "style": 30.0, "idio": 50.0},
+            {"country": 0.0, "industry": 0.4, "style": 0.6},
+            [{"factor": "Beta", "exposure": 0.1, "sensitivity": 0.01, "factor_vol": 0.05, "pct_of_total": 3.0}],
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_compute_position_risk_mix",
+        lambda *args, **kwargs: {"AAPL": {"country": 0.0, "industry": 0.2, "style": 0.3, "idio": 0.5}},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_build_universe_ticker_loadings",
+        lambda *args, **kwargs: {
+            "factors": ["Beta"],
+            "factor_vols": {"Beta": 0.05},
+            "ticker_count": 1,
+            "eligible_ticker_count": 1,
+            "by_ticker": {"AAPL": {"ticker": "AAPL", "price": 100.0, "exposures": {"Beta": 1.0}}},
+        },
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_load_cached_risk_display_payload",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_compute_exposures_modes",
+        lambda *args, **kwargs: {"raw": [], "sensitivity": [], "risk_contribution": []},
+    )
+    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db: (None, {}))
+    monkeypatch.setattr(
+        pipeline,
+        "stage_refresh_cache_snapshot",
+        lambda **kwargs: captured.update(
+            {
+                "risk_engine_meta": kwargs["risk_engine_meta"],
+                "recomputed_this_refresh": kwargs["recomputed_this_refresh"],
+                "recompute_reason": kwargs["recompute_reason"],
+            }
+        )
+        or {
+            "snapshot_id": "snap_live_first",
+            "risk_engine_state": kwargs["risk_engine_meta"],
+            "sanity": {"status": "ok"},
+            "health_refreshed": True,
+            "persisted_payloads": {"risk": {"risk_engine": kwargs["risk_engine_meta"]}},
+        },
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "persist_model_outputs",
+        lambda **kwargs: {"status": "ok", "run_id": kwargs["run_id"]},
+    )
+    monkeypatch.setattr(
+        pipeline.serving_outputs,
+        "persist_current_payloads",
+        lambda **kwargs: {"status": "ok", "run_id": kwargs["run_id"]},
+    )
+    monkeypatch.setattr(pipeline.sqlite, "cache_set", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline.sqlite, "cache_publish_snapshot", lambda snapshot_id: None)
+    monkeypatch.setattr(
+        pipeline.sqlite,
+        "cache_get",
+        lambda key: stale_meta if key == "risk_engine_meta" else None,
+    )
+    monkeypatch.setattr(
+        pipeline.sqlite,
+        "cache_get_live_first",
+        lambda key: {
+            "risk_engine_meta": fresh_meta,
+            "risk_engine_cov": fresh_cov,
+            "risk_engine_specific_risk": fresh_specific,
+        }.get(key),
+    )
+
+    out = pipeline.run_refresh(
+        mode="full",
+        refresh_scope="full",
+        skip_snapshot_rebuild=True,
+        skip_cuse4_foundation=True,
+        skip_risk_engine=True,
+    )
+
+    assert out["status"] == "ok"
+    assert captured["risk_engine_meta"]["method_version"] == "fresh_live"
+    assert captured["recomputed_this_refresh"] is False
+    assert captured["recompute_reason"] == "orchestrator_precomputed"
+
+
 def test_run_model_pipeline_clears_pending_after_serving_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "ensure_schema", lambda *args, **kwargs: None)
+    monkeypatch.setattr(run_model_pipeline_module.job_runs, "fail_stale_running_stages", lambda *args, **kwargs: 0)
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "completed_stages", lambda *args, **kwargs: set())
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "begin_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "finish_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "run_rows", lambda *args, **kwargs: [])
     monkeypatch.setattr(run_model_pipeline_module.sqlite, "cache_get", lambda key: {})
+    monkeypatch.setattr(run_model_pipeline_module.sqlite, "cache_get_live_first", lambda key: {})
     monkeypatch.setattr(
         run_model_pipeline_module,
         "_run_stage",
@@ -665,6 +824,7 @@ def test_run_model_pipeline_reports_stage_runtime_details(monkeypatch: pytest.Mo
     finished: list[dict[str, object]] = []
 
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "ensure_schema", lambda *args, **kwargs: None)
+    monkeypatch.setattr(run_model_pipeline_module.job_runs, "fail_stale_running_stages", lambda *args, **kwargs: 0)
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "completed_stages", lambda *args, **kwargs: set())
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "begin_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -674,6 +834,7 @@ def test_run_model_pipeline_reports_stage_runtime_details(monkeypatch: pytest.Mo
     )
     monkeypatch.setattr(run_model_pipeline_module.job_runs, "run_rows", lambda *args, **kwargs: [])
     monkeypatch.setattr(run_model_pipeline_module.sqlite, "cache_get", lambda key: {})
+    monkeypatch.setattr(run_model_pipeline_module.sqlite, "cache_get_live_first", lambda key: {})
     monkeypatch.setattr(
         run_model_pipeline_module,
         "_run_stage",
@@ -737,6 +898,11 @@ def test_refresh_manager_tracks_current_stage_from_pipeline_callback(monkeypatch
                 "stage_index": 1,
                 "stage_count": 1,
                 "started_at": "2026-03-09T00:00:00Z",
+                "message": "Publishing serving payloads",
+                "progress_pct": 25.0,
+                "items_processed": 1,
+                "items_total": 4,
+                "unit": "steps",
             }
         )
         return {"status": "ok", "run_id": "run_123"}
@@ -763,6 +929,8 @@ def test_refresh_manager_tracks_current_stage_from_pipeline_callback(monkeypatch
     )
 
     assert any(update.get("current_stage") == "serving_refresh" for update in updates)
+    assert any(update.get("current_stage_message") == "Publishing serving payloads" for update in updates)
+    assert any(update.get("current_stage_progress_pct") == 25.0 for update in updates)
     assert any(update.get("status") == "ok" for update in updates)
 
 

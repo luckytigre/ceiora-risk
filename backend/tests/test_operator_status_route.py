@@ -112,6 +112,7 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
         return None
 
     monkeypatch.setattr(operator_route.sqlite, "cache_get", _fake_cache_get)
+    monkeypatch.setattr(operator_route.sqlite, "cache_get_live_first", _fake_cache_get)
 
     client = TestClient(app)
     res = client.get("/api/operator/status")
@@ -146,6 +147,7 @@ def test_operator_status_reports_cloud_allowed_profiles(monkeypatch) -> None:
     monkeypatch.setattr(operator_route.job_runs, "recent_run_summaries_by_profile", lambda **kwargs: {})
     monkeypatch.setattr(operator_route.core_reads, "load_source_dates", lambda: {})
     monkeypatch.setattr(operator_route.sqlite, "cache_get", lambda key: {})
+    monkeypatch.setattr(operator_route.sqlite, "cache_get_live_first", lambda key: {})
     monkeypatch.setattr(operator_route, "get_holdings_sync_state", lambda: {"pending": False, "pending_count": 0})
 
     client = TestClient(app)
@@ -154,3 +156,44 @@ def test_operator_status_reports_cloud_allowed_profiles(monkeypatch) -> None:
     assert res.status_code == 200
     assert res.json()["runtime"]["allowed_profiles"] == ["serve-refresh"]
     assert "source-daily" in res.json()["runtime"]["local_only_profiles"]
+
+
+def test_job_runs_summary_includes_live_stage_details(tmp_path) -> None:
+    from backend.data import job_runs
+
+    db = tmp_path / "data.db"
+    job_runs.ensure_schema(db)
+    job_runs.begin_stage(
+        db_path=db,
+        run_id="job_live",
+        profile="cold-core",
+        stage_name="raw_history",
+        stage_order=2,
+        details={
+            "stage_index": 1,
+            "stage_count": 6,
+            "message": "Starting raw history",
+        },
+    )
+    job_runs.heartbeat_stage(
+        db_path=db,
+        run_id="job_live",
+        stage_name="raw_history",
+        details={
+            "message": "Computing style scores through 2026-03-13",
+            "items_processed": 250,
+            "items_total": 800,
+            "progress_pct": 31.25,
+            "unit": "cross_sections",
+        },
+    )
+
+    out = job_runs.latest_run_summary_by_profile(db_path=db, profiles=["cold-core"])
+    latest = out["cold-core"]
+
+    assert latest["status"] == "running"
+    assert latest["current_stage"]["stage_name"] == "raw_history"
+    assert latest["current_stage"]["details"]["message"] == "Computing style scores through 2026-03-13"
+    assert latest["current_stage"]["details"]["items_processed"] == 250
+    assert latest["current_stage"]["details"]["unit"] == "cross_sections"
+    assert latest["current_stage"]["heartbeat_at"] is not None
