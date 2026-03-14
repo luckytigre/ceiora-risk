@@ -80,7 +80,7 @@ def get_operator_status(
             "classification_asof": None,
             "exposures_asof": None,
         }
-    risk_engine_meta = sqlite.cache_get("risk_engine_meta") or {}
+    risk_engine_meta = sqlite.cache_get_live_first("risk_engine_meta") or {}
     refresh_status = sqlite.cache_get("refresh_status") or {}
     neon_sync_health = sqlite.cache_get("neon_sync_health") or {}
     active_snapshot = sqlite.cache_get("__cache_snapshot_active")
@@ -117,6 +117,7 @@ def get_operator_status(
                     "completed_stage_count": 0,
                     "failed_stage_count": 0,
                     "running_stage_count": 0,
+                    "current_stage": None,
                     "stage_duration_seconds_total": 0.0,
                     "slowest_stage": None,
                     "stages": [],

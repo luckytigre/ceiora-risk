@@ -7,7 +7,7 @@ import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -29,7 +29,7 @@ PRICES_TABLE = "security_prices_eod"
 FUNDAMENTALS_TABLE = "security_fundamentals_pit"
 CLASSIFICATION_TABLE = "security_classification_pit"
 MODEL_VERSION = "inproj-v1"
-DESCRIPTOR_VERSION = "raw-cross-section-v1"
+DESCRIPTOR_VERSION = "raw-cross-section-v3-no-value-factor"
 
 _SCORE_COLS = list(STYLE_COLUMN_TO_LABEL.keys())
 _FACTOR_TO_SCORE_COL = {v: k for k, v in STYLE_COLUMN_TO_LABEL.items()}
@@ -92,7 +92,7 @@ def _create_raw_cross_section_history_table(conn: sqlite3.Connection) -> None:
             price_volume REAL,
             shares_outstanding REAL,
             trbc_economic_sector_short TEXT,
-            trbc_industry_group TEXT,
+            trbc_business_sector TEXT,
             beta_raw REAL,
             momentum_raw REAL,
             size_raw REAL,
@@ -124,7 +124,6 @@ def _create_raw_cross_section_history_table(conn: sqlite3.Connection) -> None:
             liquidity_score REAL,
             book_to_price_score REAL,
             earnings_yield_score REAL,
-            value_score REAL,
             leverage_score REAL,
             growth_score REAL,
             profitability_score REAL,
@@ -160,8 +159,18 @@ def ensure_raw_cross_section_history_table(conn: sqlite3.Connection) -> None:
         for r in conn.execute(f"PRAGMA table_info({TABLE})").fetchall()
         if int(r[5] or 0) > 0
     ]
-    if expected.issubset(cols) and pk_cols == ["ric", "as_of_date"]:
+    if expected.issubset(cols) and pk_cols == ["ric", "as_of_date"] and "trbc_business_sector" in cols:
         _create_raw_cross_section_history_table(conn)
+        if "value_score" in cols:
+            try:
+                conn.execute(f"ALTER TABLE {TABLE} DROP COLUMN value_score")
+            except sqlite3.OperationalError:
+                logger.warning(
+                    "Unable to drop legacy value_score column from %s in place; recreating table without it",
+                    TABLE,
+                )
+                conn.execute(f"DROP TABLE IF EXISTS {TABLE}")
+                _create_raw_cross_section_history_table(conn)
         conn.execute(f"DROP INDEX IF EXISTS idx_{TABLE}_ric")
         return
 
@@ -249,7 +258,17 @@ def _compute_price_features(prices: pd.DataFrame) -> pd.DataFrame:
     out["avg_volume_21d"] = g["volume"].rolling(21, min_periods=10).mean().reset_index(level=0, drop=True)
     out["avg_volume_252d"] = g["volume"].rolling(252, min_periods=60).mean().reset_index(level=0, drop=True)
 
-    market_ret = out.groupby("date", sort=False)["ret_1d"].mean().rename("market_ret")
+    valid_market = (
+        np.isfinite(pd.to_numeric(out["ret_1d"], errors="coerce").to_numpy(dtype=float))
+        & np.isfinite(close.to_numpy(dtype=float))
+        & (close.to_numpy(dtype=float) >= 5.0)
+    )
+    market_ret = (
+        out.loc[valid_market]
+        .groupby("date", sort=False)["ret_1d"]
+        .median()
+        .rename("market_ret")
+    )
     out = out.merge(market_ret, on="date", how="left")
 
     def _rolling_beta(grp: pd.DataFrame) -> pd.Series:
@@ -330,6 +349,7 @@ def rebuild_raw_cross_section_history(
     start_date: str | None = None,
     end_date: str | None = None,
     frequency: str = "weekly",
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Rebuild in-project raw/scores table from source-of-truth datasets."""
     stage_t0 = time.perf_counter()
@@ -353,6 +373,17 @@ def rebuild_raw_cross_section_history(
             dates[0] if dates else None,
             dates[-1] if dates else None,
         )
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "message": f"Resolved {len(dates)} target dates for raw cross-section rebuild",
+                    "items_processed": 0,
+                    "items_total": int(len(dates)),
+                    "unit": "dates",
+                    "progress_pct": 0.0,
+                    "progress_kind": "dates",
+                }
+            )
         if not dates:
             return {"status": "no-dates", "rows_upserted": 0, "table": TABLE}
 
@@ -380,6 +411,17 @@ def rebuild_raw_cross_section_history(
             len(prices),
             prices["ric"].nunique() if not prices.empty else 0,
         )
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "message": f"Loaded price history for {prices['ric'].nunique() if not prices.empty else 0} securities",
+                    "items_processed": 1,
+                    "items_total": 4,
+                    "unit": "setup_steps",
+                    "progress_pct": 25.0,
+                    "progress_kind": "setup",
+                }
+            )
         if prices.empty:
             return {"status": "no-prices", "rows_upserted": 0, "table": TABLE}
 
@@ -450,6 +492,17 @@ def rebuild_raw_cross_section_history(
             len(fundamentals),
             fundamentals["ric"].nunique() if not fundamentals.empty else 0,
         )
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "message": f"Loaded PIT fundamentals for {fundamentals['ric'].nunique() if not fundamentals.empty else 0} securities",
+                    "items_processed": 2,
+                    "items_total": 4,
+                    "unit": "setup_steps",
+                    "progress_pct": 50.0,
+                    "progress_kind": "setup",
+                }
+            )
 
         trbc_cols = _table_columns(conn, CLASSIFICATION_TABLE)
         trbc_ind_col = pick_trbc_industry_column(trbc_cols)
@@ -464,7 +517,7 @@ def rebuild_raw_cross_section_history(
                     UPPER(sm.ticker) AS ticker,
                     c.as_of_date,
                     c.{trbc_sec_col} AS trbc_economic_sector_short,
-                    c.{trbc_biz_col} AS trbc_industry_group,
+                    c.{trbc_biz_col} AS trbc_business_sector,
                     {f"c.{trbc_ind_col}" if trbc_ind_col else "NULL"} AS trbc_industry_group_l3
                 FROM {CLASSIFICATION_TABLE} c
                 JOIN {SECURITY_MASTER_TABLE} sm
@@ -483,7 +536,7 @@ def rebuild_raw_cross_section_history(
                 trbc = trbc.dropna(subset=["as_of_date_dt"])
                 trbc["trbc_economic_sector_short"] = _normalize_text(trbc["trbc_economic_sector_short"])
                 trbc["trbc_industry_group_l3"] = _normalize_text(trbc.get("trbc_industry_group_l3"))
-                trbc["trbc_industry_group"] = _normalize_text(trbc["trbc_industry_group"])
+                trbc["trbc_business_sector"] = _normalize_text(trbc["trbc_business_sector"])
                 trbc = trbc.sort_values(["ric", "as_of_date"]).drop_duplicates(
                     subset=["ric", "as_of_date"], keep="last"
                 )
@@ -494,6 +547,17 @@ def rebuild_raw_cross_section_history(
             trbc_biz_col,
             trbc_ind_col,
         )
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "message": f"Loaded TRBC classification for {trbc['ric'].nunique() if not trbc.empty else 0} securities",
+                    "items_processed": 3,
+                    "items_total": 4,
+                    "unit": "setup_steps",
+                    "progress_pct": 75.0,
+                    "progress_kind": "setup",
+                }
+            )
 
         out = base.copy()
         if not fundamentals.empty:
@@ -529,7 +593,7 @@ def rebuild_raw_cross_section_history(
         if not trbc.empty:
             out = _merge_asof_by_ric(
                 out,
-                trbc[["ric", "ticker", "as_of_date_dt", "trbc_economic_sector_short", "trbc_industry_group"]],
+                trbc[["ric", "ticker", "as_of_date_dt", "trbc_economic_sector_short", "trbc_business_sector"]],
                 left_date_col="as_of_date_dt",
                 right_date_col="as_of_date_dt",
             )
@@ -537,7 +601,46 @@ def rebuild_raw_cross_section_history(
         out["ric"] = out["ric"].astype(str).str.upper()
         out["ticker"] = out["ticker"].astype(str).str.upper()
         out["trbc_economic_sector_short"] = _normalize_text(out.get("trbc_economic_sector_short", pd.Series(index=out.index)))
-        out["trbc_industry_group"] = _normalize_text(out.get("trbc_industry_group", pd.Series(index=out.index)))
+        out["trbc_business_sector"] = _normalize_text(out.get("trbc_business_sector", pd.Series(index=out.index)))
+
+        # Rebuild beta against a lagged-cap market proxy after PIT market caps are merged.
+        out = out.sort_values(["ric", "as_of_date"]).reset_index(drop=True)
+        out["ret_1d"] = pd.to_numeric(out.get("ret_1d"), errors="coerce")
+        out["market_cap"] = pd.to_numeric(out.get("market_cap"), errors="coerce")
+        out["price_close"] = pd.to_numeric(out.get("price_close"), errors="coerce")
+        out["lagged_market_cap"] = out.groupby("ric", sort=False)["market_cap"].shift(1)
+        valid_beta_proxy = (
+            np.isfinite(out["ret_1d"].to_numpy(dtype=float))
+            & np.isfinite(out["lagged_market_cap"].to_numpy(dtype=float))
+            & (out["lagged_market_cap"].to_numpy(dtype=float) > 0.0)
+            & np.isfinite(out["price_close"].to_numpy(dtype=float))
+            & (out["price_close"].to_numpy(dtype=float) >= 5.0)
+        )
+        proxy_df = out.loc[valid_beta_proxy, ["as_of_date", "ret_1d", "lagged_market_cap"]].copy()
+        if not proxy_df.empty:
+            proxy_df["weighted_ret"] = proxy_df["ret_1d"] * proxy_df["lagged_market_cap"]
+            market_proxy = proxy_df.groupby("as_of_date", sort=False).agg(
+                total_weighted_ret=("weighted_ret", "sum"),
+                total_cap=("lagged_market_cap", "sum"),
+            )
+            market_proxy["beta_market_ret"] = market_proxy["total_weighted_ret"] / market_proxy["total_cap"].replace(0.0, np.nan)
+            out = out.merge(
+                market_proxy[["beta_market_ret"]].reset_index(),
+                on="as_of_date",
+                how="left",
+            )
+
+            def _rolling_beta_from_proxy(grp: pd.DataFrame) -> pd.Series:
+                ri = pd.to_numeric(grp["ret_1d"], errors="coerce")
+                rm = pd.to_numeric(grp["beta_market_ret"], errors="coerce")
+                cov = ri.rolling(252, min_periods=60).cov(rm)
+                var = rm.rolling(252, min_periods=60).var()
+                return cov / var.replace(0.0, np.nan)
+
+            out["beta_raw"] = (
+                out.groupby("ric", sort=False, group_keys=False)[["ret_1d", "beta_market_ret"]]
+                .apply(_rolling_beta_from_proxy)
+            )
 
         market_cap = pd.to_numeric(out.get("market_cap"), errors="coerce")
         shares_out = pd.to_numeric(out.get("shares_outstanding"), errors="coerce")
@@ -593,16 +696,27 @@ def rebuild_raw_cross_section_history(
         date_groups = list(out.groupby("as_of_date", sort=False).groups.items())
         total_groups = len(date_groups)
         logger.info("Computing style scores across %s cross-sections", total_groups)
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "message": f"Computing style scores across {total_groups} cross-sections",
+                    "items_processed": 0,
+                    "items_total": int(total_groups),
+                    "unit": "cross_sections",
+                    "progress_pct": 0.0,
+                    "progress_kind": "cross_sections",
+                }
+            )
         for group_i, (as_of, idx) in enumerate(date_groups, start=1):
             loc = list(idx)
             grp = out.loc[loc].copy()
             valid = (
                 pd.to_numeric(grp["market_cap"], errors="coerce").gt(0.0)
-                & grp["trbc_industry_group"].astype(str).str.strip().ne("")
+                & grp["trbc_business_sector"].astype(str).str.strip().ne("")
             )
             if int(valid.sum()) < 30:
                 continue
-            sub = grp.loc[valid, ["ric", "market_cap", "trbc_industry_group", *required_desc]].copy()
+            sub = grp.loc[valid, ["ric", "market_cap", "trbc_business_sector", *required_desc]].copy()
             for col in required_desc:
                 sub[col] = pd.to_numeric(sub[col], errors="coerce")
                 med = float(sub[col].median()) if sub[col].notna().any() else 0.0
@@ -610,7 +724,7 @@ def rebuild_raw_cross_section_history(
                     med = 0.0
                 sub[col] = sub[col].fillna(med)
             raw = sub.set_index("ric")[["market_cap", *required_desc]]
-            industries = sub.set_index("ric")["trbc_industry_group"].astype(str)
+            industries = sub.set_index("ric")["trbc_business_sector"].astype(str)
             ind_dummies = pd.get_dummies(industries, dtype=float)
             scores = assemble_full_style_scores(
                 raw_descriptors=raw,
@@ -632,6 +746,18 @@ def rebuild_raw_cross_section_history(
                     total_groups,
                     as_of,
                 )
+                if progress_callback is not None:
+                    progress_callback(
+                        {
+                            "message": f"Computed style scores through {as_of}",
+                            "items_processed": int(group_i),
+                            "items_total": int(total_groups),
+                            "unit": "cross_sections",
+                            "progress_pct": round((float(group_i) / max(1.0, float(total_groups))) * 100.0, 1),
+                            "current_as_of": str(as_of),
+                            "progress_kind": "cross_sections",
+                        }
+                    )
 
         # Quality metadata
         present = out[required_desc].notna().sum(axis=1).astype(float)
@@ -660,7 +786,7 @@ def rebuild_raw_cross_section_history(
             "price_volume",
             "shares_outstanding",
             "trbc_economic_sector_short",
-            "trbc_industry_group",
+            "trbc_business_sector",
             *_RAW_DESCRIPTOR_COLS,
             *_SCORE_COLS,
             "confidence_band",
@@ -681,6 +807,19 @@ def rebuild_raw_cross_section_history(
             len(payload),
             len(delete_dates),
         )
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "message": f"Persisting {len(payload)} raw cross-section rows",
+                    "items_processed": 4,
+                    "items_total": 4,
+                    "unit": "setup_steps",
+                    "progress_pct": 100.0,
+                    "rows_upserted": int(len(payload)),
+                    "dates_processed": int(len(delete_dates)),
+                    "progress_kind": "persist",
+                }
+            )
         for d in delete_dates:
             conn.execute(f"DELETE FROM {TABLE} WHERE as_of_date = ?", (d,))
         conn.executemany(

@@ -15,10 +15,12 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
 
+from backend import config
 from backend.data.trbc_schema import pick_trbc_business_sector_column, pick_trbc_industry_column
 from backend.risk_model.eligibility import (
     build_eligibility_context,
@@ -33,16 +35,33 @@ logger = logging.getLogger(__name__)
 
 # Style score columns in the raw cross-section table.
 STYLE_SCORE_COLS = list(STYLE_COLUMN_TO_LABEL.keys())
-RETURNS_WINSOR_PCT = 0.05
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v14_trbc_l2_country_us_dummy_2026_03_08"
+CACHE_METHOD_VERSION = "v18_country_split_hc1_no_value_factor_trbc_business_sector_2026_03_14"
+
+
+def _supported_style_score_columns(style_scores: pd.DataFrame) -> list[str]:
+    """Keep style columns that have non-zero cross-sectional support on the date."""
+    supported: list[str] = []
+    for col in style_scores.columns:
+        series = pd.to_numeric(style_scores[col], errors="coerce")
+        values = series.to_numpy(dtype=float)
+        finite = values[np.isfinite(values)]
+        if finite.size == 0:
+            continue
+        if float(np.nanmax(np.abs(finite))) <= 0.0:
+            continue
+        supported.append(str(col))
+    return supported
+
 
 _DAILY_FR_SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily_factor_returns (
     date        TEXT NOT NULL,
     factor_name TEXT NOT NULL,
     factor_return REAL NOT NULL,
+    robust_se   REAL NOT NULL DEFAULT 0.0,
+    t_stat      REAL NOT NULL DEFAULT 0.0,
     r_squared   REAL NOT NULL,
     residual_vol REAL NOT NULL,
     cross_section_n INTEGER NOT NULL DEFAULT 0,
@@ -64,9 +83,10 @@ CREATE TABLE IF NOT EXISTS daily_specific_residuals (
     date TEXT NOT NULL,
     ric TEXT NOT NULL,
     ticker TEXT NOT NULL,
-    residual REAL NOT NULL,
+    model_residual REAL NOT NULL,
+    raw_residual REAL NOT NULL,
     market_cap REAL NOT NULL DEFAULT 0.0,
-    trbc_industry_group TEXT,
+    trbc_business_sector TEXT,
     PRIMARY KEY (date, ric)
 );
 """
@@ -274,6 +294,8 @@ def _factor_return_cache_signature(*, min_cross_section_age_days: int) -> dict[s
     return {
         "method_version": str(CACHE_METHOD_VERSION),
         "cross_section_min_age_days": str(max(0, int(min_cross_section_age_days))),
+        "returns_winsor_pct": f"{float(config.RETURNS_WINSOR_PCT):.6f}",
+        "t_stat_method": "hc1_linear_map",
     }
 
 
@@ -290,7 +312,7 @@ def _ensure_cache_version(cache_db: Path, *, min_cross_section_age_days: int):
     current_meta = {
         str(row[0]): str(row[1])
         for row in conn.execute(
-            "SELECT key, value FROM daily_factor_returns_meta WHERE key IN (?, ?)",
+            f"SELECT key, value FROM daily_factor_returns_meta WHERE key IN ({','.join('?' for _ in required_meta)})",
             tuple(required_meta.keys()),
         ).fetchall()
     }
@@ -373,13 +395,15 @@ def _save_daily_results_and_residuals(
         if results:
             conn.executemany(
                 """INSERT OR REPLACE INTO daily_factor_returns
-                   (date, factor_name, factor_return, r_squared, residual_vol, cross_section_n, eligible_n, coverage)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (date, factor_name, factor_return, robust_se, t_stat, r_squared, residual_vol, cross_section_n, eligible_n, coverage)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
                     (
                         r["date"],
                         r["factor_name"],
                         r["factor_return"],
+                        float(r.get("robust_se", 0.0) or 0.0),
+                        float(r.get("t_stat", 0.0) or 0.0),
                         r["r_squared"],
                         r["residual_vol"],
                         r["cross_section_n"],
@@ -392,16 +416,17 @@ def _save_daily_results_and_residuals(
         if residuals:
             conn.executemany(
                 """INSERT OR REPLACE INTO daily_specific_residuals
-                   (date, ric, ticker, residual, market_cap, trbc_industry_group)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (date, ric, ticker, model_residual, raw_residual, market_cap, trbc_business_sector)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 [
                     (
                         r["date"],
                         r["ric"],
                         r["ticker"],
-                        r["residual"],
+                        float(r.get("model_residual", r.get("residual", 0.0)) or 0.0),
+                        float(r.get("raw_residual", r.get("residual", 0.0)) or 0.0),
                         r["market_cap"],
-                        r["trbc_industry_group"],
+                        r["trbc_business_sector"],
                     )
                     for r in residuals
                 ],
@@ -490,6 +515,7 @@ def compute_daily_factor_returns(
     lookback_days: int = 0,
     *,
     min_cross_section_age_days: int = 7,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> pd.DataFrame:
     """Compute daily factor returns via cross-sectional WLS for every trading day.
 
@@ -501,7 +527,7 @@ def compute_daily_factor_returns(
             snapshots used for each regression date.
 
     Returns:
-        DataFrame with columns: date, factor_name, factor_return, r_squared, residual_vol
+        DataFrame with columns: date, factor_name, factor_return, robust_se, t_stat, r_squared, residual_vol
     """
     t0 = time.time()
     logger.info("Loading data for daily factor returns...")
@@ -530,6 +556,17 @@ def compute_daily_factor_returns(
         model_history_start_date,
         factor_history_start_date,
     )
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "message": f"Resolved {len(trading_dates)} trading dates inside the active model window",
+                "items_processed": 0,
+                "items_total": int(len(trading_dates)),
+                "unit": "dates",
+                "progress_pct": 0.0,
+                "progress_kind": "dates",
+            }
+        )
     if not trading_dates:
         logger.warning("No trading dates inside active Barra-history window — cannot compute daily factor returns")
         return _load_all_from_cache(
@@ -552,6 +589,21 @@ def compute_daily_factor_returns(
         f"Computing daily factor returns: {len(dates_to_compute)} new dates "
         f"({len(cached_dates)} already cached)"
     )
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "message": (
+                    f"Computing factor returns for {len(dates_to_compute)} uncached dates "
+                    f"({len(cached_dates)} already cached)"
+                ),
+                "items_processed": 0,
+                "items_total": int(len(dates_to_compute)),
+                "unit": "dates",
+                "progress_pct": 0.0,
+                "cached_dates": int(len(cached_dates)),
+                "progress_kind": "dates",
+            }
+        )
 
     first_compute_idx = all_trading_dates.index(dates_to_compute[0])
     price_start_date = all_trading_dates[max(0, first_compute_idx - 1)]
@@ -563,7 +615,7 @@ def compute_daily_factor_returns(
     )
     if prices_df.empty:
         logger.warning("No prices data in resolved window — cannot compute daily factor returns")
-        return pd.DataFrame(columns=["date", "factor_name", "factor_return", "r_squared", "residual_vol"])
+        return pd.DataFrame(columns=["date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol"])
     logger.info(
         "Loaded bounded prices for factor returns: rows=%s rics=%s trading_dates=%s start=%s end=%s",
         len(prices_df),
@@ -572,6 +624,17 @@ def compute_daily_factor_returns(
         price_start_date,
         price_end_date,
     )
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "message": f"Loaded price history for {prices_df['ric'].nunique()} securities",
+                "items_processed": 1,
+                "items_total": 3,
+                "unit": "setup_steps",
+                "progress_pct": 33.3,
+                "progress_kind": "setup",
+            }
+        )
 
     prices_wide = prices_df.pivot(index="date", columns="ric", values="close")
     prices_wide = prices_wide.sort_index()
@@ -597,13 +660,24 @@ def compute_daily_factor_returns(
     eligibility_ctx = build_eligibility_context(data_db, dates=eligibility_dates)
     if not eligibility_ctx.exposure_dates:
         logger.warning("No exposure snapshots available — cannot compute daily factor returns")
-        return pd.DataFrame(columns=["date", "factor_name", "factor_return", "r_squared", "residual_vol"])
+        return pd.DataFrame(columns=["date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol"])
     logger.info(
         "Eligibility context ready: snapshots=%s first_snapshot=%s last_snapshot=%s",
         len(eligibility_ctx.exposure_dates),
         eligibility_ctx.exposure_dates[0] if eligibility_ctx.exposure_dates else None,
         eligibility_ctx.exposure_dates[-1] if eligibility_ctx.exposure_dates else None,
     )
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "message": f"Loaded {len(eligibility_ctx.exposure_dates)} eligibility snapshots",
+                "items_processed": 2,
+                "items_total": 3,
+                "unit": "setup_steps",
+                "progress_pct": 66.7,
+                "progress_kind": "setup",
+            }
+        )
 
     # Process each trading day
     batch_results: list[dict] = []
@@ -741,50 +815,58 @@ def compute_daily_factor_returns(
             skip_counts["missing_country"] += 1
             continue
 
-        returns = returns_series.to_numpy(dtype=float)
-        returns = _winsorize_cross_section(returns, RETURNS_WINSOR_PCT)
+        raw_returns = returns_series.to_numpy(dtype=float)
+        returns = _winsorize_cross_section(raw_returns, float(config.RETURNS_WINSOR_PCT))
         market_caps = market_cap_series.to_numpy(dtype=float)
 
         # Style exposures (canonicalized cross-sectionally using only structurally eligible names)
         style_cols_present = [c for c in STYLE_SCORE_COLS if c in exp_snap.columns]
-        style_names = [STYLE_COLUMN_TO_LABEL[c] for c in style_cols_present]
-        style_scores = exp_snap.loc[valid_idx, style_cols_present].copy()
+        style_scores_raw = exp_snap.loc[valid_idx, style_cols_present].copy()
+        style_cols_supported = _supported_style_score_columns(style_scores_raw)
+        style_names = [STYLE_COLUMN_TO_LABEL[c] for c in style_cols_supported]
+        style_scores = style_scores_raw[style_cols_supported].copy()
         style_scores.columns = style_names
 
-        # Structural exposures: US country dummy plus TRBC L2 business-sector groups.
+        # Structural exposures: unconstrained US country dummy plus constrained TRBC L2 business-sector groups.
         structural_dummies = pd.get_dummies(industry_series, dtype=float)
         if structural_dummies.empty:
             skip_counts["empty_dummies"] += 1
             continue
-        country_exposure = np.where(country_series.eq("US"), 1.0, 0.0)
-        country_exposure = pd.Series(country_exposure, index=country_series.index, dtype=float)
+        country_dummies = pd.DataFrame(index=country_series.index)
         if country_series.eq("US").any() and country_series.ne("US").any():
-            structural_dummies = pd.concat(
-                [country_exposure.rename(COUNTRY_FACTOR), structural_dummies],
-                axis=1,
-            )
+            country_dummies[COUNTRY_FACTOR] = np.where(country_series.eq("US"), 1.0, 0.0)
+        country_x = country_dummies.to_numpy(dtype=float) if not country_dummies.empty else None
+        country_names = list(country_dummies.columns)
         ind_x = structural_dummies.to_numpy(dtype=float)
         ind_names = list(structural_dummies.columns)
 
-        style_canonical = canonicalize_style_scores(
-            style_scores=style_scores,
-            market_caps=market_cap_series.loc[valid_idx],
-            orth_rules=FULL_STYLE_ORTH_RULES,
-            industry_exposures=structural_dummies,
-        )
-        style_x = style_canonical[style_names].to_numpy(dtype=float)
+        if style_names:
+            style_canonical = canonicalize_style_scores(
+                style_scores=style_scores,
+                market_caps=market_cap_series.loc[valid_idx],
+                orth_rules=FULL_STYLE_ORTH_RULES,
+                industry_exposures=structural_dummies,
+            )
+            style_x = style_canonical[style_names].to_numpy(dtype=float)
+        else:
+            style_x = None
 
         # 6. Run two-phase WLS
         result = estimate_factor_returns_two_phase(
             returns=returns,
+            raw_returns=raw_returns,
             market_caps=market_caps,
+            country_exposures=country_x,
             industry_exposures=ind_x if ind_x is not None else None,
             style_exposures=style_x if style_x is not None else None,
+            country_names=country_names,
             industry_names=ind_names,
             style_names=style_names,
         )
 
         # 7. Store factor returns
+        robust_se_map = getattr(result, "robust_se", {}) or {}
+        t_stat_map = getattr(result, "t_stats", {}) or {}
         for factor_name, factor_return in result.factor_returns.items():
             if not np.isfinite(factor_return):
                 factor_return = 0.0
@@ -792,6 +874,8 @@ def compute_daily_factor_returns(
                 "date": date,
                 "factor_name": factor_name,
                 "factor_return": factor_return,
+                "robust_se": float(robust_se_map.get(factor_name, 0.0) or 0.0),
+                "t_stat": float(t_stat_map.get(factor_name, 0.0) or 0.0),
                 "r_squared": result.r_squared if np.isfinite(result.r_squared) else 0.0,
                 "residual_vol": result.residual_vol if np.isfinite(result.residual_vol) else 0.0,
                 "cross_section_n": int(regression_n),
@@ -799,15 +883,15 @@ def compute_daily_factor_returns(
                 "coverage": float(regression_coverage) if np.isfinite(regression_coverage) else 0.0,
             })
 
-        # 8. Store per-stock residual history for specific risk forecasting.
-        # Column name remains legacy `trbc_industry_group` for cache compatibility,
-        # but values now carry TRBC L2 business-sector buckets.
-        residuals = np.asarray(result.residuals, dtype=float)
+        # 8. Store per-stock residual history for specific-risk forecasting.
+        residuals = np.asarray(getattr(result, "residuals", []), dtype=float)
+        raw_residuals = np.asarray(getattr(result, "raw_residuals", residuals), dtype=float)
         for idx, ric in enumerate(valid_idx):
-            if idx >= residuals.shape[0]:
+            if idx >= residuals.shape[0] or idx >= raw_residuals.shape[0]:
                 break
             resid_val = float(residuals[idx])
-            if not np.isfinite(resid_val):
+            raw_resid_val = float(raw_residuals[idx])
+            if not np.isfinite(resid_val) or not np.isfinite(raw_resid_val):
                 continue
             mcap_val = float(market_cap_series.loc[ric])
             if not np.isfinite(mcap_val) or mcap_val <= 0:
@@ -818,9 +902,10 @@ def compute_daily_factor_returns(
                 "date": date,
                 "ric": ric_key,
                 "ticker": str(ric_ticker_map.get(ric_key, "")),
-                "residual": resid_val,
+                "model_residual": resid_val,
+                "raw_residual": raw_resid_val,
                 "market_cap": mcap_val,
-                "trbc_industry_group": industry,
+                "trbc_business_sector": industry,
             })
 
         n_computed += 1
@@ -860,6 +945,21 @@ def compute_daily_factor_returns(
                 skip_counts["small_cross_section"],
                 skip_counts["low_coverage"],
             )
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "message": f"Computed factor returns through {date}",
+                        "items_processed": int(i + 1),
+                        "items_total": int(len(dates_to_compute)),
+                        "unit": "dates",
+                        "progress_pct": round((float(i + 1) / max(1.0, float(len(dates_to_compute)))) * 100.0, 1),
+                        "computed_dates": int(n_computed),
+                        "dates_per_second": round(float(rate), 2),
+                        "skip_counts": dict(skip_counts),
+                        "current_date": str(date),
+                        "progress_kind": "dates",
+                    }
+                )
 
     # Save remaining
     pending_results = len(batch_results)
@@ -873,6 +973,22 @@ def compute_daily_factor_returns(
             pending_results,
             pending_residuals,
             pending_eligibility,
+        )
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "message": f"Persisted factor-return history for {n_computed} computed dates",
+                "items_processed": int(len(dates_to_compute)),
+                "items_total": int(len(dates_to_compute)),
+                "unit": "dates",
+                "progress_pct": 100.0,
+                "computed_dates": int(n_computed),
+                "skip_counts": dict(skip_counts),
+                "factor_rows_flushed": int(pending_results),
+                "residual_rows_flushed": int(pending_residuals),
+                "eligibility_rows_flushed": int(pending_eligibility),
+                "progress_kind": "persist",
+            }
         )
 
     elapsed = time.time() - t0
@@ -907,7 +1023,10 @@ def _load_all_from_cache(
         params.append(str(model_history_start_date))
     if lookback_days > 0:
         df = pd.read_sql_query(
-            f"""SELECT date, factor_name, factor_return, r_squared, residual_vol
+            f"""SELECT date, factor_name, factor_return,
+                       COALESCE(robust_se, 0.0) AS robust_se,
+                       COALESCE(t_stat, 0.0) AS t_stat,
+                       r_squared, residual_vol
                FROM daily_factor_returns
                {where_clause}
                ORDER BY date DESC""",
@@ -922,7 +1041,10 @@ def _load_all_from_cache(
         df = df.sort_values(["date", "factor_name"]).reset_index(drop=True)
     else:
         df = pd.read_sql_query(
-            f"""SELECT date, factor_name, factor_return, r_squared, residual_vol
+            f"""SELECT date, factor_name, factor_return,
+                       COALESCE(robust_se, 0.0) AS robust_se,
+                       COALESCE(t_stat, 0.0) AS t_stat,
+                       r_squared, residual_vol
                FROM daily_factor_returns
                {where_clause}
                ORDER BY date, factor_name""",
@@ -945,6 +1067,8 @@ def load_daily_factor_returns(
 def load_specific_residuals(
     cache_db: Path,
     lookback_days: int = 504,
+    *,
+    residual_kind: str = "model",
 ) -> pd.DataFrame:
     """Load per-stock daily residual returns from cache for specific-risk modeling."""
     conn = sqlite3.connect(str(cache_db))
@@ -953,13 +1077,19 @@ def load_specific_residuals(
     industry_col = pick_trbc_business_sector_column(cols) or pick_trbc_industry_column(cols)
     if industry_col is None:
         conn.close()
-        return pd.DataFrame(columns=["date", "ric", "ticker", "residual", "market_cap", "trbc_industry_group"])
+        return pd.DataFrame(columns=["date", "ric", "ticker", "residual", "market_cap", "trbc_business_sector"])
+    residual_col = "model_residual"
+    clean_kind = str(residual_kind or "model").strip().lower()
+    if clean_kind == "raw" and "raw_residual" in cols:
+        residual_col = "raw_residual"
+    elif "model_residual" not in cols and "residual" in cols:
+        residual_col = "residual"
     ric_expr = "UPPER(ric)" if "ric" in cols else "UPPER(ticker)"
     ticker_expr = "UPPER(ticker)" if "ticker" in cols else "UPPER(ric)"
     if lookback_days > 0:
         df = pd.read_sql_query(
             f"""
-            SELECT date, {ric_expr} AS ric, {ticker_expr} AS ticker, residual, market_cap, {industry_col} AS trbc_industry_group
+            SELECT date, {ric_expr} AS ric, {ticker_expr} AS ticker, {residual_col} AS residual, market_cap, {industry_col} AS trbc_business_sector
             FROM daily_specific_residuals
             WHERE date IN (
                 SELECT date
@@ -978,7 +1108,7 @@ def load_specific_residuals(
     else:
         df = pd.read_sql_query(
             f"""
-            SELECT date, {ric_expr} AS ric, {ticker_expr} AS ticker, residual, market_cap, {industry_col} AS trbc_industry_group
+            SELECT date, {ric_expr} AS ric, {ticker_expr} AS ticker, {residual_col} AS residual, market_cap, {industry_col} AS trbc_business_sector
             FROM daily_specific_residuals
             ORDER BY date, ric
             """,

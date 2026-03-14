@@ -259,8 +259,8 @@ def _latest_factor_return_date(cache_db: Path) -> str | None:
 
 
 def _risk_cache_ready() -> bool:
-    cov_payload = sqlite.cache_get("risk_engine_cov")
-    specific_payload = sqlite.cache_get("risk_engine_specific_risk")
+    cov_payload = sqlite.cache_get_live_first("risk_engine_cov")
+    specific_payload = sqlite.cache_get_live_first("risk_engine_specific_risk")
     factors = cov_payload.get("factors") if isinstance(cov_payload, dict) else None
     matrix = cov_payload.get("matrix") if isinstance(cov_payload, dict) else None
     return bool(
@@ -274,10 +274,27 @@ def _risk_cache_ready() -> bool:
     )
 
 
+def _serving_refresh_skip_risk_engine(*, today_utc: date) -> tuple[bool, str]:
+    if not _risk_cache_ready():
+        return False, "risk_cache_missing"
+    risk_engine_meta = sqlite.cache_get_live_first("risk_engine_meta") or {}
+    should_recompute, recompute_reason = _risk_recompute_due(
+        risk_engine_meta,
+        today_utc=today_utc,
+    )
+    if should_recompute:
+        return False, f"core_due_{recompute_reason}"
+    return True, "risk_cache_current"
+
+
 def _resolved_as_of_date(user_as_of_date: str | None) -> str:
     if user_as_of_date and str(user_as_of_date).strip():
         return previous_or_same_xnys_session(str(user_as_of_date).strip())
-    source_dates = core_reads.load_source_dates()
+    try:
+        source_dates = core_reads.load_source_dates()
+    except Exception:  # noqa: BLE001
+        logger.warning("Falling back to today's session because source dates could not be loaded.", exc_info=True)
+        source_dates = {}
     return previous_or_same_xnys_session(
         str(
             source_dates.get("fundamentals_asof")
@@ -360,8 +377,11 @@ def _run_stage(
     reset_core_cache: bool = False,
     enable_ingest: bool = False,
     refresh_scope: str | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     if stage == "ingest":
+        if progress_callback is not None:
+            progress_callback({"message": "Bootstrapping source tables", "progress_kind": "stage"})
         bootstrap = bootstrap_cuse4_source_tables(
             db_path=DATA_DB,
             replace_all=False,
@@ -390,6 +410,8 @@ def _run_stage(
                 "bootstrap": bootstrap,
                 "runtime_role": str(config.APP_RUNTIME_ROLE),
             }
+        if progress_callback is not None:
+            progress_callback({"message": "Pulling latest source data from LSEG", "progress_kind": "io"})
         ingest = download_from_lseg(
             db_path=DATA_DB,
             as_of_date=as_of_date,
@@ -416,6 +438,7 @@ def _run_stage(
         out = rebuild_raw_cross_section_history(
             DATA_DB,
             frequency=frequency,
+            progress_callback=progress_callback,
         )
         if str(out.get("status") or "") != "ok":
             raise RuntimeError(f"raw_history stage failed: {out}")
@@ -428,6 +451,8 @@ def _run_stage(
         }
 
     if stage == "feature_build":
+        if progress_callback is not None:
+            progress_callback({"message": "Rebuilding cross-section snapshot", "progress_kind": "stage"})
         out = rebuild_cross_section_snapshot(
             DATA_DB,
             mode=str(config.CROSS_SECTION_SNAPSHOT_MODE or "current"),
@@ -438,6 +463,8 @@ def _run_stage(
         }
 
     if stage == "estu_audit":
+        if progress_callback is not None:
+            progress_callback({"message": "Recomputing ESTU membership", "progress_kind": "stage"})
         out = build_and_persist_estu_membership(
             db_path=DATA_DB,
             as_of_date=as_of_date,
@@ -454,10 +481,19 @@ def _run_stage(
                 "reason": f"core_policy_skip_{core_reason}",
             }
         reset_summary = _reset_core_caches(CACHE_DB) if reset_core_cache else {}
+        if progress_callback is not None and reset_core_cache:
+            progress_callback(
+                {
+                    "message": "Resetting factor-return and residual caches before rebuild",
+                    "progress_kind": "stage",
+                    "cache_rows_cleared": reset_summary,
+                }
+            )
         df = compute_daily_factor_returns(
             DATA_DB,
             CACHE_DB,
             min_cross_section_age_days=config.CROSS_SECTION_MIN_AGE_DAYS,
+            progress_callback=progress_callback,
         )
         if df is None or df.empty:
             raise RuntimeError("factor_returns stage produced zero rows")
@@ -474,10 +510,14 @@ def _run_stage(
                 "status": "skipped",
                 "reason": f"core_policy_skip_{core_reason}",
             }
+        if progress_callback is not None:
+            progress_callback({"message": "Building factor covariance matrix", "progress_kind": "stage"})
         cov, latest_r2 = build_factor_covariance_from_cache(
             CACHE_DB,
             lookback_days=config.LOOKBACK_DAYS,
         )
+        if progress_callback is not None:
+            progress_callback({"message": "Building specific-risk model", "progress_kind": "stage"})
         specific_risk = build_specific_risk_from_cache(
             CACHE_DB,
             lookback_days=config.LOOKBACK_DAYS,
@@ -503,6 +543,15 @@ def _run_stage(
         sqlite.cache_set("risk_engine_cov", _serialize_covariance(cov))
         sqlite.cache_set("risk_engine_specific_risk", specific_risk)
         sqlite.cache_set("risk_engine_meta", risk_engine_meta)
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "message": "Published risk-engine payloads to cache",
+                    "progress_kind": "stage",
+                    "factor_count": int(cov.shape[1]) if cov is not None and not cov.empty else 0,
+                    "specific_risk_ticker_count": int(len(specific_risk)),
+                }
+            )
         return {
             "status": "ok",
             "factor_count": int(cov.shape[1]) if cov is not None and not cov.empty else 0,
@@ -511,7 +560,11 @@ def _run_stage(
         }
 
     if stage == "serving_refresh":
-        skip_risk_engine = _risk_cache_ready()
+        if progress_callback is not None:
+            progress_callback({"message": "Publishing serving payloads", "progress_kind": "stage"})
+        skip_risk_engine, skip_reason = _serving_refresh_skip_risk_engine(
+            today_utc=datetime.now(timezone.utc).date()
+        )
         out = run_refresh(
             mode=serving_mode,
             force_risk_recompute=False,
@@ -524,6 +577,7 @@ def _run_stage(
             "status": str(out.get("status") or "ok"),
             "serving_mode": serving_mode,
             "skip_risk_engine": bool(skip_risk_engine),
+            "skip_risk_engine_reason": str(skip_reason),
             "refresh": out,
         }
 
@@ -556,11 +610,15 @@ def run_model_pipeline(
         else (str(run_id).strip() if run_id and str(run_id).strip() else f"job_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
     )
     job_runs.ensure_schema(DATA_DB)
+    job_runs.fail_stale_running_stages(db_path=DATA_DB)
     completed = job_runs.completed_stages(db_path=DATA_DB, run_id=effective_run_id) if resume_run_id else set()
 
     as_of = _resolved_as_of_date(as_of_date)
     today_utc = datetime.fromisoformat(previous_or_same_xnys_session(datetime.now(timezone.utc).date().isoformat())).date()
-    due, due_reason = _risk_recompute_due(sqlite.cache_get("risk_engine_meta") or {}, today_utc=today_utc)
+    due, due_reason = _risk_recompute_due(
+        sqlite.cache_get_live_first("risk_engine_meta") or {},
+        today_utc=today_utc,
+    )
     core_policy = str(cfg["core_policy"])
     raw_history_policy = str(cfg.get("raw_history_policy") or "none")
     reset_core_cache = bool(cfg.get("reset_core_cache"))
@@ -605,26 +663,50 @@ def run_model_pipeline(
             )
             continue
 
+        stage_started_at = datetime.now(timezone.utc).isoformat()
+        stage_base_details = {
+            "stage_order": int(stage_order),
+            "stage_index": int(idx),
+            "stage_count": int(total_stages),
+            "started_at": stage_started_at,
+            "message": f"Starting {stage.replace('_', ' ')}",
+            "progress_kind": "stage",
+        }
         job_runs.begin_stage(
             db_path=DATA_DB,
             run_id=effective_run_id,
             profile=profile_key,
             stage_name=stage,
             stage_order=stage_order,
+            details=stage_base_details,
         )
-        stage_started_at = datetime.now(timezone.utc).isoformat()
-        if stage_callback is not None:
+        def _emit_stage_event(event: dict[str, Any] | None = None) -> None:
+            payload = {
+                "stage": stage,
+                "stage_order": int(stage_order),
+                "stage_index": int(idx),
+                "stage_count": int(total_stages),
+                "started_at": stage_started_at,
+            }
+            if event:
+                payload.update(event)
+            details_update = {k: v for k, v in payload.items() if k != "stage"}
             try:
-                stage_callback(
-                    {
-                        "stage": stage,
-                        "stage_index": idx,
-                        "stage_count": total_stages,
-                        "started_at": stage_started_at,
-                    }
+                job_runs.heartbeat_stage(
+                    db_path=DATA_DB,
+                    run_id=effective_run_id,
+                    stage_name=stage,
+                    details=details_update,
                 )
             except Exception:  # noqa: BLE001
-                logger.exception("Stage callback failed before stage start: %s", stage)
+                logger.exception("Failed to persist stage heartbeat: %s", stage)
+            if stage_callback is not None:
+                try:
+                    stage_callback(payload)
+                except Exception:  # noqa: BLE001
+                    logger.exception("Stage callback failed during stage heartbeat: %s", stage)
+
+        _emit_stage_event({"message": f"Starting {stage.replace('_', ' ')}", "progress_kind": "stage"})
         try:
             out = _run_stage(
                 stage=stage,
@@ -637,6 +719,7 @@ def run_model_pipeline(
                 raw_history_policy=raw_history_policy,
                 reset_core_cache=reset_core_cache,
                 enable_ingest=bool(cfg.get("enable_ingest")),
+                progress_callback=_emit_stage_event,
             )
             stage_status = "skipped" if str(out.get("status")) == "skipped" else "completed"
             elapsed = time.perf_counter() - stage_t0
