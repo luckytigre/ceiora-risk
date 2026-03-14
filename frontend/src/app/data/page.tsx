@@ -3,7 +3,6 @@
 import { useState } from "react";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ApiErrorState from "@/components/ApiErrorState";
-import OperatorControlPanel from "@/components/OperatorControlPanel";
 import { useDataDiagnostics } from "@/hooks/useApi";
 import type { DataTableStats } from "@/lib/types";
 
@@ -37,12 +36,12 @@ const DATASET_DESC: Record<string, string> = {
 };
 
 const CACHE_DESC: Record<string, string> = {
-  portfolio: "Current portfolio positions, weights, and exposure projections for the Overview page.",
+  portfolio: "Current portfolio positions, weights, and exposure projections used across Risk, Explore, and Positions.",
   exposures: "Factor exposure matrix for all held positions, served to the Exposures page.",
   risk: "Risk decomposition, factor contributions, and covariance-derived metrics for the Risk page.",
   health_diagnostics: "Precomputed health page payload — R², coverage, bias stats, and factor diagnostics.",
   daily_universe_eligibility_summary: "Daily time series of how many securities pass structural and regression eligibility filters.",
-  daily_factor_returns: "Daily factor return series used for cumulative return charts and t-stat analysis.",
+  daily_factor_returns: "Daily factor return series plus regression diagnostics used for cumulative return charts and health analysis.",
   risk_engine_meta: "Risk engine configuration — method version, covariance parameters, history window.",
   cuse4_foundation: "Core cUSE4 model foundation — factor definitions, hierarchy, and estimation parameters.",
 };
@@ -84,7 +83,9 @@ export default function DataPage() {
 
   return (
     <div>
-      <OperatorControlPanel compact />
+      <div className="section-subtitle" style={{ marginBottom: 14 }}>
+        Health is the live operator/control-room surface. Data is the maintenance surface for source tables, lineage, coverage, and cache diagnostics.
+      </div>
 
       {/* ── Pipeline Overview ── */}
       <div className="chart-card data-section">
@@ -152,21 +153,21 @@ export default function DataPage() {
             <h4>Dashboard Serving</h4>
             <div className="data-truth-source">{truth?.dashboard_serving?.source || "—"}</div>
             <div className="data-truth-desc">
-              {truth?.dashboard_serving?.plain_english || "Overview, Risk, Exposures, and Explore pages read from pre-computed serving payloads persisted in the cache database. These are rebuilt by the serve-refresh lane."}
+              {truth?.dashboard_serving?.plain_english || "Risk, Explore, Positions, and Health summaries read from durable serving payloads built by refresh and then published for dashboard use."}
             </div>
           </div>
           <div className="data-truth-card">
             <h4>Operator Status</h4>
             <div className="data-truth-source">{truth?.operator_status?.source || "—"}</div>
             <div className="data-truth-desc">
-              {truth?.operator_status?.plain_english || "The Operator Control Deck reads live runtime state: lane statuses, holdings sync, Neon parity, and source recency. This is the control-room view."}
+              {truth?.operator_status?.plain_english || "The Health page reads live runtime state: lane statuses, holdings sync, Neon parity, and source recency. This is the control-room view."}
             </div>
           </div>
           <div className="data-truth-card">
             <h4>Local Diagnostics</h4>
             <div className="data-truth-source">{truth?.local_diagnostics?.source || "—"}</div>
             <div className="data-truth-desc">
-              {truth?.local_diagnostics?.plain_english || "This Data page queries the local SQLite source tables and cache database directly. It's a maintenance view and may lag behind cloud-served state."}
+              {truth?.local_diagnostics?.plain_english || "This Data page inspects local source tables and cache state directly. Treat it as a diagnostics surface, not the live operator control room."}
             </div>
           </div>
         </div>

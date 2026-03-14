@@ -7,7 +7,6 @@ import { useBackground, type BgMode } from "./BackgroundContext";
 import { triggerServeRefresh, useOperatorStatus } from "@/hooks/useApi";
 
 const TABS = [
-  { href: "/overview", label: "Overview" },
   { href: "/exposures", label: "Risk" },
   { href: "/explore", label: "Explore" },
   { href: "/health", label: "Health" },
