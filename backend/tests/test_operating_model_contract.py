@@ -232,6 +232,17 @@ def test_holdings_runtime_state_does_not_clear_newer_dirty_revision(monkeypatch:
 
 def test_pipeline_prefers_fundamentals_asof(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
+    risk_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-03-07",
+        "factor_returns_latest_date": "2026-03-07",
+        "cross_section_min_age_days": 7,
+        "lookback_days": 504,
+        "specific_risk_ticker_count": 1,
+        "recompute_interval_days": 7,
+        "latest_r2": 0.4,
+    }
 
     monkeypatch.setattr(
         pipeline,
@@ -261,6 +272,37 @@ def test_pipeline_prefers_fundamentals_asof(monkeypatch: pytest.MonkeyPatch) -> 
         lambda *args, **kwargs: (_ for _ in ()).throw(_StopRefresh()),
     )
     monkeypatch.setattr(pipeline.config, "CUSE4_ENABLE_ESTU_AUDIT", False)
+
+    def _cache_get(key: str):
+        payloads = {
+            "risk_engine_meta": dict(risk_meta),
+            "risk_engine_cov": {"factors": ["Beta"], "matrix": [[1.0]]},
+            "risk_engine_specific_risk": {
+                "AAPL.OQ": {
+                    "ticker": "AAPL",
+                    "specific_var": 0.01,
+                    "specific_vol": 0.1,
+                }
+            },
+        }
+        return payloads.get(key)
+
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
+    monkeypatch.setattr(
+        pipeline,
+        "compute_daily_factor_returns",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not recompute risk engine")),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "build_factor_covariance_from_cache",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not recompute risk engine")),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "build_specific_risk_from_cache",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not recompute risk engine")),
+    )
 
     with pytest.raises(_StopRefresh):
         pipeline.run_refresh(mode="light")

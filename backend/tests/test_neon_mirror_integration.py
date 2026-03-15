@@ -13,6 +13,7 @@ def _patch_lightweight_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(run_model_pipeline.sqlite, "cache_get", lambda _k: {})
     monkeypatch.setattr(run_model_pipeline.sqlite, "cache_set", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(run_model_pipeline.job_runs, "ensure_schema", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run_model_pipeline.job_runs, "fail_stale_running_stages", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(run_model_pipeline.job_runs, "completed_stages", lambda *_args, **_kwargs: set())
     monkeypatch.setattr(run_model_pipeline.job_runs, "begin_stage", lambda **_kwargs: None)
     monkeypatch.setattr(run_model_pipeline.job_runs, "finish_stage", lambda **_kwargs: None)
