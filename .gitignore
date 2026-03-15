@@ -28,6 +28,7 @@ backend/offline_backups/
 backend/DB_HEALTH_AUDIT_*.json
 frontend/.next_devseed_*/
 frontend/.next_stale_*/
+.playwright-cli/
 
 # IDE
 .idea/
