@@ -1,6 +1,22 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HoldingsAccount, UniverseSearchItem } from "@/lib/types";
+import { useUniverseSearch } from "@/hooks/useApi";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+
+function highlightMatch(text: string, query: string) {
+  if (!query) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="explore-highlight">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
 
 interface ManualPositionEditorProps {
   selectedAccount: string;
@@ -10,7 +26,6 @@ interface ManualPositionEditorProps {
   editRic: string;
   editQty: string;
   editSource: string;
-  ricTypeahead: UniverseSearchItem[];
   onTickerChange: (value: string) => void;
   onAccountChange: (value: string) => void;
   onRicChange: (value: string) => void;
@@ -28,7 +43,6 @@ export default function ManualPositionEditor({
   editRic,
   editQty,
   editSource,
-  ricTypeahead,
   onTickerChange,
   onAccountChange,
   onRicChange,
@@ -37,6 +51,154 @@ export default function ManualPositionEditor({
   onUpsert,
   actionLabel = "Stage Position",
 }: ManualPositionEditorProps) {
+  // --- Ticker typeahead state ---
+  const [tickerFocused, setTickerFocused] = useState(false);
+  const [tickerDropdownOpen, setTickerDropdownOpen] = useState(false);
+  const [tickerActiveIndex, setTickerActiveIndex] = useState(-1);
+  const tickerWrapRef = useRef<HTMLDivElement>(null);
+
+  const debouncedTicker = useDebouncedValue(editTicker.trim().toUpperCase(), 220);
+  const { data: tickerSearch } = useUniverseSearch(debouncedTicker, 8);
+  const tickerResults = useMemo(
+    () => (tickerSearch?.results ?? []).filter((r) => typeof r.ric === "string" && r.ric.trim().length > 0),
+    [tickerSearch?.results],
+  );
+
+  // --- RIC typeahead state ---
+  const [ricFocused, setRicFocused] = useState(false);
+  const [ricDropdownOpen, setRicDropdownOpen] = useState(false);
+  const [ricActiveIndex, setRicActiveIndex] = useState(-1);
+  const ricWrapRef = useRef<HTMLDivElement>(null);
+
+  const debouncedRic = useDebouncedValue(editRic.trim().toUpperCase(), 220);
+  const { data: ricSearch } = useUniverseSearch(debouncedRic, 8);
+  const ricResults = useMemo(
+    () => (ricSearch?.results ?? []).filter((r) => typeof r.ric === "string" && r.ric.trim().length > 0),
+    [ricSearch?.results],
+  );
+
+  // --- Ticker dropdown open/close ---
+  useEffect(() => {
+    if (tickerFocused && editTicker.trim().length > 0 && tickerResults.length > 0) {
+      setTickerDropdownOpen(true);
+      setTickerActiveIndex(-1);
+    } else {
+      setTickerDropdownOpen(false);
+    }
+  }, [tickerFocused, editTicker, tickerResults.length]);
+
+  // --- RIC dropdown open/close ---
+  useEffect(() => {
+    if (ricFocused && editRic.trim().length > 0 && ricResults.length > 0) {
+      setRicDropdownOpen(true);
+      setRicActiveIndex(-1);
+    } else {
+      setRicDropdownOpen(false);
+    }
+  }, [ricFocused, editRic, ricResults.length]);
+
+  // --- Click-outside handlers ---
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (tickerWrapRef.current && !tickerWrapRef.current.contains(e.target as Node)) {
+        setTickerDropdownOpen(false);
+        setTickerFocused(false);
+      }
+      if (ricWrapRef.current && !ricWrapRef.current.contains(e.target as Node)) {
+        setRicDropdownOpen(false);
+        setRicFocused(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // --- Auto-fill: ticker → RIC ---
+  useEffect(() => {
+    if (!editTicker.trim() || editRic.trim().length > 0) return;
+    const exact = tickerResults.find((r) => r.ticker.toUpperCase() === editTicker.trim().toUpperCase());
+    if (exact?.ric) onRicChange(String(exact.ric).toUpperCase());
+  }, [editTicker, editRic, tickerResults, onRicChange]);
+
+  // --- Auto-fill: RIC → ticker ---
+  useEffect(() => {
+    if (!editRic.trim() || editTicker.trim().length > 0) return;
+    const exact = ricResults.find((r) => String(r.ric || "").toUpperCase() === editRic.trim().toUpperCase());
+    if (exact?.ticker) onTickerChange(exact.ticker.toUpperCase());
+  }, [editRic, editTicker, ricResults, onTickerChange]);
+
+  // --- Ticker selection ---
+  const selectTicker = useCallback(
+    (row: UniverseSearchItem) => {
+      onTickerChange(row.ticker.toUpperCase());
+      if (row.ric) onRicChange(String(row.ric).toUpperCase());
+      setTickerDropdownOpen(false);
+      setTickerFocused(false);
+      setTickerActiveIndex(-1);
+    },
+    [onTickerChange, onRicChange],
+  );
+
+  // --- RIC selection ---
+  const selectRic = useCallback(
+    (row: UniverseSearchItem) => {
+      onRicChange(String(row.ric || "").toUpperCase());
+      if (row.ticker) onTickerChange(row.ticker.toUpperCase());
+      setRicDropdownOpen(false);
+      setRicFocused(false);
+      setRicActiveIndex(-1);
+    },
+    [onTickerChange, onRicChange],
+  );
+
+  const handleTickerKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!tickerDropdownOpen || tickerResults.length === 0) {
+        if (e.key === "Enter") e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setTickerActiveIndex((prev) => (prev < tickerResults.length - 1 ? prev + 1 : 0));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setTickerActiveIndex((prev) => (prev > 0 ? prev - 1 : tickerResults.length - 1));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (tickerActiveIndex >= 0 && tickerActiveIndex < tickerResults.length) {
+          selectTicker(tickerResults[tickerActiveIndex]);
+        }
+      } else if (e.key === "Escape") {
+        setTickerDropdownOpen(false);
+      }
+    },
+    [tickerActiveIndex, tickerDropdownOpen, tickerResults, selectTicker],
+  );
+
+  const handleRicKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!ricDropdownOpen || ricResults.length === 0) {
+        if (e.key === "Enter") e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setRicActiveIndex((prev) => (prev < ricResults.length - 1 ? prev + 1 : 0));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setRicActiveIndex((prev) => (prev > 0 ? prev - 1 : ricResults.length - 1));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (ricActiveIndex >= 0 && ricActiveIndex < ricResults.length) {
+          selectRic(ricResults[ricActiveIndex]);
+        }
+      } else if (e.key === "Escape") {
+        setRicDropdownOpen(false);
+      }
+    },
+    [ricActiveIndex, ricDropdownOpen, ricResults, selectRic],
+  );
+
   return (
     <div className="holdings-panel">
       <div className="holdings-panel-header">
@@ -52,7 +214,87 @@ export default function ManualPositionEditor({
         </div>
       </div>
 
-      <div className="holdings-grid-2col">
+      {/* Ticker + RIC side by side with typeahead */}
+      <div className="holdings-ticker-ric-row">
+        <div className="holdings-form-block" ref={tickerWrapRef} style={{ position: "relative" }}>
+          <label htmlFor="edit-ticker">Ticker</label>
+          <input
+            id="edit-ticker"
+            className="explore-input holdings-compact-input"
+            value={editTicker}
+            onChange={(e) => onTickerChange(e.target.value.toUpperCase())}
+            onKeyDown={handleTickerKeyDown}
+            onFocus={() => setTickerFocused(true)}
+            onBlur={(e) => {
+              if (tickerWrapRef.current?.contains(e.relatedTarget as Node)) return;
+              setTickerFocused(false);
+              setTickerDropdownOpen(false);
+            }}
+            placeholder="AAPL"
+            autoComplete="off"
+          />
+          {tickerDropdownOpen && tickerResults.length > 0 && (
+            <div className="explore-typeahead holdings-typeahead">
+              {tickerResults.map((row, idx) => (
+                <button
+                  key={`${row.ticker}:${row.ric}`}
+                  className={`explore-typeahead-item${idx === tickerActiveIndex ? " active" : ""}`}
+                  onMouseEnter={() => setTickerActiveIndex(idx)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => selectTicker(row)}
+                >
+                  <span className="ticker">{highlightMatch(row.ticker, editTicker)}</span>
+                  <span className="name">{highlightMatch(row.name, editTicker)}</span>
+                  <span className="explore-typeahead-classifications">
+                    <span>{row.trbc_economic_sector_short_abbr || row.trbc_economic_sector_short || ""}</span>
+                  </span>
+                  <span className="ric-hint">{row.ric || ""}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="holdings-form-block" ref={ricWrapRef} style={{ position: "relative" }}>
+          <label htmlFor="edit-ric">RIC</label>
+          <input
+            id="edit-ric"
+            className="explore-input holdings-compact-input"
+            value={editRic}
+            onChange={(e) => onRicChange(e.target.value.toUpperCase())}
+            onKeyDown={handleRicKeyDown}
+            onFocus={() => setRicFocused(true)}
+            onBlur={(e) => {
+              if (ricWrapRef.current?.contains(e.relatedTarget as Node)) return;
+              setRicFocused(false);
+              setRicDropdownOpen(false);
+            }}
+            placeholder="AAPL.OQ"
+            autoComplete="off"
+          />
+          {ricDropdownOpen && ricResults.length > 0 && (
+            <div className="explore-typeahead holdings-typeahead">
+              {ricResults.map((row, idx) => (
+                <button
+                  key={`${row.ticker}:${row.ric}`}
+                  className={`explore-typeahead-item${idx === ricActiveIndex ? " active" : ""}`}
+                  onMouseEnter={() => setRicActiveIndex(idx)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => selectRic(row)}
+                >
+                  <span className="ticker">{highlightMatch(String(row.ric || ""), editRic)}</span>
+                  <span className="name">{row.ticker}{row.name ? ` — ${row.name}` : ""}</span>
+                  <span className="explore-typeahead-classifications">
+                    <span>{row.trbc_economic_sector_short_abbr || row.trbc_economic_sector_short || ""}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="holdings-grid-2col" style={{ marginTop: 10 }}>
         <div className="holdings-form-block">
           <label htmlFor="manual-account-id">Account</label>
           <input
@@ -67,34 +309,6 @@ export default function ManualPositionEditor({
             {accountOptions.map((a) => (
               <option key={a.account_id} value={a.account_id}>
                 {a.account_name}
-              </option>
-            ))}
-          </datalist>
-        </div>
-        <div className="holdings-form-block">
-          <label htmlFor="edit-ticker">Ticker</label>
-          <input
-            id="edit-ticker"
-            className="explore-input holdings-compact-input"
-            value={editTicker}
-            onChange={(e) => onTickerChange(e.target.value.toUpperCase())}
-            placeholder="AAPL"
-          />
-        </div>
-        <div className="holdings-form-block">
-          <label htmlFor="edit-ric">RIC</label>
-          <input
-            id="edit-ric"
-            className="explore-input holdings-compact-input"
-            list="edit-ric-options"
-            value={editRic}
-            onChange={(e) => onRicChange(e.target.value.toUpperCase())}
-            placeholder="AAPL.OQ"
-          />
-          <datalist id="edit-ric-options">
-            {ricTypeahead.map((row) => (
-              <option key={`${row.ticker}:${row.ric}`} value={String(row.ric || "").toUpperCase()}>
-                {row.ticker}{row.name ? ` — ${row.name}` : ""}
               </option>
             ))}
           </datalist>

@@ -9,10 +9,8 @@ import {
   useHoldingsModes,
   useHoldingsPositions,
   usePortfolio,
-  useUniverseSearch,
 } from "@/hooks/useApi";
 import type { HoldingsImportMode } from "@/lib/types";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import HoldingsImportPanel from "@/features/holdings/components/HoldingsImportPanel";
 import HoldingsLedgerSection from "@/features/holdings/components/HoldingsLedgerSection";
 import HoldingsMutationFeedback from "@/features/holdings/components/HoldingsMutationFeedback";
@@ -62,10 +60,6 @@ export default function PositionsPage() {
   const [editSource, setEditSource] = useState("ui_edit");
   const [holdingsManagerExpanded, setHoldingsManagerExpanded] = useState(true);
 
-  const tickerSearchQuery = editTicker.trim().toUpperCase();
-  const debouncedTickerSearchQuery = useDebouncedValue(tickerSearchQuery, 220);
-  const { data: tickerRicSearch } = useUniverseSearch(debouncedTickerSearchQuery, 12);
-
   useEffect(() => {
     if (!modesData?.default) return;
     setMode(modesData.default);
@@ -77,21 +71,6 @@ export default function PositionsPage() {
       setSelectedAccount(accounts[0].account_id);
     }
   }, [accountsData?.accounts, selectedAccount]);
-
-  const ricTypeahead = useMemo(
-    () =>
-      (tickerRicSearch?.results ?? []).filter(
-        (row) => typeof row.ric === "string" && row.ric.trim().length > 0,
-      ),
-    [tickerRicSearch?.results],
-  );
-
-  useEffect(() => {
-    if (!tickerSearchQuery || editRic.trim().length > 0) return;
-    const exact = ricTypeahead.find((row) => String(row.ticker || "").toUpperCase() === tickerSearchQuery);
-    if (!exact?.ric) return;
-    setEditRic(String(exact.ric).toUpperCase());
-  }, [tickerSearchQuery, editRic, ricTypeahead]);
   const positions = portfolio?.positions ?? [];
   const accountOptions = accountsData?.accounts ?? [];
   const liveHoldingsRows = holdingsData?.positions ?? [];
@@ -239,7 +218,6 @@ export default function PositionsPage() {
                 editRic={editRic}
                 editQty={editQty}
                 editSource={editSource}
-                ricTypeahead={ricTypeahead}
                 onAccountChange={setSelectedAccount}
                 onTickerChange={setEditTicker}
                 onRicChange={setEditRic}

@@ -19,16 +19,23 @@ DATA_DB = Path(config.DATA_DB_PATH)
 
 
 def _search_rank(row: dict, needle: str) -> tuple[int, int, str]:
-    """Rank search hits with ticker intent first, then company-name intent."""
+    """Rank search hits with ticker intent first, then RIC, then company-name intent."""
     ticker = str(row.get("ticker", "")).upper()
     name = str(row.get("name", "")).upper()
+    ric = str(row.get("ric", "")).upper()
 
     if ticker == needle:
         return (0, 0, ticker)  # exact ticker
+    if ric == needle:
+        return (0, 1, ticker)  # exact RIC
     if ticker.startswith(needle):
         return (1, len(ticker), ticker)  # ticker prefix
+    if ric.startswith(needle):
+        return (1, len(ric), ticker)  # RIC prefix
     if needle in ticker:
         return (2, ticker.find(needle), ticker)  # ticker contains
+    if needle in ric:
+        return (2, ric.find(needle), ticker)  # RIC contains
     if name.startswith(needle):
         return (3, len(name), ticker)  # company prefix
     return (4, name.find(needle), ticker)  # company contains
@@ -144,7 +151,8 @@ async def search_universe(
     for row in index:
         ticker = str(row.get("ticker", "")).upper()
         name = str(row.get("name", "")).upper()
-        if needle in ticker or needle in name:
+        ric = str(row.get("ric", "")).upper()
+        if needle in ticker or needle in name or needle in ric:
             normalized = normalize_trbc_sector_fields(row)
             if not normalized.get("ric"):
                 ric = str((by_ticker.get(ticker) or {}).get("ric") or "").upper().strip()
