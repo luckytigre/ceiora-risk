@@ -22,13 +22,15 @@ Scope note:
 
 ## 1) Key Decisions Locked
 
-- Country factor is segmented as `US` vs `non-US` (binary structural block).
+- The live model is now a `US-core` risk engine:
+  - `US` equities define the core cross-sectional regression and factor-return history.
+  - `non-US` equities remain in coverage and portfolio analytics as `projected_only` names.
+- The structural baseline factor is `Market`, not `Country: US`.
 - Industry handling uses weighted sum-to-zero constraints (not dropped dummy baseline).
-- Current runtime implementation carries country as a simple `Country: US` dummy in phase A, estimated separately from the constrained industry block.
+- The live estimator is a single-stage constrained WLS, not the retired sequential two-phase solver.
 - Factor covariance will include both:
   - Newey-West adjustment, and
   - shrinkage (toward a structured/shrunk target).
-- No explicit market factor in the cross-sectional factor return regression block.
 
 ## 2) Current Universe and Data-Model State
 
@@ -229,8 +231,8 @@ Columns:
 ## 5) Barra Factors and Metric Roll-up
 
 Structural blocks in regression:
-- `country`: binary `US` dummy, emitted in runtime as `Country: US`
-- `industry`: TRBC industry-group dummies
+- `market`: explicit `Market` factor for the US-core model
+- `industry`: TRBC business-sector dummies
 
 Style factors:
 - Size: `ln(market_cap)`
@@ -263,20 +265,25 @@ Per date on ESTU:
    - cap-weighted mean centering
    - equal-weighted std scaling
 4. Structural neutralization (WLS, cap-based weights):
-   - neutralize style descriptors to `country + industry` structural block as configured.
+   - neutralize style descriptors to the `market + industry` structural block as configured.
 5. Build composites from standardized component descriptors.
-6. Orthogonalize styles in fixed order (WLS):
+6. Orthogonalize styles by fixed dependency policy (WLS):
+   - Size: no cross-factor orthogonalization
+   - industry-only neutralization: Book-to-Price, Earnings Yield, Leverage, Growth, Profitability, Investment, Dividend Yield, Beta
+   - Momentum ⟂ (industry, Size)
    - Nonlinear Size ⟂ Size
    - Liquidity ⟂ Size
    - Residual Volatility ⟂ (Size, Beta)
    - Short-term Reversal ⟂ Momentum
-   - optional fixed policy toggles: Growth ⟂ Book-to-Price, Investment ⟂ Growth
+   - optional future policy toggles remain additive rather than implicit
 7. Re-standardize after each orth step and final style pass.
 
 Implementation note (current code path):
 - Raw descriptor assembly is built from canonical source tables in `barra_raw_cross_section_history`.
 - Cross-sectional z-scoring and orthogonalization are performed in descriptor assembly (`assemble_full_style_scores`).
-- Daily factor-return regression consumes these processed exposures; z-scoring is not done during raw LSEG ingest.
+- The live implementation resolves orthogonalization in dependency order rather than raw column order, so controls like `Size`, `Beta`, and `Momentum` are always available before dependent factors are residualized.
+- The daily factor-return path re-canonicalizes stored style scores on the US-core regression sample, then applies that fitted transform to projected-only names on the same factor scale.
+- Raw LSEG ingest does not perform style z-scoring.
 
 Important design guardrail:
 - Orth policy is fixed by config/version, not dynamically changing day-to-day based on transient correlations.
@@ -304,12 +311,13 @@ Descriptor-specific rules:
 
 ## 7) Factor Returns and Covariance Methodology
 
-Daily cross-sectional model on ESTU:
-- `r_i,t = CountryBlock_i,t + IndustryBlock_i,t + StyleBlock_i,t + eps_i,t`
+Daily cross-sectional model on the US-core ESTU:
+- `r_i,t = Market_i,t + Industry_i,t + Style_i,t + eps_i,t`
 - WLS weights: cap-based, stable policy (recommended `sqrt(mcap)`).
 - Daily returns are winsorized cross-sectionally before estimation; current runtime default is configurable and set through `RETURNS_WINSOR_PCT` (currently `1%` each tail).
-- Industry coefficients are estimated with weighted sum-to-zero constraints.
-- Country currently enters as a simple structural dummy factor (`Country: US`) in the phase-A block, outside the industry sum-to-zero restriction.
+- The estimator is a single constrained WLS solved jointly across market, industry, and style blocks.
+- Industry coefficients are estimated with weighted sum-to-zero constraints relative to the market baseline.
+- Non-US names are excluded from core factor-return estimation and then projected through the live factor surface for downstream portfolio analytics and specific-risk history.
 
 Persist:
 - factor returns by date/factor
@@ -324,7 +332,7 @@ Regression diagnostics policy:
 
 - `r_squared` is reported on the solved objective using cap-weighted SSE/TSS and is not clipped to `[0, 1]`.
 - `residual_vol` remains a date-level residual-dispersion diagnostic; it is not a factor-specific coefficient standard error.
-- The current runtime inference method is heteroskedasticity-robust `HC1` on the sequential two-phase estimator.
+- The current runtime inference method is heteroskedasticity-robust `HC1` on the one-stage constrained estimator.
 
 Covariance:
 - Base: EWMA factor covariance on factor returns.
@@ -386,11 +394,12 @@ Where this remains an approximation:
 5. ESTU audit persistence:
    - Build and persist per-date ESTU membership/drop reasons to `estu_membership_daily`.
 6. Factor return and risk-engine stages:
-   - Compute daily factor returns from lagged cross-sections on ESTU.
-   - Estimate `Country: US` separately from constrained industries, then estimate styles on phase-A residuals.
+   - Compute daily factor returns from lagged US-core cross-sections on ESTU.
+   - Estimate `Market`, industries, and styles jointly in a one-stage constrained WLS.
    - Persist true robust coefficient t-stats and standard errors with each factor-return row.
    - Build covariance (EWMA + Newey-West + shrinkage policy).
    - Build specific risk from raw residual history, while retaining model residual history for fit diagnostics.
+   - Preserve projected residual continuity for non-US names even though they do not define factor returns.
    - Residual/specific-risk persistence is keyed by `ric` with `ticker` retained as metadata.
 7. Relational model output persistence:
    - Persist into:
