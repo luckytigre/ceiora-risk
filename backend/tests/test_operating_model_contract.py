@@ -125,6 +125,37 @@ def test_build_positions_from_universe_uses_signed_gross_weights_for_long_short_
     assert by_ticker["WMT"]["weight"] == pytest.approx(-25.0 / 425.0, abs=1e-6)
 
 
+def test_pipeline_universe_loadings_wrapper_forwards_factor_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    sentinel_catalog = {"Market": object()}
+
+    monkeypatch.setattr(
+        pipeline,
+        "_build_universe_ticker_loadings_impl",
+        lambda exposures_df, fundamentals_df, prices_df, cov, **kwargs: captured.update(kwargs) or {
+            "ticker_count": 0,
+            "eligible_ticker_count": 0,
+            "by_ticker": {},
+        },
+    )
+
+    out = pipeline._build_universe_ticker_loadings(
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        specific_risk_by_ticker={"AAPL.OQ": {"specific_var": 0.01}},
+        factor_catalog_by_name=sentinel_catalog,
+    )
+
+    assert out["ticker_count"] == 0
+    assert captured["data_db"] == pipeline.DATA_DB
+    assert captured["specific_risk_by_ticker"] == {"AAPL.OQ": {"specific_var": 0.01}}
+    assert captured["factor_catalog_by_name"] is sentinel_catalog
+
+
 def test_compute_position_total_risk_contributions_sums_to_total_variance_pct() -> None:
     import pandas as pd
     from backend.analytics.services import risk_views

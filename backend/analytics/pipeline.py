@@ -193,7 +193,9 @@ def _build_universe_ticker_loadings(
     fundamentals_df: pd.DataFrame,
     prices_df: pd.DataFrame,
     cov: pd.DataFrame,
+    *,
     specific_risk_by_ticker: dict[str, SpecificRiskPayload] | None = None,
+    factor_catalog_by_name: dict[str, object] | None = None,
 ) -> UniverseLoadingsPayload:
     """Build full-universe cached loadings/risk context keyed by ticker."""
     return _build_universe_ticker_loadings_impl(
@@ -203,6 +205,7 @@ def _build_universe_ticker_loadings(
         cov,
         data_db=DATA_DB,
         specific_risk_by_ticker=specific_risk_by_ticker,
+        factor_catalog_by_name=factor_catalog_by_name,
     )
 
 
