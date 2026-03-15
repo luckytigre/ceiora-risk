@@ -133,7 +133,6 @@ export default function ManualPositionEditor({
       onTickerChange(row.ticker.toUpperCase());
       if (row.ric) onRicChange(String(row.ric).toUpperCase());
       setTickerDropdownOpen(false);
-      setTickerFocused(false);
       setTickerActiveIndex(-1);
     },
     [onTickerChange, onRicChange],
@@ -145,7 +144,6 @@ export default function ManualPositionEditor({
       onRicChange(String(row.ric || "").toUpperCase());
       if (row.ticker) onTickerChange(row.ticker.toUpperCase());
       setRicDropdownOpen(false);
-      setRicFocused(false);
       setRicActiveIndex(-1);
     },
     [onTickerChange, onRicChange],
@@ -222,7 +220,10 @@ export default function ManualPositionEditor({
             id="edit-ticker"
             className="explore-input holdings-compact-input"
             value={editTicker}
-            onChange={(e) => onTickerChange(e.target.value.toUpperCase())}
+            onChange={(e) => {
+              onTickerChange(e.target.value.toUpperCase());
+              if (editRic) onRicChange("");
+            }}
             onKeyDown={handleTickerKeyDown}
             onFocus={() => setTickerFocused(true)}
             onBlur={(e) => {
@@ -261,7 +262,10 @@ export default function ManualPositionEditor({
             id="edit-ric"
             className="explore-input holdings-compact-input"
             value={editRic}
-            onChange={(e) => onRicChange(e.target.value.toUpperCase())}
+            onChange={(e) => {
+              onRicChange(e.target.value.toUpperCase());
+              if (editTicker) onTickerChange("");
+            }}
             onKeyDown={handleRicKeyDown}
             onFocus={() => setRicFocused(true)}
             onBlur={(e) => {
