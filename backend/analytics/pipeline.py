@@ -43,7 +43,7 @@ from backend.analytics.services.universe_loadings import (
     build_universe_ticker_loadings as _build_universe_ticker_loadings_impl,
     load_latest_factor_coverage as _load_latest_factor_coverage_impl,
 )
-from backend.data import core_reads, model_outputs, rebuild_cross_section_snapshot, serving_outputs, sqlite
+from backend.data import core_reads, model_outputs, rebuild_cross_section_snapshot, runtime_state, serving_outputs, sqlite
 from backend.risk_model.factor_catalog import (
     build_factor_catalog_for_factors,
     factor_id_to_entry_map,
@@ -459,7 +459,10 @@ def run_refresh(
 
     # 2. Weekly risk-engine recompute gate.
     risk_engine_meta: RiskEngineMetaPayload = (
-        sqlite.cache_get_live_first("risk_engine_meta")
+        runtime_state.load_runtime_state(
+            "risk_engine_meta",
+            fallback_loader=sqlite.cache_get_live_first,
+        )
         or {}
     )
     should_recompute, recompute_reason = _risk_recompute_due(risk_engine_meta, today_utc=today_utc)
@@ -829,7 +832,15 @@ def run_refresh(
         sqlite.cache_set("serving_outputs_write", serving_outputs_write)
         raise RuntimeError(f"Serving payload persistence failed: {type(exc).__name__}: {exc}") from exc
     sqlite.cache_set("serving_outputs_write", serving_outputs_write)
-    sqlite.cache_publish_snapshot(snapshot_id)
+    runtime_state.persist_runtime_state(
+        "risk_engine_meta",
+        risk_engine_meta,
+        fallback_writer=lambda key, value: sqlite.cache_set(key, value),
+    )
+    runtime_state.publish_active_snapshot(
+        snapshot_id,
+        fallback_publisher=sqlite.cache_publish_snapshot,
+    )
 
     logger.info("Refresh complete.")
     return {

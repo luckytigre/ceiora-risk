@@ -244,6 +244,12 @@ def _assess_neon_rebuild_readiness(
         "security_fundamentals_pit",
         "security_classification_pit",
     ]
+    required_model_tables = [
+        "model_factor_returns_daily",
+        "model_factor_covariance_daily",
+        "model_specific_risk_daily",
+        "model_run_metadata",
+    ]
     if profile_key != "cold-core":
         required_tables.append("barra_raw_cross_section_history")
 
@@ -254,6 +260,11 @@ def _assess_neon_rebuild_readiness(
             continue
         if int(stats.get("row_count") or 0) <= 0:
             issues.append(f"empty_table:{table}")
+
+    for table in required_model_tables:
+        stats = table_stats.get(table) or {}
+        if not bool(stats.get("exists")):
+            issues.append(f"missing_table:{table}")
 
     source_anchor = _latest_source_anchor(table_stats)
     if not source_anchor:
@@ -307,6 +318,10 @@ def validate_neon_rebuild_readiness(
             "security_fundamentals_pit": _pg_date_stats(pg_conn, table="security_fundamentals_pit", date_col="as_of_date"),
             "security_classification_pit": _pg_date_stats(pg_conn, table="security_classification_pit", date_col="as_of_date"),
             "barra_raw_cross_section_history": _pg_date_stats(pg_conn, table="barra_raw_cross_section_history", date_col="as_of_date"),
+            "model_factor_returns_daily": _pg_date_stats(pg_conn, table="model_factor_returns_daily", date_col="date"),
+            "model_factor_covariance_daily": _pg_date_stats(pg_conn, table="model_factor_covariance_daily", date_col="as_of_date"),
+            "model_specific_risk_daily": _pg_date_stats(pg_conn, table="model_specific_risk_daily", date_col="as_of_date"),
+            "model_run_metadata": _pg_date_stats(pg_conn, table="model_run_metadata", date_col="completed_at"),
         }
         return _assess_neon_rebuild_readiness(
             profile=profile,

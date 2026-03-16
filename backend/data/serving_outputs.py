@@ -13,6 +13,7 @@ from psycopg.rows import dict_row
 
 from backend import config
 from backend.data.neon import connect, resolve_dsn
+from backend.data.neon_primary_write import execute_neon_primary_write
 
 DATA_DB = Path(config.DATA_DB_PATH)
 SURFACE_NAME = "serving_outputs"
@@ -91,47 +92,27 @@ def persist_current_payloads(
         )
         for name, value in payloads.items()
     ]
-    conn = sqlite3.connect(str(data_db), timeout=120)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=120000")
-    try:
-        _ensure_sqlite_schema(conn)
-        if replace_all:
-            if rows:
-                placeholders = ",".join("?" for _ in rows)
-                conn.execute(
-                    f"DELETE FROM serving_payload_current WHERE payload_name NOT IN ({placeholders})",
-                    [row[0] for row in rows],
-                )
-            else:
-                conn.execute("DELETE FROM serving_payload_current")
-        conn.executemany(
-            """
-            INSERT OR REPLACE INTO serving_payload_current (
-                payload_name,
-                snapshot_id,
-                run_id,
-                refresh_mode,
-                payload_json,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
+    result = {
+        "status": "ok",
+        "snapshot_id": str(snapshot_id),
+        "row_count": len(rows),
+        "payload_names": sorted(str(k) for k in payloads.keys()),
+        "replace_all": bool(replace_all),
+    }
+    return execute_neon_primary_write(
+        base_result=result,
+        neon_enabled=bool(config.neon_surface_enabled(SURFACE_NAME)),
+        neon_required=bool(config.serving_payload_neon_write_required()),
+        perform_neon_write=lambda: _persist_current_payloads_neon(rows, replace_all=replace_all),
+        perform_fallback_write=lambda: _persist_current_payloads_sqlite(
             rows,
-        )
-        conn.commit()
-        result = {
-            "status": "ok",
-            "snapshot_id": str(snapshot_id),
-            "row_count": len(rows),
-            "payload_names": sorted(str(k) for k in payloads.keys()),
-            "replace_all": bool(replace_all),
-        }
-        if config.neon_surface_enabled(SURFACE_NAME):
-            result["neon_write"] = _persist_current_payloads_neon(rows, replace_all=replace_all)
-        return result
-    finally:
-        conn.close()
+            data_db=data_db,
+            replace_all=replace_all,
+        ),
+        failure_label="serving payload persistence",
+        fallback_result_key="sqlite_mirror_write",
+        fallback_authority="sqlite",
+    )
 
 
 def load_current_payload(payload_name: str) -> dict[str, Any] | list[Any] | None:
@@ -263,6 +244,56 @@ def _persist_current_payloads_neon(
             "row_count": len(rows),
             "replace_all": bool(replace_all),
             "verification": verification,
+        }
+    except Exception as exc:
+        conn.rollback()
+        return {
+            "status": "error",
+            "error": {"type": type(exc).__name__, "message": str(exc)},
+        }
+    finally:
+        conn.close()
+
+
+def _persist_current_payloads_sqlite(
+    rows: list[tuple[str, str, str, str, str, str]],
+    *,
+    data_db: Path,
+    replace_all: bool,
+) -> dict[str, Any]:
+    conn = sqlite3.connect(str(data_db), timeout=120)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=120000")
+    try:
+        _ensure_sqlite_schema(conn)
+        if replace_all:
+            if rows:
+                placeholders = ",".join("?" for _ in rows)
+                conn.execute(
+                    f"DELETE FROM serving_payload_current WHERE payload_name NOT IN ({placeholders})",
+                    [row[0] for row in rows],
+                )
+            else:
+                conn.execute("DELETE FROM serving_payload_current")
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO serving_payload_current (
+                payload_name,
+                snapshot_id,
+                run_id,
+                refresh_mode,
+                payload_json,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.commit()
+        return {
+            "status": "ok",
+            "row_count": len(rows),
+            "replace_all": bool(replace_all),
         }
     except Exception as exc:
         conn.rollback()

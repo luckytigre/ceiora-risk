@@ -4,6 +4,10 @@
 - Holdings writes and holdings-serving reads are both Neon-authoritative when a Neon DSN is configured.
 - Local SQLite is the only direct LSEG landing zone and the optional deep archive on the local machine.
 - Neon is the intended authoritative operating database for serving and, once enabled, for core/cold-core rebuilds.
+- Model outputs and durable serving payloads now write to Neon first when Neon is configured; local SQLite remains a mirror and local diagnostic surface during migration.
+- Operator health/runtime truth is beginning to move to Neon-backed runtime state, but broader analytics cache state is still transitional.
+- The Neon-backed runtime-state surface is intentionally small and operator-facing: `risk_engine_meta`, `neon_sync_health`, and the active snapshot pointer.
+- `/api/health` and `/api/operator/status` now expose runtime-state status/source fields so missing Neon runtime truth is visible instead of looking healthy by omission.
 - `RECALC`/holdings-dirty state is backend-persisted, not browser-local.
 - Risk engine recompute cadence: weekly (`RISK_RECOMPUTE_INTERVAL_DAYS=7` by default).
 - Cross-section recency guard: regressions only use exposure snapshots at least 7 calendar days old (`CROSS_SECTION_MIN_AGE_DAYS=7`).

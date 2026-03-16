@@ -174,6 +174,24 @@ def serving_payload_neon_write_required() -> bool:
     )
 
 
+def runtime_state_primary_reads_enabled() -> bool:
+    return bool(
+        cloud_mode()
+        or neon_primary_model_data_enabled()
+    )
+
+
+def runtime_state_cache_fallback_enabled() -> bool:
+    return runtime_role_allows_ingest()
+
+
+def runtime_state_neon_write_required() -> bool:
+    return bool(
+        runtime_state_primary_reads_enabled()
+        and neon_surface_enabled("runtime_state")
+    )
+
+
 def neon_mirror_health_required() -> bool:
     return bool(NEON_AUTO_SYNC_REQUIRED or neon_primary_model_data_enabled())
 

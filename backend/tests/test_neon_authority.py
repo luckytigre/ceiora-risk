@@ -13,6 +13,10 @@ def test_assess_neon_rebuild_readiness_requires_raw_history_for_weekly_core() ->
         "security_fundamentals_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-14"},
         "security_classification_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-14"},
         "barra_raw_cross_section_history": {"exists": False, "row_count": 0, "min_date": None, "max_date": None},
+        "model_factor_returns_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_factor_covariance_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_specific_risk_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_run_metadata": {"exists": True, "row_count": 10, "min_date": "2026-03-01T00:00:00+00:00", "max_date": "2026-03-14T00:00:00+00:00"},
     }
 
     out = neon_authority._assess_neon_rebuild_readiness(
@@ -32,6 +36,10 @@ def test_assess_neon_rebuild_readiness_allows_cold_core_without_existing_raw_his
         "security_fundamentals_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-14"},
         "security_classification_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-14"},
         "barra_raw_cross_section_history": {"exists": False, "row_count": 0, "min_date": None, "max_date": None},
+        "model_factor_returns_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_factor_covariance_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_specific_risk_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_run_metadata": {"exists": True, "row_count": 10, "min_date": "2026-03-01T00:00:00+00:00", "max_date": "2026-03-14T00:00:00+00:00"},
     }
 
     out = neon_authority._assess_neon_rebuild_readiness(
@@ -41,6 +49,30 @@ def test_assess_neon_rebuild_readiness_allows_cold_core_without_existing_raw_his
     )
 
     assert out["status"] == "ok"
+
+
+def test_assess_neon_rebuild_readiness_requires_model_output_tables() -> None:
+    table_stats = {
+        "security_master": {"exists": True, "row_count": 10, "min_date": None, "max_date": None},
+        "security_prices_eod": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-14"},
+        "security_fundamentals_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-14"},
+        "security_classification_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-14"},
+        "barra_raw_cross_section_history": {"exists": True, "row_count": 100, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_factor_returns_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_factor_covariance_daily": {"exists": False, "row_count": 0, "min_date": None, "max_date": None},
+        "model_specific_risk_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_run_metadata": {"exists": False, "row_count": 0, "min_date": None, "max_date": None},
+    }
+
+    out = neon_authority._assess_neon_rebuild_readiness(
+        profile="cold-core",
+        table_stats=table_stats,
+        analytics_years=5,
+    )
+
+    assert out["status"] == "error"
+    assert "missing_table:model_factor_covariance_daily" in out["issues"]
+    assert "missing_table:model_run_metadata" in out["issues"]
 
 
 def test_sync_workspace_derivatives_to_local_mirror_copies_core_outputs(tmp_path: Path) -> None:

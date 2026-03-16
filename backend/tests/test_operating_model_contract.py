@@ -320,6 +320,11 @@ def test_pipeline_prefers_fundamentals_asof(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
     monkeypatch.setattr(
+        pipeline.runtime_state,
+        "load_runtime_state",
+        lambda key, fallback_loader=None: _cache_get(key),
+    )
+    monkeypatch.setattr(
         pipeline,
         "compute_daily_factor_returns",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not recompute risk engine")),
@@ -435,6 +440,11 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
     monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key: _cache_get(key))
     monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
     monkeypatch.setattr(
+        pipeline.runtime_state,
+        "load_runtime_state",
+        lambda key, fallback_loader=None: _cache_get(key),
+    )
+    monkeypatch.setattr(
         pipeline,
         "_build_positions_from_universe",
         lambda by_ticker: ([{"ticker": "AAPL", "weight": 1.0, "exposures": {"style_beta_score": 1.1}}], 100.0),
@@ -484,7 +494,11 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
         lambda **kwargs: {"status": "ok", "run_id": kwargs["run_id"]},
     )
     monkeypatch.setattr(pipeline.sqlite, "cache_set", lambda *args, **kwargs: None)
-    monkeypatch.setattr(pipeline.sqlite, "cache_publish_snapshot", lambda snapshot_id: captured.update({"published": snapshot_id}))
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "publish_active_snapshot",
+        lambda snapshot_id, fallback_publisher=None: captured.update({"published": snapshot_id}) or {"status": "ok"},
+    )
 
     out = pipeline.run_refresh(
         mode="light",
@@ -673,6 +687,11 @@ def test_pipeline_fallback_light_refresh_skips_model_outputs_when_risk_engine_is
     monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key: _cache_get(key))
     monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
     monkeypatch.setattr(
+        pipeline.runtime_state,
+        "load_runtime_state",
+        lambda key, fallback_loader=None: _cache_get(key),
+    )
+    monkeypatch.setattr(
         pipeline,
         "_build_universe_ticker_loadings",
         lambda *args, **kwargs: {
@@ -730,7 +749,11 @@ def test_pipeline_fallback_light_refresh_skips_model_outputs_when_risk_engine_is
         lambda **kwargs: {"status": "ok", "run_id": kwargs["run_id"]},
     )
     monkeypatch.setattr(pipeline.sqlite, "cache_set", lambda *args, **kwargs: None)
-    monkeypatch.setattr(pipeline.sqlite, "cache_publish_snapshot", lambda snapshot_id: None)
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "publish_active_snapshot",
+        lambda snapshot_id, fallback_publisher=None: {"status": "ok"},
+    )
 
     out = pipeline.run_refresh(
         mode="light",
@@ -873,7 +896,11 @@ def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
         lambda **kwargs: {"status": "ok", "run_id": kwargs["run_id"]},
     )
     monkeypatch.setattr(pipeline.sqlite, "cache_set", lambda *args, **kwargs: None)
-    monkeypatch.setattr(pipeline.sqlite, "cache_publish_snapshot", lambda snapshot_id: None)
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "publish_active_snapshot",
+        lambda snapshot_id, fallback_publisher=None: {"status": "ok"},
+    )
     monkeypatch.setattr(
         pipeline.sqlite,
         "cache_get",
@@ -887,6 +914,11 @@ def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
             "risk_engine_cov": fresh_cov,
             "risk_engine_specific_risk": fresh_specific,
         }.get(key),
+    )
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "load_runtime_state",
+        lambda key, fallback_loader=None: fresh_meta if key == "risk_engine_meta" else None,
     )
 
     out = pipeline.run_refresh(

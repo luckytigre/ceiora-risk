@@ -73,6 +73,11 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
             return {"snapshot_id": "snap_1"}
         return None
 
+    monkeypatch.setattr(
+        operator_route.runtime_state,
+        "read_runtime_state",
+        lambda key, fallback_loader=None: {"status": "ok", "source": "neon", "value": _fake_cache_get(key)},
+    )
     monkeypatch.setattr(operator_route.sqlite, "cache_get", _fake_cache_get)
     monkeypatch.setattr(operator_route.sqlite, "cache_get_live_first", _fake_cache_get)
 
@@ -92,6 +97,8 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
     assert body["runtime"]["dashboard_truth_surface"] == "durable_serving_payloads"
     assert body["runtime"]["diagnostics_scope"] == "local_sqlite_and_cache"
     assert body["runtime"]["source_authority"] in {"local", "neon"}
+    assert body["runtime"]["runtime_state_status"]["risk_engine_meta"]["status"] == "ok"
+    assert body["runtime"]["runtime_state_status"]["risk_engine_meta"]["source"] == "neon"
     assert "neon_authoritative_rebuilds" in body["runtime"]
 
 
@@ -107,6 +114,11 @@ def test_operator_status_reports_cloud_allowed_profiles(monkeypatch) -> None:
     monkeypatch.setattr(operator_route.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(operator_route.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
     monkeypatch.setattr(operator_route.core_reads, "load_source_dates", lambda: {})
+    monkeypatch.setattr(
+        operator_route.runtime_state,
+        "read_runtime_state",
+        lambda key, fallback_loader=None: {"status": "missing", "source": "neon", "value": None},
+    )
     monkeypatch.setattr(operator_route.sqlite, "cache_get", lambda key: {})
     monkeypatch.setattr(operator_route.sqlite, "cache_get_live_first", lambda key: {})
     monkeypatch.setattr(operator_route, "get_holdings_sync_state", lambda: {"pending": False, "pending_count": 0})
@@ -148,6 +160,11 @@ def test_operator_status_warns_when_local_archive_is_newer_than_authoritative_st
     monkeypatch.setattr(operator_route.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
     monkeypatch.setattr(operator_route, "get_refresh_status", lambda: {"status": "idle"})
     monkeypatch.setattr(operator_route, "get_holdings_sync_state", lambda: {"pending": False, "pending_count": 0})
+    monkeypatch.setattr(
+        operator_route.runtime_state,
+        "read_runtime_state",
+        lambda key, fallback_loader=None: {"status": "missing", "source": "neon", "value": None},
+    )
     monkeypatch.setattr(operator_route.sqlite, "cache_get", lambda key: {})
     monkeypatch.setattr(operator_route.sqlite, "cache_get_live_first", lambda key: {})
     monkeypatch.setattr(operator_route.config, "APP_RUNTIME_ROLE", "local-ingest")
@@ -203,6 +220,11 @@ def test_operator_status_promotes_newer_terminal_run_over_stale_refresh_cache(mo
         },
     )
     monkeypatch.setattr(operator_route.core_reads, "load_source_dates", lambda: {})
+    monkeypatch.setattr(
+        operator_route.runtime_state,
+        "read_runtime_state",
+        lambda key, fallback_loader=None: {"status": "missing", "source": "neon", "value": None},
+    )
     monkeypatch.setattr(operator_route.sqlite, "cache_get", lambda key: {})
     monkeypatch.setattr(operator_route.sqlite, "cache_get_live_first", lambda key: {})
     monkeypatch.setattr(operator_route, "get_holdings_sync_state", lambda: {"pending": False, "pending_count": 0})

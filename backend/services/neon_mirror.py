@@ -495,6 +495,7 @@ def prune_neon_history(
         ("model_factor_returns_daily", "date"),
         ("model_factor_covariance_daily", "as_of_date"),
         ("model_specific_risk_daily", "as_of_date"),
+        ("model_run_metadata", "completed_at"),
     ]
 
     out: dict[str, Any] = {
@@ -902,6 +903,159 @@ def _value_maps_match(
     return (not issues), issues
 
 
+def _bounded_sqlite_to_pg_table_audit(
+    sqlite_conn: sqlite3.Connection,
+    pg_conn,
+    *,
+    source_table: str,
+    target_table: str,
+    date_col: str | None,
+    cutoff: str | None,
+    distinct_col: str | None,
+    key_cols: list[str] | None = None,
+    required_cols: list[str] | None = None,
+    non_null_cols: list[str] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    issues: list[str] = []
+    source_exists = _sqlite_table_exists(sqlite_conn, source_table)
+    target_exists = _pg_table_exists(pg_conn, target_table)
+    if not source_exists or not target_exists:
+        reasons: list[str] = []
+        if not source_exists:
+            reasons.append(f"missing_source_table:{source_table}")
+        if not target_exists:
+            reasons.append(f"missing_target_table:{target_table}")
+        issues.append(f"mismatch:{target_table}")
+        return (
+            {
+                "status": "mismatch",
+                "reason": ",".join(reasons),
+                "source_exists": bool(source_exists),
+                "target_exists": bool(target_exists),
+                "cutoff": cutoff,
+            },
+            issues,
+        )
+
+    source = _sqlite_count_window(
+        sqlite_conn,
+        table=source_table,
+        date_col=date_col,
+        cutoff=cutoff,
+        distinct_col=distinct_col,
+    )
+    target = _pg_count_window(
+        pg_conn,
+        table=target_table,
+        date_col=date_col,
+        cutoff=cutoff,
+        distinct_col=distinct_col,
+    )
+    mismatch = source != target
+    if mismatch:
+        issues.append(f"mismatch:{target_table}")
+
+    table_out: dict[str, Any] = {
+        "source_table": source_table,
+        "source": source,
+        "target": target,
+        "cutoff": cutoff,
+        "status": "ok" if not mismatch else "mismatch",
+    }
+
+    if key_cols:
+        source_dupes = _sqlite_duplicate_key_groups(
+            sqlite_conn,
+            table=source_table,
+            key_cols=key_cols,
+            date_col=date_col,
+            cutoff=cutoff,
+        )
+        target_dupes = _pg_duplicate_key_groups(
+            pg_conn,
+            table=target_table,
+            key_cols=key_cols,
+            date_col=date_col,
+            cutoff=cutoff,
+        )
+        table_out["duplicate_key_groups"] = {
+            "source": source_dupes,
+            "target": target_dupes,
+        }
+        if source_dupes or target_dupes:
+            issues.append(f"duplicate_keys:{target_table}")
+            table_out["status"] = "mismatch"
+
+    if required_cols:
+        source_cols = set(_sqlite_columns(sqlite_conn, source_table))
+        target_cols = set(_pg_columns(pg_conn, target_table))
+        source_missing_required = sorted(set(required_cols) - source_cols)
+        target_missing_required = sorted(set(required_cols) - target_cols)
+        if source_missing_required:
+            issues.append(f"missing_source_columns:{target_table}")
+            table_out["status"] = "mismatch"
+        if target_missing_required:
+            issues.append(f"missing_target_columns:{target_table}")
+            table_out["status"] = "mismatch"
+        table_out["source_missing_required_columns"] = source_missing_required
+        table_out["target_missing_required_columns"] = target_missing_required
+
+    if non_null_cols:
+        where_sql = ""
+        params: tuple[Any, ...] = ()
+        if date_col and cutoff:
+            where_sql = f"WHERE {date_col} >= ?"
+            params = (cutoff,)
+        source_non_null = _sqlite_non_null_counts(
+            sqlite_conn,
+            table=source_table,
+            columns=non_null_cols,
+            where_sql=where_sql,
+            params=params,
+        )
+        target_non_null = _pg_non_null_counts(
+            pg_conn,
+            table=target_table,
+            columns=non_null_cols,
+            date_col=date_col,
+            cutoff=cutoff,
+        )
+        table_out["source_non_null_counts"] = source_non_null
+        table_out["target_non_null_counts"] = target_non_null
+        if source_non_null != target_non_null:
+            issues.append(f"nonnull_mismatch:{target_table}")
+            table_out["status"] = "mismatch"
+
+    if date_col:
+        sample_dates = _sqlite_recent_dates(
+            sqlite_conn,
+            table=source_table,
+            date_col=date_col,
+            cutoff=cutoff,
+            limit=3,
+        )
+        source_counts = _sqlite_group_count_by_date(
+            sqlite_conn,
+            table=source_table,
+            date_col=date_col,
+            dates=sample_dates,
+        )
+        target_counts = _pg_group_count_by_date(
+            pg_conn,
+            table=target_table,
+            date_col=date_col,
+            dates=sample_dates,
+        )
+        table_out["sample_dates"] = sample_dates
+        table_out["source_counts_by_date"] = source_counts
+        table_out["target_counts_by_date"] = target_counts
+        if source_counts != target_counts:
+            issues.append(f"group_count_mismatch:{target_table}")
+            table_out["status"] = "mismatch"
+
+    return table_out, issues
+
+
 def run_bounded_parity_audit(
     *,
     sqlite_path: Path,
@@ -937,6 +1091,74 @@ def run_bounded_parity_audit(
             analytics_cutoff,
             "ric",
         ),
+    ]
+    durable_model_specs = [
+        {
+            "target_table": "model_factor_covariance_daily",
+            "source_table": "model_factor_covariance_daily",
+            "date_col": "as_of_date",
+            "cutoff": analytics_cutoff,
+            "distinct_col": None,
+            "key_cols": ["as_of_date", "factor_name", "factor_name_2"],
+            "required_cols": [
+                "as_of_date",
+                "factor_name",
+                "factor_name_2",
+                "covariance",
+                "run_id",
+                "updated_at",
+            ],
+            "non_null_cols": ["covariance", "run_id", "updated_at"],
+        },
+        {
+            "target_table": "model_specific_risk_daily",
+            "source_table": "model_specific_risk_daily",
+            "date_col": "as_of_date",
+            "cutoff": analytics_cutoff,
+            "distinct_col": "ric",
+            "key_cols": ["as_of_date", "ric"],
+            "required_cols": [
+                "as_of_date",
+                "ric",
+                "specific_var",
+                "specific_vol",
+                "obs",
+                "run_id",
+                "updated_at",
+            ],
+            "non_null_cols": ["specific_var", "specific_vol", "obs", "run_id", "updated_at"],
+        },
+        {
+            "target_table": "model_run_metadata",
+            "source_table": "model_run_metadata",
+            "date_col": "completed_at",
+            "cutoff": analytics_cutoff,
+            "distinct_col": None,
+            "key_cols": ["run_id"],
+            "required_cols": [
+                "run_id",
+                "refresh_mode",
+                "status",
+                "started_at",
+                "completed_at",
+                "source_dates_json",
+                "params_json",
+                "risk_engine_state_json",
+                "row_counts_json",
+                "updated_at",
+            ],
+            "non_null_cols": [
+                "refresh_mode",
+                "status",
+                "started_at",
+                "completed_at",
+                "source_dates_json",
+                "params_json",
+                "risk_engine_state_json",
+                "row_counts_json",
+                "updated_at",
+            ],
+        },
     ]
 
     sqlite_db = Path(sqlite_path).expanduser().resolve()
@@ -1048,6 +1270,22 @@ def run_bounded_parity_audit(
                 if any(int(v or 0) > 0 for v in source_health.values()) or any(int(v or 0) > 0 for v in target_health.values()):
                     out["issues"].append(f"period_policy_violation:{label}")
                     out["tables"][label]["status"] = "mismatch"
+
+        for spec in durable_model_specs:
+            table_out, table_issues = _bounded_sqlite_to_pg_table_audit(
+                sqlite_conn,
+                pg_conn,
+                source_table=str(spec["source_table"]),
+                target_table=str(spec["target_table"]),
+                date_col=str(spec["date_col"]) if spec.get("date_col") else None,
+                cutoff=str(spec["cutoff"]) if spec.get("cutoff") else None,
+                distinct_col=str(spec["distinct_col"]) if spec.get("distinct_col") else None,
+                key_cols=list(spec.get("key_cols") or []),
+                required_cols=list(spec.get("required_cols") or []),
+                non_null_cols=list(spec.get("non_null_cols") or []),
+            )
+            out["tables"][str(spec["target_table"])] = table_out
+            out["issues"].extend(table_issues)
 
         if cache_conn is not None:
             source_table = "daily_factor_returns"

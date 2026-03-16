@@ -7,6 +7,9 @@ Status: Canonical reference document
 Related planning document:
 - `docs/NEON_AUTHORITATIVE_REBUILD_PLAN.md` tracks the active migration toward Neon-authoritative rebuilds with local SQLite retained as the local-only LSEG ingest/archive reservoir.
 - the same plan document now also carries the post-SQLite migration sequence for removing scratch/local SQLite from ordinary rebuild and runtime work.
+- `docs/NEON_STANDALONE_EXECUTION_PLAN.md` is the concrete phase-by-phase implementation and review program for completing that migration.
+- `docs/NEON_MAIN_PLATFORM_PLAN.md` is the focused plan for making Neon the actual main durable platform rather than a partial mirror or transitional authority.
+- `docs/NEON_LEAN_CONSOLIDATION_PLAN.md` governs the current simplification pass so the Neon migration does not accumulate unnecessary weight for a hobby tool.
 
 ## Current Implementation Status
 
@@ -39,6 +42,11 @@ Implemented now:
 - factor-return persistence now replaces stale history slices in durable SQLite and Neon instead of only appending from the latest durable date
 - durable covariance persistence now prunes retired factor names so removed factors do not linger in historical covariance rows
 - Neon factor-return parity now checks sampled row values and inference-field coverage, not only row counts and date windows
+- durable model outputs now write to Neon first when Neon is configured; local SQLite acts as a secondary mirror during migration
+- durable serving payloads now write to Neon first when Neon serving authority is required; local SQLite remains a secondary mirror and local diagnostic surface
+- operator/health runtime truth keys now have a Neon-backed `runtime_state_current` surface with local SQLite fallback retained only for transitional local-ingest recovery
+- the runtime-state surface is intentionally narrow: `risk_engine_meta`, `neon_sync_health`, and the active snapshot pointer are the only durable runtime-state keys in Neon for this phase
+- `/api/health` and `/api/operator/status` now expose runtime-state status and source metadata so missing or degraded runtime truth is visible instead of silently reading as healthy
 - the active model now carries 45 factors in total, including 14 style factors; there is no standalone `Value` factor in the live style set
 
 Cold-core lessons now incorporated:
@@ -49,7 +57,7 @@ Cold-core lessons now incorporated:
 ## Known Limitations Still Open
 
 - Neon-authoritative rebuilds still rely on a Neon-backed scratch SQLite workspace because the core math has not yet been ported to run directly on Postgres
-- runtime cache state and several model-persistence paths still write to SQLite first; the active migration plan now breaks that work into separate runtime-state, model-output, read-path, and risk-stage cutovers
+- runtime-state migration is only partially complete; operator/health keys now mirror into Neon, but broader cache-backed analytics state and rebuild-stage state still depend heavily on SQLite
 - regression inference currently ships as HC1 robust SE / t-stat; HC2 or HC3 evaluation and explicit leverage diagnostics remain follow-up work for sparse or high-leverage buckets
 - winsorization policy is configurable and improved, but its governance and diagnostic instrumentation are still lighter than ideal
 - durable-serving publish and cache-snapshot publish still use separate stores, so there is no single atomic cross-store commit boundary

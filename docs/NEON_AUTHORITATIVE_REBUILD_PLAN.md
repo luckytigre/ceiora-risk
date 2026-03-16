@@ -4,6 +4,9 @@ Date: 2026-03-15
 Owner: Codex
 Status: Active migration plan
 
+Execution companion:
+- `docs/NEON_STANDALONE_EXECUTION_PLAN.md` is the concrete implementation checklist, checkpoint plan, and review protocol for executing this migration end to end.
+
 ## Objective
 
 Make Neon the authoritative rebuild and runtime database for the standalone tool, while keeping local SQLite as the private LSEG ingest/archive reservoir.

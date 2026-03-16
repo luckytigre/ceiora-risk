@@ -10,7 +10,7 @@ from backend import config
 from backend.analytics.pipeline import RISK_ENGINE_METHOD_VERSION
 from backend.analytics.refresh_policy import risk_recompute_due as _risk_recompute_due_impl
 from backend.api.auth import require_role
-from backend.data import core_reads, job_runs, sqlite
+from backend.data import core_reads, job_runs, runtime_state, sqlite
 from backend.orchestration.run_model_pipeline import (
     DATA_DB,
     profile_catalog,
@@ -226,15 +226,27 @@ def get_operator_status(
         local_archive_source_dates = _load_local_archive_source_dates()
     except Exception:
         local_archive_source_dates = None
-    risk_engine_meta = sqlite.cache_get_live_first("risk_engine_meta") or {}
+    risk_engine_meta_state = runtime_state.read_runtime_state(
+        "risk_engine_meta",
+        fallback_loader=sqlite.cache_get_live_first,
+    )
+    risk_engine_meta = risk_engine_meta_state.get("value") or {}
     refresh_status = get_refresh_status()
     if isinstance(refresh_status, dict):
         refresh_status = _promote_latest_run_into_refresh_status(
             refresh_status=refresh_status,
             latest_runs=latest_runs,
         )
-    neon_sync_health = sqlite.cache_get("neon_sync_health") or {}
-    active_snapshot = sqlite.cache_get("__cache_snapshot_active")
+    neon_sync_health_state = runtime_state.read_runtime_state(
+        "neon_sync_health",
+        fallback_loader=sqlite.cache_get,
+    )
+    neon_sync_health = neon_sync_health_state.get("value") or {}
+    active_snapshot_state = runtime_state.read_runtime_state(
+        "__cache_snapshot_active",
+        fallback_loader=sqlite.cache_get,
+    )
+    active_snapshot = active_snapshot_state.get("value")
     holdings_sync = get_holdings_sync_state()
     core_due, core_due_reason = _risk_recompute_due(risk_engine_meta, today_utc=_today_session_date())
     runtime_warnings: list[str] = []
@@ -246,6 +258,18 @@ def get_operator_status(
         runtime_warnings.append("Neon auto-parity is disabled; post-run parity evidence will be incomplete.")
     if not bool(config.neon_auto_prune_enabled_effective()):
         runtime_warnings.append("Neon auto-prune is disabled; retained history may exceed the cloud retention window.")
+    runtime_truth_states = {
+        "risk_engine_meta": risk_engine_meta_state,
+        "neon_sync_health": neon_sync_health_state,
+        "active_snapshot": active_snapshot_state,
+    }
+    for key, state in runtime_truth_states.items():
+        status = str((state or {}).get("status") or "")
+        source = str((state or {}).get("source") or "")
+        if status != "ok":
+            runtime_warnings.append(f"Runtime-state truth is not healthy for {key}: status={status or 'unknown'} source={source or 'unknown'}.")
+        elif source == "sqlite" and config.runtime_state_primary_reads_enabled():
+            runtime_warnings.append(f"Runtime-state truth for {key} fell back to local SQLite instead of Neon.")
     newer_local_archive_fields = _newer_local_archive_fields(source_dates, local_archive_source_dates)
     if newer_local_archive_fields:
         runtime_warnings.append(
@@ -347,6 +371,14 @@ def get_operator_status(
                 "Detailed diagnostics are local-instance diagnostics. Operator status, refresh state, holdings dirty state, "
                 "and Neon mirror/parity health are the live operator truth surfaces."
             ),
+            "runtime_state_status": {
+                key: {
+                    "status": str((state or {}).get("status") or "unknown"),
+                    "source": str((state or {}).get("source") or "unknown"),
+                    "error": (state or {}).get("error"),
+                }
+                for key, state in runtime_truth_states.items()
+            },
             "data_backend": str(config.DATA_BACKEND),
             "neon_database_configured": bool(str(config.NEON_DATABASE_URL).strip()),
             "neon_auto_sync_enabled": bool(config.NEON_AUTO_SYNC_ENABLED),

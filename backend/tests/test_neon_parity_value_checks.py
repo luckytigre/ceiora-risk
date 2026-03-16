@@ -30,6 +30,61 @@ class _DummyPgConn:
         return None
 
 
+def _fake_pg_columns(table: str) -> list[str]:
+    if table == "model_factor_returns_daily":
+        return [
+            "date",
+            "factor_name",
+            "factor_return",
+            "robust_se",
+            "t_stat",
+            "r_squared",
+            "residual_vol",
+            "cross_section_n",
+            "eligible_n",
+            "coverage",
+            "run_id",
+        ]
+    if table == "model_factor_covariance_daily":
+        return [
+            "as_of_date",
+            "factor_name",
+            "factor_name_2",
+            "covariance",
+            "run_id",
+            "updated_at",
+        ]
+    if table == "model_specific_risk_daily":
+        return [
+            "as_of_date",
+            "ric",
+            "ticker",
+            "specific_var",
+            "specific_vol",
+            "obs",
+            "trbc_business_sector",
+            "run_id",
+            "updated_at",
+        ]
+    if table == "model_run_metadata":
+        return [
+            "run_id",
+            "refresh_mode",
+            "status",
+            "started_at",
+            "completed_at",
+            "factor_returns_asof",
+            "source_dates_json",
+            "params_json",
+            "risk_engine_state_json",
+            "row_counts_json",
+            "error_type",
+            "error_message",
+            "updated_at",
+        ]
+    return ["ric", "date"]
+
+
 def _create_sqlite_runtime(db_path: Path, cache_path: Path) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute("CREATE TABLE security_master (ric TEXT PRIMARY KEY)")
@@ -53,6 +108,82 @@ def _create_sqlite_runtime(db_path: Path, cache_path: Path) -> None:
     )
     conn.execute(
         "INSERT INTO barra_raw_cross_section_history (ric, as_of_date) VALUES ('ABC.N', '2026-03-01')"
+    )
+    conn.execute(
+        """
+        CREATE TABLE model_factor_covariance_daily (
+            as_of_date TEXT,
+            factor_name TEXT,
+            factor_name_2 TEXT,
+            covariance REAL,
+            run_id TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO model_factor_covariance_daily (
+            as_of_date, factor_name, factor_name_2, covariance, run_id, updated_at
+        ) VALUES ('2026-03-02', 'Beta', 'Beta', 0.04, 'run-1', '2026-03-02T00:00:00+00:00')
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE model_specific_risk_daily (
+            as_of_date TEXT,
+            ric TEXT,
+            ticker TEXT,
+            specific_var REAL,
+            specific_vol REAL,
+            obs INTEGER,
+            trbc_business_sector TEXT,
+            run_id TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO model_specific_risk_daily (
+            as_of_date, ric, ticker, specific_var, specific_vol, obs,
+            trbc_business_sector, run_id, updated_at
+        ) VALUES (
+            '2026-03-02', 'ABC.N', 'ABC', 0.09, 0.30, 252,
+            'Software', 'run-1', '2026-03-02T00:00:00+00:00'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE model_run_metadata (
+            run_id TEXT PRIMARY KEY,
+            refresh_mode TEXT,
+            status TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            factor_returns_asof TEXT,
+            source_dates_json TEXT,
+            params_json TEXT,
+            risk_engine_state_json TEXT,
+            row_counts_json TEXT,
+            error_type TEXT,
+            error_message TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO model_run_metadata (
+            run_id, refresh_mode, status, started_at, completed_at,
+            factor_returns_asof, source_dates_json, params_json,
+            risk_engine_state_json, row_counts_json, error_type, error_message, updated_at
+        ) VALUES (
+            'run-1', 'core-weekly', 'ok', '2026-03-02T00:00:00+00:00', '2026-03-02T00:05:00+00:00',
+            '2026-03-02', '{}', '{}', '{}', '{}', NULL, NULL, '2026-03-02T00:05:00+00:00'
+        )
+        """
     )
     conn.commit()
     conn.close()
@@ -119,11 +250,7 @@ def test_run_bounded_parity_audit_detects_factor_return_value_drift(
     monkeypatch.setattr(
         neon_mirror,
         "_pg_columns",
-        lambda _pg_conn, table: (
-            ["date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol", "cross_section_n", "eligible_n", "coverage"]
-            if table == "model_factor_returns_daily"
-            else ["ric", "date"]
-        ),
+        lambda _pg_conn, table: _fake_pg_columns(table),
     )
     monkeypatch.setattr(neon_mirror, "_pg_count_window", _fake_pg_count_window)
     monkeypatch.setattr(
@@ -188,11 +315,7 @@ def test_run_bounded_parity_audit_reports_factor_return_inference_coverage(
     monkeypatch.setattr(
         neon_mirror,
         "_pg_columns",
-        lambda _pg_conn, table: (
-            ["date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol", "cross_section_n", "eligible_n", "coverage"]
-            if table == "model_factor_returns_daily"
-            else ["ric", "date"]
-        ),
+        lambda _pg_conn, table: _fake_pg_columns(table),
     )
     monkeypatch.setattr(neon_mirror, "_pg_count_window", _fake_pg_count_window)
     monkeypatch.setattr(
@@ -253,6 +376,21 @@ def test_run_bounded_parity_audit_detects_open_period_pit_rows(
             "latest_distinct": 1 if date_col else None,
         },
     )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_columns",
+        lambda _pg_conn, table: _fake_pg_columns(table),
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_non_null_counts",
+        lambda _pg_conn, *, table, columns, date_col=None, cutoff=None: {col: 1 for col in columns},
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_group_count_by_date",
+        lambda _pg_conn, *, table, date_col, dates: {date: 1 for date in dates},
+    )
     monkeypatch.setattr(neon_mirror, "_pg_duplicate_key_groups", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(
         neon_mirror,
@@ -308,6 +446,21 @@ def test_run_bounded_parity_audit_detects_multiple_monthly_pit_anchors(
             "max_date": "2026-03-01" if date_col else None,
             "latest_distinct": 1 if date_col else None,
         },
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_columns",
+        lambda _pg_conn, table: _fake_pg_columns(table),
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_non_null_counts",
+        lambda _pg_conn, *, table, columns, date_col=None, cutoff=None: {col: 1 for col in columns},
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_group_count_by_date",
+        lambda _pg_conn, *, table, date_col, dates: {date: 1 for date in dates},
     )
     monkeypatch.setattr(neon_mirror, "_pg_duplicate_key_groups", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(
@@ -371,3 +524,64 @@ def test_run_bounded_parity_audit_detects_duplicate_price_keys(
     assert "duplicate_keys:security_prices_eod" in out["issues"]
     assert out["tables"]["security_prices_eod"]["duplicate_key_groups"]["source"] == 1
     assert out["tables"]["security_prices_eod"]["duplicate_key_groups"]["target"] == 1
+
+
+def test_run_bounded_parity_audit_detects_missing_neon_model_run_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sqlite_path = tmp_path / "data.db"
+    cache_path = tmp_path / "cache.db"
+    _create_sqlite_runtime(sqlite_path, cache_path)
+
+    monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_table_exists",
+        lambda _pg_conn, table: table != "model_run_metadata",
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_count_window",
+        lambda _pg_conn, *, table, date_col, cutoff, distinct_col="ric": {
+            "row_count": 1,
+            "min_date": "2026-03-01" if date_col else None,
+            "max_date": "2026-03-02" if date_col else None,
+            "latest_distinct": 1 if date_col else None,
+        },
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_columns",
+        lambda _pg_conn, table: _fake_pg_columns(table),
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_non_null_counts",
+        lambda _pg_conn, *, table, columns, date_col=None, cutoff=None: {col: 1 for col in columns},
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_group_count_by_date",
+        lambda _pg_conn, *, table, date_col, dates: {date: 1 for date in dates},
+    )
+    monkeypatch.setattr(neon_mirror, "_pg_duplicate_key_groups", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_pit_period_health",
+        lambda *_args, **_kwargs: {"periods_with_multiple_anchors": 0, "open_period_rows": 0},
+    )
+    monkeypatch.setattr(neon_mirror, "_pit_latest_closed_anchor", lambda **_kwargs: "2026-02-27")
+
+    out = neon_mirror.run_bounded_parity_audit(
+        sqlite_path=sqlite_path,
+        dsn="postgresql://example",
+        source_years=10,
+        analytics_years=5,
+    )
+
+    assert out["status"] == "mismatch"
+    assert "mismatch:model_run_metadata" in out["issues"]
+    assert out["tables"]["model_run_metadata"]["status"] == "mismatch"
+    assert out["tables"]["model_run_metadata"]["reason"] == "missing_target_table:model_run_metadata"

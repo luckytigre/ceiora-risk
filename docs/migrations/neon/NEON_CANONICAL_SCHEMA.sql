@@ -145,8 +145,51 @@ CREATE TABLE IF NOT EXISTS model_factor_returns_daily (
     cross_section_n INTEGER,
     eligible_n INTEGER,
     coverage DOUBLE PRECISION,
+    run_id TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (date, factor_name)
+);
+
+ALTER TABLE model_factor_returns_daily
+    ADD COLUMN IF NOT EXISTS run_id TEXT;
+
+CREATE TABLE IF NOT EXISTS model_factor_covariance_daily (
+    as_of_date DATE NOT NULL,
+    factor_name TEXT NOT NULL,
+    factor_name_2 TEXT NOT NULL,
+    covariance DOUBLE PRECISION NOT NULL,
+    run_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (as_of_date, factor_name, factor_name_2)
+);
+
+CREATE TABLE IF NOT EXISTS model_specific_risk_daily (
+    as_of_date DATE NOT NULL,
+    ric TEXT NOT NULL,
+    ticker TEXT,
+    specific_var DOUBLE PRECISION NOT NULL,
+    specific_vol DOUBLE PRECISION NOT NULL,
+    obs INTEGER NOT NULL DEFAULT 0,
+    trbc_business_sector TEXT,
+    run_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (as_of_date, ric)
+);
+
+CREATE TABLE IF NOT EXISTS model_run_metadata (
+    run_id TEXT PRIMARY KEY,
+    refresh_mode TEXT NOT NULL,
+    status TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ NOT NULL,
+    factor_returns_asof DATE,
+    source_dates_json TEXT NOT NULL,
+    params_json TEXT NOT NULL,
+    risk_engine_state_json TEXT NOT NULL,
+    row_counts_json TEXT NOT NULL,
+    error_type TEXT,
+    error_message TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS serving_payload_current (
@@ -158,6 +201,12 @@ CREATE TABLE IF NOT EXISTS serving_payload_current (
     updated_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS runtime_state_current (
+    state_key TEXT PRIMARY KEY,
+    value_json JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_security_master_ticker ON security_master (ticker);
 
 CREATE INDEX IF NOT EXISTS idx_security_prices_eod_date ON security_prices_eod (date);
@@ -165,5 +214,13 @@ CREATE INDEX IF NOT EXISTS idx_security_fundamentals_pit_asof ON security_fundam
 CREATE INDEX IF NOT EXISTS idx_security_classification_pit_asof ON security_classification_pit (as_of_date);
 CREATE INDEX IF NOT EXISTS idx_barra_raw_cross_section_history_asof ON barra_raw_cross_section_history (as_of_date);
 CREATE INDEX IF NOT EXISTS idx_barra_raw_cross_section_history_ticker ON barra_raw_cross_section_history (ticker);
+CREATE INDEX IF NOT EXISTS idx_model_factor_returns_daily_date ON model_factor_returns_daily (date);
 CREATE INDEX IF NOT EXISTS idx_model_factor_returns_daily_factor ON model_factor_returns_daily (factor_name);
+CREATE INDEX IF NOT EXISTS idx_model_factor_covariance_daily_asof ON model_factor_covariance_daily (as_of_date);
+CREATE INDEX IF NOT EXISTS idx_model_factor_covariance_daily_factor ON model_factor_covariance_daily (factor_name);
+CREATE INDEX IF NOT EXISTS idx_model_specific_risk_daily_asof ON model_specific_risk_daily (as_of_date);
+CREATE INDEX IF NOT EXISTS idx_model_specific_risk_daily_ric ON model_specific_risk_daily (ric);
+CREATE INDEX IF NOT EXISTS idx_model_run_metadata_completed ON model_run_metadata (completed_at);
+CREATE INDEX IF NOT EXISTS idx_model_run_metadata_status ON model_run_metadata (status);
 CREATE INDEX IF NOT EXISTS idx_serving_payload_current_updated ON serving_payload_current (updated_at);
+CREATE INDEX IF NOT EXISTS idx_runtime_state_current_updated ON runtime_state_current (updated_at);

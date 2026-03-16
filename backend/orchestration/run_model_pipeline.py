@@ -23,7 +23,7 @@ from backend.analytics.refresh_policy import (
     risk_recompute_due as _risk_recompute_due_impl,
 )
 from backend.analytics.pipeline import RISK_ENGINE_METHOD_VERSION, run_refresh
-from backend.data import core_reads, job_runs, rebuild_cross_section_snapshot, sqlite
+from backend.data import core_reads, job_runs, rebuild_cross_section_snapshot, runtime_state, sqlite
 from backend.risk_model import (
     build_factor_covariance_from_cache,
     build_specific_risk_from_cache,
@@ -308,7 +308,11 @@ def _publish_neon_sync_health(
         "error_message": (error_details or {}).get("message"),
         "artifact_path": str(artifact_path) if artifact_path else None,
     }
-    sqlite.cache_set("neon_sync_health", payload)
+    runtime_state.persist_runtime_state(
+        "neon_sync_health",
+        payload,
+        fallback_writer=lambda key, value: sqlite.cache_set(key, value),
+    )
 
     if status == "error":
         logger.error("Neon sync/parity health ERROR: %s", message)
@@ -360,7 +364,11 @@ def _publish_neon_serving_write_health(
         "artifact_path": None,
         "health_scope": "serving_payload_write",
     }
-    sqlite.cache_set("neon_sync_health", payload)
+    runtime_state.persist_runtime_state(
+        "neon_sync_health",
+        payload,
+        fallback_writer=lambda key, value: sqlite.cache_set(key, value),
+    )
     logger.error("Neon serving payload health ERROR: %s", payload["error_message"])
 
 
@@ -407,7 +415,10 @@ def _risk_cache_ready() -> bool:
 def _serving_refresh_skip_risk_engine(*, today_utc: date) -> tuple[bool, str]:
     if not _risk_cache_ready():
         return False, "risk_cache_missing"
-    risk_engine_meta = sqlite.cache_get_live_first("risk_engine_meta") or {}
+    risk_engine_meta = runtime_state.load_runtime_state(
+        "risk_engine_meta",
+        fallback_loader=sqlite.cache_get_live_first,
+    ) or {}
     should_recompute, recompute_reason = _risk_recompute_due(
         risk_engine_meta,
         today_utc=today_utc,
