@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from backend import config
@@ -32,13 +33,13 @@ _PUBLISH_METADATA_PAYLOAD_NAMES = {
 }
 
 
-def load_publishable_payloads() -> tuple[dict[str, Any], list[str]]:
+def load_publishable_payloads(*, cache_db: Path | None = None) -> tuple[dict[str, Any], list[str]]:
     payloads: dict[str, Any] = {}
     missing: list[str] = []
     for payload_name in _PUBLISH_ONLY_PAYLOAD_NAMES:
         payload = serving_outputs.load_runtime_payload(
             payload_name,
-            fallback_loader=sqlite.cache_get,
+            fallback_loader=lambda key: sqlite.cache_get(key, db_path=cache_db),
         )
         if payload is None:
             missing.append(payload_name)
@@ -70,12 +71,13 @@ def restamp_publishable_payloads(
 def persist_publish_only_payloads(
     *,
     data_db,
+    cache_db: Path | None = None,
     run_id: str,
     refresh_mode: str,
     refresh_scope_key: str | None,
     refresh_started_at: str,
 ) -> dict[str, Any]:
-    payloads, missing_payloads = load_publishable_payloads()
+    payloads, missing_payloads = load_publishable_payloads(cache_db=cache_db)
     if missing_payloads:
         raise RuntimeError(
             "publish-only requested but cached serving payloads are incomplete: "
@@ -112,8 +114,8 @@ def persist_publish_only_payloads(
         "reason": "publish_only",
         "run_id": run_id,
     }
-    sqlite.cache_set("model_outputs_write", model_outputs_write)
-    sqlite.cache_set("serving_outputs_write", serving_outputs_write)
+    sqlite.cache_set("model_outputs_write", model_outputs_write, db_path=cache_db)
+    sqlite.cache_set("serving_outputs_write", serving_outputs_write, db_path=cache_db)
     return {
         "status": "ok",
         "run_id": run_id,

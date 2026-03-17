@@ -24,13 +24,13 @@ def test_exposure_history_route_resolves_factor_id_to_factor_name(monkeypatch) -
         return None
 
     monkeypatch.setattr(
-        exposures_routes,
+        exposures_routes.factor_history_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: _load_payload(name),
     )
-    monkeypatch.setattr(exposures_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(exposures_routes.factor_history_service, "cache_get", lambda key: None)
     monkeypatch.setattr(
-        exposures_routes,
+        exposures_routes.factor_history_service,
         "load_factor_return_history",
         lambda cache_db, *, factor, years: ("2026-03-03", [("2026-03-02", 0.01)]) if factor == "Beta" and years == 5 else (None, []),
     )
@@ -73,9 +73,9 @@ def test_exposure_history_route_resolves_factor_id_from_history_when_catalog_mis
     conn.commit()
     conn.close()
 
-    monkeypatch.setattr(exposures_routes, "load_runtime_payload", lambda name, *, fallback_loader=None: None)
-    monkeypatch.setattr(exposures_routes, "cache_get", lambda key: None)
-    monkeypatch.setattr(exposures_routes.config, "SQLITE_PATH", str(cache_db))
+    monkeypatch.setattr(exposures_routes.factor_history_service, "load_runtime_payload", lambda name, *, fallback_loader=None: None)
+    monkeypatch.setattr(exposures_routes.factor_history_service, "cache_get", lambda key: None)
+    monkeypatch.setattr(exposures_routes.factor_history_service.config, "SQLITE_PATH", str(cache_db))
     monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: False)
 
     client = TestClient(app)
@@ -116,9 +116,9 @@ def test_exposure_history_route_resolves_punctuated_industry_name_from_history(
     conn.commit()
     conn.close()
 
-    monkeypatch.setattr(exposures_routes, "load_runtime_payload", lambda name, *, fallback_loader=None: None)
-    monkeypatch.setattr(exposures_routes, "cache_get", lambda key: None)
-    monkeypatch.setattr(exposures_routes.config, "SQLITE_PATH", str(cache_db))
+    monkeypatch.setattr(exposures_routes.factor_history_service, "load_runtime_payload", lambda name, *, fallback_loader=None: None)
+    monkeypatch.setattr(exposures_routes.factor_history_service, "cache_get", lambda key: None)
+    monkeypatch.setattr(exposures_routes.factor_history_service.config, "SQLITE_PATH", str(cache_db))
     monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: False)
 
     client = TestClient(app)
@@ -189,12 +189,12 @@ def test_exposure_history_route_returns_market_history_when_neon_surface_is_stal
             return None
 
     monkeypatch.setattr(
-        exposures_routes,
+        exposures_routes.factor_history_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: {"factor_catalog": [{"factor_id": "market", "factor_name": "Market"}]} if name == "risk" else None,
     )
-    monkeypatch.setattr(exposures_routes, "cache_get", lambda key: None)
-    monkeypatch.setattr(exposures_routes.config, "SQLITE_PATH", str(cache_db))
+    monkeypatch.setattr(exposures_routes.factor_history_service, "cache_get", lambda key: None)
+    monkeypatch.setattr(exposures_routes.factor_history_service.config, "SQLITE_PATH", str(cache_db))
     monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: True)
     monkeypatch.setattr(history_queries, "_path_matches_config", lambda path, configured: True)
     monkeypatch.setattr(history_queries, "resolve_dsn", lambda _dsn=None: "postgresql://example")

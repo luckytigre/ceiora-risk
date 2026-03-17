@@ -11,9 +11,9 @@ from backend import config
 
 
 def test_portfolio_route_uses_persisted_payload_when_cache_missing(monkeypatch) -> None:
-    monkeypatch.setattr(portfolio_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(portfolio_routes.dashboard_payload_service, "cache_get", lambda key: None)
     monkeypatch.setattr(
-        portfolio_routes,
+        portfolio_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda key, *, fallback_loader=None: {
             "positions": [{"ticker": "AAPL", "weight": 1.0}],
@@ -52,8 +52,12 @@ def test_risk_route_uses_persisted_payload_when_cache_incomplete(monkeypatch) ->
             return {"status": "ok", "warnings": [], "checks": {}}
         return None
 
-    monkeypatch.setattr(risk_routes, "cache_get", _fake_cache)
-    monkeypatch.setattr(risk_routes, "load_runtime_payload", lambda key, *, fallback_loader=None: _fake_payload(key))
+    monkeypatch.setattr(risk_routes.dashboard_payload_service, "cache_get", _fake_cache)
+    monkeypatch.setattr(
+        risk_routes.dashboard_payload_service,
+        "load_runtime_payload",
+        lambda key, *, fallback_loader=None: _fake_payload(key),
+    )
     client = TestClient(app)
     res = client.get("/api/risk")
     assert res.status_code == 200
@@ -61,9 +65,9 @@ def test_risk_route_uses_persisted_payload_when_cache_incomplete(monkeypatch) ->
 
 
 def test_exposures_route_uses_persisted_payload_when_cache_missing(monkeypatch) -> None:
-    monkeypatch.setattr(exposures_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(exposures_routes.dashboard_payload_service, "cache_get", lambda key: None)
     monkeypatch.setattr(
-        exposures_routes,
+        exposures_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda key, *, fallback_loader=None: {"raw": [{"factor_id": "style_beta_score", "value": 1.0}], "sensitivity": [], "risk_contribution": []}
         if key == "exposures"
@@ -112,23 +116,21 @@ def test_serving_routes_preserve_snapshot_metadata_when_present(monkeypatch) -> 
         "source_dates": portfolio_payload["source_dates"],
     }
 
-    monkeypatch.setattr(portfolio_routes, "cache_get", lambda key: None)
+    payloads = {
+        "portfolio": portfolio_payload,
+        "risk": risk_payload,
+        "exposures": exposures_payload,
+        "model_sanity": {"status": "ok", "warnings": [], "checks": {}},
+    }
     monkeypatch.setattr(
-        portfolio_routes,
-        "load_runtime_payload",
-        lambda key, *, fallback_loader=None: portfolio_payload if key == "portfolio" else None,
+        portfolio_routes.dashboard_payload_service,
+        "cache_get",
+        lambda key: None,
     )
-    monkeypatch.setattr(risk_routes, "cache_get", lambda key: None)
     monkeypatch.setattr(
-        risk_routes,
+        portfolio_routes.dashboard_payload_service,
         "load_runtime_payload",
-        lambda key, *, fallback_loader=None: risk_payload if key == "risk" else {"status": "ok", "warnings": [], "checks": {}} if key == "model_sanity" else None,
-    )
-    monkeypatch.setattr(exposures_routes, "cache_get", lambda key: None)
-    monkeypatch.setattr(
-        exposures_routes,
-        "load_runtime_payload",
-        lambda key, *, fallback_loader=None: exposures_payload if key == "exposures" else None,
+        lambda key, *, fallback_loader=None: payloads.get(key),
     )
 
     client = TestClient(app)
@@ -156,9 +158,9 @@ def test_universe_routes_use_persisted_payload_when_cache_missing(monkeypatch) -
         "ticker_count": 1,
         "eligible_ticker_count": 1,
     }
-    monkeypatch.setattr(universe_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(universe_routes.universe_service, "cache_get", lambda key: None)
     monkeypatch.setattr(
-        universe_routes,
+        universe_routes.universe_service,
         "load_runtime_payload",
         lambda key, *, fallback_loader=None: payload if key == "universe_loadings" else (payload if key == "universe_factors" else None),
     )
@@ -179,14 +181,14 @@ def test_portfolio_route_prefers_persisted_payload_in_serving_outputs_mode(monke
     monkeypatch.setattr(config, "APP_RUNTIME_ROLE", "local-ingest")
     monkeypatch.setattr(config, "neon_surface_enabled", lambda surface: surface == "serving_outputs")
     monkeypatch.setattr(
-        portfolio_routes,
+        portfolio_routes.dashboard_payload_service,
         "cache_get",
         lambda key: {"positions": [{"ticker": "STALE"}], "position_count": 1, "total_value": 1.0}
         if key == "portfolio"
         else None,
     )
     monkeypatch.setattr(
-        portfolio_routes,
+        portfolio_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda key, *, fallback_loader=None: {"positions": [{"ticker": "LIVE"}], "position_count": 1, "total_value": 100.0}
         if key == "portfolio"
@@ -227,8 +229,12 @@ def test_risk_route_prefers_persisted_payload_in_serving_outputs_mode(monkeypatc
             return {"status": "ok", "warnings": [], "checks": {"source": "durable"}}
         return None
 
-    monkeypatch.setattr(risk_routes, "cache_get", _fake_cache)
-    monkeypatch.setattr(risk_routes, "load_runtime_payload", lambda key, *, fallback_loader=None: _fake_payload(key))
+    monkeypatch.setattr(risk_routes.dashboard_payload_service, "cache_get", _fake_cache)
+    monkeypatch.setattr(
+        risk_routes.dashboard_payload_service,
+        "load_runtime_payload",
+        lambda key, *, fallback_loader=None: _fake_payload(key),
+    )
     client = TestClient(app)
     res = client.get("/api/risk")
     assert res.status_code == 200
@@ -242,14 +248,14 @@ def test_portfolio_route_prefers_durable_reads_in_cloud_mode_even_without_flag(m
     monkeypatch.setattr(config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(config, "neon_surface_enabled", lambda surface: surface == "serving_outputs")
     monkeypatch.setattr(
-        portfolio_routes,
+        portfolio_routes.dashboard_payload_service,
         "cache_get",
         lambda key: {"positions": [{"ticker": "STALE"}], "position_count": 1, "total_value": 1.0}
         if key == "portfolio"
         else None,
     )
     monkeypatch.setattr(
-        portfolio_routes,
+        portfolio_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda key, *, fallback_loader=None: {"positions": [{"ticker": "LIVE"}], "position_count": 1, "total_value": 100.0}
         if key == "portfolio"
@@ -266,13 +272,17 @@ def test_portfolio_route_does_not_fallback_to_cache_in_cloud_mode(monkeypatch) -
     monkeypatch.setattr(config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(config, "neon_surface_enabled", lambda surface: surface == "serving_outputs")
     monkeypatch.setattr(
-        portfolio_routes,
+        portfolio_routes.dashboard_payload_service,
         "cache_get",
         lambda key: {"positions": [{"ticker": "STALE"}], "position_count": 1, "total_value": 1.0}
         if key == "portfolio"
         else None,
     )
-    monkeypatch.setattr(portfolio_routes, "load_runtime_payload", lambda key, *, fallback_loader=None: None)
+    monkeypatch.setattr(
+        portfolio_routes.dashboard_payload_service,
+        "load_runtime_payload",
+        lambda key, *, fallback_loader=None: None,
+    )
     client = TestClient(app)
     res = client.get("/api/portfolio")
     assert res.status_code == 503

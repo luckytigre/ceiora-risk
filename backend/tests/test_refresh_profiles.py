@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import pytest
 
 run_model_pipeline = importlib.import_module("backend.orchestration.run_model_pipeline")
@@ -506,7 +507,7 @@ def test_source_sync_stage_refuses_to_downgrade_neon_sources(monkeypatch: pytest
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
 
-    def _load_source_dates():
+    def _load_source_dates(**kwargs):
         backend = run_model_pipeline.core_reads.core_read_backend_name()
         if backend == "local":
             return {"prices_asof": "2026-03-13", "fundamentals_asof": "2026-03-13", "classification_asof": "2026-03-13"}
@@ -533,7 +534,7 @@ def test_source_sync_stage_allows_healing_neon_dates_newer_than_target(monkeypat
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
 
-    def _load_source_dates():
+    def _load_source_dates(**kwargs):
         backend = run_model_pipeline.core_reads.core_read_backend_name()
         if backend == "local":
             return {"prices_asof": "2026-03-13", "fundamentals_asof": "2026-03-04", "classification_asof": "2026-03-04"}
@@ -578,7 +579,7 @@ def test_source_sync_stage_allows_healing_open_period_pit_dates(monkeypatch: pyt
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
     monkeypatch.setattr(run_model_pipeline.config, "SOURCE_DAILY_PIT_FREQUENCY", "monthly")
 
-    def _load_source_dates():
+    def _load_source_dates(**kwargs):
         backend = run_model_pipeline.core_reads.core_read_backend_name()
         if backend == "local":
             return {"prices_asof": "2026-03-13", "fundamentals_asof": "2026-02-27", "classification_asof": "2026-02-27"}
@@ -703,7 +704,53 @@ def test_serving_refresh_stage_only_requests_deep_diagnostics_for_core_lanes(
     )
 
     assert out["status"] == "ok"
+    assert captured["data_db"] == run_model_pipeline.DATA_DB
+    assert captured["cache_db"] == run_model_pipeline.CACHE_DB
     assert captured["refresh_deep_health_diagnostics"] is expected_recompute
+
+
+def test_risk_model_stage_writes_workspace_cache_without_global_path_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    workspace_cache_db = tmp_path / "workspace_cache.db"
+    original_cache_path = str(run_model_pipeline.config.SQLITE_PATH)
+
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "build_factor_covariance_from_cache",
+        lambda cache_db, **kwargs: (
+            pd.DataFrame([[0.04]], index=["Market"], columns=["Market"]),
+            0.88,
+        ),
+    )
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "build_specific_risk_from_cache",
+        lambda cache_db, **kwargs: {"AAPL.OQ": {"specific_var": 0.01}},
+    )
+    monkeypatch.setattr(
+        run_model_pipeline.runtime_support,
+        "latest_factor_return_date",
+        lambda cache_db: "2026-03-13",
+    )
+
+    out = run_model_pipeline._run_stage(
+        profile="cold-core",
+        stage="risk_model",
+        as_of_date="2026-03-14",
+        should_run_core=True,
+        serving_mode="full",
+        force_core=False,
+        core_reason="due",
+        data_db=tmp_path / "workspace_data.db",
+        cache_db=workspace_cache_db,
+    )
+
+    assert out["status"] == "ok"
+    assert str(run_model_pipeline.config.SQLITE_PATH) == original_cache_path
+    assert run_model_pipeline.sqlite.cache_get_live("risk_engine_meta", db_path=workspace_cache_db)["status"] == "ok"
+    assert run_model_pipeline.sqlite.cache_get_live("risk_engine_cov", db_path=workspace_cache_db)["factors"] == ["Market"]
 
 
 def test_explicit_neon_core_window_fails_without_neon_readiness(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -145,7 +145,7 @@ def stage_refresh_cache_snapshot(
     logger.info("Staging refresh cache snapshot: snapshot_id=%s mode=%s", snapshot_id, refresh_mode)
 
     def _stage_cache(key: str, value: Any) -> None:
-        sqlite.cache_set(key, value, snapshot_id=snapshot_id)
+        sqlite.cache_set(key, value, snapshot_id=snapshot_id, db_path=cache_db)
 
     risk_engine_state = build_risk_engine_state(
         risk_engine_meta=risk_engine_meta,
@@ -153,7 +153,7 @@ def stage_refresh_cache_snapshot(
         recompute_reason=str(recompute_reason),
     )
     eligibility_summary = (
-        sqlite.cache_get("eligibility")
+        sqlite.cache_get("eligibility", db_path=cache_db)
         if reuse_cached_static_payloads
         else None
     )
@@ -243,7 +243,7 @@ def stage_refresh_cache_snapshot(
     _stage_cache("model_sanity", sanity)
     _stage_cache("cuse4_foundation", cuse4_foundation)
 
-    cached_health_payload = sqlite.cache_get("health_diagnostics")
+    cached_health_payload = sqlite.cache_get("health_diagnostics", db_path=cache_db)
     health_refresh_state = "deferred"
     if bool(recompute_health_diagnostics):
         health_payload = compute_health_diagnostics(

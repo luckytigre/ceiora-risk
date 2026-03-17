@@ -10,7 +10,6 @@ from backend.analytics.pipeline import RISK_ENGINE_METHOD_VERSION
 from backend.analytics.refresh_policy import risk_recompute_due as _risk_recompute_due_impl
 from backend.data import core_reads, job_runs, runtime_state, sqlite
 from backend.orchestration.profiles import profile_catalog
-from backend.orchestration.run_model_pipeline import DATA_DB
 from backend.services.refresh_manager import _runtime_allowed_profiles, get_refresh_status
 from backend.services.holdings_runtime_state import get_holdings_sync_state
 from backend.trading_calendar import previous_or_same_xnys_session
@@ -192,7 +191,10 @@ def _newer_local_archive_fields(
 def build_operator_status_payload() -> dict[str, Any]:
     catalog = profile_catalog()
     profiles = [str(item.get("profile") or "") for item in catalog]
-    latest_runs = job_runs.latest_run_summary_by_profile(db_path=DATA_DB, profiles=profiles)
+    latest_runs = job_runs.latest_run_summary_by_profile(
+        db_path=job_runs.default_db_path(),
+        profiles=profiles,
+    )
     try:
         source_dates = _load_authoritative_operator_source_dates()
     except Exception:

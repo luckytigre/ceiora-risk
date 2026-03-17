@@ -12,11 +12,15 @@ from backend.api.routes import universe as universe_routes
 
 def test_portfolio_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(
-        portfolio_routes,
+        portfolio_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: {"positions": [], "total_value": 1, "position_count": 0} if name == "portfolio" else None,
     )
-    monkeypatch.setattr(portfolio_routes, "cache_get", lambda key: {"positions": [], "total_value": 999, "position_count": 9})
+    monkeypatch.setattr(
+        portfolio_routes.dashboard_payload_service,
+        "cache_get",
+        lambda key: {"positions": [], "total_value": 999, "position_count": 9},
+    )
 
     client = TestClient(app)
     res = client.get("/api/portfolio")
@@ -27,11 +31,15 @@ def test_portfolio_prefers_serving_payload_over_cache(monkeypatch) -> None:
 
 def test_exposures_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(
-        exposures_routes,
+        exposures_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: {"raw": [{"factor_id": "style_size_score"}]} if name == "exposures" else None,
     )
-    monkeypatch.setattr(exposures_routes, "cache_get", lambda key: {"raw": [{"factor_id": "style_momentum_score"}]})
+    monkeypatch.setattr(
+        exposures_routes.dashboard_payload_service,
+        "cache_get",
+        lambda key: {"raw": [{"factor_id": "style_momentum_score"}]},
+    )
 
     client = TestClient(app)
     res = client.get("/api/exposures?mode=raw")
@@ -42,13 +50,13 @@ def test_exposures_prefers_serving_payload_over_cache(monkeypatch) -> None:
 
 def test_exposures_normalizes_legacy_factor_field(monkeypatch) -> None:
     monkeypatch.setattr(
-        exposures_routes,
+        exposures_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: {"raw": [{"factor": "Momentum", "value": 1.0}], "sensitivity": [], "risk_contribution": []}
         if name == "exposures"
         else None,
     )
-    monkeypatch.setattr(exposures_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(exposures_routes.dashboard_payload_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/exposures?mode=raw")
@@ -67,11 +75,11 @@ def test_risk_prefers_serving_payload_over_cache(monkeypatch) -> None:
         "risk_engine": {"specific_risk_ticker_count": 1},
     }
     monkeypatch.setattr(
-        risk_routes,
+        risk_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: risk_payload if name == "risk" else {"status": "ok"} if name == "model_sanity" else None,
     )
-    monkeypatch.setattr(risk_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(risk_routes.dashboard_payload_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/risk")
@@ -90,11 +98,11 @@ def test_risk_normalizes_legacy_factor_and_country_fields(monkeypatch) -> None:
         "risk_engine": {"specific_risk_ticker_count": 1},
     }
     monkeypatch.setattr(
-        risk_routes,
+        risk_routes.dashboard_payload_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: risk_payload if name == "risk" else {"status": "ok"} if name == "model_sanity" else None,
     )
-    monkeypatch.setattr(risk_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(risk_routes.dashboard_payload_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/risk")
@@ -111,12 +119,12 @@ def test_risk_normalizes_legacy_factor_and_country_fields(monkeypatch) -> None:
 def test_health_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(health_routes, "require_role", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        health_routes,
+        health_routes.health_diagnostics_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: {"status": "ok", "as_of": "2026-03-03", "notes": ["fresh"]} if name == "health_diagnostics" else None,
     )
     monkeypatch.setattr(
-        health_routes,
+        health_routes.health_diagnostics_service,
         "cache_get",
         lambda key: {"status": "ok", "as_of": "2020-01-01", "notes": ["stale"]} if key == "health_diagnostics" else None,
     )
@@ -135,11 +143,15 @@ def test_universe_search_prefers_serving_payload_over_cache(monkeypatch) -> None
         "by_ticker": {"JPM": {"ticker": "JPM", "ric": "JPM.N"}},
     }
     monkeypatch.setattr(
-        universe_routes,
+        universe_routes.universe_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: payload if name == "universe_loadings" else None,
     )
-    monkeypatch.setattr(universe_routes, "cache_get", lambda key: {"index": [], "by_ticker": {}})
+    monkeypatch.setattr(
+        universe_routes.universe_service,
+        "cache_get",
+        lambda key: {"index": [], "by_ticker": {}},
+    )
 
     client = TestClient(app)
     res = client.get("/api/universe/search?q=JPM")

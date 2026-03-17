@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from contextlib import nullcontext
 from pathlib import Path
 
 import pandas as pd
@@ -292,16 +293,16 @@ def test_pipeline_prefers_fundamentals_asof(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_source_dates",
-        lambda: {
+        lambda **kwargs: {
             "fundamentals_asof": "2026-02-27",
             "classification_asof": "2026-03-01",
             "prices_asof": "2026-03-07",
             "exposures_asof": "2026-03-07",
         },
     )
-    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda: pd.DataFrame())
+    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda **kwargs: pd.DataFrame())
 
-    def _load_latest_fundamentals(*, as_of_date: str | None = None, tickers=None):
+    def _load_latest_fundamentals(*, as_of_date: str | None = None, tickers=None, data_db=None):
         captured["as_of_date"] = as_of_date
         return pd.DataFrame()
 
@@ -327,8 +328,8 @@ def test_pipeline_prefers_fundamentals_asof(monkeypatch: pytest.MonkeyPatch) -> 
         }
         return payloads.get(key)
 
-    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
-    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key, **kwargs: _cache_get(key))
     monkeypatch.setattr(
         pipeline.runtime_state,
         "load_runtime_state",
@@ -414,12 +415,12 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_source_dates",
-        lambda: dict(source_dates),
+        lambda **kwargs: dict(source_dates),
     )
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_latest_prices",
-        lambda: (_ for _ in ()).throw(AssertionError("should not load latest prices")),
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not load latest prices")),
     )
     monkeypatch.setattr(
         pipeline.core_reads,
@@ -451,9 +452,9 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
         }
         return payloads.get(key)
 
-    monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key: _cache_get(key))
-    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key: _cache_get(key))
-    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key, **kwargs: _cache_get(key))
     monkeypatch.setattr(
         pipeline.runtime_state,
         "load_runtime_state",
@@ -659,12 +660,12 @@ def test_pipeline_fallback_light_refresh_skips_model_outputs_when_risk_engine_is
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_source_dates",
-        lambda: dict(source_dates),
+        lambda **kwargs: dict(source_dates),
     )
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_latest_prices",
-        lambda: pd.DataFrame([{"ticker": "AAPL", "ric": "AAPL.OQ", "close": 100.0}]),
+        lambda **kwargs: pd.DataFrame([{"ticker": "AAPL", "ric": "AAPL.OQ", "close": 100.0}]),
     )
     monkeypatch.setattr(
         pipeline.core_reads,
@@ -698,9 +699,9 @@ def test_pipeline_fallback_light_refresh_skips_model_outputs_when_risk_engine_is
         }
         return payloads.get(key)
 
-    monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key: _cache_get(key))
-    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key: _cache_get(key))
-    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key, **kwargs: _cache_get(key))
     monkeypatch.setattr(
         pipeline.runtime_state,
         "load_runtime_state",
@@ -818,23 +819,23 @@ def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_source_dates",
-        lambda: {
+        lambda **kwargs: {
             "prices_asof": "2026-03-07",
             "fundamentals_asof": "2026-03-07",
             "classification_asof": "2026-03-07",
             "exposures_asof": "2026-03-07",
         },
     )
-    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda: pd.DataFrame({"ticker": ["AAPL"]}))
+    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda **kwargs: pd.DataFrame({"ticker": ["AAPL"]}))
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_latest_fundamentals",
-        lambda as_of_date=None: pd.DataFrame({"ticker": ["AAPL"]}),
+        lambda as_of_date=None, **kwargs: pd.DataFrame({"ticker": ["AAPL"]}),
     )
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_raw_cross_section_latest",
-        lambda: pd.DataFrame({"ticker": ["AAPL"], "beta_score": [1.0]}),
+        lambda **kwargs: pd.DataFrame({"ticker": ["AAPL"], "beta_score": [1.0]}),
     )
     monkeypatch.setattr(
         pipeline,
@@ -874,7 +875,7 @@ def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
     monkeypatch.setattr(
         pipeline,
         "_load_cached_risk_display_payload",
-        lambda: None,
+        lambda **kwargs: None,
     )
     monkeypatch.setattr(
         pipeline,
@@ -919,12 +920,12 @@ def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
     monkeypatch.setattr(
         pipeline.sqlite,
         "cache_get",
-        lambda key: stale_meta if key == "risk_engine_meta" else None,
+        lambda key, **kwargs: stale_meta if key == "risk_engine_meta" else None,
     )
     monkeypatch.setattr(
         pipeline.sqlite,
         "cache_get_live_first",
-        lambda key: {
+        lambda key, **kwargs: {
             "risk_engine_meta": fresh_meta,
             "risk_engine_cov": fresh_cov,
             "risk_engine_specific_risk": fresh_specific,
@@ -1028,7 +1029,7 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_source_dates",
-        lambda: {
+        lambda **kwargs: {
             "fundamentals_asof": "2026-02-27",
             "classification_asof": "2026-02-27",
             "prices_asof": "2026-03-13",
@@ -1036,10 +1037,10 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
             "exposures_latest_available_asof": "2026-03-13",
         },
     )
-    monkeypatch.setattr(pipeline, "_load_cached_risk_display_payload", lambda: {"factors": [], "correlation": []})
-    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda: pytest.fail("should not rebuild prices"))
-    monkeypatch.setattr(pipeline.core_reads, "load_latest_fundamentals", lambda as_of_date=None: pytest.fail("should not rebuild fundamentals"))
-    monkeypatch.setattr(pipeline.core_reads, "load_raw_cross_section_latest", lambda: pytest.fail("should not rebuild exposures"))
+    monkeypatch.setattr(pipeline, "_load_cached_risk_display_payload", lambda **kwargs: {"factors": [], "correlation": []})
+    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda **kwargs: pytest.fail("should not rebuild prices"))
+    monkeypatch.setattr(pipeline.core_reads, "load_latest_fundamentals", lambda as_of_date=None, **kwargs: pytest.fail("should not rebuild fundamentals"))
+    monkeypatch.setattr(pipeline.core_reads, "load_raw_cross_section_latest", lambda **kwargs: pytest.fail("should not rebuild exposures"))
     monkeypatch.setattr(pipeline, "_build_positions_from_universe", lambda by_ticker: ([{"ticker": "AAPL"}], 1.0))
     monkeypatch.setattr(
         pipeline,
@@ -1083,7 +1084,7 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
     monkeypatch.setattr(
         pipeline.sqlite,
         "cache_get_live_first",
-        lambda key: {
+        lambda key, **kwargs: {
             "risk_engine_cov": {"factors": ["style_beta_score"], "matrix": [[1.0]]},
             "risk_engine_specific_risk": {"AAPL": {"ticker": "AAPL", "specific_var": 0.01, "specific_vol": 0.1}},
         }.get(key),
@@ -1091,7 +1092,7 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
     monkeypatch.setattr(
         pipeline.sqlite,
         "cache_get",
-        lambda key: (
+        lambda key, **kwargs: (
             {
                 "by_ticker": {"AAPL": {"ticker": "AAPL", "exposures": {}, "model_status": "core_estimated"}},
                 "ticker_count": 1,
@@ -1179,7 +1180,7 @@ def test_run_refresh_publish_only_republishes_cached_payloads_without_recompute(
         "universe_loadings": {"run_id": "old_run", "snapshot_id": "old_snapshot"},
     }
 
-    monkeypatch.setattr(pipeline, "_load_publishable_payloads", lambda: (dict(payloads), []))
+    monkeypatch.setattr(pipeline, "_load_publishable_payloads", lambda **kwargs: (dict(payloads), []))
     monkeypatch.setattr(
         pipeline.serving_outputs,
         "persist_current_payloads",
@@ -1192,7 +1193,7 @@ def test_run_refresh_publish_only_republishes_cached_payloads_without_recompute(
     monkeypatch.setattr(
         pipeline.core_reads,
         "load_source_dates",
-        lambda: (_ for _ in ()).throw(AssertionError("publish-only should not load source dates")),
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("publish-only should not load source dates")),
     )
 
     out = pipeline.run_refresh(mode="publish")
@@ -1492,7 +1493,7 @@ def test_run_stage_serving_refresh_uses_local_backend_during_core_rebuild(
     assert captured["backend"] == "local"
 
 
-def test_temporary_runtime_paths_updates_core_reads_data_db(
+def test_run_stage_serving_refresh_passes_workspace_paths_without_mutating_core_reads(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1501,13 +1502,40 @@ def test_temporary_runtime_paths_updates_core_reads_data_db(
     new_data_db.touch()
     new_cache_db.touch()
     original = run_model_pipeline_module.core_reads.DATA_DB
+    captured: dict[str, object] = {}
 
-    with run_model_pipeline_module.runtime_support.temporary_runtime_paths(
+    monkeypatch.setattr(
+        run_model_pipeline_module.runtime_support,
+        "serving_refresh_skip_risk_engine",
+        lambda **kwargs: (True, "risk_cache_current"),
+    )
+    monkeypatch.setattr(run_model_pipeline_module.core_reads, "core_read_backend", lambda backend: nullcontext())
+
+    def _run_refresh(**kwargs):
+        captured.update(kwargs)
+        captured["core_reads_data_db"] = run_model_pipeline_module.core_reads.DATA_DB
+        return {"status": "ok"}
+
+    monkeypatch.setattr(run_model_pipeline_module, "run_refresh", _run_refresh)
+
+    out = run_model_pipeline_module._run_stage(
+        profile="cold-core",
+        stage="serving_refresh",
+        as_of_date="2026-03-14",
+        should_run_core=True,
+        serving_mode="full",
+        force_core=False,
+        core_reason="method_version_change",
         data_db=new_data_db,
         cache_db=new_cache_db,
-    ):
-        assert run_model_pipeline_module.core_reads.DATA_DB == new_data_db.resolve()
+        prefer_local_source_archive=False,
+        refresh_scope=None,
+    )
 
+    assert out["status"] == "ok"
+    assert captured["data_db"] == new_data_db
+    assert captured["cache_db"] == new_cache_db
+    assert captured["core_reads_data_db"] == original
     assert run_model_pipeline_module.core_reads.DATA_DB == original
 
 

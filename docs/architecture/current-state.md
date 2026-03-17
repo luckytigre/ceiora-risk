@@ -91,7 +91,7 @@ Problems:
   - CLI concerns
 - profile and stage-selection metadata have now been extracted to `backend/orchestration/profiles.py`, but the main execution and publication logic still live together
 - as-of/session planning and post-run Neon publication now also live in dedicated orchestration modules, but stage execution and scratch-workspace control are still concentrated in one file
-- the stage loop, finalization flow, and `_run_stage` implementation are now extracted as orchestration-local modules, but the orchestrator still imports many lower-layer dependencies and remains the main integration hub
+- the stage loop, finalization flow, and `_run_stage` implementation are now extracted as orchestration-local modules, and stage implementation is now split into `stage_source.py`, `stage_core.py`, and `stage_serving.py`; `run_model_pipeline.py` still imports many lower-layer dependencies and remains the main integration hub
 - `refresh_manager` imports orchestration details directly, which couples API-driven refresh management to the full job engine
 - orchestration policy and execution are too intertwined
 
@@ -150,16 +150,47 @@ Primary modules:
 - `backend/services/neon_stage2.py`
 - `backend/services/neon_authority.py`
 - `backend/services/neon_holdings.py`
+- `backend/services/neon_holdings_identifiers.py`
+- `backend/services/neon_holdings_store.py`
 
 Strengths:
 - Neon migration work is concrete and well documented
 - mirror/parity logic is explicit rather than hidden
 - holdings is now a dedicated service area
+- holdings workflows are clearer after separating identifier resolution and persistence primitives out of `neon_holdings.py`
 
 Problems:
 - Neon sync infrastructure is operationally important but spread across several large modules
 - mirror/parity code mixes schema, sync, pruning, audit, and repair-oriented logic
 - rebuild authority, mirror authority, and durable-serving authority are clearer conceptually than they are structurally
+
+### Cross-Section Snapshot Surface
+
+Primary modules:
+- `backend/data/cross_section_snapshot.py`
+- `backend/data/cross_section_snapshot_schema.py`
+- `backend/data/cross_section_snapshot_build.py`
+
+Strengths:
+- the rebuild entrypoint is now explicit and smaller
+- schema maintenance is separated from source loading and payload assembly
+
+Problems:
+- snapshot build logic is still operationally dense and should stay behind the stable facade instead of leaking into callers
+
+### Diagnostics Service Surface
+
+Primary modules:
+- `backend/services/data_diagnostics_service.py`
+- `backend/services/data_diagnostics_sections.py`
+- `backend/services/data_diagnostics_sqlite.py`
+
+Strengths:
+- the route-facing diagnostics surface is now explicit and smaller
+- low-level SQLite inspection is separated from section-level diagnostics assembly
+
+Problems:
+- this remains a local diagnostics surface backed by direct SQLite inspection, so it should stay deliberately narrow and not turn into a second operator-status system
 
 ### Risk Model / Domain Compute
 
@@ -230,7 +261,6 @@ The repository’s biggest fragility points are large ownership-heavy modules:
 - `backend/services/neon_mirror.py`
 - `backend/analytics/health.py`
 - `backend/risk_model/daily_factor_returns.py`
-- `backend/data/cross_section_snapshot.py`
 - `frontend/src/lib/types.ts` is now only a barrel, but its callers still need gradual narrowing
 
 These files are not large only because the domain is large. They are large because multiple roles are merged into one place.

@@ -15,6 +15,7 @@ from backend.api.routes import refresh as refresh_routes
 
 orchestrator = importlib.import_module("backend.orchestration.run_model_pipeline")
 refresh_manager = importlib.import_module("backend.services.refresh_manager")
+operator_status_service = importlib.import_module("backend.services.operator_status_service")
 
 def test_cloud_refresh_requires_operator_token(monkeypatch) -> None:
     monkeypatch.setattr(refresh_routes.config, "APP_RUNTIME_ROLE", "cloud-serve")
@@ -70,7 +71,7 @@ def test_cloud_expensive_diagnostics_require_operator_token(monkeypatch) -> None
     monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(
-        health_routes,
+        health_routes.health_diagnostics_service,
         "load_runtime_payload",
         lambda key, fallback_loader=None: {"status": "ok"} if key == "health_diagnostics" else None,
     )
@@ -87,9 +88,9 @@ def test_cloud_operator_status_requires_operator_token(monkeypatch) -> None:
     monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(operator_route.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(operator_route.config, "OPERATOR_API_TOKEN", "op-secret")
-    monkeypatch.setattr(operator_route.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
-    monkeypatch.setattr(operator_route.core_reads, "load_source_dates", lambda: {})
-    monkeypatch.setattr(operator_route.sqlite, "cache_get", lambda key: {})
+    monkeypatch.setattr(operator_status_service.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
+    monkeypatch.setattr(operator_status_service.core_reads, "load_source_dates", lambda: {})
+    monkeypatch.setattr(operator_status_service.sqlite, "cache_get", lambda key: {})
 
     client = TestClient(app)
     assert client.get("/api/operator/status").status_code == 401

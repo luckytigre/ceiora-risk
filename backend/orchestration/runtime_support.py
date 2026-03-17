@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -28,9 +27,9 @@ def serialize_covariance(cov) -> dict[str, Any]:
     }
 
 
-def risk_cache_ready(*, sqlite_module=sqlite) -> bool:
-    cov_payload = sqlite_module.cache_get_live_first("risk_engine_cov")
-    specific_payload = sqlite_module.cache_get_live_first("risk_engine_specific_risk")
+def risk_cache_ready(*, cache_db: Path | None = None, sqlite_module=sqlite) -> bool:
+    cov_payload = sqlite_module.cache_get_live_first("risk_engine_cov", db_path=cache_db)
+    specific_payload = sqlite_module.cache_get_live_first("risk_engine_specific_risk", db_path=cache_db)
     factors = cov_payload.get("factors") if isinstance(cov_payload, dict) else None
     matrix = cov_payload.get("matrix") if isinstance(cov_payload, dict) else None
     return bool(
@@ -47,15 +46,16 @@ def risk_cache_ready(*, sqlite_module=sqlite) -> bool:
 def serving_refresh_skip_risk_engine(
     *,
     today_utc: date,
+    cache_db: Path | None = None,
     sqlite_module=sqlite,
     resolve_effective_risk_engine_meta_fn=None,
 ) -> tuple[bool, str]:
     if resolve_effective_risk_engine_meta_fn is None:
         resolve_effective_risk_engine_meta_fn = analytics_pipeline._resolve_effective_risk_engine_meta
-    if not risk_cache_ready(sqlite_module=sqlite_module):
+    if not risk_cache_ready(cache_db=cache_db, sqlite_module=sqlite_module):
         return False, "risk_cache_missing"
     risk_engine_meta, _ = resolve_effective_risk_engine_meta_fn(
-        fallback_loader=sqlite_module.cache_get_live_first,
+        fallback_loader=lambda key: sqlite_module.cache_get_live_first(key, db_path=cache_db),
     )
     should_recompute, recompute_reason = risk_recompute_due(
         risk_engine_meta,
@@ -75,31 +75,6 @@ def profile_prefers_local_source_archive(profile: str) -> bool:
         config.runtime_role_allows_ingest()
         and str(profile or "").strip().lower() not in {"serve-refresh", "publish-only"}
     )
-
-
-@contextmanager
-def temporary_runtime_paths(*, data_db: Path, cache_db: Path):
-    data_db_path = Path(data_db).expanduser().resolve()
-    cache_db_path = Path(cache_db).expanduser().resolve()
-    old_data_db_path = str(config.DATA_DB_PATH)
-    old_cache_db_path = str(config.SQLITE_PATH)
-    old_pipeline_data_db = analytics_pipeline.DATA_DB
-    old_pipeline_cache_db = analytics_pipeline.CACHE_DB
-    old_core_reads_data_db = core_reads.DATA_DB
-    config.DATA_DB_PATH = str(data_db_path)
-    config.SQLITE_PATH = str(cache_db_path)
-    analytics_pipeline.DATA_DB = data_db_path
-    analytics_pipeline.CACHE_DB = cache_db_path
-    core_reads.DATA_DB = data_db_path
-    try:
-        yield
-    finally:
-        config.DATA_DB_PATH = old_data_db_path
-        config.SQLITE_PATH = old_cache_db_path
-        analytics_pipeline.DATA_DB = old_pipeline_data_db
-        analytics_pipeline.CACHE_DB = old_pipeline_cache_db
-        core_reads.DATA_DB = old_core_reads_data_db
-
 
 def reset_core_caches(cache_db: Path) -> dict[str, int]:
     conn = sqlite3.connect(str(cache_db))

@@ -7,9 +7,8 @@ from fastapi.testclient import TestClient
 
 from backend.main import app
 from backend.api.routes import operator as operator_route
+from backend.services import operator_status_service as svc
 from backend.analytics import pipeline
-
-svc = operator_route.operator_status_service
 
 
 def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:

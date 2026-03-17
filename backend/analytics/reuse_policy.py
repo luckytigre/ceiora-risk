@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -39,8 +40,8 @@ def can_reuse_cached_universe_loadings(
     return True, "source_and_risk_engine_match"
 
 
-def load_cached_risk_display_payload() -> CovarianceMatrixPayload | None:
-    cached_risk = sqlite.cache_get("risk")
+def load_cached_risk_display_payload(*, cache_db: Path | None = None) -> CovarianceMatrixPayload | None:
+    cached_risk = sqlite.cache_get("risk", db_path=cache_db)
     if not isinstance(cached_risk, dict):
         return None
     cov_matrix = cached_risk.get("cov_matrix")

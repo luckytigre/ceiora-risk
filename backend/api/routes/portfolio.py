@@ -11,13 +11,8 @@ from backend import config
 from backend.api.auth import require_role
 from backend.api.routes.presenters import normalize_trbc_sector_fields
 from backend.api.routes.readiness import raise_cache_not_ready
-from backend.data.serving_outputs import load_runtime_payload
-from backend.data.sqlite import cache_get
-from backend.services.dashboard_payload_service import (
-    DashboardPayloadNotReady,
-    load_portfolio_response,
-)
 from backend.services import holdings_service
+from backend.services import dashboard_payload_service
 from backend.services.portfolio_whatif import preview_portfolio_whatif
 
 router = APIRouter()
@@ -45,12 +40,10 @@ class WhatIfApplyRequest(BaseModel):
 @router.get("/portfolio")
 async def get_portfolio():
     try:
-        return load_portfolio_response(
-            payload_loader=load_runtime_payload,
-            fallback_loader=cache_get,
+        return dashboard_payload_service.load_portfolio_response(
             position_normalizer=normalize_trbc_sector_fields,
         )
-    except DashboardPayloadNotReady as exc:
+    except dashboard_payload_service.DashboardPayloadNotReady as exc:
         raise_cache_not_ready(
             cache_key=exc.cache_key,
             message=exc.message,

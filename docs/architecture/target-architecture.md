@@ -90,6 +90,7 @@ Responsibilities:
 - sequence multi-step operational work
 - record checkpoints and artifacts
 - call domain routines and adapters
+- pass runtime execution context, including workspace/canonical db targets, explicitly rather than mutating process-wide module state
 
 Current home:
 - `backend/orchestration`
@@ -155,6 +156,9 @@ backend/
     stage_planning.py
     runtime_support.py
     stage_runner.py
+    stage_source.py
+    stage_core.py
+    stage_serving.py
     post_run_publish.py
     run_model_pipeline.py
   analytics/
@@ -196,6 +200,9 @@ The first pieces of this shape now exist in code:
 - `backend/orchestration/stage_execution.py`
 - `backend/orchestration/finalize_run.py`
 - `backend/orchestration/stage_runner.py`
+- `backend/orchestration/stage_source.py`
+- `backend/orchestration/stage_core.py`
+- `backend/orchestration/stage_serving.py`
 - `backend/analytics/refresh_context.py`
 - `backend/analytics/reuse_policy.py`
 - `backend/analytics/publish_payloads.py`

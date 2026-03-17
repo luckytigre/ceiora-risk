@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 def persist_refresh_outputs(
     *,
     data_db: Path,
+    cache_db: Path,
     run_id: str,
     snapshot_id: str,
     refresh_mode: str,
@@ -40,7 +41,7 @@ def persist_refresh_outputs(
         else:
             model_outputs_write = model_outputs.persist_model_outputs(
                 data_db=data_db,
-                cache_db=Path(config.SQLITE_PATH),
+                cache_db=cache_db,
                 run_id=run_id,
                 refresh_mode=refresh_mode,
                 status="ok",
@@ -59,9 +60,9 @@ def persist_refresh_outputs(
             "run_id": run_id,
             "error": {"type": type(exc).__name__, "message": str(exc)},
         }
-        sqlite.cache_set("model_outputs_write", model_outputs_write)
+        sqlite.cache_set("model_outputs_write", model_outputs_write, db_path=cache_db)
         raise RuntimeError(f"Relational model output persistence failed: {type(exc).__name__}: {exc}") from exc
-    sqlite.cache_set("model_outputs_write", model_outputs_write)
+    sqlite.cache_set("model_outputs_write", model_outputs_write, db_path=cache_db)
 
     try:
         serving_outputs_write = serving_outputs.persist_current_payloads(
@@ -86,16 +87,16 @@ def persist_refresh_outputs(
             "run_id": run_id,
             "error": {"type": type(exc).__name__, "message": str(exc)},
         }
-        sqlite.cache_set("serving_outputs_write", serving_outputs_write)
+        sqlite.cache_set("serving_outputs_write", serving_outputs_write, db_path=cache_db)
         raise RuntimeError(f"Serving payload persistence failed: {type(exc).__name__}: {exc}") from exc
-    sqlite.cache_set("serving_outputs_write", serving_outputs_write)
+    sqlite.cache_set("serving_outputs_write", serving_outputs_write, db_path=cache_db)
     runtime_state.persist_runtime_state(
         "risk_engine_meta",
         risk_engine_state,
-        fallback_writer=lambda key, value: sqlite.cache_set(key, value),
+        fallback_writer=lambda key, value: sqlite.cache_set(key, value, db_path=cache_db),
     )
     runtime_state.publish_active_snapshot(
         snapshot_id,
-        fallback_publisher=sqlite.cache_publish_snapshot,
+        fallback_publisher=lambda sid: sqlite.cache_publish_snapshot(sid, db_path=cache_db),
     )
     return model_outputs_write, serving_outputs_write

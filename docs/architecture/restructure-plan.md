@@ -1,12 +1,12 @@
 # Repository Restructure Plan
 
 Date: 2026-03-16
-Status: Active master plan
+Status: Original restructure scope completed; follow-up hardening workstreams completed
 Owner: Codex
 
 ## Overview
 
-This is the living master plan for the repository restructuring program.
+This is the master plan for the original repository restructuring program.
 
 It tracks:
 - current architectural goals
@@ -17,6 +17,12 @@ It tracks:
 - deferred work
 - known risks
 - next steps
+
+The original scope tracked here is complete.
+
+Post-restructure cleanup of the remaining audit issues is now tracked in:
+
+- [follow-up-remediation-plan.md](./follow-up-remediation-plan.md)
 
 This plan complements:
 - [current-state.md](./current-state.md)
@@ -146,6 +152,37 @@ Scope:
 ## In-Progress Items
 
 - none for the original restructure scope
+- post-audit cleanup is tracked separately in [follow-up-remediation-plan.md](./follow-up-remediation-plan.md)
+- Batch 1 of the follow-up plan is complete:
+  - route boundary cleanup
+  - operator-status decoupling from the orchestrator
+  - first architecture guard tests
+- Batch 2 of the follow-up plan is complete:
+  - hidden runtime path mutation removed
+  - explicit `data_db` / `cache_db` threading added to orchestration-driven refresh execution
+  - targeted workspace-path guard tests added
+- Batch 3 of the follow-up plan is complete:
+  - `stage_runner.py` reduced to a stage-family dispatch surface
+  - source/core/serving stage implementation moved into orchestration-local family modules
+  - stage-level behavior validated against refresh-profile and operating-model contract tests
+- Batch 4 of the follow-up plan is complete:
+  - `data_diagnostics_service.py` reduced to a stable route-facing facade
+  - SQLite inspection helpers moved into `backend/services/data_diagnostics_sqlite.py`
+  - diagnostics section builders moved into `backend/services/data_diagnostics_sections.py`
+  - behavior validated against diagnostics-route, architecture-boundary, and cloud-auth/runtime-role tests
+- Batch 5 of the follow-up plan is complete:
+  - `neon_holdings.py` reduced to a workflow surface over explicit helper modules
+  - identifier and ticker-resolution logic moved into `backend/services/neon_holdings_identifiers.py`
+  - schema, batch/account persistence, position mutation primitives, and holdings listing queries moved into `backend/services/neon_holdings_store.py`
+  - behavior validated against holdings-service, holdings-route, and portfolio-whatif tests
+- Batch 6 of the follow-up plan is complete:
+  - `cross_section_snapshot.py` reduced to a stable rebuild facade over explicit schema and build helpers
+  - schema maintenance moved into `backend/data/cross_section_snapshot_schema.py`
+  - source-event loading and payload assembly moved into `backend/data/cross_section_snapshot_build.py`
+  - behavior validated against audit-fix and operating-model contract tests
+- Batch 7 of the follow-up plan is complete:
+  - architecture guard tests now reject new `shared.py`, `common.py`, and vague `*manager.py` module names under `backend/`
+  - `refresh_manager.py` remains the one explicit allow-listed exception
 
 ## Deferred Items
 
@@ -171,6 +208,6 @@ Scope:
 
 ## Next Recommended Steps
 
-1. Treat `docs/architecture/restructure-plan.md` as the active repository-structure tracker; use the remaining top-level plan docs as domain-specific execution history or focused operating notes.
+1. Treat this file as the historical record of the completed restructure program and use [follow-up-remediation-plan.md](./follow-up-remediation-plan.md) for the remaining audit-driven cleanups.
 2. Revisit `backend/services/neon_mirror.py`, `backend/analytics/health.py`, and large risk-model workflow modules only when there is a concrete behavior or ownership win.
-3. Keep the current shape stable long enough for ordinary feature work before deciding whether any further package churn is justified.
+3. For the active follow-up batch sequence, the remaining work is selective review of deferred large modules only when there is a concrete ownership or behavior win.

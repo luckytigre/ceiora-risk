@@ -76,10 +76,12 @@ Workflow/orchestration modules should:
 - define stages and job sequencing
 - coordinate long-running tasks
 - publish run status and artifacts
+- pass runtime db targets and similar execution context explicitly when stage execution is redirected to a workspace or non-canonical store
 
 Workflow/orchestration modules should not:
 - own every low-level helper used inside a stage
 - become the only place where profile metadata can be queried
+- mutate process-wide module globals just to retarget data or cache paths for one run
 
 ## Data Adapter Rules
 
@@ -115,6 +117,9 @@ Prohibited patterns:
 - `shared.py`
 - `manager.py` without lifecycle responsibility
 - catch-all `utils` modules that are actually mini-frameworks
+
+Current reviewed exception:
+- `backend/services/refresh_manager.py` is allowed because it owns concrete process-local refresh lifecycle control
 
 ## Documentation Rules
 

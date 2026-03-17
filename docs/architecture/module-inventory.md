@@ -11,7 +11,7 @@ Owner: Codex
 | `backend/api` | FastAPI routes, auth, router registration, some response shaping | Route thinness is inconsistent; some routes still assemble domain truth inline |
 | `backend/analytics` | Serving refresh pipeline, diagnostics, payload contracts, reusable risk/exposure views | `pipeline.py` is too broad; health diagnostics are mixed near lighter serving work |
 | `backend/data` | SQLite/Neon adapters, query surfaces, durable model/serving/runtime state | `core_reads.py` and `model_outputs.py` are now thin facades, but they still expose internal composition helpers that deserve restraint |
-| `backend/orchestration` | Profile-driven rebuild/refresh job orchestration | Much improved after decomposition, but `run_model_pipeline.py` is still the central integration shell |
+| `backend/orchestration` | Profile-driven rebuild/refresh job orchestration | Much improved after decomposition; `run_model_pipeline.py` remains the central integration shell, while stage family ownership now lives across `stage_source.py`, `stage_core.py`, and `stage_serving.py` |
 | `backend/risk_model` | Factor-model math, regression, raw-history generation, covariance/specific risk | Some workflow/storage behavior still leaks into domain packages |
 | `backend/services` | Application services, Neon sync/mirror, holdings mutations, refresh manager, route-facing assembly | `services/` mixes application surfaces with heavy infrastructure and workflow helpers |
 | `backend/universe` | Universe bootstrap, ESTU, security master sync | Clearer than many areas, but still tied into orchestration and source-table workflows |
@@ -45,6 +45,49 @@ Problems:
 - hard to test components independently
 - imports many layers directly
 
+### `backend/orchestration/stage_runner.py`
+
+Appears to own:
+- orchestration-local stage dispatch
+- family routing between source, core, and serving stage helpers
+
+Problems:
+- much smaller and clearer now
+- still acts as the central stage entry surface, so it should stay boring and avoid reaccreting stage logic
+
+### `backend/orchestration/stage_source.py`
+
+Appears to own:
+- ingest
+- source sync
+- Neon readiness / workspace preparation
+
+Problems:
+- source sync still reconciles local and Neon source dates inline
+- remains operationally sensitive because it gates source authority publication
+
+### `backend/orchestration/stage_core.py`
+
+Appears to own:
+- raw history rebuild
+- feature snapshot rebuild
+- ESTU rebuild
+- factor returns
+- risk model publication to cache
+
+Problems:
+- clearer than the old branch-heavy stage runner, but still a meaningful compute/publication hub
+
+### `backend/orchestration/stage_serving.py`
+
+Appears to own:
+- serving refresh execution
+- local-vs-Neon read selection during rebuild windows
+
+Problems:
+- small and focused now
+- should stay orchestration-local and not become a second refresh pipeline
+
 ### `backend/analytics/pipeline.py`
 
 Appears to own:
@@ -57,6 +100,16 @@ Appears to own:
 Problems:
 - still the main refresh coordinator after extracting context, reuse, publish, and persistence helpers
 - hard to isolate a single serving surface
+
+### `backend/services/data_diagnostics_service.py`
+
+Appears to own:
+- the route-facing `/api/data/diagnostics` payload surface
+- final payload assembly and diagnostics-scope framing
+
+Problems:
+- now much smaller after moving SQLite inspection into `data_diagnostics_sqlite.py` and section builders into `data_diagnostics_sections.py`
+- should stay a thin facade and not reaccrete raw SQL inspection logic
 
 ### `backend/analytics/services/cache_publisher.py`
 
@@ -94,6 +147,16 @@ Problems:
 - now a stable facade over `model_output_schema.py`, `model_output_state.py`, `model_output_payloads.py`, and `model_output_writers.py`
 - now has tests driven by configuration and lower-level helper seams rather than facade-private monkeypatch hooks
 
+### `backend/data/cross_section_snapshot.py`
+
+Appears to own:
+- the stable cross-section snapshot rebuild facade used by refresh and orchestration flows
+
+Problems:
+- now thinner after moving schema maintenance into `cross_section_snapshot_schema.py`
+- now thinner after moving source-event loading and payload assembly into `cross_section_snapshot_build.py`
+- should stay a facade and not reaccrete raw schema or source-query logic
+
 ### `backend/services/neon_mirror.py`
 
 Appears to own:
@@ -106,6 +169,16 @@ Appears to own:
 Problems:
 - very large infrastructure module
 - multiple operational roles combined
+
+### `backend/services/neon_holdings.py`
+
+Appears to own:
+- holdings import, what-if apply, and single-position edit workflows
+
+Problems:
+- now thinner after moving normalization and identifier resolution into `neon_holdings_identifiers.py`
+- now thinner after moving schema, account/batch persistence, mutation primitives, and list queries into `neon_holdings_store.py`
+- should stay a workflow surface and not reaccrete raw persistence helpers
 
 ### `backend/analytics/health.py`
 
@@ -129,7 +202,7 @@ Problems:
 
 | Route | Current State | Notes |
 | --- | --- | --- |
-| `operator.py` | Improved; now delegates to service | Still carries temporary compatibility seam for older tests |
+| `operator.py` | Improved; now delegates to service | Good route/service split |
 | `data.py` | Improved; now delegates to service | Good model for future route cleanup |
 | `exposures.py` | Better | Serving-payload assembly is extracted; history resolution still lives here |
 | `risk.py` | Better | Serving-payload assembly is extracted |

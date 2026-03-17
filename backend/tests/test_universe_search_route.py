@@ -16,11 +16,11 @@ def test_universe_search_uses_index_ric_when_present(monkeypatch) -> None:
         },
     }
     monkeypatch.setattr(
-        universe_routes,
+        universe_routes.universe_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: payload if name == "universe_loadings" else None,
     )
-    monkeypatch.setattr(universe_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(universe_routes.universe_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/universe/search?q=jpm&limit=20")
@@ -41,11 +41,11 @@ def test_universe_search_fills_ric_from_by_ticker_when_index_missing(monkeypatch
         },
     }
     monkeypatch.setattr(
-        universe_routes,
+        universe_routes.universe_service,
         "load_runtime_payload",
         lambda name, *, fallback_loader=None: payload if name == "universe_loadings" else None,
     )
-    monkeypatch.setattr(universe_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(universe_routes.universe_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/universe/search?q=wmt&limit=20")

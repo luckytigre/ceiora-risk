@@ -324,7 +324,6 @@ def _run_stage(
         build_specific_risk_from_cache_fn=build_specific_risk_from_cache,
         latest_factor_return_date_fn=runtime_support.latest_factor_return_date,
         serialize_covariance_fn=runtime_support.serialize_covariance,
-        temporary_runtime_paths_cm=runtime_support.temporary_runtime_paths,
         serving_refresh_skip_risk_engine_fn=runtime_support.serving_refresh_skip_risk_engine,
         run_refresh_fn=run_refresh,
         previous_or_same_xnys_session_fn=previous_or_same_xnys_session,

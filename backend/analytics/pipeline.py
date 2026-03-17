@@ -62,6 +62,14 @@ CACHE_DB = Path(config.SQLITE_PATH)
 RISK_ENGINE_METHOD_VERSION = refresh_context.RISK_ENGINE_METHOD_VERSION
 
 
+def _resolve_data_db(data_db: Path | None = None) -> Path:
+    return Path(data_db or DATA_DB).expanduser().resolve()
+
+
+def _resolve_cache_db(cache_db: Path | None = None) -> Path:
+    return Path(cache_db or CACHE_DB).expanduser().resolve()
+
+
 def _finite_float(value: Any, default: float = 0.0) -> float:
     try:
         out = float(value)
@@ -95,8 +103,8 @@ def _can_reuse_cached_universe_loadings(
     )
 
 
-def _load_cached_risk_display_payload() -> CovarianceMatrixPayload | None:
-    return reuse_policy.load_cached_risk_display_payload()
+def _load_cached_risk_display_payload(*, cache_db: Path | None = None) -> CovarianceMatrixPayload | None:
+    return reuse_policy.load_cached_risk_display_payload(cache_db=cache_db)
 
 
 def _risk_recompute_due(meta: dict[str, Any], *, today_utc: date) -> tuple[bool, str]:
@@ -118,8 +126,8 @@ def _serialize_covariance(cov: pd.DataFrame) -> CovariancePayload:
     }
 
 
-def _load_publishable_payloads() -> tuple[dict[str, Any], list[str]]:
-    return publish_payloads.load_publishable_payloads()
+def _load_publishable_payloads(*, cache_db: Path | None = None) -> tuple[dict[str, Any], list[str]]:
+    return publish_payloads.load_publishable_payloads(cache_db=cache_db)
 
 
 def _restamp_publishable_payloads(
@@ -154,6 +162,7 @@ def _build_universe_ticker_loadings(
     prices_df: pd.DataFrame,
     cov: pd.DataFrame,
     *,
+    data_db: Path | None = None,
     specific_risk_by_ticker: dict[str, SpecificRiskPayload] | None = None,
     factor_catalog_by_name: dict[str, object] | None = None,
 ) -> UniverseLoadingsPayload:
@@ -163,7 +172,7 @@ def _build_universe_ticker_loadings(
         fundamentals_df,
         prices_df,
         cov,
-        data_db=DATA_DB,
+        data_db=_resolve_data_db(data_db),
         specific_risk_by_ticker=specific_risk_by_ticker,
         factor_catalog_by_name=factor_catalog_by_name,
     )
@@ -227,6 +236,8 @@ def _compute_position_total_risk_contributions(
 
 def run_refresh(
     *,
+    data_db: Path | None = None,
+    cache_db: Path | None = None,
     force_risk_recompute: bool = False,
     mode: str = "full",
     refresh_scope: str | None = None,
@@ -242,6 +253,8 @@ def run_refresh(
     - publish: republishes already-current cached payloads without recomputing analytics.
     """
     logger.info("Starting refresh pipeline...")
+    effective_data_db = _resolve_data_db(data_db)
+    effective_cache_db = _resolve_cache_db(cache_db)
     refresh_mode = str(mode or "full").strip().lower()
     refresh_scope_key = str(refresh_scope or "").strip().lower() or None
     if refresh_mode not in {"full", "light", "publish"}:
@@ -256,7 +269,7 @@ def run_refresh(
     ).date()
 
     if publish_only_mode:
-        payloads, missing_payloads = _load_publishable_payloads()
+        payloads, missing_payloads = _load_publishable_payloads(cache_db=effective_cache_db)
         if missing_payloads:
             raise RuntimeError(
                 "publish-only requested but cached serving payloads are incomplete: "
@@ -274,7 +287,7 @@ def run_refresh(
         portfolio_payload = dict(payloads.get("portfolio") or {})
         health_payload = dict(payloads.get("health_diagnostics") or {})
         serving_outputs_write = serving_outputs.persist_current_payloads(
-            data_db=DATA_DB,
+            data_db=effective_data_db,
             run_id=run_id,
             snapshot_id=snapshot_id,
             refresh_mode=refresh_mode,
@@ -293,8 +306,8 @@ def run_refresh(
             "reason": "publish_only",
             "run_id": run_id,
         }
-        sqlite.cache_set("model_outputs_write", model_outputs_write)
-        sqlite.cache_set("serving_outputs_write", serving_outputs_write)
+        sqlite.cache_set("model_outputs_write", model_outputs_write, db_path=effective_cache_db)
+        sqlite.cache_set("serving_outputs_write", serving_outputs_write, db_path=effective_cache_db)
         return {
             "status": "ok",
             "run_id": run_id,
@@ -328,11 +341,11 @@ def run_refresh(
     else:
         logger.info("Rebuilding canonical cross-section snapshot...")
         snapshot_build = rebuild_cross_section_snapshot(
-            DATA_DB,
+            effective_data_db,
             mode=str(config.CROSS_SECTION_SNAPSHOT_MODE or "current"),
         )
 
-    source_dates: SourceDatesPayload = core_reads.load_source_dates()
+    source_dates: SourceDatesPayload = core_reads.load_source_dates(data_db=effective_data_db)
     fundamentals_asof = source_dates.get("fundamentals_asof") or source_dates.get("exposures_asof")
 
     # Optional cUSE4 foundation maintenance (additive, non-breaking).
@@ -348,7 +361,7 @@ def run_refresh(
         try:
             if bool(config.CUSE4_AUTO_BOOTSTRAP):
                 cuse4_bootstrap = bootstrap_cuse4_source_tables(
-                    db_path=DATA_DB,
+                    db_path=effective_data_db,
                 )
             estu_asof = (
                 source_dates.get("fundamentals_asof")
@@ -356,7 +369,7 @@ def run_refresh(
                 or today_utc.isoformat()
             )
             cuse4_estu = build_and_persist_estu_membership(
-                db_path=DATA_DB,
+                db_path=effective_data_db,
                 as_of_date=str(estu_asof),
             )
             cuse4_foundation = {
@@ -375,7 +388,7 @@ def run_refresh(
 
     # 2. Weekly risk-engine recompute gate.
     risk_engine_meta, risk_engine_meta_source = _resolve_effective_risk_engine_meta(
-        fallback_loader=sqlite.cache_get_live_first,
+        fallback_loader=lambda key: sqlite.cache_get_live_first(key, db_path=effective_cache_db),
     )
     should_recompute, recompute_reason = _risk_recompute_due(risk_engine_meta, today_utc=today_utc)
     if skip_risk_engine:
@@ -388,8 +401,8 @@ def run_refresh(
         should_recompute = True
         recompute_reason = "force_risk_recompute"
 
-    cov = _deserialize_covariance(sqlite.cache_get_live_first("risk_engine_cov"))
-    cached_specific = sqlite.cache_get_live_first("risk_engine_specific_risk")
+    cov = _deserialize_covariance(sqlite.cache_get_live_first("risk_engine_cov", db_path=effective_cache_db))
+    cached_specific = sqlite.cache_get_live_first("risk_engine_specific_risk", db_path=effective_cache_db)
     specific_risk_by_security: dict[str, SpecificRiskPayload] = (
         cached_specific if isinstance(cached_specific, dict) else {}
     )
@@ -416,22 +429,22 @@ def run_refresh(
             recompute_reason,
         )
         compute_daily_factor_returns(
-            DATA_DB,
-            CACHE_DB,
+            effective_data_db,
+            effective_cache_db,
             min_cross_section_age_days=config.CROSS_SECTION_MIN_AGE_DAYS,
         )
         cov, latest_r2 = build_factor_covariance_from_cache(
-            CACHE_DB, lookback_days=config.LOOKBACK_DAYS
+            effective_cache_db, lookback_days=config.LOOKBACK_DAYS
         )
         specific_risk_by_security = build_specific_risk_from_cache(
-            CACHE_DB,
+            effective_cache_db,
             lookback_days=config.LOOKBACK_DAYS,
         )
         risk_engine_meta = {
             "status": "ok",
             "method_version": RISK_ENGINE_METHOD_VERSION,
             "last_recompute_date": today_utc.isoformat(),
-            "factor_returns_latest_date": _latest_factor_return_date(CACHE_DB),
+            "factor_returns_latest_date": _latest_factor_return_date(effective_cache_db),
             "lookback_days": int(config.LOOKBACK_DAYS),
             "cross_section_min_age_days": int(config.CROSS_SECTION_MIN_AGE_DAYS),
             "recompute_interval_days": int(config.RISK_RECOMPUTE_INTERVAL_DAYS),
@@ -467,7 +480,7 @@ def run_refresh(
     universe_loadings_reused = False
     universe_loadings_reuse_reason = "not_attempted"
     cached_universe_loadings = (
-        sqlite.cache_get("universe_loadings")
+        sqlite.cache_get("universe_loadings", db_path=effective_cache_db)
         if light_mode and not recomputed_this_refresh
         else None
     )
@@ -492,11 +505,12 @@ def run_refresh(
             "Fetching full-universe inputs from local database for rebuild (%s)...",
             universe_loadings_reuse_reason,
         )
-        prices_universe_df = core_reads.load_latest_prices()
+        prices_universe_df = core_reads.load_latest_prices(data_db=effective_data_db)
         fundamentals_universe_df = core_reads.load_latest_fundamentals(
+            data_db=effective_data_db,
             as_of_date=str(fundamentals_asof) if fundamentals_asof else None,
         )
-        exposures_universe_df = core_reads.load_raw_cross_section_latest()
+        exposures_universe_df = core_reads.load_raw_cross_section_latest(data_db=effective_data_db)
         logger.info(
             "Loaded source rows: prices=%s fundamentals=%s exposures=%s",
             int(len(prices_universe_df)),
@@ -509,6 +523,7 @@ def run_refresh(
             fundamentals_universe_df,
             prices_universe_df,
             cov,
+            data_db=effective_data_db,
             specific_risk_by_ticker=specific_risk_by_ticker,
             factor_catalog_by_name=factor_catalog_by_name,
         )
@@ -578,11 +593,11 @@ def run_refresh(
         and universe_loadings_reused
         and not recomputed_this_refresh
     )
-    cached_risk_display = _load_cached_risk_display_payload() if reuse_cached_risk_display else None
+    cached_risk_display = _load_cached_risk_display_payload(cache_db=effective_cache_db) if reuse_cached_risk_display else None
 
     # 7. Compute exposure modes
     logger.info("Computing exposure modes...")
-    coverage_date, factor_coverage = _load_latest_factor_coverage(CACHE_DB)
+    coverage_date, factor_coverage = _load_latest_factor_coverage(effective_cache_db)
     if factor_name_to_id:
         factor_coverage = {
             factor_name_to_id[factor_name]: payload
@@ -669,8 +684,8 @@ def run_refresh(
             and universe_loadings_reused
             and not recomputed_this_refresh
         ),
-        data_db=DATA_DB,
-        cache_db=CACHE_DB,
+        data_db=effective_data_db,
+        cache_db=effective_cache_db,
     )
     snapshot_id = str(staged.get("snapshot_id") or run_id)
     risk_engine_state = dict(staged.get("risk_engine_state") or {})
@@ -680,7 +695,8 @@ def run_refresh(
     persisted_payloads = dict(staged.get("persisted_payloads") or {})
 
     model_outputs_write, serving_outputs_write = refresh_persistence.persist_refresh_outputs(
-        data_db=DATA_DB,
+        data_db=effective_data_db,
+        cache_db=effective_cache_db,
         run_id=run_id,
         snapshot_id=snapshot_id,
         refresh_mode=refresh_mode,

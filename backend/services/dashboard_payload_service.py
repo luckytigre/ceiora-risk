@@ -6,6 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from backend.data.serving_outputs import load_runtime_payload
+from backend.data.sqlite import cache_get
+
 
 PayloadLoader = Callable[[str], Any]
 RuntimePayloadLoader = Callable[[str], Any]
@@ -22,9 +25,13 @@ class DashboardPayloadNotReady(RuntimeError):
 def _load_payload(
     payload_name: str,
     *,
-    payload_loader: Callable[..., Any],
+    payload_loader: Callable[..., Any] | None,
     fallback_loader,
 ) -> Any:
+    if payload_loader is None:
+        payload_loader = load_runtime_payload
+    if fallback_loader is None:
+        fallback_loader = cache_get
     return payload_loader(payload_name, fallback_loader=fallback_loader)
 
 
@@ -106,8 +113,8 @@ def _risk_payload_complete(data: Any) -> bool:
 def load_exposures_response(
     *,
     mode: str,
-    payload_loader,
-    fallback_loader,
+    payload_loader=None,
+    fallback_loader=None,
 ) -> dict[str, Any]:
     data = _load_payload(
         "exposures",
@@ -133,8 +140,8 @@ def load_exposures_response(
 
 def load_risk_response(
     *,
-    payload_loader,
-    fallback_loader,
+    payload_loader=None,
+    fallback_loader=None,
 ) -> dict[str, Any]:
     data = _load_payload(
         "risk",
@@ -171,8 +178,8 @@ def load_risk_response(
 
 def load_portfolio_response(
     *,
-    payload_loader,
-    fallback_loader,
+    payload_loader=None,
+    fallback_loader=None,
     position_normalizer: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
     data = _load_payload(
