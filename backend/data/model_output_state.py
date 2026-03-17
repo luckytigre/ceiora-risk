@@ -6,6 +6,11 @@ import json
 import sqlite3
 from typing import Any
 
+import math
+
+from backend import config
+from backend.trading_calendar import lagged_xnys_session
+
 
 def latest_date(conn: sqlite3.Connection, *, table: str, col: str) -> str | None:
     row = conn.execute(f"SELECT MAX({col}) FROM {table}").fetchone()
@@ -30,7 +35,52 @@ def latest_risk_engine_state(conn: sqlite3.Connection) -> dict[str, Any]:
         decoded = json.loads(str(row[0]))
     except Exception:
         return {}
-    return decoded if isinstance(decoded, dict) else {}
+    if not isinstance(decoded, dict):
+        return {}
+    if "latest_r2" not in decoded:
+        latest_r2 = latest_factor_returns_r2(conn)
+        if latest_r2 is not None:
+            decoded["latest_r2"] = latest_r2
+    if "estimation_exposure_anchor_date" not in decoded:
+        estimation_anchor = _derive_estimation_exposure_anchor_date(decoded)
+        if estimation_anchor is not None:
+            decoded["estimation_exposure_anchor_date"] = estimation_anchor
+    return decoded
+
+
+def _derive_estimation_exposure_anchor_date(meta: dict[str, Any]) -> str | None:
+    latest = str(meta.get("factor_returns_latest_date") or "").strip()
+    if not latest:
+        return None
+    try:
+        lag_days = int(meta.get("cross_section_min_age_days") or config.CROSS_SECTION_MIN_AGE_DAYS)
+    except (TypeError, ValueError):
+        lag_days = int(config.CROSS_SECTION_MIN_AGE_DAYS)
+    try:
+        return lagged_xnys_session(latest, lag_days)
+    except Exception:
+        return None
+
+
+def latest_factor_returns_r2(conn: sqlite3.Connection) -> float | None:
+    latest_factor_date = latest_date(conn, table="model_factor_returns_daily", col="date")
+    if not latest_factor_date:
+        return None
+    row = conn.execute(
+        """
+        SELECT AVG(r_squared)
+        FROM model_factor_returns_daily
+        WHERE date = ?
+        """,
+        (latest_factor_date,),
+    ).fetchone()
+    if not row or row[0] is None:
+        return None
+    try:
+        value = float(row[0])
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
 
 
 def latest_covariance_payload(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -172,7 +222,40 @@ def pg_latest_risk_engine_state(pg_conn) -> dict[str, Any]:
         decoded = json.loads(str(row[0]))
     except Exception:
         return {}
-    return decoded if isinstance(decoded, dict) else {}
+    if not isinstance(decoded, dict):
+        return {}
+    if "latest_r2" not in decoded:
+        latest_r2 = pg_latest_factor_returns_r2(pg_conn)
+        if latest_r2 is not None:
+            decoded["latest_r2"] = latest_r2
+    if "estimation_exposure_anchor_date" not in decoded:
+        estimation_anchor = _derive_estimation_exposure_anchor_date(decoded)
+        if estimation_anchor is not None:
+            decoded["estimation_exposure_anchor_date"] = estimation_anchor
+    return decoded
+
+
+def pg_latest_factor_returns_r2(pg_conn) -> float | None:
+    latest_factor_date = pg_latest_date(pg_conn, table="model_factor_returns_daily", col="date")
+    if not latest_factor_date:
+        return None
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT AVG(r_squared)
+            FROM model_factor_returns_daily
+            WHERE date = %s
+            """,
+            (latest_factor_date,),
+        )
+        row = cur.fetchone()
+    if not row or row[0] is None:
+        return None
+    try:
+        value = float(row[0])
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
 
 
 def pg_latest_covariance_payload(pg_conn) -> dict[str, Any]:

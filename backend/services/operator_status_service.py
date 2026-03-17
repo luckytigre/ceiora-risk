@@ -7,6 +7,7 @@ from typing import Any
 
 from backend import config
 from backend.analytics.pipeline import RISK_ENGINE_METHOD_VERSION
+from backend.analytics.refresh_context import derive_estimation_exposure_anchor_date_from_meta
 from backend.analytics.refresh_policy import risk_recompute_due as _risk_recompute_due_impl
 from backend.data import core_reads, job_runs, runtime_state, sqlite
 from backend.orchestration.profiles import profile_catalog
@@ -188,6 +189,21 @@ def _newer_local_archive_fields(
     return newer
 
 
+def _decorate_risk_engine_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
+    out = dict(meta or {})
+    factor_returns_latest_date = str(out.get("factor_returns_latest_date") or "").strip() or None
+    last_recompute_date = str(out.get("last_recompute_date") or "").strip() or None
+    if factor_returns_latest_date is not None:
+        out.setdefault("core_state_through_date", factor_returns_latest_date)
+    if last_recompute_date is not None:
+        out.setdefault("core_rebuild_date", last_recompute_date)
+    out.setdefault(
+        "estimation_exposure_anchor_date",
+        derive_estimation_exposure_anchor_date_from_meta(out),
+    )
+    return out
+
+
 def build_operator_status_payload() -> dict[str, Any]:
     catalog = profile_catalog()
     profiles = [str(item.get("profile") or "") for item in catalog]
@@ -212,7 +228,7 @@ def build_operator_status_payload() -> dict[str, Any]:
         "risk_engine_meta",
         fallback_loader=sqlite.cache_get_live_first,
     )
-    risk_engine_meta = risk_engine_meta_state.get("value") or {}
+    risk_engine_meta = _decorate_risk_engine_meta(risk_engine_meta_state.get("value") or {})
     refresh_status = get_refresh_status()
     if isinstance(refresh_status, dict):
         refresh_status = _promote_latest_run_into_refresh_status(

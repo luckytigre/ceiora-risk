@@ -11,6 +11,19 @@ BACKEND_DIR = REPO_ROOT / "backend"
 ALLOWED_VAGUE_MODULES = {
     "refresh_manager.py",
 }
+SERVING_WRITE_SCAN_DIRS = (
+    BACKEND_DIR / "api",
+    BACKEND_DIR / "services",
+    BACKEND_DIR / "analytics",
+    BACKEND_DIR / "orchestration",
+)
+FORBIDDEN_PRICE_HISTORY_WRITE_PATTERNS = (
+    "INSERT INTO security_prices_eod",
+    "INSERT OR REPLACE INTO security_prices_eod",
+    "REPLACE INTO security_prices_eod",
+    "UPDATE security_prices_eod",
+    "DELETE FROM security_prices_eod",
+)
 
 
 def _imported_modules(path: Path) -> set[str]:
@@ -48,4 +61,14 @@ def test_backend_does_not_add_new_vague_module_names() -> None:
             if path.name in ALLOWED_VAGUE_MODULES:
                 continue
             offenders.append(str(path.relative_to(REPO_ROOT)))
+    assert offenders == []
+
+
+def test_serving_and_orchestration_layers_do_not_write_canonical_price_history() -> None:
+    offenders: list[str] = []
+    for root in SERVING_WRITE_SCAN_DIRS:
+        for path in sorted(root.rglob("*.py")):
+            text = path.read_text(encoding="utf-8")
+            if any(pattern in text for pattern in FORBIDDEN_PRICE_HISTORY_WRITE_PATTERNS):
+                offenders.append(str(path.relative_to(REPO_ROOT)))
     assert offenders == []

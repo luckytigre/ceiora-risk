@@ -51,12 +51,21 @@ export default function HealthPage() {
     return <AnalyticsLoadingViz message="Loading model health..." />;
   }
 
-  const modelAsOf = riskData?.risk_engine?.factor_returns_latest_date || riskData?.model_sanity?.coverage_date || null;
+  const coreStateThrough = riskData?.risk_engine?.core_state_through_date
+    || riskData?.risk_engine?.factor_returns_latest_date
+    || null;
+  const coreRebuilt = riskData?.risk_engine?.core_rebuild_date
+    || riskData?.risk_engine?.last_recompute_date
+    || null;
+  const estimationExposureAnchor = riskData?.risk_engine?.estimation_exposure_anchor_date || null;
+  const currentLoadingsAsOf = riskData?.source_dates?.exposures_served_asof
+    || riskData?.model_sanity?.coverage_date
+    || null;
   const latestSourceAsOf = operatorData?.source_dates?.exposures_asof
     || riskData?.model_sanity?.latest_available_date
     || latestSourceDate(operatorData?.source_dates);
   const lagDays = riskData?.risk_engine?.cross_section_min_age_days;
-  const rSquared = riskData?.r_squared;
+  const rSquared = riskData?.r_squared ?? riskData?.risk_engine?.latest_r2 ?? null;
   const allowedProfiles = new Set(operatorData?.runtime?.allowed_profiles ?? []);
   const onlyServeRefreshAllowed = allowedProfiles.size > 0 && allowedProfiles.size === 1 && allowedProfiles.has("serve-refresh");
   const neonAuthoritativeRebuilds = Boolean(operatorData?.runtime?.neon_authoritative_rebuilds);
@@ -71,7 +80,7 @@ export default function HealthPage() {
 
   async function handleRefreshPrompt() {
     const proceed = window.confirm(
-      `Run refresh now?\n\nLatest source date: ${latestSourceAsOf || "n/a"}\nModel as-of date: ${modelAsOf || "n/a"}`,
+      `Run refresh now?\n\nLatest loadings source date: ${latestSourceAsOf || "n/a"}\nCore state through: ${coreStateThrough || "n/a"}`,
     );
     if (!proceed) return;
     setRefreshState("running");
@@ -92,9 +101,14 @@ export default function HealthPage() {
   );
   const modelSummary = (
     <div className="chart-card">
-      <h3 style={{ marginBottom: 6 }}>Current Model Quality</h3>
+      <h3 style={{ marginBottom: 6 }}>Current Core Risk State</h3>
       <div className="section-subtitle">
-        Live summary from the currently served risk payload. Load diagnostics below for the deeper regression, coverage, and bias studies.
+        Live summary from the currently served risk payload. The stable core package changes only on core rebuild lanes; daily serving refreshes project against it without advancing it.
+      </div>
+      <div className="section-subtitle" style={{ marginBottom: 14 }}>
+        {currentLoadingsAsOf
+          ? `Daily serving loadings are currently ${fmtAsOfDate(currentLoadingsAsOf)}. The core package below remains frozen until the next core rebuild and uses the lagged estimation anchor shown here.`
+          : "Daily serving loadings can refresh independently; the core package below remains frozen until the next core rebuild."}
       </div>
       <div className="kpi-row">
         <KpiCard
@@ -102,14 +116,29 @@ export default function HealthPage() {
           value={typeof rSquared === "number" ? `${(rSquared * 100).toFixed(1)}%` : "—"}
           subtitle={riskError && !riskData
             ? "Current risk payload unavailable"
-            : modelAsOf
-              ? `Current factor-return fit as of ${fmtAsOfDate(modelAsOf)}`
+            : coreStateThrough
+              ? `Current factor-return fit through ${fmtAsOfDate(coreStateThrough)}`
               : "Current factor-return fit"}
         />
         <KpiCard
-          label="Model As Of"
-          value={fmtAsOfDate(modelAsOf)}
-          subtitle={modelAsOf ? `Latest well-covered date (${lagDays ?? 7}d lag)` : "Latest well-covered date"}
+          label="Core State Through"
+          value={fmtAsOfDate(coreStateThrough)}
+          subtitle={coreStateThrough ? "Latest return date covered by the stable core package" : "Latest return date covered by the stable core package"}
+        />
+        <KpiCard
+          label="Estimation Anchor"
+          value={fmtAsOfDate(estimationExposureAnchor)}
+          subtitle={estimationExposureAnchor ? `Lagged exposure basis used to estimate returns (${lagDays ?? 7}d policy)` : `Lagged exposure basis used to estimate returns (${lagDays ?? 7}d policy)`}
+        />
+        <KpiCard
+          label="Core Rebuilt"
+          value={fmtAsOfDate(coreRebuilt)}
+          subtitle={coreRebuilt ? "Most recent core-weekly / cold-core rebuild date" : "Most recent core-weekly / cold-core rebuild date"}
+        />
+        <KpiCard
+          label="Lag Policy"
+          value={`${lagDays ?? 7}d`}
+          subtitle="Minimum age of the exposure snapshot used for core estimation"
         />
       </div>
     </div>
@@ -121,12 +150,12 @@ export default function HealthPage() {
         {servedLoadingsBehind ? (
           <>
             Newer {neonAuthoritativeRebuilds ? "authoritative Neon" : "source"} factor loadings exist for <strong>{fmtAsOfDate(latestSourceAsOf)}</strong>,
-            while the currently served well-covered loadings are older. A serving refresh can publish them without recomputing the full core model.
+            while the currently served well-covered loadings are older. A serving refresh can publish them without advancing the stable core package.
           </>
         ) : coreDue ? (
           <>
             The core model is due for a rebuild{operatorData?.core_due?.reason ? ` (${operatorData.core_due.reason})` : ""}.
-            The current factor-return fit is <strong>{fmtAsOfDate(modelAsOf)}</strong>.
+            The current stable core state runs through <strong>{fmtAsOfDate(coreStateThrough)}</strong>.
           </>
         ) : null}
         {coreDue && onlyServeRefreshAllowed && (

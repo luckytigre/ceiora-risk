@@ -25,8 +25,10 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
   }, [data, tSortAsc]);
 
   const r2Data = r2ChartData(data);
+  const hasR2Series = (data.section1.r2_series?.length ?? 0) > 0;
   const tHistData = buildHistogramData(data.section1.t_stat_hist);
   const blockRows = data.section1.incremental_block_r2_series ?? [];
+  const hasBlockRows = blockRows.length > 0;
   const blockData: ChartData<"line", number[], string> = {
     labels: blockRows.map((r) => r.date),
     datasets: [
@@ -149,25 +151,32 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
         <span>Section 1 sampling: {data.section1.sampling === "weekly_week_end" ? "Week-end sample (10Y)" : "Daily (10Y)"}</span>
         <span>Heavy diagnostics are sampled at week-end for speed</span>
       </div>
-      <div className="health-chart-lg">
-        <Line
-          data={r2Data}
-          options={{
-            ...commonLineOptions,
-            scales: {
-              ...commonLineOptions.scales,
-              y: {
-                ...(commonLineOptions.scales?.y || {}),
-                ticks: {
-                  color: "rgba(169, 182, 210, 0.5)",
-                  font: { size: 9 },
-                  callback: (v) => `${Number(v).toFixed(0)}%`,
+      {hasR2Series ? (
+        <div className="health-chart-lg">
+          <Line
+            data={r2Data}
+            options={{
+              ...commonLineOptions,
+              scales: {
+                ...commonLineOptions.scales,
+                y: {
+                  ...(commonLineOptions.scales?.y || {}),
+                  ticks: {
+                    color: "rgba(169, 182, 210, 0.5)",
+                    font: { size: 9 },
+                    callback: (v) => `${Number(v).toFixed(0)}%`,
+                  },
                 },
               },
-            },
-          }}
-        />
-      </div>
+            }}
+          />
+        </div>
+      ) : (
+        <div className="detail-history-empty" style={{ marginBottom: 10 }}>
+          R-squared trend is unavailable for this snapshot. Deep regression diagnostics still come from the legacy
+          health pipeline, and no persisted R-squared series was available.
+        </div>
+      )}
       <div className="detail-history-header" style={{ marginBottom: 2 }}>
         <h4 style={{ margin: 0 }}>
           <HelpLabel
@@ -181,7 +190,7 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
             }}
           />
         </h4>
-        {blockRows.length > 0 && (() => {
+        {hasBlockRows && (() => {
           const last = blockRows[blockRows.length - 1];
           const structuralR2 = (Number(last.r2_structural) || 0) * 100;
           const styleR2 = (Number(last.r2_style_incremental) || 0) * 100;
@@ -201,44 +210,50 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
           );
         })()}
       </div>
-      <div className="health-chart-lg" style={{ marginBottom: 10 }}>
-        <Line
-          ref={blockChartRef}
-          data={blockData}
-          options={{
-            ...commonLineOptions,
-            plugins: {
-              ...commonLineOptions.plugins,
-              tooltip: {
-                ...commonLineOptions.plugins?.tooltip,
-                callbacks: {
-                  label: (ctx) => {
-                    const val = Number(ctx.parsed.y ?? 0);
-                    return ` ${ctx.dataset.label}: ${val.toFixed(1)}%`;
+      {hasBlockRows ? (
+        <div className="health-chart-lg" style={{ marginBottom: 10 }}>
+          <Line
+            ref={blockChartRef}
+            data={blockData}
+            options={{
+              ...commonLineOptions,
+              plugins: {
+                ...commonLineOptions.plugins,
+                tooltip: {
+                  ...commonLineOptions.plugins?.tooltip,
+                  callbacks: {
+                    label: (ctx) => {
+                      const val = Number(ctx.parsed.y ?? 0);
+                      return ` ${ctx.dataset.label}: ${val.toFixed(1)}%`;
+                    },
                   },
                 },
               },
-            },
-            scales: {
-              ...commonLineOptions.scales,
-              x: {
-                ...(commonLineOptions.scales?.x || {}),
-                stacked: true,
-              },
-              y: {
-                ...(commonLineOptions.scales?.y || {}),
-                stacked: true,
-                grid: { color: "rgba(154, 171, 214, 0.08)" },
-                ticks: {
-                  color: "rgba(169, 182, 210, 0.5)",
-                  callback: (v) => `${Number(v).toFixed(0)}%`,
-                  font: { size: 9 },
+              scales: {
+                ...commonLineOptions.scales,
+                x: {
+                  ...(commonLineOptions.scales?.x || {}),
+                  stacked: true,
+                },
+                y: {
+                  ...(commonLineOptions.scales?.y || {}),
+                  stacked: true,
+                  grid: { color: "rgba(154, 171, 214, 0.08)" },
+                  ticks: {
+                    color: "rgba(169, 182, 210, 0.5)",
+                    callback: (v) => `${Number(v).toFixed(0)}%`,
+                    font: { size: 9 },
+                  },
                 },
               },
-            },
-          }}
-        />
-      </div>
+            }}
+          />
+        </div>
+      ) : (
+        <div className="detail-history-empty" style={{ marginBottom: 10 }}>
+          Incremental block R-squared is unavailable on this snapshot.
+        </div>
+      )}
       <div className="health-grid-2-half">
         <div>
           <h4>

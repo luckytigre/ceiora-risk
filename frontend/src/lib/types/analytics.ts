@@ -134,13 +134,17 @@ export interface RiskData extends ServingSnapshotMeta {
   factor_details: FactorDetail[];
   factor_catalog?: FactorCatalogEntry[];
   cov_matrix: CovMatrix;
-  r_squared: number;
+  r_squared: number | null;
   source_dates?: SourceDates;
   risk_engine?: {
     status?: string;
     method_version?: string;
     last_recompute_date?: string;
     factor_returns_latest_date?: string;
+    core_rebuild_date?: string;
+    core_state_through_date?: string;
+    estimation_exposure_anchor_date?: string | null;
+    latest_r2?: number | null;
     cross_section_min_age_days?: number;
     recompute_interval_days?: number;
     lookback_days?: number;
@@ -221,7 +225,7 @@ export interface UniverseFactorsData {
   factors: string[];
   factor_vols: Record<string, number>;
   factor_catalog?: FactorCatalogEntry[];
-  r_squared?: number;
+  r_squared?: number | null;
   ticker_count?: number;
   eligible_ticker_count?: number;
   core_estimated_ticker_count?: number;

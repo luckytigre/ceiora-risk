@@ -143,10 +143,6 @@ export default function OperatorStatusSection({
             <span className="kv-label" data-tip="Latest computed factor exposures (betas) for every security in the cross-section.">Cross Section</span>
             <span className="kv-value">{sourceDates.exposures_asof ?? "—"}</span>
           </div>
-          <div className="operator-kv-item">
-            <span className="kv-label" data-tip="Most recent date for which daily factor returns have been estimated by the risk engine.">Factor Returns</span>
-            <span className="kv-value">{data?.risk_engine?.factor_returns_latest_date ?? "—"}</span>
-          </div>
         </div>
 
         {localArchiveSourceDates && (
@@ -170,6 +166,30 @@ export default function OperatorStatusSection({
             </div>
           </div>
         )}
+
+        <div className="operator-info-card">
+          <h4>Core Risk State</h4>
+          <div className="operator-kv-item">
+            <span className="kv-label" data-tip="Latest return date covered by the current stable factor-return / covariance / specific-risk package.">Core Through</span>
+            <span className="kv-value">{data?.risk_engine?.core_state_through_date ?? data?.risk_engine?.factor_returns_latest_date ?? "—"}</span>
+          </div>
+          <div className="operator-kv-item">
+            <span className="kv-label" data-tip="Lagged exposure snapshot date used as the basis for the current stable core package.">Estimation Anchor</span>
+            <span className="kv-value">{data?.risk_engine?.estimation_exposure_anchor_date ?? "—"}</span>
+          </div>
+          <div className="operator-kv-item">
+            <span className="kv-label" data-tip="Date the current stable core package was last rebuilt.">Core Rebuilt</span>
+            <span className="kv-value">{data?.risk_engine?.core_rebuild_date ?? data?.risk_engine?.last_recompute_date ?? "—"}</span>
+          </div>
+          <div className="operator-kv-item">
+            <span className="kv-label" data-tip="Configured minimum age of the exposure snapshot used for factor-return estimation.">Lag Policy</span>
+            <span className="kv-value">{data?.risk_engine?.cross_section_min_age_days ?? "—"}d</span>
+          </div>
+          <div className="operator-kv-item">
+            <span className="kv-label" data-tip="Version of the regression and risk engine method currently active (e.g. WLS with specific factor set).">Risk Engine</span>
+            <span className="kv-value">{data?.risk_engine?.method_version ?? "—"}</span>
+          </div>
+        </div>
 
         <div className="operator-info-card">
           <h4>Runtime Health</h4>
@@ -202,10 +222,6 @@ export default function OperatorStatusSection({
           <div className="operator-kv-item">
             <span className="kv-label" data-tip="The active data snapshot ID currently being used to serve risk analytics and exposures.">Snapshot</span>
             <span className="kv-value">{data?.active_snapshot?.snapshot_id ?? "—"}</span>
-          </div>
-          <div className="operator-kv-item">
-            <span className="kv-label" data-tip="Version of the regression and risk engine method currently active (e.g. WLS with specific factor set).">Risk Engine</span>
-            <span className="kv-value">{data?.risk_engine?.method_version ?? "—"}</span>
           </div>
         </div>
       </div>

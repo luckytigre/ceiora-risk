@@ -718,7 +718,37 @@ def test_serving_refresh_stage_only_requests_deep_diagnostics_for_core_lanes(
     assert out["status"] == "ok"
     assert captured["data_db"] == run_model_pipeline.DATA_DB
     assert captured["cache_db"] == run_model_pipeline.CACHE_DB
+    assert captured["enforce_stable_core_package"] is (not should_run_core)
     assert captured["refresh_deep_health_diagnostics"] is expected_recompute
+
+
+def test_serve_refresh_stage_fails_closed_when_current_core_package_is_not_reusable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        run_model_pipeline.runtime_support,
+        "serving_refresh_skip_risk_engine",
+        lambda **kwargs: (False, "core_due_within_interval"),
+    )
+    monkeypatch.setattr(run_model_pipeline.core_reads, "core_read_backend", lambda backend: nullcontext())
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "run_refresh",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("serve-refresh should fail before run_refresh")),
+    )
+
+    with pytest.raises(RuntimeError, match="serve-refresh requires a current stable core package"):
+        run_model_pipeline._run_stage(
+            profile="serve-refresh",
+            stage="serving_refresh",
+            as_of_date="2026-03-14",
+            should_run_core=False,
+            serving_mode="light",
+            force_core=False,
+            core_reason="within_interval",
+            data_db=run_model_pipeline.DATA_DB,
+            cache_db=run_model_pipeline.CACHE_DB,
+        )
 
 
 def test_risk_model_stage_writes_workspace_cache_without_global_path_mutation(

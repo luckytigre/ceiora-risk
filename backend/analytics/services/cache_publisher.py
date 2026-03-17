@@ -40,11 +40,13 @@ def build_risk_engine_state(
     risk_engine_meta: RiskEngineMetaPayload,
     recomputed_this_refresh: bool,
     recompute_reason: str,
+    estimation_exposure_anchor_date: str | None = None,
 ) -> RiskEngineStatePayload:
     return refresh_metadata.build_risk_engine_state(
         risk_engine_meta=risk_engine_meta,
         recomputed_this_refresh=recomputed_this_refresh,
         recompute_reason=recompute_reason,
+        estimation_exposure_anchor_date=estimation_exposure_anchor_date,
     )
 
 
@@ -130,7 +132,7 @@ def stage_refresh_cache_snapshot(
     component_shares: ComponentSharesPayload,
     factor_details: list[FactorDetailPayload],
     cov_matrix: CovarianceMatrixPayload,
-    latest_r2: float,
+    latest_r2: float | None,
     universe_loadings: UniverseLoadingsPayload,
     exposure_modes: ExposureModesPayload,
     factor_catalog: list[FactorCatalogEntryPayload],
@@ -147,11 +149,6 @@ def stage_refresh_cache_snapshot(
     def _stage_cache(key: str, value: Any) -> None:
         sqlite.cache_set(key, value, snapshot_id=snapshot_id, db_path=cache_db)
 
-    risk_engine_state = build_risk_engine_state(
-        risk_engine_meta=risk_engine_meta,
-        recomputed_this_refresh=bool(recomputed_this_refresh),
-        recompute_reason=str(recompute_reason),
-    )
     eligibility_summary = (
         sqlite.cache_get("eligibility", db_path=cache_db)
         if reuse_cached_static_payloads
@@ -163,6 +160,16 @@ def stage_refresh_cache_snapshot(
         eligibility_summary=eligibility_summary,
         universe_loadings=universe_loadings,
         source_dates=source_dates,
+    )
+    risk_engine_state = build_risk_engine_state(
+        risk_engine_meta=risk_engine_meta,
+        recomputed_this_refresh=bool(recomputed_this_refresh),
+        recompute_reason=str(recompute_reason),
+        estimation_exposure_anchor_date=refresh_metadata.derive_estimation_exposure_anchor_date(
+            factor_returns_latest_date=risk_engine_meta.get("factor_returns_latest_date"),
+            cross_section_min_age_days=risk_engine_meta.get("cross_section_min_age_days"),
+            existing_anchor_date=risk_engine_meta.get("estimation_exposure_anchor_date"),
+        ),
     )
     effective_source_dates = _serving_source_dates(
         source_dates=source_dates,
@@ -196,7 +203,7 @@ def stage_refresh_cache_snapshot(
         "factor_details": factor_details,
         "factor_catalog": factor_catalog,
         "cov_matrix": cov_matrix,
-        "r_squared": round(float(latest_r2), 4),
+        "r_squared": round(float(latest_r2), 4) if latest_r2 is not None else None,
         "risk_engine": risk_engine_state,
         "run_id": str(run_id),
         "snapshot_id": snapshot_id,
@@ -215,7 +222,7 @@ def stage_refresh_cache_snapshot(
         "factors": universe_loadings.get("factors", []),
         "factor_vols": universe_loadings.get("factor_vols", {}),
         "factor_catalog": factor_catalog,
-        "r_squared": round(float(latest_r2), 4),
+        "r_squared": round(float(latest_r2), 4) if latest_r2 is not None else None,
         "ticker_count": universe_loadings.get("ticker_count", 0),
         "eligible_ticker_count": universe_loadings.get("eligible_ticker_count", 0),
         "core_estimated_ticker_count": universe_loadings.get("core_estimated_ticker_count", 0),

@@ -544,6 +544,41 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
     assert isinstance(captured["staged_universe_loadings"], dict)
 
 
+def test_light_refresh_can_fail_closed_when_stable_core_package_is_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_source_dates",
+        lambda **kwargs: {
+            "fundamentals_asof": "2026-02-27",
+            "classification_asof": "2026-02-27",
+            "prices_asof": "2026-03-07",
+            "exposures_asof": "2026-03-07",
+        },
+    )
+    monkeypatch.setattr(pipeline.config, "CUSE4_ENABLE_ESTU_AUDIT", False)
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_effective_risk_engine_meta",
+        lambda **kwargs: ({}, "runtime_state"),
+    )
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline,
+        "compute_daily_factor_returns",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("light refresh should fail before recomputing factor returns")),
+    )
+
+    with pytest.raises(RuntimeError, match="stable core package"):
+        pipeline.run_refresh(
+            mode="light",
+            skip_snapshot_rebuild=True,
+            skip_cuse4_foundation=True,
+            enforce_stable_core_package=True,
+        )
+
+
 def test_pipeline_rebuilds_universe_loadings_when_local_source_archive_requested(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1160,7 +1195,9 @@ def test_resolve_effective_risk_engine_meta_prefers_persisted_model_run_state(
         pipeline,
         "_can_reuse_cached_universe_loadings",
         lambda cached_payload, *, source_dates, risk_engine_meta: (
-            risk_engine_meta == persisted_meta and bool(cached_payload),
+            risk_engine_meta.get("method_version") == persisted_meta["method_version"]
+            and risk_engine_meta.get("factor_returns_latest_date") == persisted_meta["factor_returns_latest_date"]
+            and bool(cached_payload),
             "source_and_risk_engine_match",
         ),
     )
@@ -1169,8 +1206,50 @@ def test_resolve_effective_risk_engine_meta_prefers_persisted_model_run_state(
         fallback_loader=lambda key: None,
     )
 
-    assert out == persisted_meta
+    assert out["method_version"] == persisted_meta["method_version"]
+    assert out["factor_returns_latest_date"] == persisted_meta["factor_returns_latest_date"]
+    assert out["last_recompute_date"] == persisted_meta["last_recompute_date"]
+    assert out["specific_risk_ticker_count"] == persisted_meta["specific_risk_ticker_count"]
+    assert out["estimation_exposure_anchor_date"] == "2026-03-06"
     assert source == "model_run_metadata"
+
+
+def test_resolve_effective_risk_engine_meta_enriches_runtime_with_persisted_latest_r2(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-03-16",
+        "factor_returns_latest_date": "2026-03-13",
+        "specific_risk_ticker_count": 3736,
+    }
+    persisted_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-03-16",
+        "factor_returns_latest_date": "2026-03-13",
+        "specific_risk_ticker_count": 3736,
+        "latest_r2": 0.42,
+    }
+
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "load_runtime_state",
+        lambda key, fallback_loader=None: runtime_meta if key == "risk_engine_meta" else None,
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_persisted_risk_engine_state",
+        lambda: persisted_meta,
+    )
+
+    out, source = pipeline._resolve_effective_risk_engine_meta(
+        fallback_loader=lambda key: None,
+    )
+
+    assert out["latest_r2"] == pytest.approx(0.42)
+    assert source == "runtime_state_enriched_from_model_run_metadata"
 
 
 def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_runtime_state(
@@ -1249,7 +1328,9 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
         pipeline,
         "_can_reuse_cached_universe_loadings",
         lambda cached_payload, *, source_dates, risk_engine_meta: (
-            risk_engine_meta == persisted_meta and bool(cached_payload),
+            risk_engine_meta.get("method_version") == persisted_meta["method_version"]
+            and risk_engine_meta.get("factor_returns_latest_date") == persisted_meta["factor_returns_latest_date"]
+            and bool(cached_payload),
             "source_and_risk_engine_match",
         ),
     )

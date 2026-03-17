@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -202,3 +203,104 @@ def test_model_outputs_load_latest_persisted_covariance_and_specific_risk(
     assert cov_payload["matrix"] == [[0.04, 0.01], [0.01, 0.09]]
     assert specific_payload["AAPL.OQ"]["ticker"] == "AAPL"
     assert specific_payload["AAPL.OQ"]["specific_var"] == 0.01
+
+
+def test_load_latest_persisted_risk_engine_state_backfills_latest_r2_from_factor_returns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_db = tmp_path / "data.db"
+    monkeypatch.setattr(model_outputs.config, "DATA_DB_PATH", str(data_db))
+    monkeypatch.setattr(model_outputs.config, "neon_dsn", lambda: "")
+    monkeypatch.setattr(model_outputs.config, "neon_primary_model_data_enabled", lambda: False)
+
+    conn = sqlite3.connect(str(data_db))
+    conn.execute(
+        """
+        CREATE TABLE model_run_metadata (
+            run_id TEXT PRIMARY KEY,
+            refresh_mode TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            factor_returns_asof TEXT,
+            source_dates_json TEXT NOT NULL,
+            params_json TEXT NOT NULL,
+            risk_engine_state_json TEXT NOT NULL,
+            row_counts_json TEXT NOT NULL,
+            error_type TEXT,
+            error_message TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE model_factor_returns_daily (
+            date TEXT NOT NULL,
+            factor_name TEXT NOT NULL,
+            factor_return REAL NOT NULL,
+            robust_se REAL NOT NULL,
+            t_stat REAL NOT NULL,
+            r_squared REAL NOT NULL,
+            residual_vol REAL NOT NULL,
+            cross_section_n INTEGER,
+            eligible_n INTEGER,
+            coverage REAL,
+            run_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (date, factor_name)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO model_run_metadata (
+            run_id, refresh_mode, status, started_at, completed_at, factor_returns_asof,
+            source_dates_json, params_json, risk_engine_state_json, row_counts_json,
+            error_type, error_message, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "run_1",
+            "core-weekly",
+            "ok",
+            "2026-03-16T00:00:00Z",
+            "2026-03-16T00:10:00Z",
+            "2026-03-13",
+            "{}",
+            "{}",
+            json.dumps(
+                {
+                    "status": "ok",
+                    "method_version": "v8",
+                    "last_recompute_date": "2026-03-16",
+                    "factor_returns_latest_date": "2026-03-13",
+                }
+            ),
+            "{}",
+            None,
+            None,
+            "2026-03-16T00:10:00Z",
+        ),
+    )
+    conn.executemany(
+        """
+        INSERT INTO model_factor_returns_daily (
+            date, factor_name, factor_return, robust_se, t_stat, r_squared, residual_vol,
+            cross_section_n, eligible_n, coverage, run_id, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ("2026-03-13", "Market", 0.01, 0.0, 0.0, 0.41, 0.2, 100, 95, 0.95, "run_1", "2026-03-16T00:10:00Z"),
+            ("2026-03-13", "Beta", 0.02, 0.0, 0.0, 0.43, 0.2, 100, 95, 0.95, "run_1", "2026-03-16T00:10:00Z"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    state = model_outputs.load_latest_persisted_risk_engine_state()
+
+    assert state["factor_returns_latest_date"] == "2026-03-13"
+    assert state["latest_r2"] == pytest.approx(0.42)
+    assert state["estimation_exposure_anchor_date"] == "2026-03-06"

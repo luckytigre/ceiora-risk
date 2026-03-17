@@ -46,6 +46,14 @@ def previous_or_same_xnys_session(value: str | pd.Timestamp) -> str:
     return str(sessions[-1].date())
 
 
+def lagged_xnys_session(value: str | pd.Timestamp, days: int) -> str:
+    """Return the lagged XNYS session used by the core regression age guard."""
+    shift = max(0, int(days))
+    target = _to_norm_ts(value)
+    shifted = target if shift <= 0 else (target - pd.Timedelta(days=shift))
+    return previous_or_same_xnys_session(shifted)
+
+
 def is_xnys_session(value: str | pd.Timestamp) -> bool:
     target = _to_norm_ts(value)
     sessions = _sessions_in_range(target, target)

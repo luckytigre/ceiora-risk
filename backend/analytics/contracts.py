@@ -39,11 +39,14 @@ class RiskEngineMetaPayload(TypedDict, total=False):
     method_version: str
     last_recompute_date: str
     factor_returns_latest_date: str | None
+    core_rebuild_date: str
+    core_state_through_date: str | None
+    estimation_exposure_anchor_date: str | None
     cross_section_min_age_days: int
     recompute_interval_days: int
     lookback_days: int
     specific_risk_ticker_count: int
-    latest_r2: float
+    latest_r2: float | None
     recompute_reason: str
 
 
@@ -52,6 +55,10 @@ class RiskEngineStatePayload(TypedDict):
     method_version: str
     last_recompute_date: str
     factor_returns_latest_date: str | None
+    core_rebuild_date: str
+    core_state_through_date: str | None
+    estimation_exposure_anchor_date: str | None
+    latest_r2: float | None
     cross_section_min_age_days: int
     recompute_interval_days: int
     lookback_days: int
@@ -202,7 +209,7 @@ class UniverseFactorsPayload(TypedDict, total=False):
     factors: list[str]
     factor_vols: dict[str, float]
     factor_catalog: list[FactorCatalogEntryPayload]
-    r_squared: float
+    r_squared: float | None
     ticker_count: int
     eligible_ticker_count: int
     core_estimated_ticker_count: int
