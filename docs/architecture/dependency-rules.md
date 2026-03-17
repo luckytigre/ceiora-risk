@@ -126,6 +126,7 @@ Current reviewed exception:
 Any structural refactor that changes ownership or semantics must update:
 - `current-state.md` if the diagnosis materially changed
 - `target-architecture.md` if the target shape or ownership changed
-- `refactor-roadmap.md` if sequence changed
-- `restructure-plan.md` status
+- `module-inventory.md` if ownership or major module boundaries changed
+- `maintainer-guide.md` or `architecture-invariants.md` when active rules or maintainer guidance changed
 - canonical docs outside `docs/architecture/` when operator behavior or frontend truth wording changed
+- archived plans or investigations only if preserving important historical context is worthwhile

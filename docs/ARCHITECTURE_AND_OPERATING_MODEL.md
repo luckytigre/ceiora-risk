@@ -5,9 +5,15 @@ Owner: Codex
 Status: Canonical reference document
 
 Related planning document:
-- `docs/architecture/` is the active repository-structure package. `docs/architecture/restructure-plan.md` is the live master tracker for architectural cleanup and follow-up structure work.
-- `docs/NEON_AUTHORITATIVE_REBUILD_PLAN.md`, `docs/NEON_STANDALONE_EXECUTION_PLAN.md`, and `docs/NEON_MAIN_PLATFORM_PLAN.md` are still the relevant focused Neon migration plans.
-- `docs/NEON_LEAN_CONSOLIDATION_PLAN.md`, `docs/HEALTH_DIAGNOSTICS_REFRESH_PLAN.md`, and `docs/PROJECT_HARDENING_ORGANIZATION_PLAN.md` are completed or subordinate execution notes kept for context rather than as competing master plans.
+- `docs/architecture/` is the active architecture package. The active maintenance surface is:
+  - `docs/architecture/architecture-invariants.md`
+  - `docs/architecture/dependency-rules.md`
+  - `docs/architecture/maintainer-guide.md`
+  - `docs/architecture/current-state.md`
+  - `docs/architecture/target-architecture.md`
+  - `docs/architecture/module-inventory.md`
+- historical architecture audits, restructure/remediation trackers, and investigation notes live under `docs/architecture/archive/`
+- completed root-level plans and execution notes live under `docs/archive/legacy-plans/`
 
 ## Current Implementation Status
 
