@@ -70,6 +70,7 @@ Use:
 Do not:
 - mutate module globals to retarget one run
 - hide stage behavior in unrelated helper modules
+- let serving-only paths synthesize or advance core artifacts when the stable core package is stale or missing
 
 ### Serving
 
@@ -78,6 +79,29 @@ Prefer:
 
 Avoid:
 - route -> many data adapters directly
+- serving-time writes into canonical historical source tables
+
+### Core Cadence
+
+Treat these as different timelines:
+
+- weekly stable core package
+  - factor returns
+  - covariance
+  - specific risk
+  - estimation basis metadata
+- daily serving/projection
+  - holdings
+  - prices used for serving
+  - current loadings
+  - portfolio outputs
+- PIT source timeline
+  - fundamentals
+  - classifications
+
+Rule:
+- `serve-refresh` may read and project against the stable core package, but it may not compute, persist, or advance that package.
+- canonical historical price writes belong only to approved ingest/history paths, not serving-time logic.
 
 ## Common Drift Mistakes
 

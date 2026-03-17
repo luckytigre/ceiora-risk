@@ -141,6 +141,9 @@ export interface RiskData extends ServingSnapshotMeta {
     method_version?: string;
     last_recompute_date?: string;
     factor_returns_latest_date?: string;
+    core_rebuild_date?: string;
+    core_state_through_date?: string;
+    estimation_exposure_anchor_date?: string | null;
     cross_section_min_age_days?: number;
     recompute_interval_days?: number;
     lookback_days?: number;

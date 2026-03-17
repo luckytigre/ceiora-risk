@@ -84,10 +84,11 @@ export interface AnalyticsTruthSummary {
   snapshotsCoherent: boolean;
   exposuresServedAsOf: string | null;
   exposuresLatestAvailableAsOf: string | null;
-  modelAsOf: string | null;
+  coreStateThroughDate: string | null;
+  coreRebuildDate: string | null;
   updateAvailable: boolean;
   servedLoadingsBehindLatestSource: boolean;
-  modelLaggingServedLoadings: boolean;
+  coreStateLaggingServedLoadings: boolean;
 }
 
 export function summarizeAnalyticsTruth({
@@ -127,17 +128,22 @@ export function summarizeAnalyticsTruth({
     sourceDates.exposures_asof,
     risk?.model_sanity?.latest_available_date,
   );
-  const modelAsOf = pickDate(
+  const coreStateThroughDate = pickDate(
+    risk?.risk_engine?.core_state_through_date,
     risk?.risk_engine?.factor_returns_latest_date,
     exposuresServedAsOf,
+  );
+  const coreRebuildDate = pickDate(
+    risk?.risk_engine?.core_rebuild_date,
+    risk?.risk_engine?.last_recompute_date,
   );
   const servedLoadingsBehindLatestSource = compareIsoDate(
     exposuresLatestAvailableAsOf,
     exposuresServedAsOf,
   ) > 0;
-  const modelLaggingServedLoadings = compareIsoDate(
+  const coreStateLaggingServedLoadings = compareIsoDate(
     exposuresServedAsOf,
-    modelAsOf,
+    coreStateThroughDate,
   ) > 0;
   return {
     sourceDates,
@@ -153,10 +159,11 @@ export function summarizeAnalyticsTruth({
     snapshotsCoherent: snapshotIds.length <= 1 || new Set(snapshotIds).size === 1,
     exposuresServedAsOf,
     exposuresLatestAvailableAsOf,
-    modelAsOf,
+    coreStateThroughDate,
+    coreRebuildDate,
     updateAvailable: Boolean(risk?.model_sanity?.update_available || servedLoadingsBehindLatestSource),
     servedLoadingsBehindLatestSource,
-    modelLaggingServedLoadings,
+    coreStateLaggingServedLoadings,
   };
 }
 
@@ -166,8 +173,10 @@ export function buildAnalyticsTruthCompactSummary(
 ): string {
   const parts = [cleanDate(prefix)];
   const loadings = cleanDate(summary.exposuresServedAsOf);
-  const model = cleanDate(summary.modelAsOf);
+  const coreThrough = cleanDate(summary.coreStateThroughDate);
+  const rebuilt = cleanDate(summary.coreRebuildDate);
   if (loadings) parts.push(`Loadings = ${loadings}`);
-  if (model) parts.push(`Model = ${model}`);
+  if (coreThrough) parts.push(`Core Through = ${coreThrough}`);
+  if (rebuilt) parts.push(`Rebuilt = ${rebuilt}`);
   return parts.filter((part): part is string => Boolean(part)).join(" · ");
 }

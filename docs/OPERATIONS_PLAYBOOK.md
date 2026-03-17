@@ -46,7 +46,8 @@
 
 ## Refresh Paths (When To Use)
 - `serve-refresh`: quick serving refresh; no core recompute and no source ingest.
-  - it skips the risk-engine stages only when the live cache is both present and current for the active method version; stale or method-drifted caches force a core lane instead of silently reusing old factors
+  - it reuses the current stable core package only when the live cache is both present and current for the active method version
+  - if that stable core package is missing, stale, or due for rebuild, `serve-refresh` now fails closed and requires a core lane instead of recomputing factor returns / covariance / specific risk on the serving path
   - holdings-triggered light refreshes now pass an explicit `holdings_only` scope and may reuse the current published `universe_loadings` payload when both of these still match:
     - `source_dates`
     - stable risk-engine fingerprint (`method_version`, `last_recompute_date`, `factor_returns_latest_date`, snapshot-age/lookback settings, specific-risk count)
@@ -54,6 +55,7 @@
   - deep `health_diagnostics` are no longer recomputed on the quick path; `serve-refresh` carries forward the last good diagnostics payload or records that diagnostics were deferred
   - when that reuse path is active, relational `model_outputs` persistence is skipped because the core model state is unchanged; serving payload persistence still runs normally
   - manual `serve-refresh` without that scope keeps the existing full serving-refresh behavior.
+  - serving-time prices remain read-only inputs to the projection layer; they must never write into canonical historical model-estimation tables such as `security_prices_eod`
 - `source-daily`: local LSEG ingest into SQLite for the latest completed XNYS session, repair any missing daily price sessions up to that session, purge open-month PIT rows, backfill any missing closed-month fundamentals/classification anchors, publish the retained working window into Neon, then refresh serving only.
 - `source-daily-plus-core-if-due`: default daily maintenance lane; local ingest + Neon source-sync first, then recompute core only when cadence/version says due.
 - `core-weekly`: force core recompute without rebuilding full raw history.

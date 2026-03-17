@@ -39,6 +39,9 @@ class RiskEngineMetaPayload(TypedDict, total=False):
     method_version: str
     last_recompute_date: str
     factor_returns_latest_date: str | None
+    core_rebuild_date: str
+    core_state_through_date: str | None
+    estimation_exposure_anchor_date: str | None
     cross_section_min_age_days: int
     recompute_interval_days: int
     lookback_days: int
@@ -52,6 +55,9 @@ class RiskEngineStatePayload(TypedDict):
     method_version: str
     last_recompute_date: str
     factor_returns_latest_date: str | None
+    core_rebuild_date: str
+    core_state_through_date: str | None
+    estimation_exposure_anchor_date: str | None
     cross_section_min_age_days: int
     recompute_interval_days: int
     lookback_days: int

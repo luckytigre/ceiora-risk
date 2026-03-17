@@ -67,7 +67,11 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
 
     def _fake_cache_get(key: str):
         if key == "risk_engine_meta":
-            return {"method_version": pipeline.RISK_ENGINE_METHOD_VERSION, "factor_returns_latest_date": "2026-03-07"}
+            return {
+                "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+                "factor_returns_latest_date": "2026-03-07",
+                "last_recompute_date": "2026-03-08",
+            }
         if key == "neon_sync_health":
             return {"status": "ok", "artifact_path": "/tmp/report.json"}
         if key == "__cache_snapshot_active":
@@ -100,6 +104,8 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
     assert body["runtime"]["source_authority"] in {"local", "neon"}
     assert body["runtime"]["runtime_state_status"]["risk_engine_meta"]["status"] == "ok"
     assert body["runtime"]["runtime_state_status"]["risk_engine_meta"]["source"] == "neon"
+    assert body["risk_engine"]["core_state_through_date"] == "2026-03-07"
+    assert body["risk_engine"]["core_rebuild_date"] == "2026-03-08"
     assert "neon_authoritative_rebuilds" in body["runtime"]
 
 

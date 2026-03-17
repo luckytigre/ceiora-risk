@@ -273,6 +273,7 @@ def run_refresh(
     skip_snapshot_rebuild: bool = False,
     skip_cuse4_foundation: bool = False,
     skip_risk_engine: bool = False,
+    enforce_stable_core_package: bool = False,
     refresh_deep_health_diagnostics: bool = False,
     prefer_local_source_archive: bool = False,
 ) -> dict[str, Any]:
@@ -281,6 +282,9 @@ def run_refresh(
     - light: fast cache refresh path that prefers cache reuse and avoids risk recompute
       unless risk caches are missing, stale, or explicitly forced.
     - publish: republishes already-current cached payloads without recomputing analytics.
+    When `enforce_stable_core_package=True`, light-mode callers must reuse an existing
+    stable core package and fail closed instead of recomputing factor returns,
+    covariance, or specific risk on the serving path.
     """
     logger.info("Starting refresh pipeline...")
     effective_data_db = _resolve_data_db(data_db)
@@ -480,6 +484,12 @@ def run_refresh(
         if not specific_risk_by_security:
             should_recompute = True
             recompute_reason = "missing_specific_risk_cache"
+
+    if light_mode and enforce_stable_core_package and not skip_risk_engine:
+        raise RuntimeError(
+            "Light serving refresh is configured to reuse a stable core package and cannot "
+            f"advance core artifacts on the serving path ({recompute_reason}). Run a core lane instead."
+        )
 
     recomputed_this_refresh = False
     if should_recompute:

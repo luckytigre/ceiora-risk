@@ -31,6 +31,12 @@ These are the non-negotiable structural rules for this repository.
    `services` must not import API layers.
    `services` should not import full workflow modules just to inspect static metadata.
 
+8. Serving paths must not advance the stable core package.
+   `serve-refresh` and other serving-only paths may project against the current core package, but they must not compute or persist factor returns, covariance, specific risk, or advance `core_state_through_date`.
+
+9. Serving-time prices are read-only.
+   Serving/orchestration/API layers must not write serving-time or ad hoc prices into canonical model-estimation history tables such as `security_prices_eod`.
+
 ## Existing Guardrails
 
 The repository already enforces several of these with lightweight tests in [test_architecture_boundaries.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/tests/test_architecture_boundaries.py):
@@ -44,6 +50,8 @@ The repository already enforces several of these with lightweight tests in [test
 - operator-service/orchestrator coupling regressing
 - visual structure drift through vague catch-all modules
 - new hidden path-retargeting helpers creeping in through convenience edits
+- serving-only refreshes silently advancing the stable core package
+- serving-time price logic contaminating canonical model-estimation history
 
 ## Low-Overhead Maintenance Rule
 

@@ -45,6 +45,13 @@ def run_serving_stage(
             today_utc=today_utc,
             cache_db=cache_db,
         )
+        enforce_stable_core_package = not bool(should_run_core)
+        if enforce_stable_core_package and not skip_risk_engine:
+            raise RuntimeError(
+                "serve-refresh requires a current stable core package and will not recompute "
+                f"core artifacts on the serving path ({skip_reason}). Run source-daily-plus-core-if-due, "
+                "core-weekly, or cold-core instead."
+            )
         if force_local_core_reads:
             with core_reads_module.core_read_backend("local"):
                 out = run_refresh_fn(
@@ -56,6 +63,7 @@ def run_serving_stage(
                     skip_snapshot_rebuild=True,
                     skip_cuse4_foundation=True,
                     skip_risk_engine=bool(skip_risk_engine),
+                    enforce_stable_core_package=enforce_stable_core_package,
                     refresh_deep_health_diagnostics=bool(should_run_core),
                     prefer_local_source_archive=bool(prefer_local_source_archive),
                 )
@@ -71,6 +79,7 @@ def run_serving_stage(
             skip_snapshot_rebuild=True,
             skip_cuse4_foundation=True,
             skip_risk_engine=bool(skip_risk_engine),
+            enforce_stable_core_package=enforce_stable_core_package,
             refresh_deep_health_diagnostics=bool(should_run_core),
             prefer_local_source_archive=bool(prefer_local_source_archive),
         )

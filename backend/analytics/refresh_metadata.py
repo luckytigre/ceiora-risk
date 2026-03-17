@@ -49,12 +49,18 @@ def build_risk_engine_state(
     risk_engine_meta: RiskEngineMetaPayload,
     recomputed_this_refresh: bool,
     recompute_reason: str,
+    estimation_exposure_anchor_date: str | None = None,
 ) -> RiskEngineStatePayload:
+    factor_returns_latest_date = risk_engine_meta.get("factor_returns_latest_date")
+    last_recompute_date = str(risk_engine_meta.get("last_recompute_date") or "")
     return {
         "status": str(risk_engine_meta.get("status") or "unknown"),
         "method_version": str(risk_engine_meta.get("method_version") or ""),
-        "last_recompute_date": str(risk_engine_meta.get("last_recompute_date") or ""),
-        "factor_returns_latest_date": risk_engine_meta.get("factor_returns_latest_date"),
+        "last_recompute_date": last_recompute_date,
+        "factor_returns_latest_date": factor_returns_latest_date,
+        "core_rebuild_date": last_recompute_date,
+        "core_state_through_date": factor_returns_latest_date,
+        "estimation_exposure_anchor_date": estimation_exposure_anchor_date,
         "cross_section_min_age_days": int(risk_engine_meta.get("cross_section_min_age_days") or 0),
         "recompute_interval_days": int(risk_engine_meta.get("recompute_interval_days") or 0),
         "lookback_days": int(risk_engine_meta.get("lookback_days") or 0),

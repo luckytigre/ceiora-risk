@@ -544,6 +544,41 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
     assert isinstance(captured["staged_universe_loadings"], dict)
 
 
+def test_light_refresh_can_fail_closed_when_stable_core_package_is_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_source_dates",
+        lambda **kwargs: {
+            "fundamentals_asof": "2026-02-27",
+            "classification_asof": "2026-02-27",
+            "prices_asof": "2026-03-07",
+            "exposures_asof": "2026-03-07",
+        },
+    )
+    monkeypatch.setattr(pipeline.config, "CUSE4_ENABLE_ESTU_AUDIT", False)
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_effective_risk_engine_meta",
+        lambda **kwargs: ({}, "runtime_state"),
+    )
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline,
+        "compute_daily_factor_returns",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("light refresh should fail before recomputing factor returns")),
+    )
+
+    with pytest.raises(RuntimeError, match="stable core package"):
+        pipeline.run_refresh(
+            mode="light",
+            skip_snapshot_rebuild=True,
+            skip_cuse4_foundation=True,
+            enforce_stable_core_package=True,
+        )
+
+
 def test_pipeline_rebuilds_universe_loadings_when_local_source_archive_requested(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

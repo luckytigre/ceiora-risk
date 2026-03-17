@@ -105,8 +105,11 @@ This plan is intentionally operational rather than theoretical. It maps directly
 - cUSE4 core model state is slower-moving than source data.
 - Frontend-facing caches are cheap projections and should refresh more often than the core model.
 - Served holdings, prices, and factor loadings may move ahead of the core risk engine between weekly rebuilds; that is intentional and should not be treated as drift by itself.
+- The stable core risk package (factor returns, covariance, specific risk, and estimation-basis metadata) advances only on core rebuild lanes and is frozen between rebuilds.
+- `serve-refresh` is a serving/projection lane only; it must not compute, persist, or advance core artifacts.
 - Holdings changes, price updates, source-data refreshes, and core model recalculations must be treated as different operational events.
 - A factor-set change is a core-model change. `serve-refresh` may reuse risk-engine artifacts only when the live cache is both present and current for the active method version.
+- Serving-time prices, if introduced, are read-only serving inputs and must never write into canonical historical model-estimation tables such as `security_prices_eod`.
 
 ## Four-Layer Operating Model
 
@@ -230,6 +233,7 @@ Key rule:
 - Serving refreshes should be cheap and frequent.
 - They should not trigger full cUSE4 recompute unless explicitly requested.
 - Their job is to publish the latest holdings, prices, and factor-loadings projection against the currently accepted core risk-engine state.
+- If the current stable core package is missing or stale, `serve-refresh` should fail closed and direct the operator to a core rebuild lane instead of recomputing core artifacts on the serving path.
 - Deep model-health diagnostics belong to `core-weekly`, `cold-core`, or another explicit diagnostics-producing lane rather than the ordinary quick refresh path.
 - The currently active serving payload set should be durable and mirrorable (`serving_payload_current`), not only present in the local cache layer.
 
@@ -535,7 +539,11 @@ Should show:
   - prices
   - fundamentals
   - classification
-  - core factor returns
+- current loadings / cross-section
+- core risk-state dates, kept separate from raw source recency:
+  - core state through
+  - core rebuilt
+  - estimation exposure anchor when available
 - core due status:
   - due / not due
   - reason

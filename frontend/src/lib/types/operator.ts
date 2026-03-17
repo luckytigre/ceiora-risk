@@ -112,6 +112,9 @@ export interface OperatorStatusData {
     method_version?: string;
     last_recompute_date?: string;
     factor_returns_latest_date?: string;
+    core_rebuild_date?: string;
+    core_state_through_date?: string;
+    estimation_exposure_anchor_date?: string | null;
     lookback_days?: number;
     cross_section_min_age_days?: number;
     recompute_interval_days?: number;

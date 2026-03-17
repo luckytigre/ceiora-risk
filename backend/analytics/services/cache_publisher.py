@@ -40,11 +40,13 @@ def build_risk_engine_state(
     risk_engine_meta: RiskEngineMetaPayload,
     recomputed_this_refresh: bool,
     recompute_reason: str,
+    estimation_exposure_anchor_date: str | None = None,
 ) -> RiskEngineStatePayload:
     return refresh_metadata.build_risk_engine_state(
         risk_engine_meta=risk_engine_meta,
         recomputed_this_refresh=recomputed_this_refresh,
         recompute_reason=recompute_reason,
+        estimation_exposure_anchor_date=estimation_exposure_anchor_date,
     )
 
 
@@ -147,11 +149,6 @@ def stage_refresh_cache_snapshot(
     def _stage_cache(key: str, value: Any) -> None:
         sqlite.cache_set(key, value, snapshot_id=snapshot_id, db_path=cache_db)
 
-    risk_engine_state = build_risk_engine_state(
-        risk_engine_meta=risk_engine_meta,
-        recomputed_this_refresh=bool(recomputed_this_refresh),
-        recompute_reason=str(recompute_reason),
-    )
     eligibility_summary = (
         sqlite.cache_get("eligibility", db_path=cache_db)
         if reuse_cached_static_payloads
@@ -159,10 +156,17 @@ def stage_refresh_cache_snapshot(
     )
     if not isinstance(eligibility_summary, dict) or not eligibility_summary:
         eligibility_summary = load_latest_eligibility_summary(cache_db)
+    estimation_exposure_anchor_date = str(eligibility_summary.get("exp_date") or "").strip() or None
     eligibility_summary = refresh_metadata.refreshed_eligibility_summary(
         eligibility_summary=eligibility_summary,
         universe_loadings=universe_loadings,
         source_dates=source_dates,
+    )
+    risk_engine_state = build_risk_engine_state(
+        risk_engine_meta=risk_engine_meta,
+        recomputed_this_refresh=bool(recomputed_this_refresh),
+        recompute_reason=str(recompute_reason),
+        estimation_exposure_anchor_date=estimation_exposure_anchor_date,
     )
     effective_source_dates = _serving_source_dates(
         source_dates=source_dates,
