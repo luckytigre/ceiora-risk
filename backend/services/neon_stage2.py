@@ -52,6 +52,12 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         date_col="as_of_date",
         overlap_days=14,
     ),
+    "model_factor_returns_daily": TableConfig(
+        name="model_factor_returns_daily",
+        pk_cols=("date", "factor_name"),
+        date_col="date",
+        overlap_days=14,
+    ),
     "model_factor_covariance_daily": TableConfig(
         name="model_factor_covariance_daily",
         pk_cols=("as_of_date", "factor_name", "factor_name_2"),
@@ -541,7 +547,7 @@ def _profile_pg_table(pg_conn, cfg: TableConfig) -> dict[str, Any]:
             row = cur.fetchone()
             out["min_date"] = (str(row[0]) if row and row[0] is not None else None)
             out["max_date"] = (str(row[1]) if row and row[1] is not None else None)
-            if out["max_date"]:
+            if out["max_date"] and _has_ric_column_pg(pg_conn, table):
                 cur.execute(
                     sql.SQL("SELECT COUNT(DISTINCT ric) FROM {} WHERE {} = %s")
                     .format(sql.Identifier(table), sql.Identifier(cfg.date_col)),

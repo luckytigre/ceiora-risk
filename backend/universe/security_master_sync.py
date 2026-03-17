@@ -8,11 +8,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from backend.risk_model.eligibility import NON_EQUITY_ECONOMIC_SECTORS
 from backend.universe.schema import SECURITY_MASTER_TABLE
 
 
 DEFAULT_SECURITY_MASTER_SEED_PATH = Path(__file__).resolve().parents[2] / "data/reference/security_master_seed.csv"
+_PRIMARY_SUFFIX_RANK = {
+    ".N": 0,
+    ".OQ": 1,
+    ".O": 2,
+    ".K": 3,
+    ".P": 4,
+}
 
 
 def normalize_ric(value: str | None) -> str:
@@ -38,6 +44,150 @@ def ticker_from_ric(ric: str | None) -> str | None:
     return text.split(".", 1)[0]
 
 
+def _source_suffix_rank(ric: str | None) -> int:
+    text = normalize_ric(ric)
+    for suffix, rank in _PRIMARY_SUFFIX_RANK.items():
+        if text.endswith(suffix):
+            return int(rank)
+    return 99
+
+
+def _source_quality_exclusion_reason(
+    *,
+    ric: str | None,
+    ticker: str | None,
+    exchange_name: str | None,
+) -> str | None:
+    ric_txt = normalize_ric(ric)
+    ticker_txt = normalize_ticker(ticker) or ""
+    exchange_txt = (normalize_optional_text(exchange_name) or "").upper()
+    if not ric_txt:
+        return "missing_ric"
+    if "^" in ric_txt:
+        return "lineage_ric"
+    if "*" in ticker_txt:
+        return "alias_ticker"
+    if "CONSOLIDATED" in exchange_txt:
+        return "consolidated_exchange"
+    if "PINK SHEETS" in exchange_txt:
+        return "pink_sheets"
+    if "WHEN TRADING" in exchange_txt:
+        return "secondary_when_trading"
+    if " PSX" in exchange_txt or exchange_txt.startswith("NASDAQ OMX PSX"):
+        return "secondary_psx"
+    return None
+
+
+def _recent_degraded_price_rics(
+    conn: sqlite3.Connection,
+    *,
+    recent_sessions: int = 8,
+) -> set[str]:
+    if recent_sessions <= 0:
+        return set()
+    dates = [
+        str(row[0])
+        for row in conn.execute(
+            """
+            SELECT DISTINCT date
+            FROM security_prices_eod
+            WHERE date IS NOT NULL
+            ORDER BY date DESC
+            LIMIT ?
+            """,
+            (int(recent_sessions),),
+        ).fetchall()
+        if row and row[0]
+    ]
+    if len(dates) < 3:
+        return set()
+    placeholders = ",".join("?" for _ in dates)
+    rows = conn.execute(
+        f"""
+        SELECT
+            UPPER(TRIM(ric)) AS ric,
+            COUNT(DISTINCT date) AS obs_count,
+            COUNT(DISTINCT CAST(close AS TEXT)) AS distinct_close_count,
+            MAX(COALESCE(volume, 0)) AS max_volume
+        FROM security_prices_eod
+        WHERE date IN ({placeholders})
+        GROUP BY UPPER(TRIM(ric))
+        HAVING COUNT(DISTINCT date) BETWEEN 1 AND 2
+           AND COUNT(DISTINCT CAST(close AS TEXT)) = 1
+           AND MAX(COALESCE(volume, 0)) <= 0
+        """,
+        dates,
+    ).fetchall()
+    return {normalize_ric(row[0]) for row in rows if row and row[0]}
+
+
+def load_default_source_universe_rows(
+    conn: sqlite3.Connection,
+    *,
+    include_pending_seed: bool = True,
+    recent_sessions: int = 8,
+) -> list[dict[str, str]]:
+    degraded_recent = _recent_degraded_price_rics(conn, recent_sessions=recent_sessions)
+    rows = conn.execute(
+        f"""
+        SELECT
+            UPPER(TRIM(ric)) AS ric,
+            UPPER(TRIM(ticker)) AS ticker,
+            exchange_name,
+            COALESCE(classification_ok, 0) AS classification_ok,
+            COALESCE(is_equity_eligible, 0) AS is_equity_eligible,
+            COALESCE(source, '') AS source
+        FROM {SECURITY_MASTER_TABLE}
+        WHERE ric IS NOT NULL
+          AND TRIM(ric) <> ''
+          AND ticker IS NOT NULL
+          AND TRIM(ticker) <> ''
+        ORDER BY ticker, ric
+        """
+    ).fetchall()
+    pending_rows: list[dict[str, str]] = []
+    current_by_ticker: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not row:
+            continue
+        ric = normalize_ric(row[0])
+        ticker = normalize_ticker(row[1]) or ticker_from_ric(ric)
+        exchange_name = normalize_optional_text(row[2])
+        classification_ok = int(row[3] or 0)
+        is_equity_eligible = int(row[4] or 0)
+        source = normalize_optional_text(row[5]) or ""
+        if not ric or not ticker:
+            continue
+        if include_pending_seed and classification_ok == 0 and is_equity_eligible == 0 and source == "security_master_seed":
+            pending_rows.append({"ticker": ticker, "ric": ric})
+            continue
+        if classification_ok != 1 or is_equity_eligible != 1:
+            continue
+        if ric in degraded_recent:
+            continue
+        if _source_quality_exclusion_reason(ric=ric, ticker=ticker, exchange_name=exchange_name):
+            continue
+        candidate = {
+            "ticker": ticker,
+            "ric": ric,
+            "suffix_rank": _source_suffix_rank(ric),
+        }
+        existing = current_by_ticker.get(ticker)
+        if existing is None or (
+            int(candidate["suffix_rank"]),
+            str(candidate["ric"]),
+        ) < (
+            int(existing["suffix_rank"]),
+            str(existing["ric"]),
+        ):
+            current_by_ticker[ticker] = candidate
+    out = pending_rows + [
+        {"ticker": str(row["ticker"]), "ric": str(row["ric"])}
+        for _, row in sorted(current_by_ticker.items(), key=lambda item: item[0])
+    ]
+    return out
+
+
 def derive_security_master_flags(
     *,
     trbc_economic_sector: str | None,
@@ -47,6 +197,8 @@ def derive_security_master_flags(
     trbc_activity: str | None,
     hq_country_code: str | None,
 ) -> tuple[int, int]:
+    from backend.risk_model.eligibility import NON_EQUITY_ECONOMIC_SECTORS
+
     sector = normalize_optional_text(trbc_economic_sector)
     has_classification = any(
         normalize_optional_text(value)

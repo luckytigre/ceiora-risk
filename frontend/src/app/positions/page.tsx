@@ -17,7 +17,7 @@ import HoldingsLedgerSection from "@/features/holdings/components/HoldingsLedger
 import HoldingsMutationFeedback from "@/features/holdings/components/HoldingsMutationFeedback";
 import ManualPositionEditor from "@/features/holdings/components/ManualPositionEditor";
 import { useHoldingsManager } from "@/features/holdings/hooks/useHoldingsManager";
-import { buildAnalyticsTruthBanner, summarizeAnalyticsTruth } from "@/lib/analyticsTruth";
+import { buildAnalyticsTruthCompactSummary, summarizeAnalyticsTruth } from "@/lib/analyticsTruth";
 
 function modeLabel(m: HoldingsImportMode): string {
   if (m === "replace_account") return "Full Replace Account";
@@ -122,7 +122,7 @@ export default function PositionsPage() {
     () => summarizeAnalyticsTruth({ portfolio, risk: riskData }),
     [portfolio, riskData],
   );
-  const truthBanner = useMemo(() => buildAnalyticsTruthBanner(truth), [truth]);
+  const compactTruthSummary = useMemo(() => buildAnalyticsTruthCompactSummary(truth), [truth]);
   const snapshotMismatch = !truth.snapshotsCoherent && truth.snapshotIds.length > 1;
 
   const modelVsLiveDiffs = useMemo(() => {
@@ -343,20 +343,11 @@ export default function PositionsPage() {
           </div>
         ) : (
           <>
-            <div
-              style={{
-                marginTop: 12,
-                padding: "12px 14px",
-                border: "1px solid rgba(169, 182, 210, 0.18)",
-                background: "rgba(169, 182, 210, 0.05)",
-                color: "rgba(232, 237, 249, 0.84)",
-                fontSize: 13,
-                lineHeight: 1.55,
-              }}
-            >
-              <div>{truthBanner.headline}</div>
-              <div>{truthBanner.detail}</div>
-            </div>
+            {compactTruthSummary && (
+              <div className="section-subtitle" style={{ marginTop: 12, marginBottom: 0 }}>
+                {compactTruthSummary}
+              </div>
+            )}
             <div className="data-metric-grid" style={{ marginTop: 12 }}>
               <div className="data-metric-card">
                 <h4>Live Holdings Rows</h4>

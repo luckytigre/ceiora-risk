@@ -57,6 +57,7 @@ def run_serving_stage(
                     skip_cuse4_foundation=True,
                     skip_risk_engine=bool(skip_risk_engine),
                     refresh_deep_health_diagnostics=bool(should_run_core),
+                    prefer_local_source_archive=bool(prefer_local_source_archive),
                 )
                 out["_skip_risk_engine_reason"] = str(skip_reason)
                 out["_skip_risk_engine"] = bool(skip_risk_engine)
@@ -71,6 +72,7 @@ def run_serving_stage(
             skip_cuse4_foundation=True,
             skip_risk_engine=bool(skip_risk_engine),
             refresh_deep_health_diagnostics=bool(should_run_core),
+            prefer_local_source_archive=bool(prefer_local_source_archive),
         )
         out["_skip_risk_engine_reason"] = str(skip_reason)
         out["_skip_risk_engine"] = bool(skip_risk_engine)

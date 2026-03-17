@@ -20,6 +20,7 @@ from backend.data.trbc_schema import (
     pick_trbc_industry_column,
 )
 from backend.trading_calendar import filter_xnys_sessions
+from backend.universe.security_master_sync import load_default_source_universe_rows
 
 logger = logging.getLogger(__name__)
 
@@ -404,6 +405,12 @@ def rebuild_raw_cross_section_history(
             conn,
             params=(min_for_roll, max_date),
         )
+        source_universe_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
+        if source_universe_rows:
+            source_universe = pd.DataFrame(source_universe_rows)
+            source_universe["ric"] = source_universe["ric"].astype(str).str.upper()
+            source_universe["ticker"] = source_universe["ticker"].astype(str).str.upper()
+            prices_raw = prices_raw.merge(source_universe, on=["ric", "ticker"], how="inner")
         prices = _dedupe_prices(prices_raw)
         prices = _compute_price_features(prices)
         logger.info(

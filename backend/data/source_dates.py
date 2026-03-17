@@ -2,7 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
 from typing import Any, Callable
+
+from backend import config
+from backend.trading_calendar import previous_or_same_xnys_session
+
+
+def _pit_latest_closed_anchor(*, today: date | None = None) -> str:
+    current = today or datetime.utcnow().date()
+    frequency = str(config.SOURCE_DAILY_PIT_FREQUENCY or "monthly").strip().lower()
+    if frequency == "quarterly":
+        quarter_start_month = (((current.month - 1) // 3) * 3) + 1
+        period_start = date(current.year, quarter_start_month, 1)
+    else:
+        period_start = date(current.year, current.month, 1)
+    previous_day = (period_start - timedelta(days=1)).isoformat()
+    return previous_or_same_xnys_session(previous_day)
 
 
 def resolve_latest_barra_tuple(
@@ -44,15 +60,24 @@ def load_source_dates(
         val = rows[0].get("latest")
         return str(val) if val else None
 
+    pit_latest_closed_anchor = _pit_latest_closed_anchor()
     fundamentals_asof = None
     if table_exists_fn("security_fundamentals_pit"):
         fundamentals_asof = _max_val(
-            "SELECT MAX(as_of_date) AS latest FROM security_fundamentals_pit"
+            f"""
+            SELECT MAX(as_of_date) AS latest
+            FROM security_fundamentals_pit
+            WHERE as_of_date <= '{pit_latest_closed_anchor}'
+            """
         )
     classification_asof = None
     if table_exists_fn("security_classification_pit"):
         classification_asof = _max_val(
-            "SELECT MAX(as_of_date) AS latest FROM security_classification_pit"
+            f"""
+            SELECT MAX(as_of_date) AS latest
+            FROM security_classification_pit
+            WHERE as_of_date <= '{pit_latest_closed_anchor}'
+            """
         )
     prices_asof = None
     if table_exists_fn("security_prices_eod"):

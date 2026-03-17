@@ -163,6 +163,57 @@ def load_eligibility_summary(cache_conn: sqlite3.Connection) -> dict[str, Any]:
     return summary
 
 
+def eligibility_summary_from_runtime_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    latest = dict(payload or {})
+    if not latest:
+        return {
+            "available": False,
+            "latest": None,
+            "min_structural_eligible_n": None,
+            "max_structural_eligible_n": None,
+            "min_core_structural_eligible_n": None,
+            "max_core_structural_eligible_n": None,
+            "min_regression_member_n": None,
+            "max_regression_member_n": None,
+            "min_projectable_n": None,
+            "max_projectable_n": None,
+            "min_projected_only_n": None,
+            "max_projected_only_n": None,
+        }
+    structural_eligible_n = int(latest.get("structural_eligible_n") or 0)
+    core_structural_eligible_n = int(latest.get("core_structural_eligible_n") or structural_eligible_n)
+    regression_member_n = int(latest.get("regression_member_n") or 0)
+    projectable_n = int(latest.get("projectable_n") or regression_member_n)
+    projected_only_n = int(latest.get("projected_only_n") or 0)
+    return {
+        "available": True,
+        "latest": {
+            "date": str(latest.get("date") or ""),
+            "exp_date": str(latest.get("exp_date") or latest.get("date") or ""),
+            "exposure_n": int(latest.get("exposure_n") or 0),
+            "structural_eligible_n": structural_eligible_n,
+            "core_structural_eligible_n": core_structural_eligible_n,
+            "regression_member_n": regression_member_n,
+            "projectable_n": projectable_n,
+            "projected_only_n": projected_only_n,
+            "structural_coverage_pct": round(100.0 * float(latest.get("structural_coverage") or 0.0), 2),
+            "regression_coverage_pct": round(100.0 * float(latest.get("regression_coverage") or 0.0), 2),
+            "projectable_coverage_pct": round(100.0 * float(latest.get("projectable_coverage") or 0.0), 2),
+            "alert_level": str(latest.get("alert_level") or ""),
+        },
+        "min_structural_eligible_n": structural_eligible_n,
+        "max_structural_eligible_n": structural_eligible_n,
+        "min_core_structural_eligible_n": core_structural_eligible_n,
+        "max_core_structural_eligible_n": core_structural_eligible_n,
+        "min_regression_member_n": regression_member_n,
+        "max_regression_member_n": regression_member_n,
+        "min_projectable_n": projectable_n,
+        "max_projectable_n": projectable_n,
+        "min_projected_only_n": projected_only_n,
+        "max_projected_only_n": projected_only_n,
+    }
+
+
 def load_factor_cross_section(cache_conn: sqlite3.Connection) -> dict[str, Any]:
     summary = {"available": False, "latest": None, "min_cross_section_n": None, "max_cross_section_n": None}
     if not sqlite_diag.table_exists(cache_conn, "daily_factor_returns"):
@@ -179,6 +230,49 @@ def load_factor_cross_section(cache_conn: sqlite3.Connection) -> dict[str, Any]:
         "SELECT MIN(cross_section_n), MAX(cross_section_n), MIN(eligible_n), MAX(eligible_n) FROM daily_factor_returns"
     ).fetchone()
 
+    summary["available"] = True
+    if latest:
+        summary["latest"] = {
+            "date": str(latest[0]) if latest[0] is not None else None,
+            "cross_section_n_min": int(latest[1] or 0),
+            "cross_section_n_max": int(latest[2] or 0),
+            "eligible_n_min": int(latest[3] or 0),
+            "eligible_n_max": int(latest[4] or 0),
+        }
+    if minmax:
+        summary["min_cross_section_n"] = int(minmax[0] or 0)
+        summary["max_cross_section_n"] = int(minmax[1] or 0)
+        summary["min_eligible_n"] = int(minmax[2] or 0)
+        summary["max_eligible_n"] = int(minmax[3] or 0)
+    return summary
+
+
+def factor_cross_section_from_model_outputs(data_conn: sqlite3.Connection) -> dict[str, Any]:
+    summary = {
+        "available": False,
+        "latest": None,
+        "min_cross_section_n": None,
+        "max_cross_section_n": None,
+        "min_eligible_n": None,
+        "max_eligible_n": None,
+    }
+    if not sqlite_diag.table_exists(data_conn, "model_factor_returns_daily"):
+        return summary
+    latest = data_conn.execute(
+        """
+        SELECT date, MIN(cross_section_n), MAX(cross_section_n), MIN(eligible_n), MAX(eligible_n)
+        FROM model_factor_returns_daily
+        WHERE date = (SELECT MAX(date) FROM model_factor_returns_daily)
+        """
+    ).fetchone()
+    minmax = data_conn.execute(
+        """
+        SELECT MIN(cross_section_n), MAX(cross_section_n), MIN(eligible_n), MAX(eligible_n)
+        FROM model_factor_returns_daily
+        """
+    ).fetchone()
+    if latest is None and minmax is None:
+        return summary
     summary["available"] = True
     if latest:
         summary["latest"] = {

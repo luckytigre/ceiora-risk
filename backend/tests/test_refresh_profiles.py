@@ -24,6 +24,18 @@ def test_default_profile_is_cloud_serve_refresh(monkeypatch: pytest.MonkeyPatch)
     assert refresh_manager._resolve_profile(None) == "serve-refresh"
 
 
+def test_local_serve_refresh_prefers_local_source_archive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run_model_pipeline.config, "APP_RUNTIME_ROLE", "local-ingest")
+
+    assert run_model_pipeline.runtime_support.profile_prefers_local_source_archive("serve-refresh") is True
+
+
+def test_cloud_serve_refresh_does_not_prefer_local_source_archive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run_model_pipeline.config, "APP_RUNTIME_ROLE", "cloud-serve")
+
+    assert run_model_pipeline.runtime_support.profile_prefers_local_source_archive("serve-refresh") is False
+
+
 def test_unknown_profile_is_rejected() -> None:
     with pytest.raises(ValueError, match="Invalid profile"):
         refresh_manager._resolve_profile("daily-with-core-if-due")

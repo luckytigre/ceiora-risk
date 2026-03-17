@@ -131,3 +131,74 @@ def test_model_outputs_persist_incremental_rows_only_without_neon(
     assert second["factor_returns_persistence_mode"] == "incremental"
     assert second["factor_returns_reload_from"] == "2026-03-03"
     assert second["row_counts"]["model_factor_returns_daily"] == 1
+
+
+def test_model_outputs_load_latest_persisted_covariance_and_specific_risk(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(model_outputs.config, "DATA_DB_PATH", str(tmp_path / "data.db"))
+    monkeypatch.setattr(model_outputs.config, "neon_dsn", lambda: "")
+    monkeypatch.setattr(model_outputs.config, "neon_primary_model_data_enabled", lambda: False)
+
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    conn.execute(
+        """
+        CREATE TABLE model_factor_covariance_daily (
+            as_of_date TEXT NOT NULL,
+            factor_name TEXT NOT NULL,
+            factor_name_2 TEXT NOT NULL,
+            covariance REAL NOT NULL,
+            run_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (as_of_date, factor_name, factor_name_2)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE model_specific_risk_daily (
+            as_of_date TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            ticker TEXT,
+            specific_var REAL NOT NULL,
+            specific_vol REAL NOT NULL,
+            obs INTEGER NOT NULL DEFAULT 0,
+            trbc_business_sector TEXT,
+            run_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (as_of_date, ric)
+        )
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO model_factor_covariance_daily (
+            as_of_date, factor_name, factor_name_2, covariance, run_id, updated_at
+        ) VALUES (?, ?, ?, ?, 'run_1', '2026-03-16T00:00:00Z')
+        """,
+        [
+            ("2026-03-13", "market", "market", 0.04),
+            ("2026-03-13", "market", "style_beta_score", 0.01),
+            ("2026-03-13", "style_beta_score", "market", 0.01),
+            ("2026-03-13", "style_beta_score", "style_beta_score", 0.09),
+        ],
+    )
+    conn.execute(
+        """
+        INSERT INTO model_specific_risk_daily (
+            as_of_date, ric, ticker, specific_var, specific_vol, obs, trbc_business_sector, run_id, updated_at
+        ) VALUES ('2026-03-13', 'AAPL.OQ', 'AAPL', 0.01, 0.1, 60, 'Technology', 'run_1', '2026-03-16T00:00:00Z')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    cov_payload = model_outputs.load_latest_persisted_covariance_payload()
+    specific_payload = model_outputs.load_latest_persisted_specific_risk_payload()
+
+    assert cov_payload["factors"] == ["market", "style_beta_score"]
+    assert cov_payload["matrix"] == [[0.04, 0.01], [0.01, 0.09]]
+    assert specific_payload["AAPL.OQ"]["ticker"] == "AAPL"
+    assert specific_payload["AAPL.OQ"]["specific_var"] == 0.01

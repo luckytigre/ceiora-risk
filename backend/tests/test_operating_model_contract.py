@@ -26,6 +26,16 @@ def _stub_persisted_model_state_reads(monkeypatch: pytest.MonkeyPatch) -> None:
         "load_latest_persisted_risk_engine_state",
         lambda: {},
     )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_persisted_covariance_payload",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_persisted_specific_risk_payload",
+        lambda: {},
+    )
 
 
 def test_positions_store_prefers_neon_when_dsn_present(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -479,7 +489,7 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
         "_compute_position_risk_mix",
         lambda **kwargs: {"AAPL": {"market": 0.0, "industry": 0.2, "style": 0.3, "idio": 0.5}},
     )
-    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db: (None, {}))
+    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db, **kwargs: (None, {}))
     monkeypatch.setattr(
         pipeline,
         "_compute_exposures_modes",
@@ -532,6 +542,168 @@ def test_pipeline_can_reuse_cached_universe_loadings_for_holdings_only_light_ref
     assert captured["reuse_cached_static_payloads"] is True
     assert captured["published"] == "snap_1"
     assert isinstance(captured["staged_universe_loadings"], dict)
+
+
+def test_pipeline_rebuilds_universe_loadings_when_local_source_archive_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    source_dates = {
+        "fundamentals_asof": "2026-03-13",
+        "classification_asof": "2026-03-13",
+        "prices_asof": "2026-03-13",
+        "exposures_asof": "2026-03-13",
+        "exposures_latest_available_asof": "2026-03-13",
+    }
+    risk_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-03-16",
+        "factor_returns_latest_date": "2026-03-13",
+        "cross_section_min_age_days": 7,
+        "lookback_days": 504,
+        "specific_risk_ticker_count": 1,
+        "recompute_interval_days": 7,
+        "latest_r2": 0.4,
+    }
+    cached_universe_loadings = {
+        "factors": ["style_beta_score"],
+        "factor_vols": {"style_beta_score": 0.05},
+        "ticker_count": 1,
+        "eligible_ticker_count": 1,
+        "source_dates": dict(source_dates),
+        "risk_engine": {
+            "status": "ok",
+            "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+            "last_recompute_date": "2026-03-16",
+            "factor_returns_latest_date": "2026-03-13",
+            "cross_section_min_age_days": 7,
+            "lookback_days": 504,
+            "specific_risk_ticker_count": 1,
+        },
+        "by_ticker": {
+            "AAPL": {
+                "ticker": "AAPL",
+                "price": 100.0,
+                "name": "Apple",
+                "exposures": {},
+                "specific_var": 0.01,
+                "specific_vol": 0.1,
+                "model_status": "ineligible",
+            }
+        },
+    }
+
+    monkeypatch.setattr(pipeline.core_reads, "load_source_dates", lambda **kwargs: dict(source_dates))
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_latest_prices",
+        lambda **kwargs: pd.DataFrame([{"ticker": "AAPL", "ric": "AAPL.OQ", "close": 100.0}]),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_latest_fundamentals",
+        lambda **kwargs: pd.DataFrame([{"ticker": "AAPL", "ric": "AAPL.OQ", "market_cap": 1_000_000.0}]),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_raw_cross_section_latest",
+        lambda **kwargs: pd.DataFrame([{"ticker": "AAPL", "ric": "AAPL.OQ", "as_of_date": "2026-03-13", "beta_score": 1.1}]),
+    )
+    monkeypatch.setattr(pipeline.config, "CUSE4_ENABLE_ESTU_AUDIT", False)
+
+    def _cache_get(key: str):
+        payloads = {
+            "risk_engine_meta": dict(risk_meta),
+            "risk_engine_cov": {"factors": ["style_beta_score"], "matrix": [[1.0]]},
+            "risk_engine_specific_risk": {"AAPL.OQ": {"ticker": "AAPL", "specific_var": 0.01, "specific_vol": 0.1}},
+            "risk": {"cov_matrix": {"factors": ["style_beta_score"], "correlation": [[1.0]]}},
+            "universe_loadings": dict(cached_universe_loadings),
+        }
+        return payloads.get(key)
+
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.runtime_state, "load_runtime_state", lambda key, fallback_loader=None: _cache_get(key))
+    monkeypatch.setattr(
+        pipeline,
+        "_build_universe_ticker_loadings",
+        lambda *args, **kwargs: captured.update({"rebuilt": True}) or {
+            "as_of_date": "2026-03-13",
+            "latest_available_asof": "2026-03-13",
+            "factors": ["style_beta_score"],
+            "factor_vols": {"style_beta_score": 0.05},
+            "factor_catalog": [],
+            "ticker_count": 1,
+            "eligible_ticker_count": 1,
+            "core_estimated_ticker_count": 1,
+            "projected_only_ticker_count": 0,
+            "ineligible_ticker_count": 0,
+            "by_ticker": {
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "price": 100.0,
+                    "name": "Apple",
+                    "exposures": {"style_beta_score": 1.1},
+                    "specific_var": 0.01,
+                    "specific_vol": 0.1,
+                    "model_status": "core_estimated",
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_build_positions_from_universe",
+        lambda by_ticker: ([{"ticker": "AAPL", "weight": 1.0, "exposures": {"style_beta_score": 1.1}}], 100.0),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "risk_decomposition",
+        lambda **kwargs: (
+            {"market": 1.0, "industry": 10.0, "style": 20.0, "idio": 69.0},
+            {"market": 0.1, "industry": 0.2, "style": 0.7},
+            [{"factor_id": "style_beta_score", "sensitivity": 0.3, "factor_vol": 0.05}],
+        ),
+    )
+    monkeypatch.setattr(pipeline, "_compute_position_risk_mix", lambda **kwargs: {"AAPL": {"market": 0.1, "industry": 0.2, "style": 0.3, "idio": 0.4}})
+    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db, **kwargs: (None, {}))
+    monkeypatch.setattr(pipeline, "_compute_exposures_modes", lambda *args, **kwargs: {"raw": [], "sensitivity": [], "risk_contribution": []})
+    monkeypatch.setattr(
+        pipeline,
+        "stage_refresh_cache_snapshot",
+        lambda **kwargs: captured.update({"reuse_cached_static_payloads": kwargs["reuse_cached_static_payloads"]}) or {
+            "snapshot_id": "snap_local",
+            "risk_engine_state": {"status": "ok"},
+            "sanity": {"status": "ok"},
+            "health_refreshed": False,
+            "persisted_payloads": {},
+        },
+    )
+    monkeypatch.setattr(pipeline.model_outputs, "persist_model_outputs", lambda **kwargs: {"status": "skipped"})
+    monkeypatch.setattr(pipeline.serving_outputs, "persist_current_payloads", lambda **kwargs: {"status": "ok", "run_id": kwargs["run_id"]})
+    monkeypatch.setattr(pipeline.sqlite, "cache_set", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "publish_active_snapshot",
+        lambda snapshot_id, fallback_publisher=None: {"status": "ok"},
+    )
+
+    out = pipeline.run_refresh(
+        mode="light",
+        refresh_scope="full",
+        skip_snapshot_rebuild=True,
+        skip_cuse4_foundation=True,
+        skip_risk_engine=True,
+        prefer_local_source_archive=True,
+    )
+
+    assert out["status"] == "ok"
+    assert out["universe_loadings_reused"] is False
+    assert out["universe_loadings_reuse_reason"] == "rebuilt"
+    assert captured["rebuilt"] is True
+    assert captured["reuse_cached_static_payloads"] is False
 
 
 def test_cached_universe_loadings_reuse_requires_matching_risk_engine_and_source_dates() -> None:
@@ -737,7 +909,7 @@ def test_pipeline_fallback_light_refresh_skips_model_outputs_when_risk_engine_is
         "_compute_position_risk_mix",
         lambda **kwargs: {"AAPL": {"market": 0.0, "industry": 0.2, "style": 0.3, "idio": 0.5}},
     )
-    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db: (None, {}))
+    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db, **kwargs: (None, {}))
     monkeypatch.setattr(
         pipeline,
         "_compute_exposures_modes",
@@ -882,7 +1054,7 @@ def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
         "_compute_exposures_modes",
         lambda *args, **kwargs: {"raw": [], "sensitivity": [], "risk_contribution": []},
     )
-    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db: (None, {}))
+    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db, **kwargs: (None, {}))
     monkeypatch.setattr(
         pipeline,
         "stage_refresh_cache_snapshot",
@@ -1061,7 +1233,7 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
         "_compute_position_total_risk_contributions",
         lambda **kwargs: {"AAPL": 1.0},
     )
-    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda cache_db: ("2026-03-13", {}))
+    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda cache_db, **kwargs: ("2026-03-13", {}))
     monkeypatch.setattr(pipeline, "_compute_exposures_modes", lambda *args, **kwargs: {})
     monkeypatch.setattr(
         pipeline.runtime_state,
@@ -1150,6 +1322,196 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
     assert captured["recomputed_this_refresh"] is False
     assert captured["risk_engine_meta"]["factor_returns_latest_date"] == "2026-03-13"
     assert captured["risk_engine_meta"]["method_version"] == pipeline.RISK_ENGINE_METHOD_VERSION
+
+
+def test_run_refresh_uses_persisted_risk_artifacts_when_runtime_cache_is_degraded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    persisted_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-03-16",
+        "factor_returns_latest_date": "2026-03-13",
+        "lookback_days": 504,
+        "cross_section_min_age_days": 7,
+        "recompute_interval_days": 7,
+        "specific_risk_ticker_count": 3736,
+    }
+    persisted_cov = {
+        "factors": ["market", "industry_technology_equipment", "style_beta_score"],
+        "matrix": [
+            [0.04, 0.01, 0.002],
+            [0.01, 0.09, 0.003],
+            [0.002, 0.003, 0.16],
+        ],
+    }
+    persisted_specific = {
+        "AAPL.OQ": {"ric": "AAPL.OQ", "ticker": "AAPL", "specific_var": 0.01, "specific_vol": 0.1},
+        "MSFT.OQ": {"ric": "MSFT.OQ", "ticker": "MSFT", "specific_var": 0.02, "specific_vol": 0.1414},
+    }
+
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_source_dates",
+        lambda **kwargs: {
+            "fundamentals_asof": "2026-03-13",
+            "classification_asof": "2026-03-13",
+            "prices_asof": "2026-03-13",
+            "exposures_asof": "2026-03-13",
+            "exposures_latest_available_asof": "2026-03-13",
+        },
+    )
+    monkeypatch.setattr(pipeline, "_load_cached_risk_display_payload", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline.core_reads, "load_latest_prices", lambda **kwargs: pd.DataFrame({"ticker": ["AAPL"]}))
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_latest_fundamentals",
+        lambda as_of_date=None, **kwargs: pd.DataFrame({"ticker": ["AAPL"]}),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_raw_cross_section_latest",
+        lambda **kwargs: pd.DataFrame({"ticker": ["AAPL"], "market": [1.0], "industry_technology_equipment": [0.4], "beta_score": [1.0]}),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_build_universe_ticker_loadings",
+        lambda *args, **kwargs: {
+            "factors": ["market", "industry_technology_equipment", "style_beta_score"],
+            "factor_vols": {"market": 0.2, "industry_technology_equipment": 0.3, "style_beta_score": 0.4},
+            "ticker_count": 1,
+            "eligible_ticker_count": 1,
+            "by_ticker": {
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "price": 100.0,
+                    "exposures": {
+                        "market": 1.0,
+                        "industry_technology_equipment": 0.4,
+                        "style_beta_score": 1.0,
+                    },
+                }
+            },
+            "factor_catalog": [],
+            "index": [],
+        },
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_build_positions_from_universe",
+        lambda universe_by_ticker: (
+            [
+                {
+                    "ticker": "AAPL",
+                    "weight": 1.0,
+                    "market_value": 100.0,
+                    "exposures": {
+                        "market": 1.0,
+                        "industry_technology_equipment": 0.4,
+                        "style_beta_score": 1.0,
+                    },
+                }
+            ],
+            100.0,
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "risk_decomposition",
+        lambda **kwargs: (
+            {"market": 30.0, "industry": 20.0, "style": 10.0, "idio": 40.0},
+            {"market": 0.5, "industry": 0.33, "style": 0.17},
+            [
+                {"factor_id": "market", "factor_vol": 0.2, "sensitivity": 0.2, "pct_of_total": 30.0},
+                {"factor_id": "industry_technology_equipment", "factor_vol": 0.3, "sensitivity": 0.12, "pct_of_total": 20.0},
+                {"factor_id": "style_beta_score", "factor_vol": 0.4, "sensitivity": 0.4, "pct_of_total": 10.0},
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_compute_position_risk_mix",
+        lambda **kwargs: {"AAPL": {"market": 0.3, "industry": 0.2, "style": 0.1, "idio": 0.4}},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_compute_position_total_risk_contributions",
+        lambda **kwargs: {"AAPL": 100.0},
+    )
+    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda cache_db, **kwargs: ("2026-03-13", {}))
+    monkeypatch.setattr(
+        pipeline,
+        "_compute_exposures_modes",
+        lambda positions, cov, factor_details, **kwargs: captured.update({"cov_columns": list(cov.columns)}) or {
+            "raw": [],
+            "sensitivity": [],
+            "risk_contribution": [],
+        },
+    )
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "load_runtime_state",
+        lambda key, fallback_loader=None: {"status": "ok", "method_version": "fresh_live", "factor_returns_latest_date": "2026-03-07", "specific_risk_ticker_count": 2} if key == "risk_engine_meta" else None,
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_persisted_risk_engine_state",
+        lambda: persisted_meta,
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_persisted_covariance_payload",
+        lambda: persisted_cov,
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_persisted_specific_risk_payload",
+        lambda: persisted_specific,
+    )
+    monkeypatch.setattr(
+        pipeline.sqlite,
+        "cache_get_live_first",
+        lambda key, **kwargs: {
+            "risk_engine_cov": {"factors": ["style_beta_score"], "matrix": [[1.0]]},
+            "risk_engine_specific_risk": {"AAPL.OQ": {"ric": "AAPL.OQ", "ticker": "AAPL", "specific_var": 0.01, "specific_vol": 0.1}},
+        }.get(key),
+    )
+    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline,
+        "stage_refresh_cache_snapshot",
+        lambda **kwargs: captured.update(
+            {
+                "cov_payload": kwargs["cov_payload"],
+                "specific_risk_by_security": kwargs["specific_risk_by_security"],
+            }
+        )
+        or {
+            "snapshot_id": "snap",
+            "risk_engine_state": kwargs["risk_engine_meta"],
+            "sanity": {"status": "ok"},
+            "health_refreshed": False,
+            "persisted_payloads": {"risk": {"risk_engine": kwargs["risk_engine_meta"]}},
+        },
+    )
+    monkeypatch.setattr(pipeline.model_outputs, "persist_model_outputs", lambda **kwargs: {"status": "skipped"})
+    monkeypatch.setattr(pipeline.serving_outputs, "persist_current_payloads", lambda **kwargs: {"status": "ok"})
+    monkeypatch.setattr(pipeline.sqlite, "cache_set", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline.runtime_state, "persist_runtime_state", lambda *args, **kwargs: {"status": "ok"})
+    monkeypatch.setattr(pipeline.runtime_state, "publish_active_snapshot", lambda *args, **kwargs: {"status": "ok"})
+
+    out = pipeline.run_refresh(
+        mode="light",
+        refresh_scope="full",
+        skip_snapshot_rebuild=True,
+        skip_cuse4_foundation=True,
+    )
+
+    assert out["status"] == "ok"
+    assert captured["cov_payload"]["factors"] == ["market", "industry_technology_equipment", "style_beta_score"]
+    assert set(captured["specific_risk_by_security"].keys()) == {"AAPL.OQ", "MSFT.OQ"}
+    assert captured["cov_columns"] == ["market", "industry_technology_equipment", "style_beta_score"]
 
 
 def test_run_refresh_publish_only_republishes_cached_payloads_without_recompute(
@@ -1391,6 +1753,7 @@ def test_run_stage_serving_refresh_uses_local_source_archive_for_local_publish_p
 
     def _run_refresh(**kwargs):
         captured["backend"] = run_model_pipeline_module.core_reads.core_read_backend_name()
+        captured["prefer_local_source_archive"] = kwargs.get("prefer_local_source_archive")
         return {"status": "ok"}
 
     monkeypatch.setattr(run_model_pipeline_module, "run_refresh", _run_refresh)
@@ -1411,6 +1774,7 @@ def test_run_stage_serving_refresh_uses_local_source_archive_for_local_publish_p
 
     assert out["status"] == "ok"
     assert captured["backend"] == "local"
+    assert captured["prefer_local_source_archive"] is True
 
 
 def test_run_stage_serving_refresh_keeps_neon_backend_for_canonical_serve_refresh(
@@ -1431,6 +1795,7 @@ def test_run_stage_serving_refresh_keeps_neon_backend_for_canonical_serve_refres
 
     def _run_refresh(**kwargs):
         captured["backend"] = run_model_pipeline_module.core_reads.core_read_backend_name()
+        captured["prefer_local_source_archive"] = kwargs.get("prefer_local_source_archive")
         return {"status": "ok"}
 
     monkeypatch.setattr(run_model_pipeline_module, "run_refresh", _run_refresh)
@@ -1451,6 +1816,7 @@ def test_run_stage_serving_refresh_keeps_neon_backend_for_canonical_serve_refres
 
     assert out["status"] == "ok"
     assert captured["backend"] == "neon"
+    assert captured["prefer_local_source_archive"] is False
 
 
 def test_run_stage_serving_refresh_uses_local_backend_during_core_rebuild(

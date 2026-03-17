@@ -159,6 +159,11 @@ def stage_refresh_cache_snapshot(
     )
     if not isinstance(eligibility_summary, dict) or not eligibility_summary:
         eligibility_summary = load_latest_eligibility_summary(cache_db)
+    eligibility_summary = refresh_metadata.refreshed_eligibility_summary(
+        eligibility_summary=eligibility_summary,
+        universe_loadings=universe_loadings,
+        source_dates=source_dates,
+    )
     effective_source_dates = _serving_source_dates(
         source_dates=source_dates,
         universe_loadings=universe_loadings,

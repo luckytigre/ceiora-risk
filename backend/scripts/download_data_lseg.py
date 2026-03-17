@@ -30,6 +30,7 @@ from backend.universe.schema import (
 )
 from backend.universe.security_master_sync import (
     derive_security_master_flags,
+    load_default_source_universe_rows,
     ticker_from_ric,
     upsert_security_master_rows,
 )
@@ -313,14 +314,7 @@ def _load_universe_from_security_master(
         if requested_filters:
             where.append("(" + " OR ".join(requested_filters) + ")")
     else:
-        where.extend(
-            [
-                "ticker IS NOT NULL",
-                "TRIM(ticker) <> ''",
-                "COALESCE(classification_ok, 0) = 1",
-                "COALESCE(is_equity_eligible, 0) = 1",
-            ]
-        )
+        return load_default_source_universe_rows(conn, include_pending_seed=True)
 
     rows = conn.execute(
         f"""

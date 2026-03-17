@@ -22,6 +22,7 @@ import pandas as pd
 import lseg.data as rd
 
 from backend.universe.schema import PRICES_TABLE, SECURITY_MASTER_TABLE, ensure_cuse4_schema
+from backend.universe.security_master_sync import load_default_source_universe_rows
 from backend.trading_calendar import filter_xnys_sessions, previous_or_same_xnys_session
 
 warnings.filterwarnings(
@@ -182,33 +183,28 @@ def backfill_prices(
     try:
         requested_rics = [str(r).strip().upper() for r in str(rics_csv).split(",") if str(r).strip()] if rics_csv else []
         requested_ric_set = set(requested_rics)
-        where = [
-            "ric IS NOT NULL",
-            "TRIM(ric) <> ''",
-        ]
-        params: list[Any] = []
         if requested_rics:
+            where = [
+                "ric IS NOT NULL",
+                "TRIM(ric) <> ''",
+            ]
+            params: list[Any] = []
             placeholders = ",".join("?" for _ in requested_rics)
             where.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
             params.extend(requested_rics)
+            universe = conn.execute(
+                f"""
+                SELECT UPPER(TRIM(ric)) AS ric
+                FROM {SECURITY_MASTER_TABLE}
+                WHERE {' AND '.join(where)}
+                ORDER BY ric
+                """,
+                params,
+            ).fetchall()
+            rics = sorted({str(r[0]) for r in universe if r and r[0]})
         else:
-            where.extend(
-                [
-                    "COALESCE(classification_ok, 0) = 1",
-                    "COALESCE(is_equity_eligible, 0) = 1",
-                ]
-            )
-
-        universe = conn.execute(
-            f"""
-            SELECT UPPER(TRIM(ric)) AS ric
-            FROM {SECURITY_MASTER_TABLE}
-            WHERE {' AND '.join(where)}
-            ORDER BY ric
-            """,
-            params,
-        ).fetchall()
-        rics = sorted({str(r[0]) for r in universe if r and r[0]})
+            universe_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
+            rics = sorted({str(row["ric"]).strip().upper() for row in universe_rows if row.get("ric")})
         ric_set = set(rics)
         matched_requested_ric_count = int(len(requested_ric_set & ric_set))
         missing_requested_rics = sorted(requested_ric_set - ric_set)

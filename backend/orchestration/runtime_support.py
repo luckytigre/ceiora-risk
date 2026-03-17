@@ -73,7 +73,7 @@ def profile_prefers_local_source_archive(profile: str) -> bool:
         return False
     return bool(
         config.runtime_role_allows_ingest()
-        and str(profile or "").strip().lower() not in {"serve-refresh", "publish-only"}
+        and str(profile or "").strip().lower() != "publish-only"
     )
 
 def reset_core_caches(cache_db: Path) -> dict[str, int]:

@@ -149,6 +149,33 @@ def _deserialize_covariance(payload: Any) -> pd.DataFrame:
     return reuse_policy.deserialize_covariance(payload)
 
 
+def _covariance_factor_count(cov: pd.DataFrame | None) -> int:
+    if cov is None or cov.empty:
+        return 0
+    return int(len(cov.columns))
+
+
+def _specific_risk_entry_count(payload: dict[str, Any] | None) -> int:
+    return int(len(payload)) if isinstance(payload, dict) else 0
+
+
+def _persisted_risk_artifacts_are_richer(
+    *,
+    cached_cov: pd.DataFrame,
+    cached_specific: dict[str, SpecificRiskPayload],
+    persisted_cov_payload: dict[str, Any],
+    persisted_specific_payload: dict[str, Any],
+) -> bool:
+    persisted_factor_count = int(len(persisted_cov_payload.get("factors") or [])) if isinstance(persisted_cov_payload, dict) else 0
+    persisted_specific_count = _specific_risk_entry_count(persisted_specific_payload)
+    cached_factor_count = _covariance_factor_count(cached_cov)
+    cached_specific_count = _specific_risk_entry_count(cached_specific)
+    return bool(
+        (persisted_factor_count > 0 and cached_factor_count < persisted_factor_count)
+        or (persisted_specific_count > 0 and cached_specific_count < persisted_specific_count)
+    )
+
+
 def _specific_risk_by_ticker_view(
     specific_risk_by_security: dict[str, SpecificRiskPayload] | None,
 ) -> dict[str, SpecificRiskPayload]:
@@ -187,9 +214,11 @@ def _build_positions_from_universe(
 
 def _load_latest_factor_coverage(
     cache_db: Path,
+    *,
+    data_db: Path | None = None,
 ) -> tuple[str | None, dict[str, FactorCoveragePayload]]:
-    """Load latest per-factor cross-section coverage stats from cache DB."""
-    return _load_latest_factor_coverage_impl(cache_db)
+    """Load latest per-factor cross-section coverage stats from durable model outputs."""
+    return _load_latest_factor_coverage_impl(cache_db, data_db=data_db)
 
 
 def _compute_exposures_modes(
@@ -245,6 +274,7 @@ def run_refresh(
     skip_cuse4_foundation: bool = False,
     skip_risk_engine: bool = False,
     refresh_deep_health_diagnostics: bool = False,
+    prefer_local_source_archive: bool = False,
 ) -> dict[str, Any]:
     """Pipeline refresh with serving-oriented modes:
     - full: weekly-gated risk engine + all downstream caches
@@ -407,9 +437,38 @@ def run_refresh(
         cached_specific if isinstance(cached_specific, dict) else {}
     )
     latest_r2 = _finite_float(risk_engine_meta.get("latest_r2"), 0.0)
+    cached_factor_count = _covariance_factor_count(cov)
+    cached_specific_count = _specific_risk_entry_count(specific_risk_by_security)
+
+    if risk_engine_meta_source == "model_run_metadata":
+        persisted_cov_payload = model_outputs.load_latest_persisted_covariance_payload()
+        persisted_specific_payload = model_outputs.load_latest_persisted_specific_risk_payload()
+        if _persisted_risk_artifacts_are_richer(
+            cached_cov=cov,
+            cached_specific=specific_risk_by_security,
+            persisted_cov_payload=persisted_cov_payload,
+            persisted_specific_payload=persisted_specific_payload,
+        ):
+            persisted_cov = _deserialize_covariance(persisted_cov_payload)
+            if not persisted_cov.empty:
+                cov = persisted_cov
+            if isinstance(persisted_specific_payload, dict) and persisted_specific_payload:
+                specific_risk_by_security = {
+                    str(key): dict(value)
+                    for key, value in persisted_specific_payload.items()
+                    if isinstance(value, dict)
+                }
+            logger.warning(
+                "Using persisted model-output risk artifacts instead of degraded runtime cache: "
+                "cached_factor_count=%s persisted_factor_count=%s cached_specific_count=%s persisted_specific_count=%s",
+                cached_factor_count,
+                int(len(persisted_cov_payload.get('factors') or [])) if isinstance(persisted_cov_payload, dict) else 0,
+                cached_specific_count,
+                _specific_risk_entry_count(persisted_specific_payload),
+            )
 
     if skip_risk_engine:
-        if cov.empty or not isinstance(cached_specific, dict):
+        if cov.empty or not specific_risk_by_security:
             raise RuntimeError(
                 "skip_risk_engine requested but risk-engine cache is missing; "
                 "run orchestrator core stages first or disable skip_risk_engine."
@@ -418,7 +477,7 @@ def run_refresh(
         if cov.empty:
             should_recompute = True
             recompute_reason = "missing_covariance_cache"
-        if not isinstance(cached_specific, dict):
+        if not specific_risk_by_security:
             should_recompute = True
             recompute_reason = "missing_specific_risk_cache"
 
@@ -481,9 +540,11 @@ def run_refresh(
     universe_loadings_reuse_reason = "not_attempted"
     cached_universe_loadings = (
         sqlite.cache_get("universe_loadings", db_path=effective_cache_db)
-        if light_mode and not recomputed_this_refresh
+        if light_mode and not recomputed_this_refresh and not prefer_local_source_archive
         else None
     )
+    if light_mode and not recomputed_this_refresh and prefer_local_source_archive:
+        universe_loadings_reuse_reason = "local_source_archive_requested"
     if cached_universe_loadings is not None:
         universe_loadings_reused, universe_loadings_reuse_reason = _can_reuse_cached_universe_loadings(
             cached_universe_loadings,
@@ -597,7 +658,10 @@ def run_refresh(
 
     # 7. Compute exposure modes
     logger.info("Computing exposure modes...")
-    coverage_date, factor_coverage = _load_latest_factor_coverage(effective_cache_db)
+    coverage_date, factor_coverage = _load_latest_factor_coverage(
+        effective_cache_db,
+        data_db=effective_data_db,
+    )
     if factor_name_to_id:
         factor_coverage = {
             factor_name_to_id[factor_name]: payload

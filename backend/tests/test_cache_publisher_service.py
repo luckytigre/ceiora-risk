@@ -411,6 +411,112 @@ def test_stage_refresh_cache_snapshot_upgrades_stale_exposure_source_dates(
 
     refresh_meta = cache_sqlite.cache_get("refresh_meta")
     assert isinstance(refresh_meta, dict)
+    assert refresh_meta["source_dates"]["fundamentals_asof"] == "2026-02-27"
+    assert refresh_meta["source_dates"]["classification_asof"] == "2026-02-27"
     assert refresh_meta["source_dates"]["exposures_served_asof"] == "2026-03-13"
     assert refresh_meta["source_dates"]["exposures_latest_available_asof"] == "2026-03-13"
     assert refresh_meta["health_refresh_state"] == "recomputed"
+
+    risk_payload = staged["persisted_payloads"]["risk"]
+    assert risk_payload["source_dates"]["fundamentals_asof"] == "2026-02-27"
+    assert risk_payload["source_dates"]["classification_asof"] == "2026-02-27"
+
+
+def test_stage_refresh_cache_snapshot_refreshes_stale_eligibility_summary_from_current_snapshot(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    cache_db = tmp_path / "cache.db"
+    data_db = tmp_path / "data.db"
+    data_db.touch()
+
+    monkeypatch.setattr(config, "SQLITE_PATH", str(cache_db))
+    monkeypatch.setattr(cache_sqlite, "_SCHEMA_READY", False)
+    monkeypatch.setattr(cache_sqlite, "_SCHEMA_READY_PATH", None)
+    monkeypatch.setattr(cache_publisher, "compute_health_diagnostics", lambda *args, **kwargs: {"status": "ok"})
+    monkeypatch.setattr(
+        cache_publisher,
+        "load_latest_eligibility_summary",
+        lambda _cache_db: {
+            "status": "ok",
+            "date": "2017-01-04",
+            "latest_available_date": "2017-01-04",
+            "regression_coverage": 0.994,
+            "structural_eligible_n": 2717,
+            "core_structural_eligible_n": 2587,
+            "projectable_n": 2703,
+            "projected_only_n": 130,
+            "selection_mode": "well_covered",
+        },
+    )
+
+    staged = cache_publisher.stage_refresh_cache_snapshot(
+        run_id="run_stage_refresh_eligibility",
+        refresh_mode="light",
+        refresh_started_at="2026-03-17T03:10:00Z",
+        source_dates={
+            "fundamentals_asof": "2026-03-13",
+            "classification_asof": "2026-03-13",
+            "prices_asof": "2026-03-13",
+            "exposures_asof": "2026-03-13",
+            "exposures_latest_available_asof": "2026-03-13",
+            "exposures_served_asof": "2026-03-13",
+        },
+        snapshot_build={"status": "skipped"},
+        risk_engine_meta={
+            "status": "ok",
+            "method_version": "v8",
+            "last_recompute_date": "2026-03-16",
+            "factor_returns_latest_date": "2026-03-13",
+            "cross_section_min_age_days": 7,
+            "recompute_interval_days": 7,
+            "lookback_days": 504,
+            "specific_risk_ticker_count": 3736,
+        },
+        recomputed_this_refresh=False,
+        recompute_reason="risk_engine_reused",
+        cov_payload={"factors": ["style_beta_score"], "matrix": [[1.0]]},
+        specific_risk_by_security={"AAPL.OQ": {"ticker": "AAPL", "specific_var": 0.01}},
+        positions=[{"ticker": "AAPL", "weight": 1.0, "market_value": 100.0, "exposures": {"style_beta_score": 1.1}}],
+        total_value=100.0,
+        risk_shares={"market": 3.0, "industry": 24.0, "style": 11.0, "idio": 62.0},
+        component_shares={"market": 0.1, "industry": 0.2, "style": 0.7},
+        factor_details=[
+            {"factor_id": "style_beta_score", "exposure": 0.1, "sensitivity": 0.01, "factor_vol": 0.05, "pct_of_total": 3.0}
+        ],
+        cov_matrix={"factors": ["style_beta_score"], "correlation": [[1.0]]},
+        latest_r2=0.35,
+        universe_loadings={
+            "as_of_date": "2026-03-13",
+            "latest_available_asof": "2026-03-13",
+            "factors": ["style_beta_score"],
+            "factor_vols": {"style_beta_score": 0.05},
+            "factor_catalog": [],
+            "ticker_count": 3446,
+            "eligible_ticker_count": 3390,
+            "core_estimated_ticker_count": 3210,
+            "projected_only_ticker_count": 180,
+            "ineligible_ticker_count": 56,
+            "by_ticker": {"AAPL": {"ticker": "AAPL", "price": 100.0, "exposures": {"style_beta_score": 1.1}}},
+        },
+        exposure_modes={"raw": [], "sensitivity": [], "risk_contribution": []},
+        factor_catalog=[],
+        cuse4_foundation={"status": "skipped"},
+        data_db=data_db,
+        cache_db=cache_db,
+    )
+
+    eligibility = staged["persisted_payloads"]["eligibility"]
+    sanity = staged["persisted_payloads"]["model_sanity"]
+
+    assert eligibility["date"] == "2026-03-13"
+    assert eligibility["exp_date"] == "2026-03-13"
+    assert eligibility["latest_available_date"] == "2026-03-13"
+    assert eligibility["selection_mode"] == "serving_snapshot"
+    assert eligibility["structural_eligible_n"] == 3390
+    assert eligibility["core_structural_eligible_n"] == 3210
+    assert eligibility["regression_member_n"] == 3210
+    assert eligibility["projectable_n"] == 3390
+    assert eligibility["projected_only_n"] == 180
+    assert sanity["coverage_date"] == "2026-03-13"
+    assert sanity["latest_available_date"] == "2026-03-13"

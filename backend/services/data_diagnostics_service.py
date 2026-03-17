@@ -7,11 +7,26 @@ from pathlib import Path
 from typing import Any
 
 from backend import config
+from backend.data import model_outputs
+from backend.data.serving_outputs import load_runtime_payload
 from backend.data.sqlite import cache_get, cache_get_live_first
 from backend.services import data_diagnostics_sections, data_diagnostics_sqlite
 
 DATA_DB = Path(config.DATA_DB_PATH)
 CACHE_DB = Path(config.SQLITE_PATH)
+
+
+def _with_section_source(section: dict[str, Any], source: str) -> dict[str, Any]:
+    out = dict(section)
+    out["source"] = source
+    return out
+
+
+def _effective_risk_engine_meta() -> dict[str, Any]:
+    runtime_meta = cache_get_live_first("risk_engine_meta") or {}
+    if isinstance(runtime_meta, dict) and runtime_meta:
+        return runtime_meta
+    return model_outputs.load_latest_persisted_risk_engine_state()
 
 
 def build_data_diagnostics_payload(
@@ -35,8 +50,29 @@ def build_data_diagnostics_payload(
             exposure_source_table=exposure_source_table,
             include_expensive_checks=include_expensive_checks,
         )
-        elig_summary = data_diagnostics_sections.load_eligibility_summary(cache_conn)
-        factor_cross_section = data_diagnostics_sections.load_factor_cross_section(cache_conn)
+        runtime_elig_summary = data_diagnostics_sections.eligibility_summary_from_runtime_payload(
+            load_runtime_payload("eligibility", fallback_loader=cache_get)
+            if DATA_DB.exists()
+            else None
+        )
+        cache_elig_summary = data_diagnostics_sections.load_eligibility_summary(cache_conn)
+        if bool(runtime_elig_summary.get("available")):
+            elig_summary = _with_section_source(runtime_elig_summary, "durable_serving_payload:eligibility")
+        else:
+            elig_summary = _with_section_source(cache_elig_summary, "legacy_cache:daily_universe_eligibility_summary")
+
+        model_output_cross_section = data_diagnostics_sections.factor_cross_section_from_model_outputs(data_conn)
+        cache_factor_cross_section = data_diagnostics_sections.load_factor_cross_section(cache_conn)
+        if bool(model_output_cross_section.get("available")):
+            factor_cross_section = _with_section_source(
+                model_output_cross_section,
+                "durable_model_outputs:model_factor_returns_daily",
+            )
+        else:
+            factor_cross_section = _with_section_source(
+                cache_factor_cross_section,
+                "legacy_cache:daily_factor_returns",
+            )
 
         payload = {
             "status": "ok",
@@ -80,7 +116,7 @@ def build_data_diagnostics_payload(
                 "eligibility_summary": elig_summary,
                 "factor_cross_section": factor_cross_section,
             },
-            "risk_engine_meta": cache_get_live_first("risk_engine_meta") or {},
+            "risk_engine_meta": _effective_risk_engine_meta(),
             "cuse4_foundation": cache_get("cuse4_foundation") or {},
             "cache_outputs": data_diagnostics_sqlite.load_cache_rows(CACHE_DB),
         }

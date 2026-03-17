@@ -44,6 +44,69 @@ def test_load_latest_factor_coverage_reads_latest_day(tmp_path: Path) -> None:
     assert cov["Book-to-Price"] == {"cross_section_n": 101, "eligible_n": 94, "coverage_pct": 0.93}
 
 
+def test_load_latest_factor_coverage_prefers_durable_model_outputs(tmp_path: Path) -> None:
+    cache_db = tmp_path / "cache.db"
+    data_db = tmp_path / "data.db"
+
+    conn = sqlite3.connect(str(cache_db))
+    conn.execute(
+        """
+        CREATE TABLE daily_factor_returns (
+            date TEXT NOT NULL,
+            factor_name TEXT NOT NULL,
+            cross_section_n INTEGER,
+            eligible_n INTEGER,
+            coverage REAL
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO daily_factor_returns (date, factor_name, cross_section_n, eligible_n, coverage) VALUES (?, ?, ?, ?, ?)",
+        ("2017-12-22", "Beta", 2669, 2685, 0.994041),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(str(data_db))
+    conn.execute(
+        """
+        CREATE TABLE model_factor_returns_daily (
+            date TEXT NOT NULL,
+            factor_name TEXT NOT NULL,
+            factor_return REAL NOT NULL,
+            robust_se REAL NOT NULL DEFAULT 0.0,
+            t_stat REAL NOT NULL DEFAULT 0.0,
+            r_squared REAL NOT NULL DEFAULT 0.0,
+            residual_vol REAL NOT NULL DEFAULT 0.0,
+            cross_section_n INTEGER NOT NULL DEFAULT 0,
+            eligible_n INTEGER NOT NULL DEFAULT 0,
+            coverage REAL NOT NULL DEFAULT 0.0,
+            run_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO model_factor_returns_daily (
+            date, factor_name, factor_return, cross_section_n, eligible_n, coverage, run_id, updated_at
+        ) VALUES (?, ?, 0.0, ?, ?, ?, 'run_1', '2026-03-17T00:00:00Z')
+        """,
+        [
+            ("2026-03-13", "Beta", 3446, 3455, 0.997395),
+            ("2026-03-13", "Book-to-Price", 3446, 3455, 0.997395),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    latest, cov = load_latest_factor_coverage(cache_db, data_db=data_db)
+
+    assert latest == "2026-03-13"
+    assert cov["Beta"] == {"cross_section_n": 3446, "eligible_n": 3455, "coverage_pct": 0.997395}
+    assert cov["Book-to-Price"] == {"cross_section_n": 3446, "eligible_n": 3455, "coverage_pct": 0.997395}
+
+
 def test_build_universe_ticker_loadings_empty_inputs(tmp_path: Path) -> None:
     out = build_universe_ticker_loadings(
         exposures_df=pd.DataFrame(),

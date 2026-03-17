@@ -318,182 +318,13 @@ def sync_factor_returns_to_neon(
     cache_db = Path(cache_path).expanduser().resolve()
     if not cache_db.exists():
         raise FileNotFoundError(f"cache db not found: {cache_db}")
-
-    table = "model_factor_returns_daily"
-    source_table = "daily_factor_returns"
-    mode_norm = str(mode or "incremental").strip().lower()
-    if mode_norm not in {"full", "incremental"}:
-        mode_norm = "incremental"
-    sync_cutoff = _cutoff_iso(years=analytics_years)
-
-    sqlite_conn = sqlite3.connect(str(cache_db))
-    pg_conn = connect(dsn=resolve_dsn(dsn), autocommit=False)
-    try:
-        if not _sqlite_table_exists(sqlite_conn, source_table):
-            return {
-                "status": "skipped",
-                "reason": f"missing_source_table:{source_table}",
-                "cache_path": str(cache_db),
-                "table": table,
-            }
-        if not _pg_table_exists(pg_conn, table):
-            raise RuntimeError(f"target table missing in Neon: {table}")
-        schema_update = ensure_target_columns_from_sqlite(
-            sqlite_conn,
-            pg_conn,
-            source_table=source_table,
-            target_table=table,
-        )
-
-        where_sql = "WHERE date >= ?"
-        where_params: tuple[Any, ...] = (sync_cutoff,)
-        action = "truncate_and_reload"
-        source_count_sql = f"SELECT COUNT(*) FROM {source_table} WHERE date >= ?"
-        source_count_params: tuple[Any, ...] = (sync_cutoff,)
-        if mode_norm == "full":
-            with pg_conn.cursor() as cur:
-                cur.execute(sql.SQL("TRUNCATE TABLE {}").format(sql.Identifier(table)))
-            action = "truncate_and_reload_window"
-        else:
-            with pg_conn.cursor() as cur:
-                cur.execute(
-                    sql.SQL("SELECT COUNT(*) FROM {} WHERE date >= %s").format(sql.Identifier(table)),
-                    (sync_cutoff,),
-                )
-                target_count_row = cur.fetchone()
-                target_count = int(target_count_row[0] or 0) if target_count_row else 0
-                cur.execute(
-                    sql.SQL("SELECT MAX(date)::text FROM {}").format(sql.Identifier(table)),
-                )
-                max_row = cur.fetchone()
-                max_date_txt = str(max_row[0]) if max_row and max_row[0] is not None else ""
-            src_count_row = sqlite_conn.execute(source_count_sql, source_count_params).fetchone()
-            source_window_rows = int(src_count_row[0] or 0) if src_count_row else 0
-            max_date = _parse_iso_date(max_date_txt)
-            if max_date is None:
-                with pg_conn.cursor() as cur:
-                    cur.execute(sql.SQL("TRUNCATE TABLE {}").format(sql.Identifier(table)))
-                action = "target_empty_truncate_and_reload"
-            elif target_count != source_window_rows:
-                with pg_conn.cursor() as cur:
-                    cur.execute(sql.SQL("TRUNCATE TABLE {}").format(sql.Identifier(table)))
-                action = "window_full_reload_after_count_mismatch"
-            else:
-                cutoff = max_date - timedelta(days=max(0, int(overlap_days)))
-                cutoff_txt = max(cutoff.isoformat(), sync_cutoff)
-                with pg_conn.cursor() as cur:
-                    cur.execute(
-                        sql.SQL("DELETE FROM {} WHERE date >= %s").format(
-                            sql.Identifier(table)
-                        ),
-                        (cutoff_txt,),
-                    )
-                where_sql = "WHERE date >= ?"
-                where_params = (cutoff_txt,)
-                action = "incremental_overlap_reload"
-
-        src_count = sqlite_conn.execute(
-            f"SELECT COUNT(*) FROM {source_table} {where_sql}",
-            where_params,
-        ).fetchone()
-        source_rows = int(src_count[0] or 0) if src_count else 0
-
-        select_sql = f"""
-            SELECT
-                date,
-                factor_name,
-                factor_return,
-                COALESCE(robust_se, 0.0) AS robust_se,
-                COALESCE(t_stat, 0.0) AS t_stat,
-                r_squared,
-                residual_vol,
-                cross_section_n,
-                eligible_n,
-                coverage
-            FROM {source_table}
-            {where_sql}
-            ORDER BY date, factor_name
-        """
-        now_iso = datetime.now(timezone.utc).isoformat()
-        insert_sql = sql.SQL(
-            """
-            INSERT INTO {} (
-                date,
-                factor_name,
-                factor_return,
-                robust_se,
-                t_stat,
-                r_squared,
-                residual_vol,
-                cross_section_n,
-                eligible_n,
-                coverage,
-                updated_at
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (date, factor_name) DO UPDATE SET
-                factor_return = EXCLUDED.factor_return,
-                robust_se = EXCLUDED.robust_se,
-                t_stat = EXCLUDED.t_stat,
-                r_squared = EXCLUDED.r_squared,
-                residual_vol = EXCLUDED.residual_vol,
-                cross_section_n = EXCLUDED.cross_section_n,
-                eligible_n = EXCLUDED.eligible_n,
-                coverage = EXCLUDED.coverage,
-                updated_at = EXCLUDED.updated_at
-            """
-        ).format(sql.Identifier(table))
-
-        loaded = 0
-        chunk: list[tuple[Any, ...]] = []
-        with pg_conn.cursor() as cur:
-            for row in sqlite_conn.execute(select_sql, where_params):
-                chunk.append(
-                    (
-                        row[0],
-                        row[1],
-                        row[2],
-                        row[3],
-                        row[4],
-                        row[5],
-                        row[6],
-                        row[7],
-                        row[8],
-                        row[9],
-                        now_iso,
-                    )
-                )
-                if len(chunk) >= max(500, int(batch_size)):
-                    cur.executemany(insert_sql, chunk)
-                    loaded += len(chunk)
-                    chunk = []
-            if chunk:
-                cur.executemany(insert_sql, chunk)
-                loaded += len(chunk)
-        pg_conn.commit()
-
-        out: dict[str, Any] = {
-            "status": "ok",
-            "mode": mode_norm,
-            "cache_path": str(cache_db),
-            "table": table,
-            "source_table": source_table,
-            "action": action,
-            "source_rows": int(source_rows),
-            "rows_loaded": int(loaded),
-            "schema_update": schema_update,
-            "window_cutoff": sync_cutoff,
-        }
-        if where_sql:
-            out["where_sql"] = where_sql
-            out["where_params"] = [str(v) for v in where_params]
-        return out
-    except Exception:
-        pg_conn.rollback()
-        raise
-    finally:
-        sqlite_conn.close()
-        pg_conn.close()
+    return {
+        "status": "skipped",
+        "reason": "deprecated_cache_source_use_durable_model_factor_returns_daily",
+        "cache_path": str(cache_db),
+        "table": "model_factor_returns_daily",
+        "source_table": "daily_factor_returns",
+    }
 
 
 def prune_neon_history(
@@ -1134,6 +965,35 @@ def run_bounded_parity_audit(
     ]
     durable_model_specs = [
         {
+            "target_table": "model_factor_returns_daily",
+            "source_table": "model_factor_returns_daily",
+            "date_col": "date",
+            "cutoff": analytics_cutoff,
+            "distinct_col": None,
+            "key_cols": ["date", "factor_name"],
+            "required_cols": [
+                "date",
+                "factor_name",
+                "factor_return",
+                "robust_se",
+                "t_stat",
+                "r_squared",
+                "residual_vol",
+                "cross_section_n",
+                "eligible_n",
+                "coverage",
+                "run_id",
+                "updated_at",
+            ],
+            "non_null_cols": [
+                "factor_return",
+                "robust_se",
+                "t_stat",
+                "run_id",
+                "updated_at",
+            ],
+        },
+        {
             "target_table": "model_factor_covariance_daily",
             "source_table": "model_factor_covariance_daily",
             "date_col": "as_of_date",
@@ -1326,140 +1186,30 @@ def run_bounded_parity_audit(
             )
             out["tables"][str(spec["target_table"])] = table_out
             out["issues"].extend(table_issues)
-
-        if cache_conn is not None:
-            source_table = "daily_factor_returns"
-            target_table = "model_factor_returns_daily"
-            source_exists = _sqlite_table_exists(cache_conn, source_table)
-            target_exists = _pg_table_exists(pg_conn, target_table)
-            if source_exists and target_exists:
-                source = _sqlite_count_window(
-                    cache_conn,
-                    table=source_table,
-                    date_col="date",
-                    cutoff=analytics_cutoff,
-                    distinct_col=None,
-                )
-                target = _pg_count_window(
-                    pg_conn,
-                    table=target_table,
-                    date_col="date",
-                    cutoff=analytics_cutoff,
-                    distinct_col=None,
-                )
-                mismatch = source != target
-                if mismatch:
-                    out["issues"].append(f"mismatch:{target_table}")
-                out["tables"][target_table] = {
-                    "source_table": source_table,
-                    "source": source,
-                    "target": target,
-                    "cutoff": analytics_cutoff,
-                    "status": "ok" if not mismatch else "mismatch",
-                }
-                source_cols = set(_sqlite_columns(cache_conn, source_table))
-                target_cols = set(_pg_columns(pg_conn, target_table))
-                required_cols = {
-                    "date",
-                    "factor_name",
-                    "factor_return",
-                    "robust_se",
-                    "t_stat",
-                    "r_squared",
-                    "residual_vol",
-                    "cross_section_n",
-                    "eligible_n",
-                    "coverage",
-                }
-                source_missing_required = sorted(required_cols - source_cols)
-                target_missing_required = sorted(required_cols - target_cols)
-                if source_missing_required:
-                    out["issues"].append(f"missing_source_columns:{target_table}")
-                if target_missing_required:
-                    out["issues"].append(f"missing_target_columns:{target_table}")
-
-                audit_cols = sorted(required_cols - {"date", "factor_name"})
-                source_non_null = _sqlite_non_null_counts(
-                    cache_conn,
-                    table=source_table,
-                    columns=audit_cols,
-                    where_sql="WHERE date >= ?",
-                    params=(analytics_cutoff,),
-                )
-                target_non_null = _pg_non_null_counts(
-                    pg_conn,
-                    table=target_table,
-                    columns=audit_cols,
-                    date_col="date",
-                    cutoff=analytics_cutoff,
-                )
-                if source_non_null != target_non_null:
-                    out["issues"].append(f"nonnull_mismatch:{target_table}")
-
+            if str(spec["target_table"]) == "model_factor_returns_daily":
                 sample_dates = _sqlite_recent_dates(
-                    cache_conn,
-                    table=source_table,
+                    sqlite_conn,
+                    table="model_factor_returns_daily",
                     date_col="date",
                     cutoff=analytics_cutoff,
                     limit=3,
                 )
-                source_factor_counts = _sqlite_group_count_by_date(
-                    cache_conn,
-                    table=source_table,
-                    date_col="date",
-                    dates=sample_dates,
-                )
-                target_factor_counts = _pg_group_count_by_date(
-                    pg_conn,
-                    table=target_table,
-                    date_col="date",
-                    dates=sample_dates,
-                )
-                if source_factor_counts != target_factor_counts:
-                    out["issues"].append(f"factor_count_mismatch:{target_table}")
-
                 source_values = _sqlite_factor_return_values(
-                    cache_conn,
-                    table=source_table,
+                    sqlite_conn,
+                    table="model_factor_returns_daily",
                     dates=sample_dates,
                 )
                 target_values = _pg_factor_return_values(
                     pg_conn,
-                    table=target_table,
+                    table="model_factor_returns_daily",
                     dates=sample_dates,
                 )
                 values_ok, value_issues = _value_maps_match(source_values, target_values)
                 if not values_ok:
-                    out["issues"].append(f"value_mismatch:{target_table}")
-
-                out["tables"][target_table].update(
-                    {
-                        "source_missing_required_columns": source_missing_required,
-                        "target_missing_required_columns": target_missing_required,
-                        "source_non_null_counts": source_non_null,
-                        "target_non_null_counts": target_non_null,
-                        "sample_dates": sample_dates,
-                        "source_factor_counts_by_date": source_factor_counts,
-                        "target_factor_counts_by_date": target_factor_counts,
-                        "value_check_status": "ok" if values_ok else "mismatch",
-                        "value_check_issues": value_issues[:20],
-                    }
-                )
-            else:
-                status = "skipped"
-                reason = None
-                if source_exists and not target_exists:
-                    status = "mismatch"
-                    reason = f"missing_target_table:{target_table}"
-                    out["issues"].append(f"mismatch:{target_table}")
-                elif not source_exists:
-                    reason = f"missing_source_table:{source_table}"
-                out["tables"][target_table] = {
-                    "status": status,
-                    "reason": reason,
-                    "source_exists": bool(source_exists),
-                    "target_exists": bool(target_exists),
-                }
+                    out["issues"].append("value_mismatch:model_factor_returns_daily")
+                    table_out["status"] = "mismatch"
+                table_out["value_check_status"] = "ok" if values_ok else "mismatch"
+                table_out["value_check_issues"] = value_issues[:20]
 
         out["status"] = "ok" if not out["issues"] else "mismatch"
         return out
@@ -1505,14 +1255,19 @@ def run_neon_mirror_cycle(
         batch_size=int(batch_size),
     )
 
-    if cache_path is not None:
-        out["factor_returns_sync"] = sync_factor_returns_to_neon(
-            cache_path=Path(cache_path),
-            dsn=dsn,
-            mode=str(mode),
-            batch_size=int(batch_size),
-            analytics_years=int(analytics_years),
-        )
+    factor_sync_table = (out.get("sync") or {}).get("tables", {}).get("model_factor_returns_daily")
+    if isinstance(factor_sync_table, dict):
+        out["factor_returns_sync"] = {
+            "status": "ok",
+            "source_table": "model_factor_returns_daily",
+            **factor_sync_table,
+        }
+    else:
+        out["factor_returns_sync"] = {
+            "status": "skipped",
+            "reason": "table_not_selected",
+            "source_table": "model_factor_returns_daily",
+        }
 
     if prune_enabled:
         out["prune"] = prune_neon_history(

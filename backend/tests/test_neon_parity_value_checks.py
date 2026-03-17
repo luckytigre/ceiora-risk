@@ -44,6 +44,7 @@ def _fake_pg_columns(table: str) -> list[str]:
             "eligible_n",
             "coverage",
             "run_id",
+            "updated_at",
         ]
     if table == "model_factor_covariance_daily":
         return [
@@ -114,6 +115,36 @@ def _create_sqlite_runtime(db_path: Path, cache_path: Path) -> None:
     )
     conn.execute(
         "INSERT INTO barra_raw_cross_section_history (ric, as_of_date) VALUES ('ABC.N', '2026-03-01')"
+    )
+    conn.execute(
+        """
+        CREATE TABLE model_factor_returns_daily (
+            date TEXT,
+            factor_name TEXT,
+            factor_return REAL,
+            robust_se REAL,
+            t_stat REAL,
+            r_squared REAL,
+            residual_vol REAL,
+            cross_section_n INTEGER,
+            eligible_n INTEGER,
+            coverage REAL,
+            run_id TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO model_factor_returns_daily (
+            date, factor_name, factor_return, robust_se, t_stat, r_squared,
+            residual_vol, cross_section_n, eligible_n, coverage, run_id, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'run-1', '2026-03-02T00:00:00+00:00')
+        """,
+        [
+            ("2026-03-02", "Beta", 0.01, 0.005, 2.0, 0.3, 0.2, 100, 95, 0.95),
+            ("2026-03-02", "Book-to-Price", -0.02, 0.010, -2.0, 0.3, 0.2, 100, 95, 0.95),
+        ],
     )
     conn.execute(
         """
@@ -195,34 +226,6 @@ def _create_sqlite_runtime(db_path: Path, cache_path: Path) -> None:
     conn.close()
 
     cache = sqlite3.connect(str(cache_path))
-    cache.execute(
-        """
-        CREATE TABLE daily_factor_returns (
-            date TEXT NOT NULL,
-            factor_name TEXT NOT NULL,
-            factor_return REAL NOT NULL,
-            robust_se REAL NOT NULL DEFAULT 0.0,
-            t_stat REAL NOT NULL DEFAULT 0.0,
-            r_squared REAL NOT NULL,
-            residual_vol REAL NOT NULL,
-            cross_section_n INTEGER NOT NULL DEFAULT 0,
-            eligible_n INTEGER NOT NULL DEFAULT 0,
-            coverage REAL NOT NULL DEFAULT 0.0
-        )
-        """
-    )
-    cache.executemany(
-        """
-        INSERT INTO daily_factor_returns (
-            date, factor_name, factor_return, robust_se, t_stat, r_squared,
-            residual_vol, cross_section_n, eligible_n, coverage
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        [
-            ("2026-03-02", "Beta", 0.01, 0.005, 2.0, 0.3, 0.2, 100, 95, 0.95),
-            ("2026-03-02", "Book-to-Price", -0.02, 0.010, -2.0, 0.3, 0.2, 100, 95, 0.95),
-        ],
-    )
     cache.commit()
     cache.close()
 

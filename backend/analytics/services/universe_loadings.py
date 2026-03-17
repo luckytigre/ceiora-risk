@@ -501,24 +501,27 @@ def build_universe_ticker_loadings(
     }
 
 
-def load_latest_factor_coverage(cache_db: Path) -> tuple[str | None, dict[str, FactorCoveragePayload]]:
-    """Load latest per-factor cross-section coverage stats from cache DB."""
-    conn = sqlite3.connect(str(cache_db))
+def _load_factor_coverage_rows(
+    db_path: Path,
+    *,
+    table: str,
+    date_col: str,
+) -> tuple[str | None, dict[str, FactorCoveragePayload]]:
+    conn = sqlite3.connect(str(db_path))
     try:
-        latest_row = conn.execute("SELECT MAX(date) FROM daily_factor_returns").fetchone()
+        latest_row = conn.execute(f"SELECT MAX({date_col}) FROM {table}").fetchone()
         latest = str(latest_row[0]) if latest_row and latest_row[0] else None
         if latest is None:
             return None, {}
         rows = conn.execute(
-            """
+            f"""
             SELECT factor_name, cross_section_n, eligible_n, coverage
-            FROM daily_factor_returns
-            WHERE date = ?
+            FROM {table}
+            WHERE {date_col} = ?
             """,
             (latest,),
         ).fetchall()
     except sqlite3.OperationalError:
-        # Backward-compat if cache schema doesn't have coverage columns yet.
         return None, {}
     finally:
         conn.close()
@@ -531,3 +534,25 @@ def load_latest_factor_coverage(cache_db: Path) -> tuple[str | None, dict[str, F
             "coverage_pct": float(coverage or 0.0),
         }
     return latest, out
+
+
+def load_latest_factor_coverage(
+    cache_db: Path,
+    *,
+    data_db: Path | None = None,
+) -> tuple[str | None, dict[str, FactorCoveragePayload]]:
+    """Load latest factor coverage, preferring durable model outputs over legacy cache history."""
+    if data_db is not None and Path(data_db).exists():
+        latest, out = _load_factor_coverage_rows(
+            Path(data_db),
+            table="model_factor_returns_daily",
+            date_col="date",
+        )
+        if latest is not None and out:
+            return latest, out
+
+    return _load_factor_coverage_rows(
+        Path(cache_db),
+        table="daily_factor_returns",
+        date_col="date",
+    )

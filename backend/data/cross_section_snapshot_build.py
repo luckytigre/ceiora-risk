@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 
 from backend.data.cross_section_snapshot_schema import TABLE, table_columns, table_exists
+from backend.universe.security_master_sync import load_default_source_universe_rows
 
 
 def load_base_cross_sections(
@@ -86,6 +87,12 @@ def load_base_cross_sections(
     df["ric"] = df["ric"].astype(str).str.upper()
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["as_of_date"] = df["as_of_date"].astype(str)
+    source_universe_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
+    if source_universe_rows:
+        source_universe = pd.DataFrame(source_universe_rows)
+        source_universe["ric"] = source_universe["ric"].astype(str).str.upper()
+        source_universe["ticker"] = source_universe["ticker"].astype(str).str.upper()
+        df = df.merge(source_universe, on=["ric", "ticker"], how="inner")
     return df
 
 

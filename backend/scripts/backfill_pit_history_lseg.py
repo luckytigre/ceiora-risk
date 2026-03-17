@@ -15,6 +15,7 @@ import pandas as pd
 
 from backend.scripts.download_data_lseg import download_from_lseg
 from backend.trading_calendar import previous_or_same_xnys_session
+from backend.universe.security_master_sync import load_default_source_universe_rows
 
 
 def _pit_dates(start_date: str, end_date: str, *, frequency: str) -> list[str]:
@@ -29,15 +30,7 @@ def _pit_dates(start_date: str, end_date: str, *, frequency: str) -> list[str]:
 def _eligible_universe_count(db_path: Path) -> int:
     conn = sqlite3.connect(str(db_path))
     try:
-        row = conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM security_master
-            WHERE COALESCE(classification_ok, 0) = 1
-              AND COALESCE(is_equity_eligible, 0) = 1
-            """
-        ).fetchone()
-        return int(row[0] or 0) if row else 0
+        return int(len(load_default_source_universe_rows(conn, include_pending_seed=False)))
     finally:
         conn.close()
 

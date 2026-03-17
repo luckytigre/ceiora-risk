@@ -54,6 +54,52 @@ def load_latest_persisted_risk_engine_state() -> dict[str, Any]:
     return {}
 
 
+def load_latest_persisted_covariance_payload() -> dict[str, Any]:
+    data_db = Path(config.DATA_DB_PATH)
+    if data_db.exists():
+        conn = sqlite3.connect(str(data_db))
+        try:
+            schema.ensure_schema(conn)
+            local_payload = state.latest_covariance_payload(conn)
+        finally:
+            conn.close()
+        if local_payload:
+            return local_payload
+    if _neon_model_output_writes_enabled():
+        try:
+            conn = connect(dsn=resolve_dsn(None), autocommit=True)
+            try:
+                return state.pg_latest_covariance_payload(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    return {}
+
+
+def load_latest_persisted_specific_risk_payload() -> dict[str, Any]:
+    data_db = Path(config.DATA_DB_PATH)
+    if data_db.exists():
+        conn = sqlite3.connect(str(data_db))
+        try:
+            schema.ensure_schema(conn)
+            local_payload = state.latest_specific_risk_payload(conn)
+        finally:
+            conn.close()
+        if local_payload:
+            return local_payload
+    if _neon_model_output_writes_enabled():
+        try:
+            conn = connect(dsn=resolve_dsn(None), autocommit=True)
+            try:
+                return state.pg_latest_specific_risk_payload(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    return {}
+
+
 def persist_model_outputs(
     *,
     data_db: Path,

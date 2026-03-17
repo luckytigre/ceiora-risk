@@ -15,7 +15,7 @@ import ApiErrorState from "@/components/ApiErrorState";
 import LazyMountOnVisible from "@/components/LazyMountOnVisible";
 import type { FactorDetail } from "@/lib/types";
 import { factorDisplayName } from "@/lib/factorLabels";
-import { buildAnalyticsTruthBanner, summarizeAnalyticsTruth } from "@/lib/analyticsTruth";
+import { buildAnalyticsTruthCompactSummary, summarizeAnalyticsTruth } from "@/lib/analyticsTruth";
 
 const MODES = [
   { key: "raw", label: "Exposure" },
@@ -61,7 +61,16 @@ export default function ExposuresPage() {
     () => summarizeAnalyticsTruth({ portfolio: portfolioData, risk: riskData, exposures: data }),
     [data, portfolioData, riskData],
   );
-  const truthBanner = useMemo(() => buildAnalyticsTruthBanner(truth), [truth]);
+  const compactTruthSummary = useMemo(() => {
+    const prefix = crossSection
+      ? (
+          crossSection.min === crossSection.max
+            ? `N = ${crossSection.min.toLocaleString()}`
+            : `N = ${crossSection.min.toLocaleString()}–${crossSection.max.toLocaleString()}`
+        )
+      : null;
+    return buildAnalyticsTruthCompactSummary(truth, { prefix });
+  }, [crossSection, truth]);
   const snapshotMismatch = !truth.snapshotsCoherent && truth.snapshotIds.length > 1;
 
   if (isLoading) {
@@ -138,26 +147,9 @@ export default function ExposuresPage() {
               color: "rgba(169, 182, 210, 0.5)",
               fontVariantNumeric: "tabular-nums",
             }}>
-              {crossSection.min === crossSection.max
-                ? `N = ${crossSection.min.toLocaleString()}`
-                : `N = ${crossSection.min.toLocaleString()}–${crossSection.max.toLocaleString()}`}
-              {crossSection.date && ` · ${crossSection.date}`}
+              {compactTruthSummary}
             </span>
           )}
-        </div>
-        <div
-          style={{
-            marginBottom: 12,
-            padding: "12px 14px",
-            border: "1px solid rgba(169, 182, 210, 0.18)",
-            background: "rgba(169, 182, 210, 0.05)",
-            color: "rgba(232, 237, 249, 0.84)",
-            fontSize: 13,
-            lineHeight: 1.55,
-          }}
-        >
-          <div>{truthBanner.headline}</div>
-          <div>{truthBanner.detail}</div>
         </div>
         <ExposureBarChart
           factors={factors}

@@ -40,8 +40,8 @@ const CACHE_DESC: Record<string, string> = {
   exposures: "Factor exposure matrix for all held positions, served to the Exposures page.",
   risk: "Risk decomposition, factor contributions, and covariance-derived metrics for the Risk page.",
   health_diagnostics: "Precomputed health page payload — R², coverage, bias stats, and factor diagnostics.",
-  daily_universe_eligibility_summary: "Daily time series of how many securities pass structural and regression eligibility filters.",
-  daily_factor_returns: "Daily factor return series plus regression diagnostics used for cumulative return charts and health analysis.",
+  daily_universe_eligibility_summary: "Legacy cache-era eligibility summary table kept for compatibility. Current summary metadata should come from durable serving payloads.",
+  daily_factor_returns: "Legacy cache-era factor-return history kept for compatibility. Current factor coverage metadata should come from durable model outputs.",
   risk_engine_meta: "Risk engine configuration — method version, covariance parameters, history window.",
   cuse4_foundation: "Core cUSE4 model foundation — factor definitions, hierarchy, and estimation parameters.",
 };

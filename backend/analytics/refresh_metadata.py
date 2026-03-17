@@ -91,6 +91,82 @@ def serving_source_dates(
     return out
 
 
+def refreshed_eligibility_summary(
+    *,
+    eligibility_summary: EligibilitySummaryPayload | None,
+    universe_loadings: UniverseLoadingsPayload,
+    source_dates: SourceDatesPayload,
+) -> EligibilitySummaryPayload:
+    out: EligibilitySummaryPayload = dict(eligibility_summary or {})
+    served_asof = str(
+        universe_loadings.get("as_of_date")
+        or source_dates.get("exposures_served_asof")
+        or source_dates.get("exposures_asof")
+        or ""
+    ).strip() or None
+    latest_available = max_iso_date(
+        out.get("latest_available_date"),
+        out.get("date"),
+        universe_loadings.get("latest_available_asof"),
+        source_dates.get("exposures_latest_available_asof"),
+        source_dates.get("exposures_asof"),
+        served_asof,
+    )
+    current_date = str(out.get("date") or "").strip() or None
+    current_latest = str(out.get("latest_available_date") or "").strip() or None
+    needs_overlay = bool(
+        served_asof
+        and (
+            current_date is None
+            or current_date < served_asof
+            or (latest_available is not None and (current_latest is None or current_latest < latest_available))
+        )
+    )
+    if not needs_overlay:
+        return out
+
+    exposure_n = int(universe_loadings.get("ticker_count") or out.get("exposure_n") or 0)
+    structural_eligible_n = int(
+        universe_loadings.get("eligible_ticker_count") or out.get("structural_eligible_n") or 0
+    )
+    core_structural_eligible_n = int(
+        universe_loadings.get("core_estimated_ticker_count") or out.get("core_structural_eligible_n") or 0
+    )
+    projected_only_n = int(
+        universe_loadings.get("projected_only_ticker_count") or out.get("projected_only_n") or 0
+    )
+    projectable_n = int(structural_eligible_n or out.get("projectable_n") or 0)
+    regression_member_n = int(core_structural_eligible_n or out.get("regression_member_n") or 0)
+    denominator = max(exposure_n, 1)
+    used_older_than_latest = bool(served_asof and latest_available and latest_available > served_asof)
+
+    out.update(
+        {
+            "status": "ok" if exposure_n > 0 else str(out.get("status") or "no-data"),
+            "date": served_asof,
+            "exp_date": served_asof,
+            "latest_available_date": latest_available,
+            "selection_mode": "serving_snapshot",
+            "selected_well_covered": not used_older_than_latest,
+            "used_older_than_latest": used_older_than_latest,
+            "exposure_n": exposure_n,
+            "structural_eligible_n": structural_eligible_n,
+            "core_structural_eligible_n": core_structural_eligible_n,
+            "projectable_n": projectable_n,
+            "projected_only_n": projected_only_n,
+            "regression_member_n": regression_member_n,
+            "structural_coverage": round(structural_eligible_n / denominator, 6),
+            "projectable_coverage": round(projectable_n / denominator, 6),
+            "regression_coverage": round(regression_member_n / denominator, 6),
+            "max_regression_member_n": int(
+                max(int(out.get("max_regression_member_n") or 0), regression_member_n)
+            ),
+            "coverage_threshold_n": int(out.get("coverage_threshold_n") or 0),
+        }
+    )
+    return out
+
+
 def build_model_sanity_report(
     *,
     risk_shares: RiskSharesPayload,

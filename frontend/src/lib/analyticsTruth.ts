@@ -90,11 +90,6 @@ export interface AnalyticsTruthSummary {
   modelLaggingServedLoadings: boolean;
 }
 
-export interface AnalyticsTruthBanner {
-  headline: string;
-  detail: string;
-}
-
 export function summarizeAnalyticsTruth({
   portfolio,
   risk,
@@ -165,22 +160,14 @@ export function summarizeAnalyticsTruth({
   };
 }
 
-export function buildAnalyticsTruthBanner(summary: AnalyticsTruthSummary): AnalyticsTruthBanner {
-  const headline = `Snapshot ${summary.snapshotId ?? "—"} · Loadings ${formatAsOfDate(summary.exposuresServedAsOf)} · Core ${formatAsOfDate(summary.modelAsOf)}`;
-  if (summary.updateAvailable) {
-    return {
-      headline,
-      detail: `Newer factor loadings are available through ${formatAsOfDate(summary.exposuresLatestAvailableAsOf)}. Run a serving refresh to publish them.`,
-    };
-  }
-  if (summary.modelLaggingServedLoadings) {
-    return {
-      headline,
-      detail: "Loadings are current. Core rebuild runs on the weekly cadence.",
-    };
-  }
-  return {
-    headline,
-    detail: "Snapshot is current with authoritative source dates.",
-  };
+export function buildAnalyticsTruthCompactSummary(
+  summary: AnalyticsTruthSummary,
+  { prefix }: { prefix?: string | null } = {},
+): string {
+  const parts = [cleanDate(prefix)];
+  const loadings = cleanDate(summary.exposuresServedAsOf);
+  const model = cleanDate(summary.modelAsOf);
+  if (loadings) parts.push(`Loadings = ${loadings}`);
+  if (model) parts.push(`Model = ${model}`);
+  return parts.filter((part): part is string => Boolean(part)).join(" · ");
 }
