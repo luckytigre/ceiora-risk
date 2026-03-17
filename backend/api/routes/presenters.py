@@ -15,8 +15,15 @@ def normalize_trbc_sector_fields(payload: dict[str, Any]) -> dict[str, Any]:
         or payload.get("sector")
         or ""
     )
+    model_status_reason = str(
+        payload.get("model_status_reason")
+        or payload.get("eligibility_reason")
+        or ""
+    )
     return {
         **payload,
+        "model_status_reason": model_status_reason,
+        "eligibility_reason": model_status_reason,
         "trbc_economic_sector_short": trbc_economic_sector_short,
         "trbc_economic_sector_short_abbr": str(
             payload.get("trbc_economic_sector_short_abbr")

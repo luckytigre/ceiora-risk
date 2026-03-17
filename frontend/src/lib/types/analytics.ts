@@ -32,6 +32,7 @@ export interface Position {
   exposures: Record<string, number>;
   risk_contrib_pct: number;
   model_status?: ModelStatus;
+  model_status_reason?: string;
   eligibility_reason?: string;
   risk_mix?: {
     market: number;
@@ -79,6 +80,7 @@ export interface FactorExposure {
   coverage_pct?: number;
   cross_section_n?: number;
   eligible_n?: number;
+  factor_coverage_asof?: string | null;
   coverage_date?: string | null;
   drilldown: FactorDrilldownItem[];
 }
@@ -156,6 +158,8 @@ export interface RiskData extends ServingSnapshotMeta {
     status?: string;
     warnings?: string[];
     checks?: Record<string, number>;
+    served_loadings_asof?: string | null;
+    latest_loadings_available_asof?: string | null;
     coverage_date?: string | null;
     latest_available_date?: string | null;
     selection_mode?: string;
@@ -178,6 +182,7 @@ export interface UniverseTickerItem {
   specific_var?: number | null;
   specific_vol?: number | null;
   model_status?: ModelStatus;
+  model_status_reason?: string;
   eligibility_reason?: string;
   model_warning?: string;
   as_of_date?: string;
@@ -211,6 +216,7 @@ export interface UniverseSearchItem {
   risk_loading: number | null;
   specific_vol?: number | null;
   model_status?: ModelStatus;
+  model_status_reason?: string;
   eligibility_reason?: string;
 }
 

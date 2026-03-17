@@ -253,19 +253,22 @@ def build_model_sanity_report(
             f"{sign_mismatch} factors have exposure/sensitivity sign mismatch; expected same sign."
         )
 
-    coverage_date = str(eligibility_summary.get("date") or "")
-    latest_available_date = str(eligibility_summary.get("latest_available_date") or "")
+    served_loadings_asof = str(eligibility_summary.get("date") or "")
+    latest_loadings_available_asof = str(eligibility_summary.get("latest_available_date") or "")
     used_older_than_latest = bool(eligibility_summary.get("used_older_than_latest"))
-    if used_older_than_latest and coverage_date and latest_available_date:
+    if used_older_than_latest and served_loadings_asof and latest_loadings_available_asof:
         warnings.append(
-            f"Using latest well-covered date {coverage_date} (latest source date is {latest_available_date})."
+            "Using latest well-covered date "
+            f"{served_loadings_asof} (latest source date is {latest_loadings_available_asof})."
         )
 
     return {
         "status": "warn" if warnings else "ok",
         "warnings": warnings,
-        "coverage_date": coverage_date or None,
-        "latest_available_date": latest_available_date or None,
+        "served_loadings_asof": served_loadings_asof or None,
+        "latest_loadings_available_asof": latest_loadings_available_asof or None,
+        "coverage_date": served_loadings_asof or None,
+        "latest_available_date": latest_loadings_available_asof or None,
         "selection_mode": str(eligibility_summary.get("selection_mode") or ""),
         "update_available": bool(used_older_than_latest),
         "checks": {

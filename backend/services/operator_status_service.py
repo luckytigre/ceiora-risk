@@ -181,9 +181,22 @@ def _newer_local_archive_fields(
     authoritative = authoritative_source_dates or {}
     local_archive = local_archive_source_dates or {}
     newer: list[str] = []
-    for field in ("prices_asof", "fundamentals_asof", "classification_asof", "exposures_asof"):
+    for field in (
+        "prices_asof",
+        "fundamentals_asof",
+        "classification_asof",
+        "exposures_latest_available_asof",
+    ):
         auth_value = str(authoritative.get(field) or "").strip()
-        local_value = str(local_archive.get(field) or "").strip()
+        if field == "exposures_latest_available_asof":
+            auth_value = auth_value or str(authoritative.get("exposures_asof") or "").strip()
+            local_value = str(
+                local_archive.get("exposures_latest_available_asof")
+                or local_archive.get("exposures_asof")
+                or ""
+            ).strip()
+        else:
+            local_value = str(local_archive.get(field) or "").strip()
         if local_value and local_value > auth_value:
             newer.append(field)
     return newer
@@ -218,6 +231,7 @@ def build_operator_status_payload() -> dict[str, Any]:
             "prices_asof": None,
             "fundamentals_asof": None,
             "classification_asof": None,
+            "exposures_latest_available_asof": None,
             "exposures_asof": None,
         }
     try:

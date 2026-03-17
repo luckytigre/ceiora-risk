@@ -58,6 +58,7 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
             "prices_asof": "2026-03-07",
             "fundamentals_asof": "2026-03-01",
             "classification_asof": "2026-03-01",
+            "exposures_latest_available_asof": "2026-03-07",
             "exposures_asof": "2026-03-07",
         },
     )
@@ -105,6 +106,7 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
     assert body["runtime"]["source_authority"] in {"local", "neon"}
     assert body["runtime"]["runtime_state_status"]["risk_engine_meta"]["status"] == "ok"
     assert body["runtime"]["runtime_state_status"]["risk_engine_meta"]["source"] == "neon"
+    assert body["source_dates"]["exposures_latest_available_asof"] == "2026-03-07"
     assert body["risk_engine"]["core_state_through_date"] == "2026-03-07"
     assert body["risk_engine"]["core_rebuild_date"] == "2026-03-08"
     assert body["risk_engine"]["estimation_exposure_anchor_date"] == "2026-02-27"

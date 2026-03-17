@@ -268,7 +268,7 @@ export default function TickerQuoteCard({
 
           {(!hasModelExposures || item.model_warning) && (
             <div className="explore-quote-note">
-              {item.model_warning || `Model ineligible: ${humanizeReason(item.eligibility_reason)}`}
+              {item.model_warning || `Model ineligible: ${humanizeReason(item.model_status_reason || item.eligibility_reason)}`}
             </div>
           )}
         </div>

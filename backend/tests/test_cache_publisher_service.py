@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend import config
+from backend.analytics import refresh_metadata
 from backend.analytics.services import cache_publisher
 from backend.data import sqlite as cache_sqlite
 
@@ -400,7 +401,7 @@ def test_stage_refresh_cache_snapshot_upgrades_stale_exposure_source_dates(
         lambda *args, **kwargs: {"status": "ok"},
     )
     monkeypatch.setattr(
-        cache_publisher,
+        refresh_metadata,
         "load_latest_eligibility_summary",
         lambda _cache_db: {
             "status": "ok",
@@ -506,7 +507,7 @@ def test_stage_refresh_cache_snapshot_refreshes_stale_eligibility_summary_from_c
     monkeypatch.setattr(cache_sqlite, "_SCHEMA_READY_PATH", None)
     monkeypatch.setattr(cache_publisher, "compute_health_diagnostics", lambda *args, **kwargs: {"status": "ok"})
     monkeypatch.setattr(
-        cache_publisher,
+        refresh_metadata,
         "load_latest_eligibility_summary",
         lambda _cache_db: {
             "status": "ok",
@@ -590,6 +591,8 @@ def test_stage_refresh_cache_snapshot_refreshes_stale_eligibility_summary_from_c
     assert eligibility["regression_member_n"] == 3210
     assert eligibility["projectable_n"] == 3390
     assert eligibility["projected_only_n"] == 180
+    assert sanity["served_loadings_asof"] == "2026-03-13"
+    assert sanity["latest_loadings_available_asof"] == "2026-03-13"
     assert sanity["coverage_date"] == "2026-03-13"
     assert sanity["latest_available_date"] == "2026-03-13"
     assert staged["persisted_payloads"]["risk"]["risk_engine"]["core_state_through_date"] == "2026-03-13"

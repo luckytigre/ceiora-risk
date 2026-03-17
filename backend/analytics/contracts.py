@@ -93,6 +93,7 @@ class PositionPayload(TypedDict, total=False):
     specific_vol: float | None
     risk_contrib_pct: float
     model_status: str
+    model_status_reason: str
     eligibility_reason: str
     risk_mix: PositionRiskMixPayload
 
@@ -153,6 +154,7 @@ class ExposureFactorPayload(TypedDict, total=False):
     cross_section_n: int
     eligible_n: int
     coverage_pct: float
+    factor_coverage_asof: str | None
     coverage_date: str | None
     drilldown: list[ExposureDrilldownPayload]
 
@@ -179,6 +181,7 @@ class UniverseTickerPayload(TypedDict, total=False):
     specific_var: float | None
     specific_vol: float | None
     model_status: str
+    model_status_reason: str
     eligibility_reason: str
     model_warning: str
     as_of_date: str
@@ -262,6 +265,8 @@ class ModelSanityPayload(TypedDict):
     status: str
     warnings: list[str]
     checks: ModelSanityChecksPayload
+    served_loadings_asof: NotRequired[str | None]
+    latest_loadings_available_asof: NotRequired[str | None]
     coverage_date: NotRequired[str | None]
     latest_available_date: NotRequired[str | None]
     selection_mode: NotRequired[str]

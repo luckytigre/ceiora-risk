@@ -27,7 +27,7 @@ from backend.analytics.contracts import (
     SpecificRiskPayload,
     UniverseLoadingsPayload,
 )
-from backend.analytics import publish_payloads, refresh_context, refresh_persistence, reuse_policy
+from backend.analytics import publish_payloads, refresh_context, refresh_metadata, refresh_persistence, reuse_policy
 from backend.analytics.services.cache_publisher import stage_refresh_cache_snapshot
 from backend.analytics.services.risk_views import (
     build_positions_from_universe as _build_positions_from_universe_impl,
@@ -70,25 +70,6 @@ def _resolve_cache_db(cache_db: Path | None = None) -> Path:
     return Path(cache_db or CACHE_DB).expanduser().resolve()
 
 
-def _finite_float(value: Any, default: float = 0.0) -> float:
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return float(default)
-    return out if np.isfinite(out) else float(default)
-
-
-def _finite_float_or_none(value: Any) -> float | None:
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return None
-    return out if np.isfinite(out) else None
-
-
-def _risk_engine_reuse_signature(payload: dict[str, Any] | None) -> dict[str, Any]:
-    return refresh_context.risk_engine_reuse_signature(payload)
-
 def _resolve_effective_risk_engine_meta(
     *,
     fallback_loader,
@@ -113,16 +94,6 @@ def _can_reuse_cached_universe_loadings(
 
 def _load_cached_risk_display_payload(*, cache_db: Path | None = None) -> CovarianceMatrixPayload | None:
     return reuse_policy.load_cached_risk_display_payload(cache_db=cache_db)
-
-
-def _risk_recompute_due(meta: dict[str, Any], *, today_utc: date) -> tuple[bool, str]:
-    return refresh_context.risk_recompute_due(meta, today_utc=today_utc)
-
-
-def _latest_factor_return_date(cache_db: Path) -> str | None:
-    return refresh_context.latest_factor_return_date(cache_db)
-
-
 def _serialize_covariance(cov: pd.DataFrame) -> CovariancePayload:
     if cov is None or cov.empty:
         return {"factors": [], "matrix": []}
@@ -130,27 +101,8 @@ def _serialize_covariance(cov: pd.DataFrame) -> CovariancePayload:
     mat = cov.reindex(index=factors, columns=factors).to_numpy(dtype=float)
     return {
         "factors": factors,
-        "matrix": [[_finite_float(v, 0.0) for v in row] for row in mat.tolist()],
+        "matrix": [[refresh_metadata.finite_float(v, 0.0) for v in row] for row in mat.tolist()],
     }
-
-
-def _load_publishable_payloads(*, cache_db: Path | None = None) -> tuple[dict[str, Any], list[str]]:
-    return publish_payloads.load_publishable_payloads(cache_db=cache_db)
-
-
-def _restamp_publishable_payloads(
-    payloads: dict[str, Any],
-    *,
-    run_id: str,
-    snapshot_id: str,
-    refresh_started_at: str,
-) -> dict[str, Any]:
-    return publish_payloads.restamp_publishable_payloads(
-        payloads,
-        run_id=run_id,
-        snapshot_id=snapshot_id,
-        refresh_started_at=refresh_started_at,
-    )
 
 
 def _deserialize_covariance(payload: Any) -> pd.DataFrame:
@@ -234,7 +186,7 @@ def _compute_exposures_modes(
     cov,
     factor_details: list[FactorDetailPayload],
     factor_coverage: dict[str, FactorCoveragePayload] | None = None,
-    coverage_date: str | None = None,
+    factor_coverage_asof: str | None = None,
 ) -> ExposureModesPayload:
     """Compute the 3-mode exposure data for all factors."""
     return _compute_exposures_modes_impl(
@@ -242,7 +194,7 @@ def _compute_exposures_modes(
         cov,
         factor_details,
         factor_coverage=factor_coverage,
-        coverage_date=coverage_date,
+        factor_coverage_asof=factor_coverage_asof,
     )
 
 
@@ -311,14 +263,14 @@ def run_refresh(
     ).date()
 
     if publish_only_mode:
-        payloads, missing_payloads = _load_publishable_payloads(cache_db=effective_cache_db)
+        payloads, missing_payloads = publish_payloads.load_publishable_payloads(cache_db=effective_cache_db)
         if missing_payloads:
             raise RuntimeError(
                 "publish-only requested but cached serving payloads are incomplete: "
                 + ", ".join(sorted(missing_payloads))
             )
         snapshot_id = run_id
-        payloads = _restamp_publishable_payloads(
+        payloads = publish_payloads.restamp_publishable_payloads(
             payloads,
             run_id=run_id,
             snapshot_id=snapshot_id,
@@ -355,7 +307,7 @@ def run_refresh(
             "run_id": run_id,
             "snapshot_id": snapshot_id,
             "positions": int((portfolio_payload.get("position_count") or 0)),
-            "total_value": round(_finite_float(portfolio_payload.get("total_value"), 0.0), 2),
+            "total_value": round(refresh_metadata.finite_float(portfolio_payload.get("total_value"), 0.0), 2),
             "mode": refresh_mode,
             "refresh_scope": refresh_scope_key,
             "cross_section_snapshot": dict(refresh_meta.get("cross_section_snapshot") or {"status": "reused"}),
@@ -388,7 +340,11 @@ def run_refresh(
         )
 
     source_dates: SourceDatesPayload = core_reads.load_source_dates(data_db=effective_data_db)
-    fundamentals_asof = source_dates.get("fundamentals_asof") or source_dates.get("exposures_asof")
+    fundamentals_asof = (
+        source_dates.get("fundamentals_asof")
+        or source_dates.get("exposures_latest_available_asof")
+        or source_dates.get("exposures_asof")
+    )
 
     # Optional cUSE4 foundation maintenance (additive, non-breaking).
     cuse4_foundation: dict[str, Any] = {"status": "disabled"}
@@ -407,6 +363,7 @@ def run_refresh(
                 )
             estu_asof = (
                 source_dates.get("fundamentals_asof")
+                or source_dates.get("exposures_latest_available_asof")
                 or source_dates.get("exposures_asof")
                 or today_utc.isoformat()
             )
@@ -432,7 +389,10 @@ def run_refresh(
     risk_engine_meta, risk_engine_meta_source = _resolve_effective_risk_engine_meta(
         fallback_loader=lambda key: sqlite.cache_get_live_first(key, db_path=effective_cache_db),
     )
-    should_recompute, recompute_reason = _risk_recompute_due(risk_engine_meta, today_utc=today_utc)
+    should_recompute, recompute_reason = refresh_context.risk_recompute_due(
+        risk_engine_meta,
+        today_utc=today_utc,
+    )
     if skip_risk_engine:
         should_recompute = False
         recompute_reason = "orchestrator_precomputed"
@@ -448,7 +408,7 @@ def run_refresh(
     specific_risk_by_security: dict[str, SpecificRiskPayload] = (
         cached_specific if isinstance(cached_specific, dict) else {}
     )
-    latest_r2 = _finite_float_or_none(risk_engine_meta.get("latest_r2"))
+    latest_r2 = refresh_metadata.finite_float_or_none(risk_engine_meta.get("latest_r2"))
     cached_factor_count = _covariance_factor_count(cov)
     cached_specific_count = _specific_risk_entry_count(specific_risk_by_security)
 
@@ -514,7 +474,7 @@ def run_refresh(
             effective_cache_db, lookback_days=config.LOOKBACK_DAYS
         )
         latest_r2 = float(latest_r2_value) if np.isfinite(latest_r2_value) else None
-        latest_factor_return_date = _latest_factor_return_date(effective_cache_db)
+        latest_factor_return_date = refresh_context.latest_factor_return_date(effective_cache_db)
         specific_risk_by_security = build_specific_risk_from_cache(
             effective_cache_db,
             lookback_days=config.LOOKBACK_DAYS,
@@ -684,7 +644,7 @@ def run_refresh(
 
     # 7. Compute exposure modes
     logger.info("Computing exposure modes...")
-    coverage_date, factor_coverage = _load_latest_factor_coverage(
+    factor_coverage_asof, factor_coverage = _load_latest_factor_coverage(
         effective_cache_db,
         data_db=effective_data_db,
     )
@@ -699,7 +659,7 @@ def run_refresh(
         cov,
         factor_details,
         factor_coverage=factor_coverage,
-        coverage_date=coverage_date,
+        factor_coverage_asof=factor_coverage_asof,
     )
 
     # 8. Build covariance matrix for frontend (correlation) — style factors only

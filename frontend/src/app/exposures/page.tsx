@@ -54,7 +54,9 @@ export default function ExposuresPage() {
     if (ns.length === 0) return null;
     const min = Math.min(...ns);
     const max = Math.max(...ns);
-    const date = factors.find((f) => f.coverage_date)?.coverage_date ?? null;
+    const date = factors.find((f) => f.factor_coverage_asof || f.coverage_date)?.factor_coverage_asof
+      ?? factors.find((f) => f.factor_coverage_asof || f.coverage_date)?.coverage_date
+      ?? null;
     return { min, max, date };
   }, [factors]);
   const truth = useMemo(

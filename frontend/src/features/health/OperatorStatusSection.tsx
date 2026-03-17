@@ -56,6 +56,10 @@ export default function OperatorStatusSection({
   const localArchiveSourceDates = data?.local_archive_source_dates ?? null;
   const neon = data?.neon_sync_health;
   const holdingsSync = data?.holdings_sync;
+  const latestLoadingsAvailableAsOf = sourceDates.exposures_latest_available_asof ?? sourceDates.exposures_asof;
+  const localArchiveLoadingsAvailableAsOf = localArchiveSourceDates?.exposures_latest_available_asof
+    ?? localArchiveSourceDates?.exposures_asof
+    ?? null;
 
   return (
     <div className="chart-card">
@@ -140,8 +144,8 @@ export default function OperatorStatusSection({
             <span className="kv-value">{sourceDates.classification_asof ?? "—"}</span>
           </div>
           <div className="operator-kv-item">
-            <span className="kv-label" data-tip="Latest computed factor exposures (betas) for every security in the cross-section.">Cross Section</span>
-            <span className="kv-value">{sourceDates.exposures_asof ?? "—"}</span>
+            <span className="kv-label" data-tip="Latest available source cross-section date for factor loadings before any served-snapshot well-coverage selection is applied.">Loadings Available</span>
+            <span className="kv-value">{latestLoadingsAvailableAsOf ?? "—"}</span>
           </div>
         </div>
 
@@ -161,8 +165,8 @@ export default function OperatorStatusSection({
               <span className="kv-value">{localArchiveSourceDates.classification_asof ?? "—"}</span>
             </div>
             <div className="operator-kv-item">
-              <span className="kv-label">Cross Section</span>
-              <span className="kv-value">{localArchiveSourceDates.exposures_asof ?? "—"}</span>
+              <span className="kv-label">Loadings Available</span>
+              <span className="kv-value">{localArchiveLoadingsAvailableAsOf ?? "—"}</span>
             </div>
           </div>
         )}

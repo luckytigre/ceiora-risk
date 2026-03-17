@@ -119,3 +119,28 @@ When extending the system:
 - preserve stable facades when they already exist
 - add only the smallest new helper module that creates a clearer boundary
 - update the architecture docs when ownership materially changes
+
+## Semantic Contract Rules
+
+Prefer the canonical names below in new code, docs, and UI labels:
+
+- `core_state_through_date`
+- `core_rebuild_date`
+- `estimation_exposure_anchor_date`
+- `exposures_served_asof`
+- `exposures_latest_available_asof`
+- `model_status_reason`
+- `factor_coverage_asof`
+- `served_loadings_asof`
+- `latest_loadings_available_asof`
+
+Compatibility aliases may remain in payloads, but they should be treated as fallback readers only:
+
+- `factor_returns_latest_date`
+- `last_recompute_date`
+- `exposures_asof`
+- `eligibility_reason`
+- `coverage_date`
+- `latest_available_date`
+
+Do not let compatibility aliases drive new UI or documentation semantics.

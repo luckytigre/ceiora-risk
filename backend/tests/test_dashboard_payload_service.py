@@ -20,7 +20,7 @@ def _payload_loader_factory(mapping: dict[str, object]):
 def test_load_exposures_response_normalizes_factor_fields() -> None:
     payload = {
         "exposures": {
-            "raw": [{"factor": "Momentum", "value": 1.0}],
+            "raw": [{"factor": "Momentum", "value": 1.0, "coverage_date": "2026-03-13"}],
             "sensitivity": [],
             "risk_contribution": [],
             "snapshot_id": "snap_1",
@@ -32,6 +32,8 @@ def test_load_exposures_response_normalizes_factor_fields() -> None:
         fallback_loader=lambda _key: None,
     )
     assert response["factors"][0]["factor_id"] == "Momentum"
+    assert response["factors"][0]["factor_coverage_asof"] == "2026-03-13"
+    assert response["factors"][0]["coverage_date"] == "2026-03-13"
     assert response["snapshot_id"] == "snap_1"
 
 
@@ -42,9 +44,19 @@ def test_load_risk_response_normalizes_country_fields() -> None:
             "component_shares": {"country": 0.2, "style": 0.8},
             "factor_details": [{"factor": "Country: US", "category": "country"}],
             "cov_matrix": {"factors": ["market"], "correlation": [[1.0]]},
-            "risk_engine": {"specific_risk_ticker_count": 1},
+            "risk_engine": {
+                "specific_risk_ticker_count": 1,
+                "factor_returns_latest_date": "2026-03-13",
+                "last_recompute_date": "2026-03-16",
+            },
         },
-        "model_sanity": {"status": "ok", "warnings": [], "checks": {}},
+        "model_sanity": {
+            "status": "ok",
+            "warnings": [],
+            "checks": {},
+            "coverage_date": "2026-03-13",
+            "latest_available_date": "2026-03-14",
+        },
     }
     response = load_risk_response(
         payload_loader=_payload_loader_factory(payload),
@@ -55,6 +67,10 @@ def test_load_risk_response_normalizes_country_fields() -> None:
     assert response["component_shares"]["market"] == 0.2
     assert response["factor_details"][0]["factor_id"] == "Country: US"
     assert response["factor_details"][0]["category"] == "market"
+    assert response["risk_engine"]["core_state_through_date"] == "2026-03-13"
+    assert response["risk_engine"]["core_rebuild_date"] == "2026-03-16"
+    assert response["model_sanity"]["served_loadings_asof"] == "2026-03-13"
+    assert response["model_sanity"]["latest_loadings_available_asof"] == "2026-03-14"
 
 
 def test_load_portfolio_response_normalizes_positions() -> None:

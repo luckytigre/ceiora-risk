@@ -1,5 +1,9 @@
 # Date Semantics Target
 
+Date: 2026-03-17
+Status: Implemented target
+Owner: Codex
+
 ## Goal
 
 Expose a small, durable date model that matches the operating design:
@@ -9,6 +13,8 @@ Expose a small, durable date model that matches the operating design:
 3. Monthly PIT source state
 
 This should correct semantics without changing core model math.
+
+This target is now implemented on the main frontend freshness surfaces and in the served risk/operator payload semantics.
 
 ## Target Field Model
 
@@ -54,7 +60,7 @@ These remain on `source_dates`.
 
 ### Compact analytics summary
 
-Use:
+Live now:
 
 - `Loadings = YYYY-MM-DD`
 - `Core Through = YYYY-MM-DD`
@@ -66,7 +72,7 @@ Do not use:
 
 ### Health page
 
-Use separate cards / values for:
+Live now:
 
 - `Core State Through`
 - `Core Rebuilt`
@@ -76,10 +82,12 @@ Use separate cards / values for:
 ### Operator status
 
 - Keep raw source dates under `Authoritative Source Recency`
-- Move factor-return/core dates out of raw source recency language
+- Keep factor-return/core dates under `Core Risk State`
 - Use labels like:
   - `Core Through`
   - `Core Rebuilt`
+  - `Estimation Anchor`
+  - `Loadings Available`
 
 ## Deliberate Non-Goals
 

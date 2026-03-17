@@ -110,6 +110,15 @@ This plan is intentionally operational rather than theoretical. It maps directly
 - Holdings changes, price updates, source-data refreshes, and core model recalculations must be treated as different operational events.
 - A factor-set change is a core-model change. `serve-refresh` may reuse risk-engine artifacts only when the live cache is both present and current for the active method version.
 - Serving-time prices, if introduced, are read-only serving inputs and must never write into canonical historical model-estimation tables such as `security_prices_eod`.
+- Canonical timing/contract names are:
+  - `core_state_through_date`
+  - `core_rebuild_date`
+  - `estimation_exposure_anchor_date`
+  - `exposures_served_asof`
+  - `exposures_latest_available_asof`
+  - `fundamentals_asof`
+  - `classification_asof`
+- Compatibility aliases such as `factor_returns_latest_date`, `last_recompute_date`, `exposures_asof`, `coverage_date`, `latest_available_date`, and `eligibility_reason` may remain in payloads, but they must not drive new UI or documentation semantics.
 
 ## Four-Layer Operating Model
 

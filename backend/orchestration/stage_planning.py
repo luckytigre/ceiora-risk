@@ -54,6 +54,7 @@ def resolved_as_of_date(
     return previous_or_same_xnys_session(
         str(
             source_dates.get("fundamentals_asof")
+            or source_dates.get("exposures_latest_available_asof")
             or source_dates.get("exposures_asof")
             or current_session
         )

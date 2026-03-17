@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from backend.data import serving_outputs
 from backend.data.serving_outputs import load_runtime_payload
 from backend.data.sqlite import cache_get
 
@@ -35,6 +36,27 @@ def _load_payload(
     return payload_loader(payload_name, fallback_loader=fallback_loader)
 
 
+def _load_payloads(
+    payload_names: tuple[str, ...],
+    *,
+    payload_loader: Callable[..., Any] | None,
+    fallback_loader,
+) -> dict[str, Any]:
+    if fallback_loader is None:
+        fallback_loader = cache_get
+    if payload_loader is None:
+        if load_runtime_payload is serving_outputs.load_runtime_payload:
+            return serving_outputs.load_runtime_payloads(
+                payload_names,
+                fallback_loader=fallback_loader,
+            )
+        payload_loader = load_runtime_payload
+    return {
+        payload_name: payload_loader(payload_name, fallback_loader=fallback_loader)
+        for payload_name in payload_names
+    }
+
+
 def _normalize_exposure_factor_rows(rows: Any) -> list[dict[str, Any]]:
     if not isinstance(rows, list):
         return []
@@ -52,6 +74,13 @@ def _normalize_exposure_factor_rows(rows: Any) -> list[dict[str, Any]]:
         if factor_token:
             clean["factor_id"] = factor_token
             clean.setdefault("factor_name", factor_token)
+        factor_coverage_asof = str(
+            clean.get("factor_coverage_asof")
+            or clean.get("coverage_date")
+            or ""
+        ).strip() or None
+        clean["factor_coverage_asof"] = factor_coverage_asof
+        clean["coverage_date"] = factor_coverage_asof
         if not isinstance(clean.get("drilldown"), list):
             clean["drilldown"] = []
         normalized.append(clean)
@@ -89,6 +118,48 @@ def _normalize_risk_factor_details(rows: Any) -> list[dict[str, Any]]:
             clean["category"] = "market"
         normalized.append(clean)
     return normalized
+
+
+def _normalize_risk_engine_state(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    clean = dict(payload)
+    core_state_through_date = str(
+        clean.get("core_state_through_date")
+        or clean.get("factor_returns_latest_date")
+        or ""
+    ).strip() or None
+    core_rebuild_date = str(
+        clean.get("core_rebuild_date")
+        or clean.get("last_recompute_date")
+        or ""
+    ).strip() or None
+    clean["core_state_through_date"] = core_state_through_date
+    clean["factor_returns_latest_date"] = core_state_through_date
+    clean["core_rebuild_date"] = core_rebuild_date
+    clean["last_recompute_date"] = core_rebuild_date
+    return clean
+
+
+def _normalize_model_sanity(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"status": "no-data", "warnings": [], "checks": {}}
+    clean = dict(payload)
+    served_loadings_asof = str(
+        clean.get("served_loadings_asof")
+        or clean.get("coverage_date")
+        or ""
+    ).strip() or None
+    latest_loadings_available_asof = str(
+        clean.get("latest_loadings_available_asof")
+        or clean.get("latest_available_date")
+        or ""
+    ).strip() or None
+    clean["served_loadings_asof"] = served_loadings_asof
+    clean["coverage_date"] = served_loadings_asof
+    clean["latest_loadings_available_asof"] = latest_loadings_available_asof
+    clean["latest_available_date"] = latest_loadings_available_asof
+    return clean
 
 
 def _risk_payload_complete(data: Any) -> bool:
@@ -143,11 +214,12 @@ def load_risk_response(
     payload_loader=None,
     fallback_loader=None,
 ) -> dict[str, Any]:
-    data = _load_payload(
-        "risk",
+    payloads = _load_payloads(
+        ("risk", "model_sanity"),
         payload_loader=payload_loader,
         fallback_loader=fallback_loader,
     )
+    data = payloads.get("risk")
     if data is None:
         raise DashboardPayloadNotReady(
             cache_key="risk",
@@ -159,11 +231,7 @@ def load_risk_response(
             message="Risk cache exists but is incomplete. Run a core refresh and try again.",
             refresh_profile="cold-core",
         )
-    sanity = _load_payload(
-        "model_sanity",
-        payload_loader=payload_loader,
-        fallback_loader=fallback_loader,
-    )
+    sanity = payloads.get("model_sanity")
     if sanity is None:
         sanity = {"status": "no-data", "warnings": [], "checks": {}}
     return {
@@ -171,7 +239,8 @@ def load_risk_response(
         "risk_shares": _normalize_systematic_shares(data.get("risk_shares")),
         "component_shares": _normalize_systematic_shares(data.get("component_shares")),
         "factor_details": _normalize_risk_factor_details(data.get("factor_details")),
-        "model_sanity": sanity,
+        "risk_engine": _normalize_risk_engine_state(data.get("risk_engine")),
+        "model_sanity": _normalize_model_sanity(sanity),
         "_cached": True,
     }
 

@@ -14,6 +14,7 @@ from backend.analytics.contracts import (
     PositionRiskMixPayload,
     SpecificRiskPayload,
 )
+from backend.analytics.refresh_metadata import finite_float as _finite_float
 from backend.risk_model.model_status import derive_model_status
 from backend.risk_model.risk_attribution import (
     SYSTEMATIC_CATEGORIES,
@@ -26,16 +27,6 @@ from backend.portfolio.positions_store import (
     DEFAULT_SOURCE,
     load_positions_snapshot,
 )
-
-
-def _finite_float(value: Any, default: float = 0.0) -> float:
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return float(default)
-    return out if np.isfinite(out) else float(default)
-
-
 def specific_risk_by_ticker_view(
     specific_risk_by_security: dict[str, SpecificRiskPayload] | None,
 ) -> dict[str, SpecificRiskPayload]:
@@ -87,11 +78,15 @@ def build_positions_from_snapshot(
             is_core_regression_member=False,
             is_projectable=bool(has_factor_exposures),
         )
-        eligibility_reason = str(base.get("eligibility_reason") or "")
+        model_status_reason = str(
+            base.get("model_status_reason")
+            or base.get("eligibility_reason")
+            or ""
+        )
         if model_status != "ineligible" and not has_factor_exposures:
             model_status = "ineligible"
-            if not eligibility_reason:
-                eligibility_reason = "missing_factor_exposures"
+            if not model_status_reason:
+                model_status_reason = "missing_factor_exposures"
         meta_base = dynamic_meta.get(t, {})
         meta = {
             "account": str(meta_base.get("account") or DEFAULT_ACCOUNT),
@@ -133,7 +128,8 @@ def build_positions_from_snapshot(
             ),
             "risk_contrib_pct": 0.0,
             "model_status": model_status,
-            "eligibility_reason": eligibility_reason,
+            "model_status_reason": model_status_reason,
+            "eligibility_reason": model_status_reason,
         })
 
     for pos in positions:
@@ -160,7 +156,7 @@ def compute_exposures_modes(
     cov,
     factor_details: list[FactorDetailPayload],
     factor_coverage: dict[str, FactorCoveragePayload] | None = None,
-    coverage_date: str | None = None,
+    factor_coverage_asof: str | None = None,
 ) -> ExposureModesPayload:
     """Compute the 3-mode exposure data for all factors."""
     all_factors: set[str] = set()
@@ -242,7 +238,8 @@ def compute_exposures_modes(
             "cross_section_n": cross_section_n,
             "eligible_n": eligible_n,
             "coverage_pct": round(coverage_pct, 6),
-            "coverage_date": coverage_date,
+            "factor_coverage_asof": factor_coverage_asof,
+            "coverage_date": factor_coverage_asof,
             "drilldown": drilldown_raw,
         })
         result["sensitivity"].append({
@@ -252,7 +249,8 @@ def compute_exposures_modes(
             "cross_section_n": cross_section_n,
             "eligible_n": eligible_n,
             "coverage_pct": round(coverage_pct, 6),
-            "coverage_date": coverage_date,
+            "factor_coverage_asof": factor_coverage_asof,
+            "coverage_date": factor_coverage_asof,
             "drilldown": drilldown_sens,
         })
         result["risk_contribution"].append({
@@ -262,7 +260,8 @@ def compute_exposures_modes(
             "cross_section_n": cross_section_n,
             "eligible_n": eligible_n,
             "coverage_pct": round(coverage_pct, 6),
-            "coverage_date": coverage_date,
+            "factor_coverage_asof": factor_coverage_asof,
+            "coverage_date": factor_coverage_asof,
             "drilldown": drilldown_risk,
         })
 

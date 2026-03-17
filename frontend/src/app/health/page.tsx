@@ -59,9 +59,12 @@ export default function HealthPage() {
     || null;
   const estimationExposureAnchor = riskData?.risk_engine?.estimation_exposure_anchor_date || null;
   const currentLoadingsAsOf = riskData?.source_dates?.exposures_served_asof
+    || riskData?.model_sanity?.served_loadings_asof
     || riskData?.model_sanity?.coverage_date
     || null;
-  const latestSourceAsOf = operatorData?.source_dates?.exposures_asof
+  const latestSourceAsOf = operatorData?.source_dates?.exposures_latest_available_asof
+    || operatorData?.source_dates?.exposures_asof
+    || riskData?.model_sanity?.latest_loadings_available_asof
     || riskData?.model_sanity?.latest_available_date
     || latestSourceDate(operatorData?.source_dates);
   const lagDays = riskData?.risk_engine?.cross_section_min_age_days;

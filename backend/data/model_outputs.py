@@ -119,6 +119,7 @@ def persist_model_outputs(
     now_iso = datetime.now(timezone.utc).isoformat()
     as_of_date = str(
         risk_engine_state.get("factor_returns_latest_date")
+        or source_dates.get("exposures_latest_available_asof")
         or source_dates.get("exposures_asof")
         or source_dates.get("fundamentals_asof")
         or completed_at[:10]

@@ -37,6 +37,10 @@ These are the non-negotiable structural rules for this repository.
 9. Serving-time prices are read-only.
    Serving/orchestration/API layers must not write serving-time or ad hoc prices into canonical model-estimation history tables such as `security_prices_eod`.
 
+10. Canonical contract names win over compatibility aliases.
+   UI, docs, and new code should prefer explicit fields such as `core_state_through_date`, `core_rebuild_date`, `exposures_served_asof`, `exposures_latest_available_asof`, `model_status_reason`, `factor_coverage_asof`, `served_loadings_asof`, and `latest_loadings_available_asof`.
+   Legacy aliases may remain only for compatibility and fallback decoding.
+
 ## Existing Guardrails
 
 The repository already enforces several of these with lightweight tests in [test_architecture_boundaries.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/tests/test_architecture_boundaries.py):
@@ -52,6 +56,7 @@ The repository already enforces several of these with lightweight tests in [test
 - new hidden path-retargeting helpers creeping in through convenience edits
 - serving-only refreshes silently advancing the stable core package
 - serving-time price logic contaminating canonical model-estimation history
+- user-facing and developer-facing semantics drifting back to vague compatibility fields
 
 ## Low-Overhead Maintenance Rule
 

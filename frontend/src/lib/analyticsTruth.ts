@@ -121,11 +121,13 @@ export function summarizeAnalyticsTruth({
     .filter((value): value is string => Boolean(value));
   const exposuresServedAsOf = pickDate(
     sourceDates.exposures_served_asof,
+    risk?.model_sanity?.served_loadings_asof,
     risk?.model_sanity?.coverage_date,
   );
   const exposuresLatestAvailableAsOf = pickDate(
     sourceDates.exposures_latest_available_asof,
     sourceDates.exposures_asof,
+    risk?.model_sanity?.latest_loadings_available_asof,
     risk?.model_sanity?.latest_available_date,
   );
   const coreStateThroughDate = pickDate(

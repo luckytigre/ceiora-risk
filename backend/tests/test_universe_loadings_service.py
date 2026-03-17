@@ -314,6 +314,7 @@ def test_build_universe_ticker_loadings_downgrades_structural_names_without_fact
     laz = out["by_ticker"]["LAZ"]
     assert laz["model_status"] == "ineligible"
     assert laz["exposures"] == {}
+    assert laz["model_status_reason"] == "missing_factor_exposures"
     assert laz["eligibility_reason"] == "missing_factor_exposures"
 
 

@@ -16,6 +16,7 @@ from backend.analytics.contracts import (
     UniverseLoadingsPayload,
     UniverseTickerPayload,
 )
+from backend.analytics.refresh_metadata import finite_float as _finite_float
 from backend.analytics.trbc_economic_sector_short import abbreviate_trbc_economic_sector_short
 from backend.risk_model.descriptors import (
     FULL_STYLE_ORTH_RULES,
@@ -34,16 +35,6 @@ from backend.risk_model.factor_catalog import (
 from backend.risk_model.model_status import derive_model_status
 
 logger = logging.getLogger(__name__)
-
-
-def _finite_float(value: Any, default: float = 0.0) -> float:
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return float(default)
-    return out if np.isfinite(out) else float(default)
-
-
 def build_universe_ticker_loadings(
     exposures_df: pd.DataFrame,
     fundamentals_df: pd.DataFrame,
@@ -405,21 +396,21 @@ def build_universe_ticker_loadings(
         )
 
         if has_factor_exposures:
-            eligibility_reason = ""
+            model_status_reason = ""
             model_warning = (
                 "Business sector is outside the current modeled factor set; sector effect is carried in specific risk."
                 if omitted_unmodeled_sector
                 else ""
             )
         elif structurally_eligible:
-            eligibility_reason = "missing_factor_exposures"
+            model_status_reason = "missing_factor_exposures"
             selected_date = latest_asof or "current"
             model_warning = (
                 "Ticker is structurally eligible but missing factor exposures "
                 f"on selected as-of date {selected_date}."
             )
         else:
-            eligibility_reason = ineligible_reason.get(ticker, "ineligible")
+            model_status_reason = ineligible_reason.get(ticker, "ineligible")
             model_warning = "Ticker is ineligible for strict equity model; analytics shown as N/A."
 
         universe_by_ticker[ticker] = {
@@ -438,7 +429,8 @@ def build_universe_ticker_loadings(
             "specific_var": round(spec_var, 8) if np.isfinite(spec_var) else None,
             "specific_vol": round(spec_vol, 6) if np.isfinite(spec_vol) else None,
             "model_status": model_status,
-            "eligibility_reason": eligibility_reason,
+            "model_status_reason": model_status_reason,
+            "eligibility_reason": model_status_reason,
             "model_warning": model_warning,
             "as_of_date": latest_asof,
         }
@@ -468,7 +460,8 @@ def build_universe_ticker_loadings(
             "risk_loading": d.get("risk_loading", 0.0),
             "specific_vol": d.get("specific_vol", None),
             "model_status": str(d.get("model_status") or "ineligible"),
-            "eligibility_reason": str(d.get("eligibility_reason") or ""),
+            "model_status_reason": str(d.get("model_status_reason") or d.get("eligibility_reason") or ""),
+            "eligibility_reason": str(d.get("model_status_reason") or d.get("eligibility_reason") or ""),
         }
         for t, d in universe_by_ticker.items()
     ]
