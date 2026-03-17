@@ -13,6 +13,9 @@ import pytest
 run_model_pipeline = importlib.import_module("backend.orchestration.run_model_pipeline")
 from backend.services import refresh_manager
 
+_UNUSED_DATA_DB = Path("__unused_test_data__.db")
+_UNUSED_CACHE_DB = Path("__unused_test_cache__.db")
+
 
 def test_default_profile_is_local_daily_plus_core(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(refresh_manager.config, "APP_RUNTIME_ROLE", "local-ingest")
@@ -140,8 +143,8 @@ def test_orchestrator_ingest_stage_runs_single_full_universe_pass(monkeypatch: p
         serving_mode="light",
         force_core=False,
         core_reason="test",
-        data_db=Path("dummy_data.db"),
-        cache_db=Path("dummy_cache.db"),
+        data_db=_UNUSED_DATA_DB,
+        cache_db=_UNUSED_CACHE_DB,
         enable_ingest=True,
     )
 
@@ -502,8 +505,8 @@ def test_source_sync_stage_pushes_source_tables_only(monkeypatch: pytest.MonkeyP
         serving_mode="light",
         force_core=False,
         core_reason="test",
-        data_db=Path("dummy_data.db"),
-        cache_db=Path("dummy_cache.db"),
+        data_db=_UNUSED_DATA_DB,
+        cache_db=_UNUSED_CACHE_DB,
     )
 
     assert out["status"] == "ok"
@@ -536,8 +539,8 @@ def test_source_sync_stage_refuses_to_downgrade_neon_sources(monkeypatch: pytest
             serving_mode="full",
             force_core=False,
             core_reason="due",
-            data_db=Path("dummy_data.db"),
-            cache_db=Path("dummy_cache.db"),
+            data_db=_UNUSED_DATA_DB,
+            cache_db=_UNUSED_CACHE_DB,
         )
 
 
@@ -567,8 +570,8 @@ def test_source_sync_stage_allows_healing_neon_dates_newer_than_target(monkeypat
         serving_mode="light",
         force_core=False,
         core_reason="within_interval",
-        data_db=Path("dummy_data.db"),
-        cache_db=Path("dummy_cache.db"),
+        data_db=_UNUSED_DATA_DB,
+        cache_db=_UNUSED_CACHE_DB,
     )
 
     assert out["status"] == "ok"
@@ -612,8 +615,8 @@ def test_source_sync_stage_allows_healing_open_period_pit_dates(monkeypatch: pyt
         serving_mode="light",
         force_core=False,
         core_reason="within_interval",
-        data_db=Path("dummy_data.db"),
-        cache_db=Path("dummy_cache.db"),
+        data_db=_UNUSED_DATA_DB,
+        cache_db=_UNUSED_CACHE_DB,
     )
 
     assert out["status"] == "ok"
@@ -638,8 +641,8 @@ def test_neon_readiness_stage_skips_when_core_is_not_running(monkeypatch: pytest
         serving_mode="light",
         force_core=False,
         core_reason="within_interval",
-        data_db=Path("dummy_data.db"),
-        cache_db=Path("dummy_cache.db"),
+        data_db=_UNUSED_DATA_DB,
+        cache_db=_UNUSED_CACHE_DB,
     )
 
     assert out["status"] == "skipped"
@@ -672,8 +675,8 @@ def test_neon_readiness_stage_prepares_workspace(monkeypatch: pytest.MonkeyPatch
         serving_mode="full",
         force_core=False,
         core_reason="due",
-        data_db=Path("dummy_data.db"),
-        cache_db=Path("dummy_cache.db"),
+        data_db=_UNUSED_DATA_DB,
+        cache_db=_UNUSED_CACHE_DB,
         workspace_root=tmp_path / "workspace",
     )
 

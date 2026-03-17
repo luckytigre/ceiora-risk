@@ -69,3 +69,10 @@ Do not add:
 - add the smallest helper/module that creates a clearer boundary
 - update `docs/architecture/` when ownership or semantics materially change
 - if you introduce a justified exception to these rules, document it in `docs/architecture/dependency-rules.md` and `docs/architecture/architecture-invariants.md`
+
+## The repository should not accumulate temporary artifacts.
+
+Rules:
+- scratch outputs must go to a temporary location and be removed
+- investigation artifacts should not remain in active directories
+- only durable, reusable assets belong in the main repo surface

@@ -23,7 +23,7 @@ Prepare and execute a safe migration of canonical backend source-of-truth tables
 ## Stage 1 Tooling
 - `backend/scripts/neon_preflight_check.py`
   - DSN/SSL validation and optional connectivity check.
-- `backend/scripts/prepare_neon_stage1_bundle.py`
+- `backend/scripts/_archive/prepare_neon_stage1_bundle.py`
   - Schema snapshot + SQLite audit + manifest checksums (+ optional exports).
 - `backend/data/health_audit.py`
   - Reusable consistency and health checks.
