@@ -48,6 +48,23 @@ CACHE_DB = Path(config.SQLITE_PATH)
 logger = logging.getLogger(__name__)
 
 
+def _neon_primary_backend_selected() -> bool:
+    return str(config.DATA_BACKEND or "").strip().lower() == "neon"
+
+
+def _neon_mirror_health_required() -> bool:
+    return bool(config.NEON_AUTO_SYNC_REQUIRED or _neon_primary_backend_selected())
+
+
+def _serving_payload_neon_write_required() -> bool:
+    serving_primary_reads = bool(
+        config.SERVING_OUTPUTS_PRIMARY_READS
+        or config.cloud_mode()
+        or _neon_primary_backend_selected()
+    )
+    return bool(serving_primary_reads and config.neon_surface_enabled("serving_outputs"))
+
+
 def _latest_price_date(db_path: Path) -> str | None:
     conn = sqlite3.connect(str(db_path))
     try:
@@ -437,7 +454,7 @@ def run_model_pipeline(
     neon_parity_enabled = bool(config.neon_auto_parity_enabled_effective())
     neon_prune_enabled = bool(config.neon_auto_prune_enabled_effective())
     broad_neon_mirror_enabled = runtime_support.profile_runs_broad_neon_mirror(profile_key)
-    neon_mirror_required = bool(config.neon_mirror_health_required())
+    neon_mirror_required = _neon_mirror_health_required()
     serving_payload_neon_failure = post_run_publish.extract_serving_payload_neon_failure(stage_results)
 
     finalization = finalize_run.finalize_pipeline_run(
@@ -463,7 +480,7 @@ def run_model_pipeline(
         publish_neon_sync_health_fn=post_run_publish.publish_neon_sync_health,
         publish_neon_serving_write_health_fn=post_run_publish.publish_neon_serving_write_health,
         mark_refresh_finished_fn=mark_refresh_finished,
-        serving_payload_neon_write_required_fn=config.serving_payload_neon_write_required,
+        serving_payload_neon_write_required_fn=_serving_payload_neon_write_required,
         config_module=config,
     )
     overall_status = str(finalization["overall_status"])

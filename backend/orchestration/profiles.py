@@ -113,6 +113,21 @@ _CORE_REBUILD_PROFILES = {
 }
 
 
+def _data_backend(*, cfg: dict[str, Any] | None = None) -> str:
+    spec = cfg or {}
+    value = str(spec.get("data_backend") or config.DATA_BACKEND or "").strip().lower()
+    return value or "sqlite"
+
+
+def _neon_authoritative_rebuilds_enabled(*, cfg: dict[str, Any] | None = None) -> bool:
+    spec = cfg or {}
+    if _data_backend(cfg=spec) != "neon":
+        return False
+    if "neon_authoritative_rebuilds" in spec:
+        return bool(spec.get("neon_authoritative_rebuilds"))
+    return bool(config.NEON_AUTHORITATIVE_REBUILDS)
+
+
 def resolve_profile_name(profile: str) -> str:
     clean = str(profile or "").strip().lower()
     if not clean:
@@ -122,9 +137,8 @@ def resolve_profile_name(profile: str) -> str:
 
 def profile_source_sync_required(profile: str, *, cfg: dict[str, Any] | None = None) -> bool:
     clean = str(profile or "").strip().lower()
-    _ = cfg
     return bool(
-        config.neon_primary_model_data_enabled()
+        _data_backend(cfg=cfg) == "neon"
         and clean in _NEON_BROAD_MIRROR_PROFILES
         and clean not in {"serve-refresh", "publish-only"}
     )
@@ -135,7 +149,7 @@ def profile_rebuild_backend(profile: str, *, cfg: dict[str, Any] | None = None) 
     spec = cfg or PROFILE_CONFIG.get(clean) or {}
     if str(spec.get("core_policy") or "never") == "never":
         return "none"
-    return "neon" if config.neon_authoritative_rebuilds_enabled() else "local"
+    return "neon" if _neon_authoritative_rebuilds_enabled(cfg=spec) else "local"
 
 
 def profile_requires_neon_sync_before_core(profile: str, *, cfg: dict[str, Any] | None = None) -> bool:
