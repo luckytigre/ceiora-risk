@@ -13,6 +13,7 @@ from backend.analytics.refresh_policy import (
 )
 from backend.analytics.contracts import RiskEngineMetaPayload
 from backend.data import model_outputs, runtime_state
+from backend.analytics.refresh_metadata import derive_estimation_exposure_anchor_date
 
 RISK_ENGINE_METHOD_VERSION = "v8_use4_us_core_market_one_stage_projected_non_us_2026_03_15"
 _UNIVERSE_REUSE_RISK_KEYS = (
@@ -41,6 +42,15 @@ def risk_engine_meta_score(payload: dict[str, Any] | None) -> tuple[int, str, st
     )
 
 
+def derive_estimation_exposure_anchor_date_from_meta(meta: dict[str, Any] | None) -> str | None:
+    payload = dict(meta or {})
+    return derive_estimation_exposure_anchor_date(
+        factor_returns_latest_date=payload.get("factor_returns_latest_date"),
+        cross_section_min_age_days=payload.get("cross_section_min_age_days"),
+        existing_anchor_date=payload.get("estimation_exposure_anchor_date"),
+    )
+
+
 def resolve_effective_risk_engine_meta(
     *,
     fallback_loader,
@@ -53,6 +63,9 @@ def resolve_effective_risk_engine_meta(
     runtime_score = risk_engine_meta_score(runtime_meta)
     persisted_score = risk_engine_meta_score(persisted_meta)
     if persisted_score > runtime_score:
+        if persisted_meta.get("estimation_exposure_anchor_date") is None:
+            persisted_meta = dict(persisted_meta)
+            persisted_meta["estimation_exposure_anchor_date"] = derive_estimation_exposure_anchor_date_from_meta(persisted_meta)
         return persisted_meta, "model_run_metadata"
     if runtime_meta and persisted_meta:
         same_core_state = (
@@ -60,10 +73,19 @@ def resolve_effective_risk_engine_meta(
             and str(runtime_meta.get("factor_returns_latest_date") or "") == str(persisted_meta.get("factor_returns_latest_date") or "")
             and str(runtime_meta.get("last_recompute_date") or "") == str(persisted_meta.get("last_recompute_date") or "")
         )
-        if same_core_state and runtime_meta.get("latest_r2") is None and persisted_meta.get("latest_r2") is not None:
+        runtime_anchor = runtime_meta.get("estimation_exposure_anchor_date")
+        persisted_anchor = persisted_meta.get("estimation_exposure_anchor_date")
+        if same_core_state and (
+            (runtime_meta.get("latest_r2") is None and persisted_meta.get("latest_r2") is not None)
+            or (runtime_anchor is None and persisted_anchor is not None)
+        ):
             enriched_meta = dict(runtime_meta)
             enriched_meta["latest_r2"] = persisted_meta.get("latest_r2")
+            enriched_meta["estimation_exposure_anchor_date"] = persisted_anchor
             return enriched_meta, "runtime_state_enriched_from_model_run_metadata"
+    if runtime_meta.get("estimation_exposure_anchor_date") is None:
+        runtime_meta = dict(runtime_meta)
+        runtime_meta["estimation_exposure_anchor_date"] = derive_estimation_exposure_anchor_date_from_meta(runtime_meta)
     return runtime_meta, "runtime_state"
 
 

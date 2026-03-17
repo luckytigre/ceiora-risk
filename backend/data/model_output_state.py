@@ -8,6 +8,9 @@ from typing import Any
 
 import math
 
+from backend import config
+from backend.trading_calendar import lagged_xnys_session
+
 
 def latest_date(conn: sqlite3.Connection, *, table: str, col: str) -> str | None:
     row = conn.execute(f"SELECT MAX({col}) FROM {table}").fetchone()
@@ -38,7 +41,25 @@ def latest_risk_engine_state(conn: sqlite3.Connection) -> dict[str, Any]:
         latest_r2 = latest_factor_returns_r2(conn)
         if latest_r2 is not None:
             decoded["latest_r2"] = latest_r2
+    if "estimation_exposure_anchor_date" not in decoded:
+        estimation_anchor = _derive_estimation_exposure_anchor_date(decoded)
+        if estimation_anchor is not None:
+            decoded["estimation_exposure_anchor_date"] = estimation_anchor
     return decoded
+
+
+def _derive_estimation_exposure_anchor_date(meta: dict[str, Any]) -> str | None:
+    latest = str(meta.get("factor_returns_latest_date") or "").strip()
+    if not latest:
+        return None
+    try:
+        lag_days = int(meta.get("cross_section_min_age_days") or config.CROSS_SECTION_MIN_AGE_DAYS)
+    except (TypeError, ValueError):
+        lag_days = int(config.CROSS_SECTION_MIN_AGE_DAYS)
+    try:
+        return lagged_xnys_session(latest, lag_days)
+    except Exception:
+        return None
 
 
 def latest_factor_returns_r2(conn: sqlite3.Connection) -> float | None:
@@ -207,6 +228,10 @@ def pg_latest_risk_engine_state(pg_conn) -> dict[str, Any]:
         latest_r2 = pg_latest_factor_returns_r2(pg_conn)
         if latest_r2 is not None:
             decoded["latest_r2"] = latest_r2
+    if "estimation_exposure_anchor_date" not in decoded:
+        estimation_anchor = _derive_estimation_exposure_anchor_date(decoded)
+        if estimation_anchor is not None:
+            decoded["estimation_exposure_anchor_date"] = estimation_anchor
     return decoded
 
 

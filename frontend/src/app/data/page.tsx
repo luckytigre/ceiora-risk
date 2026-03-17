@@ -103,15 +103,6 @@ export default function DataPage() {
 
         <div className="data-kpi-grid">
           <div className="data-kpi">
-            <div className="data-kpi-label">Exposure Source</div>
-            <div className="data-kpi-value small">
-              {data?.exposure_source?.table || data?.exposure_source_table || "—"}
-            </div>
-            <div className="data-kpi-desc">
-              {data?.exposure_source?.plain_english || "The canonical table the engine reads cross-sectional exposures from. All factor returns and risk outputs trace back to this source."}
-            </div>
-          </div>
-          <div className="data-kpi">
             <div className="data-kpi-label">Universe Size</div>
             <div className="data-kpi-value">{fmtInt(elig?.max_structural_eligible_n)}</div>
             <div className="data-kpi-desc">

@@ -490,7 +490,7 @@ def test_stage_refresh_cache_snapshot_upgrades_stale_exposure_source_dates(
     assert risk_payload["source_dates"]["classification_asof"] == "2026-02-27"
     assert risk_payload["risk_engine"]["core_state_through_date"] == "2026-03-13"
     assert risk_payload["risk_engine"]["core_rebuild_date"] == "2026-03-16"
-    assert risk_payload["risk_engine"]["estimation_exposure_anchor_date"] == "2026-03-13"
+    assert risk_payload["risk_engine"]["estimation_exposure_anchor_date"] == "2026-03-06"
 
 
 def test_stage_refresh_cache_snapshot_refreshes_stale_eligibility_summary_from_current_snapshot(
@@ -594,4 +594,4 @@ def test_stage_refresh_cache_snapshot_refreshes_stale_eligibility_summary_from_c
     assert sanity["latest_available_date"] == "2026-03-13"
     assert staged["persisted_payloads"]["risk"]["risk_engine"]["core_state_through_date"] == "2026-03-13"
     assert staged["persisted_payloads"]["risk"]["risk_engine"]["core_rebuild_date"] == "2026-03-16"
-    assert staged["persisted_payloads"]["risk"]["risk_engine"]["estimation_exposure_anchor_date"] == "2026-03-13"
+    assert staged["persisted_payloads"]["risk"]["risk_engine"]["estimation_exposure_anchor_date"] == "2026-03-06"

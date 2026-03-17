@@ -156,7 +156,6 @@ def stage_refresh_cache_snapshot(
     )
     if not isinstance(eligibility_summary, dict) or not eligibility_summary:
         eligibility_summary = load_latest_eligibility_summary(cache_db)
-    estimation_exposure_anchor_date = str(eligibility_summary.get("exp_date") or "").strip() or None
     eligibility_summary = refresh_metadata.refreshed_eligibility_summary(
         eligibility_summary=eligibility_summary,
         universe_loadings=universe_loadings,
@@ -166,7 +165,11 @@ def stage_refresh_cache_snapshot(
         risk_engine_meta=risk_engine_meta,
         recomputed_this_refresh=bool(recomputed_this_refresh),
         recompute_reason=str(recompute_reason),
-        estimation_exposure_anchor_date=estimation_exposure_anchor_date,
+        estimation_exposure_anchor_date=refresh_metadata.derive_estimation_exposure_anchor_date(
+            factor_returns_latest_date=risk_engine_meta.get("factor_returns_latest_date"),
+            cross_section_min_age_days=risk_engine_meta.get("cross_section_min_age_days"),
+            existing_anchor_date=risk_engine_meta.get("estimation_exposure_anchor_date"),
+        ),
     )
     effective_source_dates = _serving_source_dates(
         source_dates=source_dates,

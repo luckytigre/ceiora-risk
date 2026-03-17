@@ -71,6 +71,7 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
                 "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
                 "factor_returns_latest_date": "2026-03-07",
                 "last_recompute_date": "2026-03-08",
+                "cross_section_min_age_days": 7,
             }
         if key == "neon_sync_health":
             return {"status": "ok", "artifact_path": "/tmp/report.json"}
@@ -106,6 +107,7 @@ def test_operator_status_route_returns_lane_matrix(monkeypatch) -> None:
     assert body["runtime"]["runtime_state_status"]["risk_engine_meta"]["source"] == "neon"
     assert body["risk_engine"]["core_state_through_date"] == "2026-03-07"
     assert body["risk_engine"]["core_rebuild_date"] == "2026-03-08"
+    assert body["risk_engine"]["estimation_exposure_anchor_date"] == "2026-02-27"
     assert "neon_authoritative_rebuilds" in body["runtime"]
 
 

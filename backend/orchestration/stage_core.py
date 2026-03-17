@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
-
 
 def run_core_stage(
     *,
@@ -136,11 +135,20 @@ def run_core_stage(
         recompute_date = previous_or_same_xnys_session_fn(
             datetime.now(timezone.utc).date().isoformat()
         )
+        latest_factor_return_date = latest_factor_return_date_fn(cache_db)
+        estimation_exposure_anchor_date = None
+        if latest_factor_return_date:
+            lag_days = max(0, int(config_module.CROSS_SECTION_MIN_AGE_DAYS))
+            shifted = (
+                datetime.fromisoformat(str(latest_factor_return_date)).date() - timedelta(days=lag_days)
+            )
+            estimation_exposure_anchor_date = previous_or_same_xnys_session_fn(shifted.isoformat())
         risk_engine_meta = {
             "status": "ok",
             "method_version": risk_engine_method_version,
             "last_recompute_date": recompute_date,
-            "factor_returns_latest_date": latest_factor_return_date_fn(cache_db),
+            "factor_returns_latest_date": latest_factor_return_date,
+            "estimation_exposure_anchor_date": estimation_exposure_anchor_date,
             "lookback_days": int(config_module.LOOKBACK_DAYS),
             "cross_section_min_age_days": int(config_module.CROSS_SECTION_MIN_AGE_DAYS),
             "recompute_interval_days": int(config_module.RISK_RECOMPUTE_INTERVAL_DAYS),

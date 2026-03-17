@@ -514,6 +514,7 @@ def run_refresh(
             effective_cache_db, lookback_days=config.LOOKBACK_DAYS
         )
         latest_r2 = float(latest_r2_value) if np.isfinite(latest_r2_value) else None
+        latest_factor_return_date = _latest_factor_return_date(effective_cache_db)
         specific_risk_by_security = build_specific_risk_from_cache(
             effective_cache_db,
             lookback_days=config.LOOKBACK_DAYS,
@@ -522,7 +523,13 @@ def run_refresh(
             "status": "ok",
             "method_version": RISK_ENGINE_METHOD_VERSION,
             "last_recompute_date": today_utc.isoformat(),
-            "factor_returns_latest_date": _latest_factor_return_date(effective_cache_db),
+            "factor_returns_latest_date": latest_factor_return_date,
+            "estimation_exposure_anchor_date": refresh_context.derive_estimation_exposure_anchor_date_from_meta(
+                {
+                    "factor_returns_latest_date": latest_factor_return_date,
+                    "cross_section_min_age_days": int(config.CROSS_SECTION_MIN_AGE_DAYS),
+                },
+            ),
             "lookback_days": int(config.LOOKBACK_DAYS),
             "cross_section_min_age_days": int(config.CROSS_SECTION_MIN_AGE_DAYS),
             "recompute_interval_days": int(config.RISK_RECOMPUTE_INTERVAL_DAYS),

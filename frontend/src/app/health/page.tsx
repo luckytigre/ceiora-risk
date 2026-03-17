@@ -105,6 +105,11 @@ export default function HealthPage() {
       <div className="section-subtitle">
         Live summary from the currently served risk payload. The stable core package changes only on core rebuild lanes; daily serving refreshes project against it without advancing it.
       </div>
+      <div className="section-subtitle" style={{ marginBottom: 14 }}>
+        {currentLoadingsAsOf
+          ? `Daily serving loadings are currently ${fmtAsOfDate(currentLoadingsAsOf)}. The core package below remains frozen until the next core rebuild and uses the lagged estimation anchor shown here.`
+          : "Daily serving loadings can refresh independently; the core package below remains frozen until the next core rebuild."}
+      </div>
       <div className="kpi-row">
         <KpiCard
           label="R-Squared"
@@ -121,19 +126,19 @@ export default function HealthPage() {
           subtitle={coreStateThrough ? "Latest return date covered by the stable core package" : "Latest return date covered by the stable core package"}
         />
         <KpiCard
+          label="Estimation Anchor"
+          value={fmtAsOfDate(estimationExposureAnchor)}
+          subtitle={estimationExposureAnchor ? `Lagged exposure basis used to estimate returns (${lagDays ?? 7}d policy)` : `Lagged exposure basis used to estimate returns (${lagDays ?? 7}d policy)`}
+        />
+        <KpiCard
           label="Core Rebuilt"
           value={fmtAsOfDate(coreRebuilt)}
           subtitle={coreRebuilt ? "Most recent core-weekly / cold-core rebuild date" : "Most recent core-weekly / cold-core rebuild date"}
         />
         <KpiCard
-          label="Estimation Exposure Anchor"
-          value={fmtAsOfDate(estimationExposureAnchor)}
-          subtitle={estimationExposureAnchor ? `Lagged exposure basis (${lagDays ?? 7}d minimum-age policy)` : `Lagged exposure basis (${lagDays ?? 7}d minimum-age policy)`}
-        />
-        <KpiCard
-          label="Current Loadings As Of"
-          value={fmtAsOfDate(currentLoadingsAsOf)}
-          subtitle="Current served loadings / projection snapshot"
+          label="Lag Policy"
+          value={`${lagDays ?? 7}d`}
+          subtitle="Minimum age of the exposure snapshot used for core estimation"
         />
       </div>
     </div>

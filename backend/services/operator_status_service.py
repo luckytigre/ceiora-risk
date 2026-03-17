@@ -7,6 +7,7 @@ from typing import Any
 
 from backend import config
 from backend.analytics.pipeline import RISK_ENGINE_METHOD_VERSION
+from backend.analytics.refresh_context import derive_estimation_exposure_anchor_date_from_meta
 from backend.analytics.refresh_policy import risk_recompute_due as _risk_recompute_due_impl
 from backend.data import core_reads, job_runs, runtime_state, sqlite
 from backend.orchestration.profiles import profile_catalog
@@ -196,6 +197,10 @@ def _decorate_risk_engine_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
         out.setdefault("core_state_through_date", factor_returns_latest_date)
     if last_recompute_date is not None:
         out.setdefault("core_rebuild_date", last_recompute_date)
+    out.setdefault(
+        "estimation_exposure_anchor_date",
+        derive_estimation_exposure_anchor_date_from_meta(out),
+    )
     return out
 
 

@@ -174,11 +174,15 @@ export default function OperatorStatusSection({
             <span className="kv-value">{data?.risk_engine?.core_state_through_date ?? data?.risk_engine?.factor_returns_latest_date ?? "—"}</span>
           </div>
           <div className="operator-kv-item">
+            <span className="kv-label" data-tip="Lagged exposure snapshot date used as the basis for the current stable core package.">Estimation Anchor</span>
+            <span className="kv-value">{data?.risk_engine?.estimation_exposure_anchor_date ?? "—"}</span>
+          </div>
+          <div className="operator-kv-item">
             <span className="kv-label" data-tip="Date the current stable core package was last rebuilt.">Core Rebuilt</span>
             <span className="kv-value">{data?.risk_engine?.core_rebuild_date ?? data?.risk_engine?.last_recompute_date ?? "—"}</span>
           </div>
           <div className="operator-kv-item">
-            <span className="kv-label" data-tip="Configured minimum age of the exposure snapshot used for factor-return estimation.">Lag Guard</span>
+            <span className="kv-label" data-tip="Configured minimum age of the exposure snapshot used for factor-return estimation.">Lag Policy</span>
             <span className="kv-value">{data?.risk_engine?.cross_section_min_age_days ?? "—"}d</span>
           </div>
           <div className="operator-kv-item">

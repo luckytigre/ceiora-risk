@@ -303,3 +303,4 @@ def test_load_latest_persisted_risk_engine_state_backfills_latest_r2_from_factor
 
     assert state["factor_returns_latest_date"] == "2026-03-13"
     assert state["latest_r2"] == pytest.approx(0.42)
+    assert state["estimation_exposure_anchor_date"] == "2026-03-06"

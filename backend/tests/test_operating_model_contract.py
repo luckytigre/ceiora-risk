@@ -1195,7 +1195,9 @@ def test_resolve_effective_risk_engine_meta_prefers_persisted_model_run_state(
         pipeline,
         "_can_reuse_cached_universe_loadings",
         lambda cached_payload, *, source_dates, risk_engine_meta: (
-            risk_engine_meta == persisted_meta and bool(cached_payload),
+            risk_engine_meta.get("method_version") == persisted_meta["method_version"]
+            and risk_engine_meta.get("factor_returns_latest_date") == persisted_meta["factor_returns_latest_date"]
+            and bool(cached_payload),
             "source_and_risk_engine_match",
         ),
     )
@@ -1204,7 +1206,11 @@ def test_resolve_effective_risk_engine_meta_prefers_persisted_model_run_state(
         fallback_loader=lambda key: None,
     )
 
-    assert out == persisted_meta
+    assert out["method_version"] == persisted_meta["method_version"]
+    assert out["factor_returns_latest_date"] == persisted_meta["factor_returns_latest_date"]
+    assert out["last_recompute_date"] == persisted_meta["last_recompute_date"]
+    assert out["specific_risk_ticker_count"] == persisted_meta["specific_risk_ticker_count"]
+    assert out["estimation_exposure_anchor_date"] == "2026-03-06"
     assert source == "model_run_metadata"
 
 
@@ -1322,7 +1328,9 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
         pipeline,
         "_can_reuse_cached_universe_loadings",
         lambda cached_payload, *, source_dates, risk_engine_meta: (
-            risk_engine_meta == persisted_meta and bool(cached_payload),
+            risk_engine_meta.get("method_version") == persisted_meta["method_version"]
+            and risk_engine_meta.get("factor_returns_latest_date") == persisted_meta["factor_returns_latest_date"]
+            and bool(cached_payload),
             "source_and_risk_engine_match",
         ),
     )

@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from backend import config
+from backend.trading_calendar import lagged_xnys_session
 
 from backend.analytics.contracts import (
     EligibilitySummaryPayload,
@@ -41,6 +43,26 @@ def finite_float_or_none(value: Any) -> float | None:
     return out if np.isfinite(out) else None
 
 
+def derive_estimation_exposure_anchor_date(
+    *,
+    factor_returns_latest_date: Any,
+    cross_section_min_age_days: Any,
+    existing_anchor_date: Any = None,
+) -> str | None:
+    latest = str(factor_returns_latest_date or "").strip()
+    try:
+        if latest:
+            try:
+                lag_days = int(cross_section_min_age_days or config.CROSS_SECTION_MIN_AGE_DAYS)
+            except (TypeError, ValueError):
+                lag_days = int(config.CROSS_SECTION_MIN_AGE_DAYS)
+            return lagged_xnys_session(latest, lag_days)
+    except Exception:
+        pass
+    current = str(existing_anchor_date or "").strip()
+    return current or None
+
+
 def max_iso_date(*values: Any) -> str | None:
     clean = sorted(
         {
@@ -61,6 +83,14 @@ def build_risk_engine_state(
 ) -> RiskEngineStatePayload:
     factor_returns_latest_date = risk_engine_meta.get("factor_returns_latest_date")
     last_recompute_date = str(risk_engine_meta.get("last_recompute_date") or "")
+    resolved_estimation_anchor_date = derive_estimation_exposure_anchor_date(
+        factor_returns_latest_date=factor_returns_latest_date,
+        cross_section_min_age_days=risk_engine_meta.get("cross_section_min_age_days"),
+        existing_anchor_date=(
+            estimation_exposure_anchor_date
+            or risk_engine_meta.get("estimation_exposure_anchor_date")
+        ),
+    )
     return {
         "status": str(risk_engine_meta.get("status") or "unknown"),
         "method_version": str(risk_engine_meta.get("method_version") or ""),
@@ -68,7 +98,7 @@ def build_risk_engine_state(
         "factor_returns_latest_date": factor_returns_latest_date,
         "core_rebuild_date": last_recompute_date,
         "core_state_through_date": factor_returns_latest_date,
-        "estimation_exposure_anchor_date": estimation_exposure_anchor_date,
+        "estimation_exposure_anchor_date": resolved_estimation_anchor_date,
         "latest_r2": finite_float_or_none(risk_engine_meta.get("latest_r2")),
         "cross_section_min_age_days": int(risk_engine_meta.get("cross_section_min_age_days") or 0),
         "recompute_interval_days": int(risk_engine_meta.get("recompute_interval_days") or 0),
