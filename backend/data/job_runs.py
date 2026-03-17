@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from backend import config
+
 
 TABLE = "job_run_status"
 
@@ -22,6 +24,10 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=120000")
     return conn
+
+
+def default_db_path() -> Path:
+    return Path(config.DATA_DB_PATH)
 
 
 def ensure_schema(db_path: Path) -> None:

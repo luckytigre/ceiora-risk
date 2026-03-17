@@ -22,6 +22,7 @@ import pandas as pd
 import lseg.data as rd
 
 from backend.universe.schema import PRICES_TABLE, SECURITY_MASTER_TABLE, ensure_cuse4_schema
+from backend.universe.security_master_sync import load_default_source_universe_rows
 from backend.trading_calendar import filter_xnys_sessions, previous_or_same_xnys_session
 
 warnings.filterwarnings(
@@ -175,49 +176,63 @@ def backfill_prices(
     rics_csv: str | None = None,
     volume_only: bool = False,
     only_null_volume: bool = False,
-) -> dict[str, int | str]:
+) -> dict[str, Any]:
     conn = _connect_db(db_path)
     ensure_cuse4_schema(conn)
 
     try:
-        where = [
-            "COALESCE(classification_ok, 0) = 1",
-            "COALESCE(is_equity_eligible, 0) = 1",
-            "ric IS NOT NULL",
-            "TRIM(ric) <> ''",
-        ]
-        params: list[Any] = []
-        if rics_csv:
-            req = [str(r).strip().upper() for r in str(rics_csv).split(",") if str(r).strip()]
-            if req:
-                placeholders = ",".join("?" for _ in req)
-                where.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
-                params.extend(req)
-
-        universe = conn.execute(
-            f"""
-            SELECT UPPER(TRIM(ric)) AS ric
-            FROM {SECURITY_MASTER_TABLE}
-            WHERE {' AND '.join(where)}
-            ORDER BY ric
-            """,
-            params,
-        ).fetchall()
-        rics = sorted({str(r[0]) for r in universe if r and r[0]})
+        requested_rics = [str(r).strip().upper() for r in str(rics_csv).split(",") if str(r).strip()] if rics_csv else []
+        requested_ric_set = set(requested_rics)
+        if requested_rics:
+            where = [
+                "ric IS NOT NULL",
+                "TRIM(ric) <> ''",
+            ]
+            params: list[Any] = []
+            placeholders = ",".join("?" for _ in requested_rics)
+            where.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
+            params.extend(requested_rics)
+            universe = conn.execute(
+                f"""
+                SELECT UPPER(TRIM(ric)) AS ric
+                FROM {SECURITY_MASTER_TABLE}
+                WHERE {' AND '.join(where)}
+                ORDER BY ric
+                """,
+                params,
+            ).fetchall()
+            rics = sorted({str(r[0]) for r in universe if r and r[0]})
+        else:
+            universe_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
+            rics = sorted({str(row["ric"]).strip().upper() for row in universe_rows if row.get("ric")})
         ric_set = set(rics)
+        matched_requested_ric_count = int(len(requested_ric_set & ric_set))
+        missing_requested_rics = sorted(requested_ric_set - ric_set)
 
         if not rics:
-            return {"status": "no-universe"}
+            return {
+                "status": "no-universe",
+                "requested_ric_count": int(len(requested_ric_set)),
+                "matched_requested_ric_count": matched_requested_ric_count,
+                "missing_requested_rics": missing_requested_rics,
+                "requires_seeded_security_master": bool(requested_ric_set),
+            }
 
         windows = _iter_date_windows(start_date=start_date, end_date=end_date, days_per_window=days_per_window)
         if not windows:
-            return {"status": "no-date-windows"}
+            return {
+                "status": "no-date-windows",
+                "requested_ric_count": int(len(requested_ric_set)),
+                "matched_requested_ric_count": matched_requested_ric_count,
+                "missing_requested_rics": missing_requested_rics,
+            }
 
         start_bound = str(pd.Timestamp(start_date).date())
         end_bound = str(pd.Timestamp(end_date).date())
 
         rows_upserted = 0
         volume_rows_updated = 0
+        price_rows_skipped_missing_close = 0
         batch_calls = 0
         failed_batches = 0
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -235,6 +250,9 @@ def backfill_prices(
                     "status": "no-null-volume",
                     "start_date": start_bound,
                     "end_date": previous_or_same_xnys_session(end_bound),
+                    "requested_ric_count": int(len(requested_ric_set)),
+                    "matched_requested_ric_count": matched_requested_ric_count,
+                    "missing_requested_rics": missing_requested_rics,
                 }
             # Process only dates that still have missing volume; one-day windows keep pulls exact.
             unique_dates = sorted({str(d) for d in missing_volume_df["date"].tolist() if str(d).strip()})
@@ -359,6 +377,9 @@ def backfill_prices(
                                     continue
                                 close = row.get(price_col)
                                 close_val = None if pd.isna(close) else float(close)
+                                if close_val is None:
+                                    price_rows_skipped_missing_close += 1
+                                    continue
                                 open_val = row.get(open_col) if open_col else None
                                 high_val = row.get(high_col) if high_col else None
                                 low_val = row.get(low_col) if low_col else None
@@ -426,7 +447,7 @@ def backfill_prices(
         norm_end = previous_or_same_xnys_session(end_date)
 
         if volume_only:
-            out: dict[str, int | str] = {
+            out: dict[str, Any] = {
                 "status": "ok",
                 "mode": "volume-only",
                 "volume_metric": VOLUME_FIELD,
@@ -435,6 +456,9 @@ def backfill_prices(
                 "failed_batches": int(failed_batches),
                 "start_date": start_bound,
                 "end_date": norm_end,
+                "requested_ric_count": int(len(requested_ric_set)),
+                "matched_requested_ric_count": matched_requested_ric_count,
+                "missing_requested_rics": missing_requested_rics,
             }
             if only_null_volume:
                 remaining_nulls = int(
@@ -453,10 +477,14 @@ def backfill_prices(
         return {
             "status": "ok",
             "rows_upserted": int(rows_upserted),
+            "price_rows_skipped_missing_close": int(price_rows_skipped_missing_close),
             "batch_calls": int(batch_calls),
             "failed_batches": int(failed_batches),
             "start_date": start_bound,
             "end_date": norm_end,
+            "requested_ric_count": int(len(requested_ric_set)),
+            "matched_requested_ric_count": matched_requested_ric_count,
+            "missing_requested_rics": missing_requested_rics,
         }
     finally:
         conn.close()

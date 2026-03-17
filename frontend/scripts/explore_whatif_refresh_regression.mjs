@@ -106,8 +106,17 @@ try {
 
       if (method === "GET" && pathName === "/api/universe/factors") {
         return fulfillJson({
-          factors: ["Market Beta"],
-          factor_vols: { "Market Beta": 0.12 },
+          factors: ["market"],
+          factor_vols: { market: 0.12 },
+          factor_catalog: [
+            {
+              factor_id: "market",
+              factor_name: "Market",
+              short_label: "Market",
+              family: "market",
+              block: "core_structural",
+            },
+          ],
           _cached: true,
         });
       }
@@ -130,9 +139,9 @@ try {
               sleeve: "core",
               source: "seed",
               trbc_industry_group: "Hardware",
-              exposures: { "Market Beta": 1.1 },
+              exposures: { market: 1.1 },
               risk_contrib_pct: 4.2,
-              eligible_for_model: true,
+              model_status: "core_estimated",
             },
           ],
           total_value: 9500,
@@ -160,12 +169,12 @@ try {
             trbc_industry_group: "Hardware",
             market_cap: 2900000000000,
             price: 190,
-            exposures: { "Market Beta": 1.1 },
-            sensitivities: { "Market Beta": 0.132 },
+            exposures: { market: 1.1 },
+            sensitivities: { market: 0.132 },
             risk_loading: 1.1,
             specific_var: 0.02,
             specific_vol: 0.14,
-            eligible_for_model: true,
+            model_status: "core_estimated",
             as_of_date: "2026-03-13",
           },
           _cached: true,
@@ -330,10 +339,19 @@ try {
 
       if (method === "GET" && pathName === "/api/risk") {
         return fulfillJson({
-          risk_shares: { country: 20, industry: 30, style: 25, idio: 25 },
-          component_shares: { country: 20, industry: 30, style: 25 },
+          risk_shares: { market: 20, industry: 30, style: 25, idio: 25 },
+          component_shares: { market: 20, industry: 30, style: 25 },
           factor_details: [],
-          cov_matrix: { factors: ["Market Beta"], matrix: [[1]] },
+          factor_catalog: [
+            {
+              factor_id: "market",
+              factor_name: "Market",
+              short_label: "Market",
+              family: "market",
+              block: "core_structural",
+            },
+          ],
+          cov_matrix: { factors: ["market"], matrix: [[1]] },
           r_squared: 0.82,
           _cached: true,
         });

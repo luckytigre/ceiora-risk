@@ -5,15 +5,14 @@ import {
   ApiError,
   triggerDailyMaintenanceRefresh,
   triggerRefreshProfile,
-  triggerServeRefresh,
   useOperatorStatus,
 } from "@/hooks/useApi";
+import { runServeRefreshAndRevalidate } from "@/lib/refresh";
 
 function parseError(error: unknown): {
   message: string;
   actionMethod?: string;
   actionEndpoint?: string;
-  refreshMode?: "full" | "light" | "cold";
   refreshProfile?: string;
 } {
   if (error instanceof ApiError) {
@@ -25,14 +24,11 @@ function parseError(error: unknown): {
       | null
       | undefined;
     const actionEndpoint = detail?.action?.endpoint;
-    let refreshMode: "full" | "light" | "cold" | undefined;
     let refreshProfile: string | undefined;
     if (actionEndpoint) {
       try {
         const url = new URL(actionEndpoint, "http://localhost");
-        const mode = String(url.searchParams.get("mode") || "").toLowerCase();
         const profile = String(url.searchParams.get("profile") || "").trim();
-        if (mode === "full" || mode === "light" || mode === "cold") refreshMode = mode;
         if (profile) refreshProfile = profile;
       } catch {
         // noop
@@ -42,7 +38,6 @@ function parseError(error: unknown): {
       message: detail?.message || error.message || "Request failed.",
       actionMethod: detail?.action?.method,
       actionEndpoint,
-      refreshMode,
       refreshProfile,
     };
   }
@@ -50,6 +45,16 @@ function parseError(error: unknown): {
     return { message: error.message };
   }
   return { message: "Unknown error while loading API data." };
+}
+
+function refreshProfileLabel(profile: string | undefined, onlyServeRefreshAllowed: boolean): string {
+  if (!profile) return onlyServeRefreshAllowed ? "Run serve-refresh" : "Run source sync + core if due";
+  if (profile === "serve-refresh") return "Run serve-refresh";
+  if (profile === "source-daily-plus-core-if-due") return "Run source sync + core if due";
+  if (profile === "source-daily") return "Run source sync";
+  if (profile === "core-weekly") return "Run weekly core rebuild";
+  if (profile === "cold-core") return "Run cold-core rebuild";
+  return `Run ${profile}`;
 }
 
 export default function ApiErrorState({
@@ -68,18 +73,12 @@ export default function ApiErrorState({
   async function handleRefresh() {
     setRefreshState("running");
     try {
-      if (parsed.refreshProfile) {
+      if (parsed.refreshProfile === "serve-refresh" || (!parsed.refreshProfile && onlyServeRefreshAllowed)) {
+        await runServeRefreshAndRevalidate();
+      } else if (parsed.refreshProfile) {
         await triggerRefreshProfile(parsed.refreshProfile);
-      } else if (onlyServeRefreshAllowed) {
-        await triggerServeRefresh();
       } else {
-        if (parsed.refreshMode === "cold") {
-          await triggerRefreshProfile("cold-core");
-        } else if (parsed.refreshMode === "full") {
-          await triggerDailyMaintenanceRefresh();
-        } else {
-          await triggerServeRefresh();
-        }
+        await triggerDailyMaintenanceRefresh();
       }
       setRefreshState("done");
     } catch {
@@ -100,19 +99,13 @@ export default function ApiErrorState({
           >
             {refreshState === "running"
               ? "Starting refresh..."
-              : parsed.refreshProfile
-                ? `Run ${parsed.refreshProfile}`
-                : onlyServeRefreshAllowed
-                  ? "Run serve-refresh"
-                : parsed.refreshMode === "cold"
-                  ? "Run cold-core"
-                  : parsed.refreshMode === "full"
-                    ? "Run source-daily-plus-core-if-due"
-                    : "Run serve-refresh"}
+              : refreshProfileLabel(parsed.refreshProfile, onlyServeRefreshAllowed)}
           </button>
           {refreshState === "done" && (
             <div style={{ marginTop: 8, color: "rgba(169,182,210,0.8)", fontSize: 12 }}>
-              Refresh started. Reload in a few seconds.
+              {parsed.refreshProfile === "serve-refresh" || (!parsed.refreshProfile && onlyServeRefreshAllowed)
+                ? "Refresh completed."
+                : "Refresh started. Reload in a few seconds."}
             </div>
           )}
           {refreshState === "failed" && (

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ApiErrorState from "@/components/ApiErrorState";
-import OperatorControlPanel from "@/components/OperatorControlPanel";
 import { useDataDiagnostics } from "@/hooks/useApi";
 import type { DataTableStats } from "@/lib/types";
 
@@ -41,8 +40,8 @@ const CACHE_DESC: Record<string, string> = {
   exposures: "Factor exposure matrix for all held positions, served to the Exposures page.",
   risk: "Risk decomposition, factor contributions, and covariance-derived metrics for the Risk page.",
   health_diagnostics: "Precomputed health page payload — R², coverage, bias stats, and factor diagnostics.",
-  daily_universe_eligibility_summary: "Daily time series of how many securities pass structural and regression eligibility filters.",
-  daily_factor_returns: "Daily factor return series plus regression diagnostics used for cumulative return charts and health analysis.",
+  daily_universe_eligibility_summary: "Legacy cache-era eligibility summary table kept for compatibility. Current summary metadata should come from durable serving payloads.",
+  daily_factor_returns: "Legacy cache-era factor-return history kept for compatibility. Current factor coverage metadata should come from durable model outputs.",
   risk_engine_meta: "Risk engine configuration — method version, covariance parameters, history window.",
   cuse4_foundation: "Core cUSE4 model foundation — factor definitions, hierarchy, and estimation parameters.",
 };
@@ -87,9 +86,6 @@ export default function DataPage() {
       <div className="section-subtitle" style={{ marginBottom: 14 }}>
         Health is the live operator/control-room surface. Data is the maintenance surface for source tables, lineage, coverage, and cache diagnostics.
       </div>
-
-      <OperatorControlPanel />
-
       {/* ── Pipeline Overview ── */}
       <div className="chart-card data-section">
         <div className="data-section-header">
@@ -123,10 +119,24 @@ export default function DataPage() {
             </div>
           </div>
           <div className="data-kpi">
-            <div className="data-kpi-label">Regression Universe</div>
+            <div className="data-kpi-label">US Core Universe</div>
+            <div className="data-kpi-value">{fmtInt(elig?.latest?.core_structural_eligible_n)}</div>
+            <div className="data-kpi-desc">
+              Structurally eligible US names in the live core model. This is the maximum pool that can define factor returns.
+            </div>
+          </div>
+          <div className="data-kpi">
+            <div className="data-kpi-label">Regression Members</div>
             <div className="data-kpi-value">{fmtInt(elig?.latest?.regression_member_n)}</div>
             <div className="data-kpi-desc">
-              Securities in the latest cross-sectional regression. This is the effective sample size for estimating factor returns.
+              Securities actually used in the latest cross-sectional regression. This is the effective estimation sample size.
+            </div>
+          </div>
+          <div className="data-kpi">
+            <div className="data-kpi-label">Projected-Only</div>
+            <div className="data-kpi-value">{fmtInt(elig?.latest?.projected_only_n)}</div>
+            <div className="data-kpi-desc">
+              Names carried through the model for portfolio analytics but excluded from core factor-return estimation.
             </div>
           </div>
           <div className="data-kpi">
@@ -258,21 +268,60 @@ export default function DataPage() {
           </div>
 
           <div className="data-metric-card">
-            <h4>Regression Membership</h4>
+            <h4>US Core Estimation Universe</h4>
             <div className="data-metric-desc">
-              The subset of structurally eligible names with sufficient data quality to enter the cross-sectional regression. This is the effective sample size for factor return estimation.
+              The live model estimates factor returns on a US-core universe. These counts separate the full US structural pool from the subset that actually made it into the regression.
             </div>
             <div className="data-metric-row">
               <span className="data-metric-label">Historical min</span>
-              <span className="data-metric-value">{fmtInt(elig?.min_regression_member_n)}</span>
+              <span className="data-metric-value">{fmtInt(elig?.min_core_structural_eligible_n)}</span>
             </div>
             <div className="data-metric-row">
               <span className="data-metric-label">Historical max</span>
-              <span className="data-metric-value">{fmtInt(elig?.max_regression_member_n)}</span>
+              <span className="data-metric-value">{fmtInt(elig?.max_core_structural_eligible_n)}</span>
             </div>
             <div className="data-metric-row">
               <span className="data-metric-label">Latest</span>
+              <span className="data-metric-value">{elig?.latest ? fmtInt(elig.latest.core_structural_eligible_n) : "—"}</span>
+            </div>
+            <div className="data-metric-row">
+              <span className="data-metric-label">Latest regression members</span>
               <span className="data-metric-value">{elig?.latest ? fmtInt(elig.latest.regression_member_n) : "—"}</span>
+            </div>
+            <div className="data-metric-row">
+              <span className="data-metric-label">Regression coverage</span>
+              <span className="data-metric-value">
+                {elig?.latest ? `${Number(elig.latest.regression_coverage_pct || 0).toFixed(1)}%` : "—"}
+              </span>
+            </div>
+          </div>
+
+          <div className="data-metric-card">
+            <h4>Projected Coverage</h4>
+            <div className="data-metric-desc">
+              Structurally eligible names with usable returns that remain in portfolio analytics even when they do not participate in core estimation.
+            </div>
+            <div className="data-metric-row">
+              <span className="data-metric-label">Historical min projectable</span>
+              <span className="data-metric-value">{fmtInt(elig?.min_projectable_n)}</span>
+            </div>
+            <div className="data-metric-row">
+              <span className="data-metric-label">Historical max projectable</span>
+              <span className="data-metric-value">{fmtInt(elig?.max_projectable_n)}</span>
+            </div>
+            <div className="data-metric-row">
+              <span className="data-metric-label">Latest projectable</span>
+              <span className="data-metric-value">{elig?.latest ? fmtInt(elig.latest.projectable_n) : "—"}</span>
+            </div>
+            <div className="data-metric-row">
+              <span className="data-metric-label">Latest projected-only</span>
+              <span className="data-metric-value">{elig?.latest ? fmtInt(elig.latest.projected_only_n) : "—"}</span>
+            </div>
+            <div className="data-metric-row">
+              <span className="data-metric-label">Projectable coverage</span>
+              <span className="data-metric-value">
+                {elig?.latest ? `${Number(elig.latest.projectable_coverage_pct || 0).toFixed(1)}%` : "—"}
+              </span>
             </div>
           </div>
 

@@ -1,14 +1,45 @@
 {
   "factors": [
-    "Beta",
-    "Technology Equipment"
+    "industry_technology_equipment",
+    "style_beta_score"
   ],
   "factor_vols": {
-    "Beta": 0.05,
-    "Technology Equipment": 0.1
+    "industry_technology_equipment": 0.1,
+    "style_beta_score": 0.05
   },
+  "factor_catalog": [
+    {
+      "factor_id": "industry_technology_equipment",
+      "factor_name": "Technology Equipment",
+      "short_label": "Technology Equipment",
+      "family": "industry",
+      "block": "core_structural",
+      "source_column": null,
+      "display_order": 100,
+      "covariance_display": true,
+      "exposure_publish": true,
+      "active": true,
+      "method_version": "v8_use4_us_core_market_one_stage_projected_non_us_2026_03_15"
+    },
+    {
+      "factor_id": "style_beta_score",
+      "factor_name": "Beta",
+      "short_label": "Beta",
+      "family": "style",
+      "block": "core_style",
+      "source_column": "beta_score",
+      "display_order": 1000,
+      "covariance_display": true,
+      "exposure_publish": true,
+      "active": true,
+      "method_version": "v8_use4_us_core_market_one_stage_projected_non_us_2026_03_15"
+    }
+  ],
   "ticker_count": 2,
   "eligible_ticker_count": 2,
+  "core_estimated_ticker_count": 2,
+  "projected_only_ticker_count": 0,
+  "ineligible_ticker_count": 0,
   "factor_count": 2,
   "_cached": true
 }

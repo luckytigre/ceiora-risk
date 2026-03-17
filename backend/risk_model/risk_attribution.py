@@ -7,41 +7,24 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from backend.risk_model.descriptors import FULL_STYLE_FACTORS
+from backend.risk_model.factor_catalog import (
+    STYLE_COLUMN_TO_LABEL,
+    infer_factor_family,
+)
 
-# Column name -> human label for style factors from raw cross-section history
-STYLE_COLUMN_TO_LABEL: dict[str, str] = {
-    "beta_score": "Beta",
-    "momentum_score": "Momentum",
-    "size_score": "Size",
-    "nonlinear_size_score": "Nonlinear Size",
-    "short_term_reversal_score": "Short-Term Reversal",
-    "resid_vol_score": "Residual Volatility",
-    "liquidity_score": "Liquidity",
-    "book_to_price_score": "Book-to-Price",
-    "earnings_yield_score": "Earnings Yield",
-    "leverage_score": "Leverage",
-    "growth_score": "Growth",
-    "profitability_score": "Profitability",
-    "investment_score": "Investment",
-    "dividend_yield_score": "Dividend Yield",
-}
-
-STYLE_FACTOR_NAMES = set(FULL_STYLE_FACTORS.keys())
-COUNTRY_FACTOR = "Country: US"
-SYSTEMATIC_CATEGORIES: tuple[str, ...] = ("country", "industry", "style")
+SYSTEMATIC_CATEGORIES: tuple[str, ...] = ("market", "industry", "style")
 
 
-def is_country_factor(name: str) -> bool:
-    return str(name or "").strip().startswith("Country:")
+def is_market_factor(name: str) -> bool:
+    return infer_factor_family(str(name or "").strip()) == "market"
 
 
 def factor_category(name: str) -> str:
-    factor = str(name or "").strip()
-    if factor in STYLE_FACTOR_NAMES:
+    family = infer_factor_family(str(name or "").strip())
+    if family == "style":
         return "style"
-    if is_country_factor(factor):
-        return "country"
+    if family == "market":
+        return "market"
     return "industry"
 
 
@@ -51,7 +34,7 @@ def systematic_variance_by_category(
     exposures: np.ndarray,
     covariance: np.ndarray,
 ) -> dict[str, float]:
-    """Allocate systematic variance into country/industry/style buckets."""
+    """Allocate systematic variance into market/industry/style buckets."""
     if not factors:
         return {category: 0.0 for category in SYSTEMATIC_CATEGORIES}
 
@@ -111,12 +94,12 @@ def portfolio_factor_exposure(
     positions: list[dict[str, Any]],
     factor: str,
 ) -> float:
-    """Compute portfolio-weighted exposure to a single factor."""
+    """Compute portfolio-weighted exposure to a single factor ID."""
     total_weight = 0.0
     weighted_exposure = 0.0
     for pos in positions:
         w = float(pos.get("weight", 0.0) or 0.0)
-        # Look up exposure by factor label in the exposures dict
+        # Look up exposure by factor ID in the exposures dict
         exposures = pos.get("exposures", {})
         exp = float(exposures.get(factor, 0.0) or 0.0)
         weighted_exposure += w * exp
@@ -130,19 +113,19 @@ def risk_decomposition(
     positions: list[dict[str, Any]],
     specific_risk_by_ticker: dict[str, dict[str, float | int | str]] | None = None,
 ) -> tuple[dict[str, float], dict[str, float], list[dict[str, Any]]]:
-    """Decompose portfolio risk into style/industry/idiosyncratic.
+    """Decompose portfolio risk into market/industry/style/idiosyncratic.
 
     Returns:
         (risk_shares, component_shares, factor_details)
     """
     if cov.empty:
         return (
-            {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 100.0},
-            {"country": 0.0, "industry": 0.0, "style": 0.0},
+            {"market": 0.0, "industry": 0.0, "style": 0.0, "idio": 100.0},
+            {"market": 0.0, "industry": 0.0, "style": 0.0},
             [],
         )
 
-    # The intercept is part of phase-A fit but not modeled as a factor.
+    # The solver does not publish an intercept as a modeled factor.
     factors = [str(c) for c in cov.columns]
     exposure_map = {f: portfolio_factor_exposure(positions, f) for f in factors}
     h = np.array([exposure_map[f] for f in factors], dtype=float)
@@ -150,8 +133,8 @@ def risk_decomposition(
 
     if h.size == 0 or f_mat.size == 0:
         return (
-            {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 100.0},
-            {"country": 0.0, "industry": 0.0, "style": 0.0},
+            {"market": 0.0, "industry": 0.0, "style": 0.0, "idio": 100.0},
+            {"market": 0.0, "industry": 0.0, "style": 0.0},
             [],
         )
 
@@ -192,7 +175,7 @@ def risk_decomposition(
         idio_pct = max(0.0, min(100.0, 100.0 * raw_specific / raw_total))
 
     risk_shares = {
-        "country": round(systematic_pct * shares["country"], 2),
+        "market": round(systematic_pct * shares["market"], 2),
         "industry": round(systematic_pct * shares["industry"], 2),
         "style": round(systematic_pct * shares["style"], 2),
         "idio": round(idio_pct, 2),
@@ -215,7 +198,7 @@ def risk_decomposition(
         category = factor_category(f_name)
 
         factor_details.append({
-            "factor": f_name,
+            "factor_id": f_name,
             "category": category,
             "exposure": round(exp, 6),
             "factor_vol": round(factor_vol, 6),

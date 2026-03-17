@@ -8,17 +8,24 @@ import pandas as pd
 import pytest
 
 from backend.risk_model.daily_factor_returns import (
-    _supported_style_score_columns,
     _load_cached_dates,
     _save_daily_results_and_residuals,
     load_specific_residuals,
 )
+from backend.risk_model.regression_frame import _supported_style_score_columns
 from backend.risk_model.raw_cross_section_history import ensure_raw_cross_section_history_table
 from backend.universe.schema import ensure_cuse4_schema
 from backend.data.cross_section_snapshot import ensure_cross_section_snapshot_table
 from backend.data.model_outputs import persist_model_outputs
+from backend.data import model_outputs
 from backend.data import job_runs
 run_model_pipeline = importlib.import_module("backend.orchestration.run_model_pipeline")
+
+
+@pytest.fixture(autouse=True)
+def _disable_neon_model_output_writes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(model_outputs.config, "neon_dsn", lambda: "")
+    monkeypatch.setattr(model_outputs.config, "neon_primary_model_data_enabled", lambda: False)
 
 
 def _pk_cols(conn: sqlite3.Connection, table: str) -> list[str]:
@@ -564,12 +571,15 @@ def test_ingest_stage_is_not_hardcoded_skip(monkeypatch: pytest.MonkeyPatch, tmp
     monkeypatch.setattr(run_model_pipeline, "DATA_DB", tmp_path / "data.db")
 
     out = run_model_pipeline._run_stage(
+        profile="source-daily",
         stage="ingest",
         as_of_date="2026-03-03",
         should_run_core=False,
         serving_mode="light",
         force_core=False,
         core_reason="test",
+        data_db=run_model_pipeline.DATA_DB,
+        cache_db=run_model_pipeline.CACHE_DB,
     )
 
     assert out.get("status") == "ok"

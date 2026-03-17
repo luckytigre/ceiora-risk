@@ -3,12 +3,11 @@ import { mutate } from "swr";
 import {
   applyPortfolioWhatIf,
   previewPortfolioWhatIf,
-  triggerServeRefresh,
   useHoldingsAccounts,
   useHoldingsPositions,
-  useRefreshStatus,
 } from "@/hooks/useApi";
 import { ApiError, apiPath } from "@/lib/api";
+import { runServeRefreshAndRevalidate } from "@/lib/refresh";
 import type {
   UniverseSearchItem,
   UniverseTickerItem,
@@ -51,9 +50,6 @@ export function useWhatIfScenarioLab({
   const [quantityText, setQuantityText] = useState("");
   const [busy, setBusy] = useState(false);
   const [awaitingRefresh, setAwaitingRefresh] = useState(false);
-  const [pendingRefreshJobId, setPendingRefreshJobId] = useState<string | null>(null);
-  const [pendingRefreshScenarioCount, setPendingRefreshScenarioCount] = useState(0);
-  const [pendingRefreshWarning, setPendingRefreshWarning] = useState("");
   const [previewData, setPreviewData] = useState<WhatIfPreviewData | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -62,7 +58,6 @@ export function useWhatIfScenarioLab({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [tickerFocused, setTickerFocused] = useState(false);
-  const { data: refreshStatusData } = useRefreshStatus(awaitingRefresh);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLDivElement>(null);
@@ -165,48 +160,6 @@ export function useWhatIfScenarioLab({
     setShowResults(false);
   }, [selectedTicker]);
 
-  useEffect(() => {
-    if (!awaitingRefresh) return;
-    const refresh = refreshStatusData?.refresh;
-    if (!refresh) return;
-    const trackedJobId = String(pendingRefreshJobId || "").trim();
-    const currentJobId = String(refresh.job_id || "").trim();
-    if (trackedJobId && currentJobId && currentJobId !== trackedJobId) return;
-    const refreshStatus = String(refresh.status || "").trim().toLowerCase();
-    if (!["ok", "failed", "unknown"].includes(refreshStatus)) return;
-
-    const scenarioCount = pendingRefreshScenarioCount;
-    const warningSuffix = pendingRefreshWarning ? ` ${pendingRefreshWarning}` : "";
-    setAwaitingRefresh(false);
-    setPendingRefreshJobId(null);
-    setPendingRefreshScenarioCount(0);
-    setPendingRefreshWarning("");
-
-    void Promise.all([
-      mutate(apiPath.refreshStatus()),
-      mutate(apiPath.operatorStatus()),
-      mutate(apiPath.portfolio()),
-      mutate(apiPath.risk()),
-      mutate(apiPath.exposures("raw")),
-      mutate(apiPath.exposures("sensitivity")),
-      mutate(apiPath.exposures("risk_contribution")),
-    ]).finally(() => {
-      if (refreshStatus === "ok") {
-        setErrorMessage("");
-        setResultMessage(`Applied ${formatScenarioCount(scenarioCount)} and RECALC finished.${warningSuffix}`);
-        return;
-      }
-      setResultMessage("");
-      setErrorMessage(`What-if changes were applied, but RECALC failed: ${refreshFailureMessage(refresh)}${warningSuffix}`);
-    });
-  }, [
-    awaitingRefresh,
-    pendingRefreshJobId,
-    pendingRefreshScenarioCount,
-    pendingRefreshWarning,
-    refreshStatusData,
-  ]);
-
   const liveQuantityByScenarioKey = useMemo(() => {
     const out = new Map<string, number>();
     for (const row of holdingsRows) {
@@ -239,15 +192,16 @@ export function useWhatIfScenarioLab({
 
   const currentModeFactorOrder = useMemo(() => {
     const currentFactors = previewData?.current.exposure_modes[mode] ?? [];
+    const factorCatalog = previewData?.current.factor_catalog ?? [];
     return [...currentFactors]
       .sort((a, b) => {
-        const tierDiff = factorTier(a.factor) - factorTier(b.factor);
+        const tierDiff = factorTier(a.factor_id, factorCatalog) - factorTier(b.factor_id, factorCatalog);
         if (tierDiff !== 0) return tierDiff;
         const byMagnitude = Math.abs(Number(b.value || 0)) - Math.abs(Number(a.value || 0));
         if (byMagnitude !== 0) return byMagnitude;
-        return a.factor.localeCompare(b.factor);
+        return a.factor_id.localeCompare(b.factor_id);
       })
-      .map((factor) => factor.factor);
+      .map((factor) => factor.factor_id);
   }, [mode, previewData]);
 
   const clearMessages = useCallback(() => {
@@ -424,17 +378,22 @@ export function useWhatIfScenarioLab({
       setShowResults(false);
 
       try {
-        const refreshResponse = await triggerServeRefresh();
         setAwaitingRefresh(true);
-        setPendingRefreshJobId(refreshResponse.refresh?.job_id ?? null);
-        setPendingRefreshScenarioCount(appliedScenarioCount);
-        setPendingRefreshWarning(warningText);
         setResultMessage(`Applied ${formatScenarioCount(appliedScenarioCount)} and started RECALC.${warningText ? ` ${warningText}` : ""}`);
+        const { refresh, holdingsSyncVerified } = await runServeRefreshAndRevalidate();
+        if (String(refresh.status || "").trim().toLowerCase() === "ok") {
+          setErrorMessage("");
+          setResultMessage(
+            holdingsSyncVerified
+              ? `Applied ${formatScenarioCount(appliedScenarioCount)} and RECALC finished.${warningText ? ` ${warningText}` : ""}`
+              : `Applied ${formatScenarioCount(appliedScenarioCount)} and RECALC finished, but holdings sync status could not be verified. Check Operator status before trusting published analytics.${warningText ? ` ${warningText}` : ""}`,
+          );
+          return;
+        }
+        setResultMessage("");
+        setErrorMessage(`What-if changes were applied, but RECALC failed: ${refreshFailureMessage(refresh)}${warningText ? ` ${warningText}` : ""}`);
       } catch (refreshErr) {
-        setAwaitingRefresh(false);
-        setPendingRefreshJobId(null);
-        setPendingRefreshScenarioCount(0);
-        setPendingRefreshWarning("");
+        setResultMessage("");
         if (refreshErr instanceof ApiError) {
           setErrorMessage(
             `What-if changes were applied, but RECALC failed: ${typeof refreshErr.detail === "string" ? refreshErr.detail : refreshErr.message}${warningText ? ` ${warningText}` : ""}`,
@@ -444,6 +403,8 @@ export function useWhatIfScenarioLab({
         } else {
           setErrorMessage(`What-if changes were applied, but RECALC failed.${warningText ? ` ${warningText}` : ""}`);
         }
+      } finally {
+        setAwaitingRefresh(false);
       }
     } catch (err) {
       if (err instanceof ApiError) {
@@ -466,13 +427,8 @@ export function useWhatIfScenarioLab({
     setResultMessage("Discarded what-if scenario rows.");
   }, [clearMessages]);
 
-  const refreshStageText =
-    String(refreshStatusData?.refresh?.current_stage_message || "").trim()
-    || String(refreshStatusData?.refresh?.current_stage || "").trim();
   const builderStatus = awaitingRefresh
-    ? refreshStageText
-      ? `RECALC: ${refreshStageText}`
-      : "RECALC running"
+    ? "RECALC running"
     : previewData
       ? "Preview ready"
       : scenarioRows.length > 0

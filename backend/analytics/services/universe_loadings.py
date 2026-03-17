@@ -17,9 +17,21 @@ from backend.analytics.contracts import (
     UniverseTickerPayload,
 )
 from backend.analytics.trbc_economic_sector_short import abbreviate_trbc_economic_sector_short
-from backend.risk_model.descriptors import FULL_STYLE_ORTH_RULES, canonicalize_style_scores
+from backend.risk_model.descriptors import (
+    FULL_STYLE_ORTH_RULES,
+    apply_style_canonicalization,
+    fit_and_apply_style_canonicalization,
+)
 from backend.risk_model.eligibility import build_eligibility_context, structural_eligibility_for_date
-from backend.risk_model.risk_attribution import COUNTRY_FACTOR, STYLE_COLUMN_TO_LABEL
+from backend.risk_model.factor_catalog import (
+    MARKET_FACTOR,
+    STYLE_COLUMN_TO_LABEL,
+    build_factor_catalog_for_factors,
+    factor_id_to_entry_map,
+    factor_name_to_id_map,
+    serialize_factor_catalog,
+)
+from backend.risk_model.model_status import derive_model_status
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +52,7 @@ def build_universe_ticker_loadings(
     *,
     data_db: Path,
     specific_risk_by_ticker: dict[str, SpecificRiskPayload] | None = None,
+    factor_catalog_by_name: dict[str, object] | None = None,
 ) -> UniverseLoadingsPayload:
     """Build full-universe cached loadings/risk context keyed by ticker."""
     exposures_df = exposures_df.copy() if exposures_df is not None else pd.DataFrame()
@@ -127,10 +140,12 @@ def build_universe_ticker_loadings(
                         name_map[ticker] = s
 
     latest_asof = ""
+    latest_available_asof = ""
     if "as_of_date" in exposures_df.columns and not exposures_df.empty:
         asof_series = exposures_df["as_of_date"].astype(str).str.strip()
         asof_counts = asof_series.value_counts()
         if not asof_counts.empty:
+            latest_available_asof = str(asof_series.max())
             max_count = int(asof_counts.max())
             # Guard against thin end-of-day snapshots (for example, incomplete latest date).
             min_coverage = max(100, int(0.50 * max_count))
@@ -141,13 +156,13 @@ def build_universe_ticker_loadings(
             if well_covered_dates:
                 latest_asof = well_covered_dates[-1]
             else:
-                latest_asof = str(asof_series.max())
-            if latest_asof != str(asof_series.max()):
+                latest_asof = latest_available_asof
+            if latest_asof != latest_available_asof:
                 logger.warning(
                     "Using well-covered exposure as-of date %s instead of sparse latest %s "
                     "(coverage threshold=%s, max_count=%s)",
                     latest_asof,
-                    str(asof_series.max()),
+                    latest_available_asof,
                     min_coverage,
                     max_count,
                 )
@@ -165,6 +180,17 @@ def build_universe_ticker_loadings(
 
     eligible_mask = eligibility_df.get("is_structural_eligible", pd.Series(dtype=bool)).astype(bool)
     eligible_rics = set(eligibility_df.index[eligible_mask].astype(str).str.upper())
+    core_eligible_rics = {
+        str(ric).upper()
+        for ric in eligibility_df.index[
+            eligible_mask
+            & eligibility_df.get("hq_country_code", pd.Series(index=eligibility_df.index, dtype="string"))
+            .fillna("")
+            .astype(str)
+            .str.upper()
+            .eq("US")
+        ]
+    }
     eligible_tickers = {
         ticker for ticker, ric in ric_by_ticker.items()
         if ric in eligible_rics
@@ -174,7 +200,8 @@ def build_universe_ticker_loadings(
         if ric in eligibility_df.index:
             ineligible_reason[ticker] = str(eligibility_df.loc[ric, "exclusion_reason"] or "")
 
-    # Canonicalize style scores on the structurally eligible cross-section only.
+    # Canonicalize style scores on the US-core cross-section, then apply that transform to
+    # the full projectable universe so projected-only non-US names remain on the same scale.
     canonical_style_map: dict[str, dict[str, float]] = {}
     style_cols_present = (
         [c for c in STYLE_COLUMN_TO_LABEL if c in effective_exposures_df.columns]
@@ -193,47 +220,107 @@ def build_universe_ticker_loadings(
         style_scores = style_scores[style_scores["ric"].isin(eligible_rics)]
         style_scores = style_scores.drop_duplicates(subset=["ric"], keep="last").set_index("ric")
         style_scores.columns = style_names
-        if not style_scores.empty:
+        if not style_scores.empty and core_eligible_rics:
+            style_scores_core = style_scores.loc[style_scores.index.intersection(sorted(core_eligible_rics))].copy()
             caps_from_elig = pd.to_numeric(
-                eligibility_df.reindex(style_scores.index)["market_cap"],
+                eligibility_df.reindex(style_scores_core.index)["market_cap"],
                 errors="coerce",
             )
             industries_from_elig = (
-                eligibility_df.reindex(style_scores.index)["trbc_business_sector"]
+                eligibility_df.reindex(style_scores_core.index)["trbc_business_sector"]
                 .fillna("")
                 .astype(str)
             )
             valid = (
-                style_scores.notna().all(axis=1).to_numpy(dtype=bool)
-                & np.isfinite(style_scores.to_numpy(dtype=float)).all(axis=1)
+                style_scores_core.notna().all(axis=1).to_numpy(dtype=bool)
+                & np.isfinite(style_scores_core.to_numpy(dtype=float)).all(axis=1)
                 & np.isfinite(caps_from_elig.to_numpy(dtype=float))
                 & (caps_from_elig.to_numpy(dtype=float) > 0.0)
                 & (industries_from_elig.str.len().to_numpy(dtype=float) > 0)
             )
             if int(valid.sum()) > 0:
-                valid_idx = style_scores.index[valid]
-                style_scores = style_scores.loc[valid_idx]
+                valid_idx = style_scores_core.index[valid]
+                style_scores_core = style_scores_core.loc[valid_idx]
                 caps_from_elig = caps_from_elig.loc[valid_idx]
                 industries_from_elig = industries_from_elig.loc[valid_idx]
                 industry_dummies = pd.get_dummies(industries_from_elig, dtype=float)
-                canonical_scores = canonicalize_style_scores(
-                    style_scores=style_scores,
+                canonical_scores_core, canonical_model = fit_and_apply_style_canonicalization(
+                    style_scores=style_scores_core,
                     market_caps=caps_from_elig,
                     orth_rules=FULL_STYLE_ORTH_RULES,
                     industry_exposures=industry_dummies,
+                )
+                projectable_industries = (
+                    eligibility_df.reindex(style_scores.index)["trbc_business_sector"]
+                    .fillna("")
+                    .astype(str)
+                )
+                projectable_dummies = (
+                    pd.get_dummies(projectable_industries, dtype=float)
+                    .reindex(columns=industry_dummies.columns, fill_value=0.0)
+                    .reindex(style_scores.index, fill_value=0.0)
+                )
+                canonical_scores = apply_style_canonicalization(
+                    style_scores=style_scores,
+                    model=canonical_model,
+                    industry_exposures=projectable_dummies,
                 )
                 for ric, row in canonical_scores.iterrows():
                     ticker = ticker_by_ric.get(str(ric).upper(), str(ric).upper())
                     canonical_style_map[ticker] = {
                         factor: _finite_float(row.get(factor), 0.0)
-                        for factor in canonical_scores.columns
+                        for factor in canonical_scores_core.columns
                     }
+
+    catalog_by_name = dict(factor_catalog_by_name or {})
+    catalog_by_id = factor_id_to_entry_map(catalog_by_name) if catalog_by_name else {}
+    catalog_method_version = ""
+    if catalog_by_name:
+        first_entry = next(iter(catalog_by_name.values()))
+        catalog_method_version = str(getattr(first_entry, "method_version", "") or "")
+    catalog_factor_tokens = {str(name).strip() for name in catalog_by_name}
+    if style_cols_present:
+        catalog_factor_tokens.update(STYLE_COLUMN_TO_LABEL[col] for col in style_cols_present)
+    if eligible_rics:
+        catalog_factor_tokens.add(MARKET_FACTOR)
+    if cov is None or cov.empty:
+        catalog_factor_tokens.update(
+            str(value).strip()
+            for value in eligibility_df.get("trbc_business_sector", pd.Series(dtype=str)).fillna("").astype(str)
+            if str(value).strip()
+        )
+    if cov is not None and not cov.empty:
+        catalog_factor_tokens.update(str(name).strip() for name in cov.columns if str(name).strip())
+    known_catalog_tokens = set(catalog_by_name) | set(catalog_by_id)
+    missing_catalog_names = sorted(catalog_factor_tokens - known_catalog_tokens)
+    if not catalog_by_name:
+        catalog_by_name = build_factor_catalog_for_factors(
+            sorted(catalog_factor_tokens),
+            method_version=catalog_method_version,
+        )
+    elif missing_catalog_names:
+        catalog_by_name.update(
+            build_factor_catalog_for_factors(
+                missing_catalog_names,
+                method_version=catalog_method_version,
+            )
+        )
+    catalog_by_id = factor_id_to_entry_map(catalog_by_name)
+    factor_name_to_id = factor_name_to_id_map(catalog_by_name)
 
     # Factor vol map from full-universe covariance
     factor_vol_map: dict[str, float] = {}
     if cov is not None and not cov.empty:
         for factor in cov.columns:
-            factor_vol_map[str(factor)] = float(np.sqrt(max(0.0, _finite_float(cov.loc[factor, factor], 0.0))))
+            factor_token = str(factor)
+            factor_id = (
+                factor_token
+                if factor_token in catalog_by_id
+                else factor_name_to_id.get(factor_token)
+            )
+            if not factor_id:
+                continue
+            factor_vol_map[factor_id] = float(np.sqrt(max(0.0, _finite_float(cov.loc[factor, factor], 0.0))))
 
     all_tickers = sorted(
         {
@@ -279,16 +366,24 @@ def build_universe_ticker_loadings(
             np.nan,
         )
 
-        exposures: dict[str, float] = {}
+        exposures_by_name: dict[str, float] = {}
         if structurally_eligible and ticker in canonical_style_map:
-            exposures.update(canonical_style_map[ticker])
-            if hq_country_code:
-                exposures[COUNTRY_FACTOR] = 1.0 if hq_country_code == "US" else 0.0
+            exposures_by_name.update(canonical_style_map[ticker])
+            exposures_by_name[MARKET_FACTOR] = 1.0
             if trbc_business_sector:
-                exposures[trbc_business_sector] = 1.0
+                exposures_by_name[trbc_business_sector] = 1.0
+
+        exposures = {
+            factor_name_to_id[factor_name]: value
+            for factor_name, value in exposures_by_name.items()
+            if factor_name in factor_name_to_id
+        }
 
         has_factor_exposures = bool(exposures)
-        model_eligible = bool(structurally_eligible and has_factor_exposures)
+        model_status = derive_model_status(
+            is_core_regression_member=bool(structurally_eligible and has_factor_exposures and hq_country_code == "US"),
+            is_projectable=bool(structurally_eligible and has_factor_exposures),
+        )
         if structurally_eligible and not has_factor_exposures:
             downgraded_missing_exposures.append(ticker)
 
@@ -296,16 +391,26 @@ def build_universe_ticker_loadings(
             factor: round(_finite_float(exposures.get(factor), 0.0) * _finite_float(vol, 0.0), 6)
             for factor, vol in factor_vol_map.items()
         }
-        risk_loading = round(float(sum(abs(v) for v in sensitivities.values())), 6) if model_eligible else None
+        risk_loading = round(float(sum(abs(v) for v in sensitivities.values())), 6) if has_factor_exposures else None
         spec = (specific_risk_by_ticker or {}).get(ric, {}) if ric else {}
         if not spec:
             spec = (specific_risk_by_ticker or {}).get(ticker, {})
-        spec_var = _finite_float(spec.get("specific_var"), np.nan) if model_eligible else np.nan
-        spec_vol = _finite_float(spec.get("specific_vol"), np.nan) if model_eligible else np.nan
+        spec_var = _finite_float(spec.get("specific_var"), np.nan) if has_factor_exposures else np.nan
+        spec_vol = _finite_float(spec.get("specific_vol"), np.nan) if has_factor_exposures else np.nan
 
-        if model_eligible:
+        omitted_unmodeled_sector = bool(
+            structurally_eligible
+            and trbc_business_sector
+            and trbc_business_sector not in factor_name_to_id
+        )
+
+        if has_factor_exposures:
             eligibility_reason = ""
-            model_warning = ""
+            model_warning = (
+                "Business sector is outside the current modeled factor set; sector effect is carried in specific risk."
+                if omitted_unmodeled_sector
+                else ""
+            )
         elif structurally_eligible:
             eligibility_reason = "missing_factor_exposures"
             selected_date = latest_asof or "current"
@@ -332,7 +437,7 @@ def build_universe_ticker_loadings(
             "risk_loading": risk_loading,
             "specific_var": round(spec_var, 8) if np.isfinite(spec_var) else None,
             "specific_vol": round(spec_vol, 6) if np.isfinite(spec_vol) else None,
-            "eligible_for_model": model_eligible,
+            "model_status": model_status,
             "eligibility_reason": eligibility_reason,
             "model_warning": model_warning,
             "as_of_date": latest_asof,
@@ -362,43 +467,61 @@ def build_universe_ticker_loadings(
             "trbc_industry_group": d.get("trbc_industry_group", ""),
             "risk_loading": d.get("risk_loading", 0.0),
             "specific_vol": d.get("specific_vol", None),
-            "eligible_for_model": bool(d.get("eligible_for_model", False)),
+            "model_status": str(d.get("model_status") or "ineligible"),
             "eligibility_reason": str(d.get("eligibility_reason") or ""),
         }
         for t, d in universe_by_ticker.items()
     ]
     search_index.sort(key=lambda x: str(x["ticker"]))
 
-    eligible_count = int(sum(1 for d in universe_by_ticker.values() if bool(d.get("eligible_for_model", False))))
+    core_estimated_count = int(
+        sum(1 for d in universe_by_ticker.values() if str(d.get("model_status") or "") == "core_estimated")
+    )
+    projected_only_count = int(
+        sum(1 for d in universe_by_ticker.values() if str(d.get("model_status") or "") == "projected_only")
+    )
+    ineligible_count = int(
+        sum(1 for d in universe_by_ticker.values() if str(d.get("model_status") or "") == "ineligible")
+    )
+    eligible_count = core_estimated_count + projected_only_count
     return {
         "ticker_count": len(universe_by_ticker),
         "eligible_ticker_count": eligible_count,
+        "core_estimated_ticker_count": core_estimated_count,
+        "projected_only_ticker_count": projected_only_count,
+        "ineligible_ticker_count": ineligible_count,
+        "as_of_date": latest_asof or None,
+        "latest_available_asof": latest_available_asof or None,
         "factor_count": len(factor_vol_map),
         "factors": sorted(factor_vol_map.keys()),
         "factor_vols": {k: round(v, 6) for k, v in factor_vol_map.items()},
+        "factor_catalog": serialize_factor_catalog(catalog_by_name),
         "index": search_index,
         "by_ticker": universe_by_ticker,
     }
 
 
-def load_latest_factor_coverage(cache_db: Path) -> tuple[str | None, dict[str, FactorCoveragePayload]]:
-    """Load latest per-factor cross-section coverage stats from cache DB."""
-    conn = sqlite3.connect(str(cache_db))
+def _load_factor_coverage_rows(
+    db_path: Path,
+    *,
+    table: str,
+    date_col: str,
+) -> tuple[str | None, dict[str, FactorCoveragePayload]]:
+    conn = sqlite3.connect(str(db_path))
     try:
-        latest_row = conn.execute("SELECT MAX(date) FROM daily_factor_returns").fetchone()
+        latest_row = conn.execute(f"SELECT MAX({date_col}) FROM {table}").fetchone()
         latest = str(latest_row[0]) if latest_row and latest_row[0] else None
         if latest is None:
             return None, {}
         rows = conn.execute(
-            """
+            f"""
             SELECT factor_name, cross_section_n, eligible_n, coverage
-            FROM daily_factor_returns
-            WHERE date = ?
+            FROM {table}
+            WHERE {date_col} = ?
             """,
             (latest,),
         ).fetchall()
     except sqlite3.OperationalError:
-        # Backward-compat if cache schema doesn't have coverage columns yet.
         return None, {}
     finally:
         conn.close()
@@ -411,3 +534,25 @@ def load_latest_factor_coverage(cache_db: Path) -> tuple[str | None, dict[str, F
             "coverage_pct": float(coverage or 0.0),
         }
     return latest, out
+
+
+def load_latest_factor_coverage(
+    cache_db: Path,
+    *,
+    data_db: Path | None = None,
+) -> tuple[str | None, dict[str, FactorCoveragePayload]]:
+    """Load latest factor coverage, preferring durable model outputs over legacy cache history."""
+    if data_db is not None and Path(data_db).exists():
+        latest, out = _load_factor_coverage_rows(
+            Path(data_db),
+            table="model_factor_returns_daily",
+            date_col="date",
+        )
+        if latest is not None and out:
+            return latest, out
+
+    return _load_factor_coverage_rows(
+        Path(cache_db),
+        table="daily_factor_returns",
+        date_col="date",
+    )

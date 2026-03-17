@@ -141,9 +141,9 @@ curl -s http://127.0.0.1:8000/api/refresh/status
   - deferred to later phase (not in initial holdings schema/load).
 
 ### Holdings Commands
-Seed holdings from current mock `positions_store`:
+Import holdings from a canonical CSV file:
 ```bash
-python3 -m backend.scripts.neon_holdings_seed_mock --account-id main_mock --json
+python3 -m backend.scripts.neon_holdings_import_csv --csv-path holdings.csv --mode replace_account --account-id main --json
 ```
 
 Import holdings CSV:

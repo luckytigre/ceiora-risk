@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/down.sh"
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/up.sh"
+"$ROOT_DIR/scripts/local_app/down.sh"
+"$ROOT_DIR/scripts/local_app/up.sh"
+

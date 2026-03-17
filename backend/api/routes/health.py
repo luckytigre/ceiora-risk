@@ -6,8 +6,7 @@ from fastapi import APIRouter, Header
 
 from backend.api.auth import require_role
 from backend.api.routes.readiness import raise_cache_not_ready
-from backend.data.serving_outputs import load_current_payload
-from backend.data.sqlite import cache_get
+from backend.services import health_diagnostics_service
 
 router = APIRouter()
 
@@ -22,12 +21,11 @@ async def get_health_diagnostics(
         x_operator_token=x_operator_token,
         authorization=authorization,
     )
-    data = load_current_payload("health_diagnostics")
-    if data is None:
-        data = cache_get("health_diagnostics")
-    if data is not None:
-        return {**data, "_cached": True}
-    raise_cache_not_ready(
-        cache_key="health_diagnostics",
-        message="Health diagnostics are not ready yet. Run serve-refresh or a deeper local refresh.",
-    )
+    try:
+        return health_diagnostics_service.load_health_diagnostics_payload()
+    except health_diagnostics_service.HealthDiagnosticsNotReady as exc:
+        raise_cache_not_ready(
+            cache_key=exc.cache_key,
+            message=exc.message,
+            refresh_profile=exc.refresh_profile,
+        )

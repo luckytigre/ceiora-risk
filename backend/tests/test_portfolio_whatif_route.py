@@ -18,24 +18,26 @@ def test_portfolio_whatif_route_returns_preview_payload(monkeypatch) -> None:
                 "positions": [{"ticker": "AAA", "trbc_sector": "Technology"}],
                 "total_value": 100.0,
                 "position_count": 1,
-                "risk_shares": {"country": 1.0, "industry": 2.0, "style": 3.0, "idio": 94.0},
-                "component_shares": {"country": 1.0, "industry": 2.0, "style": 3.0},
+                "risk_shares": {"market": 1.0, "industry": 2.0, "style": 3.0, "idio": 94.0},
+                "component_shares": {"market": 1.0, "industry": 2.0, "style": 3.0},
                 "factor_details": [],
                 "exposure_modes": {"raw": [], "sensitivity": [], "risk_contribution": []},
+                "factor_catalog": [],
             },
             "hypothetical": {
                 "positions": [{"ticker": "AAA", "trbc_sector": "Technology"}],
                 "total_value": 120.0,
                 "position_count": 1,
-                "risk_shares": {"country": 2.0, "industry": 2.0, "style": 4.0, "idio": 92.0},
-                "component_shares": {"country": 2.0, "industry": 2.0, "style": 4.0},
+                "risk_shares": {"market": 2.0, "industry": 2.0, "style": 4.0, "idio": 92.0},
+                "component_shares": {"market": 2.0, "industry": 2.0, "style": 4.0},
                 "factor_details": [],
                 "exposure_modes": {"raw": [], "sensitivity": [], "risk_contribution": []},
+                "factor_catalog": [],
             },
             "diff": {
                 "total_value": 20.0,
                 "position_count": 0,
-                "risk_shares": {"country": 1.0, "industry": 0.0, "style": 1.0, "idio": -2.0},
+                "risk_shares": {"market": 1.0, "industry": 0.0, "style": 1.0, "idio": -2.0},
                 "factor_deltas": {"raw": [], "sensitivity": [], "risk_contribution": []},
             },
             "source_dates": {},
@@ -131,7 +133,7 @@ def test_portfolio_whatif_preview_requires_operator_token_in_cloud(monkeypatch) 
     monkeypatch.setattr(portfolio_routes.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
-    monkeypatch.setattr(portfolio_routes, "preview_portfolio_whatif", lambda scenario_rows: {"scenario_rows": scenario_rows, "holding_deltas": [], "current": {"positions": [], "total_value": 0.0, "position_count": 0, "risk_shares": {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}, "component_shares": {"country": 0.0, "industry": 0.0, "style": 0.0}, "factor_details": [], "exposure_modes": {"raw": [], "sensitivity": [], "risk_contribution": []}}, "hypothetical": {"positions": [], "total_value": 0.0, "position_count": 0, "risk_shares": {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}, "component_shares": {"country": 0.0, "industry": 0.0, "style": 0.0}, "factor_details": [], "exposure_modes": {"raw": [], "sensitivity": [], "risk_contribution": []}}, "diff": {"total_value": 0.0, "position_count": 0, "risk_shares": {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}, "factor_deltas": {"raw": [], "sensitivity": [], "risk_contribution": []}}, "_preview_only": True})
+    monkeypatch.setattr(portfolio_routes, "preview_portfolio_whatif", lambda scenario_rows: {"scenario_rows": scenario_rows, "holding_deltas": [], "current": {"positions": [], "total_value": 0.0, "position_count": 0, "risk_shares": {"market": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}, "component_shares": {"market": 0.0, "industry": 0.0, "style": 0.0}, "factor_details": [], "exposure_modes": {"raw": [], "sensitivity": [], "risk_contribution": []}, "factor_catalog": []}, "hypothetical": {"positions": [], "total_value": 0.0, "position_count": 0, "risk_shares": {"market": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}, "component_shares": {"market": 0.0, "industry": 0.0, "style": 0.0}, "factor_details": [], "exposure_modes": {"raw": [], "sensitivity": [], "risk_contribution": []}, "factor_catalog": []}, "diff": {"total_value": 0.0, "position_count": 0, "risk_shares": {"market": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}, "factor_deltas": {"raw": [], "sensitivity": [], "risk_contribution": []}}, "_preview_only": True})
 
     client = TestClient(app)
     payload = {"scenario_rows": [{"account_id": "acct_a", "ticker": "AAA", "quantity": 20}]}

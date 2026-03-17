@@ -11,7 +11,6 @@ from backend.services.neon_holdings import (
     apply_ticker_bucket_scenario,
     apply_holdings_import,
     apply_single_position_edit,
-    ensure_holdings_runtime_compat,
     list_holdings_accounts,
     list_holdings_positions,
     parse_holdings_rows,
@@ -24,7 +23,7 @@ def trigger_light_refresh_if_requested(trigger: bool) -> dict[str, Any] | None:
     if not bool(trigger):
         return None
     started, state = start_refresh(
-        mode="light",
+        profile="serve-refresh",
         force_risk_recompute=False,
         refresh_scope="holdings_only",
     )
@@ -215,7 +214,6 @@ def run_whatif_apply(
 ) -> dict[str, Any]:
     conn = connect(dsn=resolve_dsn(None), autocommit=False)
     try:
-        ensure_holdings_runtime_compat(conn)
         out = apply_ticker_bucket_scenario(
             conn,
             scenario_rows=scenario_rows,

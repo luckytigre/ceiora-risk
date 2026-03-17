@@ -15,6 +15,7 @@ from backend.api.routes import refresh as refresh_routes
 
 orchestrator = importlib.import_module("backend.orchestration.run_model_pipeline")
 refresh_manager = importlib.import_module("backend.services.refresh_manager")
+operator_status_service = importlib.import_module("backend.services.operator_status_service")
 
 def test_cloud_refresh_requires_operator_token(monkeypatch) -> None:
     monkeypatch.setattr(refresh_routes.config, "APP_RUNTIME_ROLE", "cloud-serve")
@@ -26,7 +27,19 @@ def test_cloud_refresh_requires_operator_token(monkeypatch) -> None:
     )
     client = TestClient(app)
     assert client.post("/api/refresh").status_code == 401
+    assert client.post("/api/refresh", headers={"X-Operator-Token": "op-secret"}).status_code == 202
     assert client.post("/api/refresh", headers={"X-Refresh-Token": "op-secret"}).status_code == 202
+
+
+def test_cloud_refresh_status_accepts_operator_header(monkeypatch) -> None:
+    monkeypatch.setattr(refresh_routes.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(refresh_routes.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(refresh_routes, "get_refresh_status", lambda: {"status": "idle"})
+
+    client = TestClient(app)
+    res = client.get("/api/refresh/status", headers={"X-Operator-Token": "op-secret"})
+    assert res.status_code == 200
+    assert res.json()["refresh"]["status"] == "idle"
 
 
 def test_cloud_holdings_write_requires_editor_or_operator_token(monkeypatch) -> None:
@@ -57,7 +70,11 @@ def test_cloud_holdings_write_requires_editor_or_operator_token(monkeypatch) -> 
 def test_cloud_expensive_diagnostics_require_operator_token(monkeypatch) -> None:
     monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
-    monkeypatch.setattr(health_routes, "cache_get", lambda key: {"status": "ok"} if key == "health_diagnostics" else None)
+    monkeypatch.setattr(
+        health_routes.health_diagnostics_service,
+        "load_runtime_payload",
+        lambda key, fallback_loader=None: {"status": "ok"} if key == "health_diagnostics" else None,
+    )
 
     client = TestClient(app)
     assert client.get("/api/data/diagnostics?include_expensive_checks=true").status_code == 401
@@ -71,10 +88,9 @@ def test_cloud_operator_status_requires_operator_token(monkeypatch) -> None:
     monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(operator_route.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(operator_route.config, "OPERATOR_API_TOKEN", "op-secret")
-    monkeypatch.setattr(operator_route.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
-    monkeypatch.setattr(operator_route.job_runs, "recent_run_summaries_by_profile", lambda **kwargs: {})
-    monkeypatch.setattr(operator_route.core_reads, "load_source_dates", lambda: {})
-    monkeypatch.setattr(operator_route.sqlite, "cache_get", lambda key: {})
+    monkeypatch.setattr(operator_status_service.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
+    monkeypatch.setattr(operator_status_service.core_reads, "load_source_dates", lambda: {})
+    monkeypatch.setattr(operator_status_service.sqlite, "cache_get", lambda key: {})
 
     client = TestClient(app)
     assert client.get("/api/operator/status").status_code == 401
@@ -96,12 +112,15 @@ def test_cloud_runtime_role_blocks_ingest_stage(monkeypatch) -> None:
     )
 
     out = orchestrator._run_stage(
+        profile="source-daily",
         stage="ingest",
         as_of_date="2026-03-09",
         should_run_core=False,
         serving_mode="light",
         force_core=False,
         core_reason="test",
+        data_db=orchestrator.DATA_DB,
+        cache_db=orchestrator.CACHE_DB,
         raw_history_policy="none",
         reset_core_cache=False,
         enable_ingest=True,
@@ -135,8 +154,8 @@ def test_cloud_refresh_defaults_to_serve_refresh_when_profile_omitted(monkeypatc
             True,
             {
                 "status": "running",
-                "profile": kwargs.get("profile"),
-                "mode": kwargs.get("mode"),
+                "profile": kwargs.get("profile") or "serve-refresh",
+                "mode": "light",
             },
         ),
     )

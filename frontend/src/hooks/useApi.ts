@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { ApiError, apiFetch, apiPath, type RefreshMode } from "@/lib/api";
+import { ApiError, apiFetch, apiPath } from "@/lib/api";
 import type {
   PortfolioData,
   WhatIfApplyResponse,
@@ -77,8 +77,8 @@ export function useExposures(mode: string) {
   return useSWR<ExposuresData>(apiPath.exposures(mode), apiFetch, SWR_OPTS);
 }
 
-export function useFactorHistory(factor: string | null, years = 5) {
-  const key = factor ? apiPath.exposureHistory(factor, years) : null;
+export function useFactorHistory(factorId: string | null, years = 5) {
+  const key = factorId ? apiPath.exposureHistory(factorId, years) : null;
   return useSWR<FactorHistoryData>(key, apiFetch, SWR_OPTS);
 }
 
@@ -128,14 +128,6 @@ export function useRefreshStatus(enabled = true) {
     ...SWR_OPTS,
     refreshInterval: refreshStatusRefreshInterval,
   });
-}
-
-export async function triggerRefresh(mode: RefreshMode = "full"): Promise<{
-  status: string;
-  message?: string;
-  refresh?: RefreshStatusData["refresh"];
-}> {
-  return apiFetch(apiPath.refresh(mode), { method: "POST" });
 }
 
 export async function triggerRefreshProfile(profile: string): Promise<{

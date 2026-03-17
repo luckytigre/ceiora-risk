@@ -6,6 +6,7 @@ import json
 import sqlite3
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from backend import config
@@ -24,28 +25,34 @@ _SNAPSHOT_POINTER_KEY = "__cache_snapshot_active"
 _SNAPSHOT_KEY_PREFIX = "__snap__:"
 
 
-def _conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(config.SQLITE_PATH, timeout=float(config.SQLITE_TIMEOUT_SECONDS))
+def _resolved_db_path(db_path: Path | str | None = None) -> str:
+    if db_path is None:
+        return str(config.SQLITE_PATH)
+    return str(Path(db_path).expanduser().resolve())
+
+
+def _conn(*, db_path: Path | str | None = None) -> sqlite3.Connection:
+    conn = sqlite3.connect(_resolved_db_path(db_path), timeout=float(config.SQLITE_TIMEOUT_SECONDS))
     conn.execute(f"PRAGMA busy_timeout={int(config.SQLITE_BUSY_TIMEOUT_MS)}")
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
-def _ensure_schema() -> None:
+def _ensure_schema(*, db_path: Path | str | None = None) -> None:
     global _SCHEMA_READY, _SCHEMA_READY_PATH
-    db_path = str(config.SQLITE_PATH)
-    if _SCHEMA_READY and _SCHEMA_READY_PATH == db_path:
+    resolved_db_path = _resolved_db_path(db_path)
+    if _SCHEMA_READY and _SCHEMA_READY_PATH == resolved_db_path:
         return
     with _SCHEMA_LOCK:
-        if _SCHEMA_READY and _SCHEMA_READY_PATH == db_path:
+        if _SCHEMA_READY and _SCHEMA_READY_PATH == resolved_db_path:
             return
-        conn = _conn()
+        conn = _conn(db_path=db_path)
         try:
             conn.execute(_SCHEMA)
             conn.commit()
             _SCHEMA_READY = True
-            _SCHEMA_READY_PATH = db_path
+            _SCHEMA_READY_PATH = resolved_db_path
         finally:
             conn.close()
 
@@ -104,12 +111,12 @@ def _run_with_lock_retry(fn):
             time.sleep(delay_s * (attempt + 1))
 
 
-def cache_get(key: str) -> Any | None:
+def cache_get(key: str, *, db_path: Path | str | None = None) -> Any | None:
     """Retrieve a cached value, or None if missing."""
-    _ensure_schema()
+    _ensure_schema(db_path=db_path)
 
     def _work() -> Any | None:
-        conn = _conn()
+        conn = _conn(db_path=db_path)
         try:
             if key == _SNAPSHOT_POINTER_KEY:
                 row = conn.execute(
@@ -140,12 +147,12 @@ def cache_get(key: str) -> Any | None:
     return _run_with_lock_retry(_work)
 
 
-def cache_get_live(key: str) -> Any | None:
+def cache_get_live(key: str, *, db_path: Path | str | None = None) -> Any | None:
     """Retrieve a cache value by raw key, ignoring the active snapshot pointer."""
-    _ensure_schema()
+    _ensure_schema(db_path=db_path)
 
     def _work() -> Any | None:
-        conn = _conn()
+        conn = _conn(db_path=db_path)
         try:
             row = conn.execute(
                 "SELECT value FROM cache WHERE key = ?",
@@ -160,21 +167,27 @@ def cache_get_live(key: str) -> Any | None:
     return _run_with_lock_retry(_work)
 
 
-def cache_get_live_first(key: str) -> Any | None:
+def cache_get_live_first(key: str, *, db_path: Path | str | None = None) -> Any | None:
     """Retrieve the raw cache value first, then fall back to the active snapshot."""
-    live_value = cache_get_live(key)
+    live_value = cache_get_live(key, db_path=db_path)
     if live_value is not None:
         return live_value
-    return cache_get(key)
+    return cache_get(key, db_path=db_path)
 
 
-def cache_set(key: str, value: Any, *, snapshot_id: str | None = None) -> None:
+def cache_set(
+    key: str,
+    value: Any,
+    *,
+    snapshot_id: str | None = None,
+    db_path: Path | str | None = None,
+) -> None:
     """Store a JSON-serializable value in the cache."""
-    _ensure_schema()
+    _ensure_schema(db_path=db_path)
     write_key = _snapshot_key(str(snapshot_id).strip(), key) if snapshot_id else key
 
     def _work() -> None:
-        conn = _conn()
+        conn = _conn(db_path=db_path)
         try:
             conn.execute(
                 "INSERT OR REPLACE INTO cache (key, value, updated_at) VALUES (?, ?, ?)",
@@ -187,15 +200,15 @@ def cache_set(key: str, value: Any, *, snapshot_id: str | None = None) -> None:
     _run_with_lock_retry(_work)
 
 
-def cache_publish_snapshot(snapshot_id: str) -> None:
+def cache_publish_snapshot(snapshot_id: str, *, db_path: Path | str | None = None) -> None:
     """Atomically publish a staged snapshot by switching active pointer."""
     clean = str(snapshot_id).strip()
     if not clean:
         raise ValueError("snapshot_id is required")
-    _ensure_schema()
+    _ensure_schema(db_path=db_path)
 
     def _work() -> None:
-        conn = _conn()
+        conn = _conn(db_path=db_path)
         try:
             payload = {
                 "snapshot_id": clean,

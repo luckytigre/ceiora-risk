@@ -39,7 +39,7 @@ export default function SectionFactorReturns({ data }: { data: HealthDiagnostics
           onChange={(e) => setSelectedReturnFactor(e.target.value)}
         >
           {returnFactors.map((f) => (
-            <option key={f} value={f}>{shortFactorLabel(f)}</option>
+            <option key={f} value={f}>{shortFactorLabel(f, data.factor_catalog)}</option>
           ))}
         </select>
       </div>
@@ -102,7 +102,7 @@ export default function SectionFactorReturns({ data }: { data: HealthDiagnostics
             minHeight={320}
             fallback={<div className="detail-history-empty">Scroll to load the factor return heatmap.</div>}
           >
-            <CovarianceHeatmap data={data.section3.return_corr} />
+            <CovarianceHeatmap data={data.section3.return_corr} factorCatalog={data.factor_catalog} />
           </LazyMountOnVisible>
         </div>
       </div>

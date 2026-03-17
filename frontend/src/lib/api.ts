@@ -1,8 +1,6 @@
 const BASE = "";
 const REQUEST_TIMEOUT_MS = 30000;
 
-export type RefreshMode = "full" | "light" | "cold";
-
 export class ApiError extends Error {
   status: number;
   url: string;
@@ -37,8 +35,8 @@ export const apiPath = {
   holdingsPosition: () => "/api/holdings/position",
   holdingsPositionRemove: () => "/api/holdings/position/remove",
   exposures: (mode: string) => `/api/exposures?mode=${encodeURIComponent(mode)}`,
-  exposureHistory: (factor: string, years: number) =>
-    `/api/exposures/history?factor=${encodeURIComponent(factor)}&years=${years}`,
+  exposureHistory: (factorId: string, years: number) =>
+    `/api/exposures/history?factor_id=${encodeURIComponent(factorId)}&years=${years}`,
   risk: () => "/api/risk",
   universeTicker: (ticker: string) => `/api/universe/ticker/${encodeURIComponent(ticker)}`,
   universeTickerHistory: (ticker: string, years: number) =>
@@ -55,7 +53,6 @@ export const apiPath = {
     return qs ? `/api/data/diagnostics?${qs}` : "/api/data/diagnostics";
   },
   operatorStatus: () => "/api/operator/status",
-  refresh: (mode: RefreshMode) => `/api/refresh?mode=${mode}`,
   refreshProfile: (profile: string) => `/api/refresh?profile=${encodeURIComponent(profile)}`,
   refreshStatus: () => "/api/refresh/status",
 };

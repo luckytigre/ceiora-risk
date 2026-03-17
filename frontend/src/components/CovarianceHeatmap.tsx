@@ -1,12 +1,12 @@
 "use client";
 
 import { useRef, useEffect, useState, useMemo, useCallback } from "react";
-import type { CovMatrix } from "@/lib/types";
-import { STYLE_FACTORS } from "@/lib/factorLabels";
-import { shortFactorLabel } from "@/lib/factorLabels";
+import type { CovMatrix, FactorCatalogEntry } from "@/lib/types";
+import { factorDisplayName, factorFamily, shortFactorLabel } from "@/lib/factorLabels";
 
 interface CovarianceHeatmapProps {
   data: CovMatrix;
+  factorCatalog?: FactorCatalogEntry[];
 }
 
 const STYLE_ORDER: string[] = [
@@ -35,16 +35,26 @@ function corrColorStr(v: number): string {
   }
 }
 
-function filterStyleFactors(data: CovMatrix): { factors: string[]; correlation: number[][] } {
+function filterStyleFactors(
+  data: CovMatrix,
+  factorCatalog?: FactorCatalogEntry[],
+): { factors: string[]; correlation: number[][] } {
   const factors = data.factors ?? [];
   const correlation = data.correlation ?? data.matrix ?? [];
   const idxMap = new Map<string, number>();
   factors.forEach((f, i) => idxMap.set(f, i));
 
-  const ordered = STYLE_ORDER.filter((f) => idxMap.has(f));
-  for (const f of factors) {
-    if (STYLE_FACTORS.has(f) && !ordered.includes(f)) ordered.push(f);
-  }
+  const styleFactors = factors.filter((factor) => factorFamily(factor, factorCatalog) === "style");
+  const ordered = [...styleFactors].sort((a, b) => {
+    const aName = factorDisplayName(a, factorCatalog);
+    const bName = factorDisplayName(b, factorCatalog);
+    const aIdx = STYLE_ORDER.indexOf(aName);
+    const bIdx = STYLE_ORDER.indexOf(bName);
+    if (aIdx >= 0 && bIdx >= 0) return aIdx - bIdx;
+    if (aIdx >= 0) return -1;
+    if (bIdx >= 0) return 1;
+    return aName.localeCompare(bName);
+  });
 
   const indices = ordered.map((f) => idxMap.get(f)!).filter((i) => i !== undefined);
   const filteredFactors = indices.map((i) => factors[i]);
@@ -173,14 +183,14 @@ function drawHeatmap(
   }
 }
 
-export default function CovarianceHeatmap({ data }: CovarianceHeatmapProps) {
+export default function CovarianceHeatmap({ data, factorCatalog }: CovarianceHeatmapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const geoRef = useRef<Geometry | null>(null);
   const [hover, setHover] = useState<{ i: number; j: number } | null>(null);
   const [containerW, setContainerW] = useState(0);
 
-  const filtered = useMemo(() => filterStyleFactors(data), [data]);
+  const filtered = useMemo(() => filterStyleFactors(data, factorCatalog), [data, factorCatalog]);
 
   // Track container width
   useEffect(() => {
@@ -223,7 +233,7 @@ export default function CovarianceHeatmap({ data }: CovarianceHeatmapProps) {
     if (!ctx) return;
 
     const n = filtered.factors.length;
-    const labels = filtered.factors.map(shortFactorLabel);
+    const labels = filtered.factors.map((factor) => shortFactorLabel(factor, factorCatalog));
     const geo = computeGeometry(n, labels, containerW);
     geoRef.current = geo;
 
@@ -235,7 +245,7 @@ export default function CovarianceHeatmap({ data }: CovarianceHeatmapProps) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     drawHeatmap(ctx, geo, filtered.correlation, null);
-  }, [filtered, containerW]);
+  }, [filtered, containerW, factorCatalog]);
 
   // Redraw on hover change
   useEffect(() => {

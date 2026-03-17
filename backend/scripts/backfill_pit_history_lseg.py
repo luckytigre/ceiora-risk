@@ -15,6 +15,7 @@ import pandas as pd
 
 from backend.scripts.download_data_lseg import download_from_lseg
 from backend.trading_calendar import previous_or_same_xnys_session
+from backend.universe.security_master_sync import load_default_source_universe_rows
 
 
 def _pit_dates(start_date: str, end_date: str, *, frequency: str) -> list[str]:
@@ -29,13 +30,27 @@ def _pit_dates(start_date: str, end_date: str, *, frequency: str) -> list[str]:
 def _eligible_universe_count(db_path: Path) -> int:
     conn = sqlite3.connect(str(db_path))
     try:
+        return int(len(load_default_source_universe_rows(conn, include_pending_seed=False)))
+    finally:
+        conn.close()
+
+
+def _requested_ric_count(db_path: Path, rics_csv: str | None) -> int:
+    requested = [str(r).strip().upper() for r in str(rics_csv or "").split(",") if str(r).strip()]
+    if not requested:
+        return 0
+    conn = sqlite3.connect(str(db_path))
+    try:
+        placeholders = ",".join("?" for _ in requested)
         row = conn.execute(
-            """
+            f"""
             SELECT COUNT(*)
             FROM security_master
-            WHERE COALESCE(classification_ok, 0) = 1
-              AND COALESCE(is_equity_eligible, 0) = 1
-            """
+            WHERE ric IS NOT NULL
+              AND TRIM(ric) <> ''
+              AND UPPER(TRIM(ric)) IN ({placeholders})
+            """,
+            requested,
         ).fetchone()
         return int(row[0] or 0) if row else 0
     finally:
@@ -107,6 +122,7 @@ def _filter_incomplete_dates(
     *,
     db_path: Path,
     dates: list[str],
+    rics_csv: str | None,
     write_fundamentals: bool,
     write_prices: bool,
     write_classification: bool,
@@ -114,7 +130,7 @@ def _filter_incomplete_dates(
 ) -> tuple[list[str], int]:
     if not skip_complete_dates:
         return dates, 0
-    universe_n = _eligible_universe_count(db_path)
+    universe_n = _requested_ric_count(db_path, rics_csv) if rics_csv else _eligible_universe_count(db_path)
     if universe_n <= 0:
         return dates, 0
     conn = sqlite3.connect(str(db_path))
@@ -212,6 +228,7 @@ def run_backfill(
     dates, skipped_dates = _filter_incomplete_dates(
         db_path=db_path,
         dates=dates,
+        rics_csv=rics_csv,
         write_fundamentals=bool(write_fundamentals),
         write_prices=bool(write_prices),
         write_classification=bool(write_classification),

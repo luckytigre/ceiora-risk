@@ -4,6 +4,7 @@ import type { Ref } from "react";
 import ExposureBarChart from "@/components/ExposureBarChart";
 import { shortFactorLabel } from "@/lib/factorLabels";
 import type { WhatIfPreviewData } from "@/lib/types";
+import { formatAsOfDate } from "@/lib/analyticsTruth";
 import { fmtQty, WHAT_IF_MODES, type WhatIfMode } from "@/features/whatif/whatIfUtils";
 
 interface WhatIfPreviewPanelProps {
@@ -33,6 +34,12 @@ export default function WhatIfPreviewPanel({
     );
   }
 
+  const truthSurface = String(previewData.truth_surface || "").trim();
+  const servedModelPreview = truthSurface === "live_holdings_projected_through_current_served_model";
+  const currentSideDescription = servedModelPreview
+    ? "Current side = live holdings projected through the current served model snapshot"
+    : "Current side = live holdings projected through current published loadings plus live risk-cache fallback";
+
   return (
     <>
       <div
@@ -58,6 +65,17 @@ export default function WhatIfPreviewPanel({
 
       {showResults && (
         <div className="whatif-results-body">
+          <div className="section-subtitle" style={{ marginBottom: 12 }}>
+            {currentSideDescription}
+            {previewData.serving_snapshot?.snapshot_id ? ` ${previewData.serving_snapshot.snapshot_id}` : ""}.
+            {servedModelPreview
+              ? " This preview is exploratory and does not replace the dashboard’s published truth surface."
+              : " Risk inputs are temporarily falling back to live cache because the current published snapshot predates the new durable risk payloads."}
+            Dashboard pages only change after `RECALC` publishes a new snapshot.
+            {previewData.source_dates?.exposures_served_asof
+              ? ` Served exposures are as of ${formatAsOfDate(previewData.source_dates.exposures_served_asof)}.`
+              : ""}
+          </div>
           <div className="explore-mode-toggle">
             {WHAT_IF_MODES.map((entry) => (
               <button
@@ -73,8 +91,12 @@ export default function WhatIfPreviewPanel({
 
           <div className="explore-detail-grid">
             <div className="chart-card">
-              <span className="explore-compare-label">Current Portfolio</span>
-              <ExposureBarChart factors={previewData.current.exposure_modes[mode]} mode={mode} />
+              <span className="explore-compare-label">Live Holdings Preview</span>
+              <ExposureBarChart
+                factors={previewData.current.exposure_modes[mode]}
+                mode={mode}
+                factorCatalog={previewData.current.factor_catalog}
+              />
             </div>
             <div className="chart-card">
               <span className="explore-compare-label">Hypothetical Portfolio</span>
@@ -82,6 +104,7 @@ export default function WhatIfPreviewPanel({
                 factors={previewData.hypothetical.exposure_modes[mode]}
                 mode={mode}
                 orderByFactors={currentModeFactorOrder}
+                factorCatalog={previewData.hypothetical.factor_catalog}
               />
             </div>
           </div>
@@ -99,7 +122,7 @@ export default function WhatIfPreviewPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {(["country", "industry", "style", "idio"] as const).map((bucket) => (
+                  {(["market", "industry", "style", "idio"] as const).map((bucket) => (
                     <tr key={bucket}>
                       <td>{bucket}</td>
                       <td className="text-right">{previewData.current.risk_shares[bucket].toFixed(2)}%</td>
@@ -158,11 +181,11 @@ export default function WhatIfPreviewPanel({
                   <th className="text-right">Hypothetical</th>
                   <th className="text-right">Delta</th>
                 </tr>
-              </thead>
-              <tbody>
-                {previewData.diff.factor_deltas[mode].map((row) => (
-                  <tr key={row.factor}>
-                    <td>{shortFactorLabel(row.factor)}</td>
+                </thead>
+                <tbody>
+                  {previewData.diff.factor_deltas[mode].map((row) => (
+                  <tr key={row.factor_id}>
+                    <td>{shortFactorLabel(row.factor_id, previewData.current.factor_catalog)}</td>
                     <td className="text-right">{row.current.toFixed(mode === "risk_contribution" ? 2 : 4)}{mode === "risk_contribution" ? "%" : ""}</td>
                     <td className="text-right">{row.hypothetical.toFixed(mode === "risk_contribution" ? 2 : 4)}{mode === "risk_contribution" ? "%" : ""}</td>
                     <td className={`text-right ${row.delta >= 0 ? "positive" : "negative"}`.trim()}>

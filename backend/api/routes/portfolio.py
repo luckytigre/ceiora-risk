@@ -11,9 +11,8 @@ from backend import config
 from backend.api.auth import require_role
 from backend.api.routes.presenters import normalize_trbc_sector_fields
 from backend.api.routes.readiness import raise_cache_not_ready
-from backend.data.serving_outputs import load_current_payload
-from backend.data.sqlite import cache_get
 from backend.services import holdings_service
+from backend.services import dashboard_payload_service
 from backend.services.portfolio_whatif import preview_portfolio_whatif
 
 router = APIRouter()
@@ -40,19 +39,16 @@ class WhatIfApplyRequest(BaseModel):
 
 @router.get("/portfolio")
 async def get_portfolio():
-    data = load_current_payload("portfolio")
-    if data is None and not config.cloud_mode():
-        data = cache_get("portfolio")
-    if data is None:
-        raise_cache_not_ready(
-            cache_key="portfolio",
-            message="Portfolio cache is empty. Run refresh to build positions.",
-            refresh_mode="light",
+    try:
+        return dashboard_payload_service.load_portfolio_response(
+            position_normalizer=normalize_trbc_sector_fields,
         )
-    positions = []
-    for raw in data.get("positions", []):
-        positions.append(normalize_trbc_sector_fields(raw))
-    return {**data, "positions": positions, "_cached": True}
+    except dashboard_payload_service.DashboardPayloadNotReady as exc:
+        raise_cache_not_ready(
+            cache_key=exc.cache_key,
+            message=exc.message,
+            refresh_profile=exc.refresh_profile,
+        )
 
 
 @router.post("/portfolio/whatif")

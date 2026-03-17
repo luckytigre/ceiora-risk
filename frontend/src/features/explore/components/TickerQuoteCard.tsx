@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ExposureBarChart from "@/components/ExposureBarChart";
 import TickerWeeklyPriceChart from "@/components/TickerWeeklyPriceChart";
-import type { FactorExposure, UniverseTickerItem, WeeklyPricePoint } from "@/lib/types";
+import type { FactorCatalogEntry, FactorExposure, UniverseTickerItem, WeeklyPricePoint } from "@/lib/types";
 
 interface PositionSummary {
   shares: number;
@@ -77,6 +77,7 @@ export default function TickerQuoteCard({
   historyLoading,
   historyError,
   chartFactors,
+  factorCatalog,
 }: {
   item: UniverseTickerItem;
   selectedPosition?: PositionSummary;
@@ -84,10 +85,12 @@ export default function TickerQuoteCard({
   historyLoading: boolean;
   historyError: unknown;
   chartFactors: FactorExposure[];
+  factorCatalog?: FactorCatalogEntry[];
 }) {
   const [expanded, setExpanded] = useState(false);
   const [spotlight, setSpotlight] = useState(false);
-  const isEligible = item.eligible_for_model !== false;
+  const modelStatus = item.model_status ?? "ineligible";
+  const hasModelExposures = chartFactors.length > 0;
 
   useEffect(() => {
     setExpanded(false);
@@ -149,7 +152,15 @@ export default function TickerQuoteCard({
     { label: "As Of", value: formatDateLabel(item.as_of_date) },
     { label: "Specific Vol", value: formatPercent(item.specific_vol, 2) },
     { label: "Specific Var", value: formatFixed(item.specific_var, 6) },
-    { label: "Model", value: isEligible ? "Eligible" : "Ineligible" },
+    {
+      label: "Model",
+      value:
+        modelStatus === "core_estimated"
+          ? "Core Estimated"
+          : modelStatus === "projected_only"
+            ? "Projected Only"
+            : "Ineligible",
+    },
   ];
 
   return (
@@ -241,21 +252,21 @@ export default function TickerQuoteCard({
             <div className="explore-quote-chart-panel">
               <div className="explore-quote-chart-head">
                 <span>Factor Exposures</span>
-                <span>{isEligible ? "All Factors" : "Unavailable"}</span>
+                <span>{hasModelExposures ? "All Factors" : "Unavailable"}</span>
               </div>
-              {expanded && isEligible ? (
+              {expanded && hasModelExposures ? (
                 <div className="explore-quote-chart-scroll">
-                  <ExposureBarChart factors={chartFactors} />
+                  <ExposureBarChart factors={chartFactors} factorCatalog={factorCatalog} />
                 </div>
               ) : (
                 <div className="explore-quote-chart-empty">
-                  {isEligible ? "Expand to load factor exposures." : "Factor exposures are unavailable for this ticker."}
+                  {hasModelExposures ? "Expand to load factor exposures." : "Factor exposures are unavailable for this ticker."}
                 </div>
               )}
             </div>
           </div>
 
-          {(!isEligible || item.model_warning) && (
+          {(!hasModelExposures || item.model_warning) && (
             <div className="explore-quote-note">
               {item.model_warning || `Model ineligible: ${humanizeReason(item.eligibility_reason)}`}
             </div>

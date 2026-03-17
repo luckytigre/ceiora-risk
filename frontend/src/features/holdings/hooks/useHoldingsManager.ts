@@ -5,9 +5,13 @@ import { mutate } from "swr";
 import { ApiError, apiPath } from "@/lib/api";
 import {
   triggerHoldingsImport,
-  triggerServeRefresh,
 } from "@/hooks/useApi";
 import type { HoldingsImportMode, HoldingsPosition } from "@/lib/types";
+import {
+  refreshFailureMessage,
+  refreshSucceeded,
+  runServeRefreshAndRevalidate,
+} from "@/lib/refresh";
 import { fmtQty, parseHoldingsCsv } from "../lib/csv";
 
 export interface HoldingsConfirmConfig {
@@ -218,7 +222,7 @@ export function useHoldingsManager(selectedAccount: string, holdingsRows: Holdin
       });
       const extras = parsed.rejected.length > 0 ? ` | CSV parse rejects: ${parsed.rejected.length}` : "";
       setResultMessage(
-        `${out.status}: ${out.applied_upserts} upserts, ${out.applied_deletes} deletes, ${out.rejected_rows} backend rejects${extras}.`,
+        `${out.status}: ${out.applied_upserts} upserts, ${out.applied_deletes} deletes, ${out.rejected_rows} backend rejects${extras}. Holdings were written immediately; run RECALC to publish updated analytics.`,
       );
       setRejectionPreview((out.preview_rejections ?? []).slice(0, 15));
       await revalidateHoldingsViews([selectedAccount]);
@@ -392,6 +396,7 @@ export function useHoldingsManager(selectedAccount: string, holdingsRows: Holdin
 
     try {
       setBusy(true);
+      const appliedDraftCount = draftEntries.length;
       const byAccount = new Map<
         string,
         Array<{ ric?: string; ticker?: string; quantity: number; source?: string }>
@@ -419,12 +424,34 @@ export function useHoldingsManager(selectedAccount: string, holdingsRows: Holdin
           trigger_refresh: false,
         });
       }
-      await triggerServeRefresh();
-      await revalidateHoldingsViews([...byAccount.keys()]);
       setDrafts({});
-      setResultMessage(
-        `Applied ${draftEntries.length} staged edit${draftEntries.length === 1 ? "" : "s"} across ${byAccount.size} account${byAccount.size === 1 ? "" : "s"} and started RECALC.`,
-      );
+
+      try {
+        const { refresh, holdingsSyncVerified } = await runServeRefreshAndRevalidate();
+        await revalidateHoldingsViews([...byAccount.keys()]);
+        if (refreshSucceeded(refresh)) {
+          setResultMessage(
+            holdingsSyncVerified
+              ? `Applied ${appliedDraftCount} staged edit${appliedDraftCount === 1 ? "" : "s"} across ${byAccount.size} account${byAccount.size === 1 ? "" : "s"} and RECALC finished.`
+              : `Applied ${appliedDraftCount} staged edit${appliedDraftCount === 1 ? "" : "s"} across ${byAccount.size} account${byAccount.size === 1 ? "" : "s"} and RECALC finished, but holdings sync status could not be verified. Check Operator status before trusting published analytics.`,
+          );
+        } else {
+          setErrorMessage(
+            `Staged edits were applied, but RECALC failed: ${refreshFailureMessage(refresh)}`,
+          );
+        }
+      } catch (err) {
+        await revalidateHoldingsViews([...byAccount.keys()]);
+        if (err instanceof ApiError) {
+          setErrorMessage(
+            `Staged edits were applied, but RECALC failed: ${typeof err.detail === "string" ? err.detail : err.message}`,
+          );
+        } else if (err instanceof Error) {
+          setErrorMessage(`Staged edits were applied, but RECALC failed: ${err.message}`);
+        } else {
+          setErrorMessage("Staged edits were applied, but RECALC failed.");
+        }
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setErrorMessage(typeof err.detail === "string" ? err.detail : err.message);

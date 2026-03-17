@@ -6,18 +6,30 @@ import TableRowToggle from "@/components/TableRowToggle";
 import FactorHistoryChart from "@/components/FactorHistoryChart";
 import HelpLabel from "@/components/HelpLabel";
 import { useFactorHistory } from "@/hooks/useApi";
+import { shortFactorLabel } from "@/lib/factorLabels";
+import type { FactorCatalogEntry } from "@/lib/types";
 
 interface FactorDrilldownProps {
-  factor: string;
+  factorId: string;
+  factorName: string;
   items: FactorDrilldownItem[];
   mode?: string;
   factorVol?: number;
+  factorCatalog?: FactorCatalogEntry[];
   onClose: () => void;
 }
 const COLLAPSED_ROWS = 10;
 type SortKey = "ticker" | "weight" | "exposure" | "sensitivity" | "contribution";
 
-export default function FactorDrilldown({ factor, items, mode, factorVol, onClose }: FactorDrilldownProps) {
+export default function FactorDrilldown({
+  factorId,
+  factorName,
+  items,
+  mode,
+  factorVol,
+  factorCatalog,
+  onClose,
+}: FactorDrilldownProps) {
   const isSensitivity = mode === "sensitivity";
   const isRiskContribution = mode === "risk_contribution";
   const hints = {
@@ -58,7 +70,8 @@ export default function FactorDrilldown({ factor, items, mode, factorVol, onClos
   );
   const [sortAsc, setSortAsc] = useState(false);
   const [showAllRows, setShowAllRows] = useState(false);
-  const { data: historyData, isLoading: historyLoading } = useFactorHistory(factor, 5);
+  const { data: historyData, error: historyError, isLoading: historyLoading } = useFactorHistory(factorId, 5);
+  const displayFactor = shortFactorLabel(factorId, factorCatalog);
   const sorted = [...items].sort((a, b) => {
     if (sortKey === "ticker") {
       return sortAsc
@@ -83,7 +96,7 @@ export default function FactorDrilldown({ factor, items, mode, factorVol, onClos
     <div className="detail-panel">
       <div className="detail-panel-header">
         <h4>
-          {factor} — {isSensitivity
+          {displayFactor} — {isSensitivity
             ? "Sensitivity Breakdown"
             : isRiskContribution
               ? "Risk Contribution Breakdown"
@@ -98,7 +111,7 @@ export default function FactorDrilldown({ factor, items, mode, factorVol, onClos
       </div>
       <div className="detail-history">
         <div className="detail-history-header">
-          <h5>5Y Historical Return — {factor}</h5>
+          <h5>5Y Historical Return — {displayFactor}</h5>
           {!historyLoading && historyData?.points && historyData.points.length > 0 && (() => {
             const vals = historyData.points.map((p) => p.cum_return * 100);
             const latest = vals[vals.length - 1] ?? 0;
@@ -120,10 +133,12 @@ export default function FactorDrilldown({ factor, items, mode, factorVol, onClos
               </div>
             );
           })()}
-        </div>
+          </div>
         {historyLoading
           ? <div className="detail-history-empty loading-pulse">Loading 5Y history...</div>
-          : <FactorHistoryChart factor={factor} points={historyData?.points ?? []} factorVol={factorVol} />}
+          : historyError
+            ? <div className="detail-history-empty">5Y factor-return history is temporarily unavailable for {displayFactor}.</div>
+            : <FactorHistoryChart factor={factorName} points={historyData?.points ?? []} factorVol={factorVol} />}
       </div>
       <p className="detail-panel-meta">
         {items.length} positions, {uniqueExposureCount} unique exposure values

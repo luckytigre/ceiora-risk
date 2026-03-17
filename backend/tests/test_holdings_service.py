@@ -26,7 +26,7 @@ def test_trigger_light_refresh_passes_holdings_only_scope(monkeypatch) -> None:
     out = holdings_service.trigger_light_refresh_if_requested(True)
 
     assert out == {"started": True, "state": {"status": "running"}}
-    assert captured["mode"] == "light"
+    assert captured["profile"] == "serve-refresh"
     assert captured["force_risk_recompute"] is False
     assert captured["refresh_scope"] == "holdings_only"
 
@@ -157,17 +157,11 @@ def test_run_position_remove_records_dirty_and_refresh(monkeypatch) -> None:
     assert calls["refresh"] == 1
 
 
-def test_run_whatif_apply_ensures_runtime_compat_before_mutation(monkeypatch) -> None:
-    calls = {"compat": 0}
+def test_run_whatif_apply_records_dirty_without_runtime_compat_shim(monkeypatch) -> None:
     conn = _FakeConn()
 
     monkeypatch.setattr(holdings_service, "resolve_dsn", lambda _dsn=None: "postgres://example")
     monkeypatch.setattr(holdings_service, "connect", lambda **kwargs: conn)
-    monkeypatch.setattr(
-        holdings_service,
-        "ensure_holdings_runtime_compat",
-        lambda _conn: calls.__setitem__("compat", calls["compat"] + 1),
-    )
     monkeypatch.setattr(
         holdings_service,
         "apply_ticker_bucket_scenario",
@@ -185,5 +179,4 @@ def test_run_whatif_apply_ensures_runtime_compat_before_mutation(monkeypatch) ->
     )
 
     assert out["status"] == "ok"
-    assert calls["compat"] == 1
     assert conn.closed is True

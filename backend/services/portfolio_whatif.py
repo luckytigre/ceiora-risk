@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from pathlib import Path
 from typing import Any
 
 import math
@@ -24,13 +23,10 @@ from backend.analytics.services.risk_views import (
     compute_position_total_risk_contributions,
     specific_risk_by_ticker_view,
 )
-from backend.analytics.services.universe_loadings import load_latest_factor_coverage
 from backend.data.serving_outputs import load_current_payload
 from backend.data.sqlite import cache_get, cache_get_live
 from backend.risk_model.risk_attribution import risk_decomposition
 from backend.services import holdings_service
-
-CACHE_DB = Path(config.SQLITE_PATH)
 
 
 def _normalize_account_id(raw: str | None) -> str:
@@ -50,29 +46,59 @@ def _scenario_key(account_id: str, ric: str | None, ticker: str | None) -> str:
     return f"{_normalize_account_id(account_id)}::{ident}"
 
 
+def _load_serving_or_runtime_cache(
+    payload_name: str,
+    *,
+    fallback_loader,
+):
+    payload = load_current_payload(payload_name)
+    if payload is not None:
+        return payload
+    if not config.serving_outputs_cache_fallback_enabled():
+        return None
+    return fallback_loader(payload_name)
+
+
 def _load_universe_loadings() -> dict[str, Any]:
-    data = load_current_payload("universe_loadings") or cache_get("universe_loadings")
+    data = _load_serving_or_runtime_cache("universe_loadings", fallback_loader=cache_get)
     if not isinstance(data, dict) or not isinstance(data.get("by_ticker"), dict):
         raise RuntimeError("Universe loadings are not ready. Run refresh before using what-if preview.")
     return data
 
 
 def _load_covariance_frame() -> pd.DataFrame:
-    payload = cache_get_live("risk_engine_cov") or cache_get("risk_engine_cov")
+    cov, _ = _load_covariance_frame_with_source()
+    return cov
+
+
+def _load_covariance_frame_with_source() -> tuple[pd.DataFrame, bool]:
+    serving_payload = load_current_payload("risk_engine_cov")
+    payload = serving_payload
+    if payload is None and config.serving_outputs_cache_fallback_enabled():
+        payload = cache_get_live("risk_engine_cov") or cache_get("risk_engine_cov")
     if not isinstance(payload, dict):
         raise RuntimeError("Risk engine covariance is not ready. Run refresh before using what-if preview.")
     factors = [str(x) for x in (payload.get("factors") or [])]
     matrix = payload.get("matrix") or []
     if not factors or not matrix:
         raise RuntimeError("Risk engine covariance is empty.")
-    return pd.DataFrame(matrix, index=factors, columns=factors, dtype=float)
+    return pd.DataFrame(matrix, index=factors, columns=factors, dtype=float), isinstance(serving_payload, dict)
 
 
 def _load_specific_risk_by_ticker() -> dict[str, dict[str, Any]]:
-    payload = cache_get_live("risk_engine_specific_risk") or cache_get("risk_engine_specific_risk") or {}
+    specific_risk, _ = _load_specific_risk_by_ticker_with_source()
+    return specific_risk
+
+
+def _load_specific_risk_by_ticker_with_source() -> tuple[dict[str, dict[str, Any]], bool]:
+    serving_payload = load_current_payload("risk_engine_specific_risk")
+    payload = serving_payload
+    if payload is None and config.serving_outputs_cache_fallback_enabled():
+        payload = cache_get_live("risk_engine_specific_risk") or cache_get("risk_engine_specific_risk")
+    payload = payload or {}
     if not isinstance(payload, dict):
         payload = {}
-    return specific_risk_by_ticker_view(payload)
+    return specific_risk_by_ticker_view(payload), isinstance(serving_payload, dict)
 
 
 def _normalize_scenario_rows(scenario_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -243,13 +269,13 @@ def _build_preview_payload(
         specific_risk_by_ticker=specific_risk_by_ticker,
     )
     risk_shares: RiskSharesPayload = {
-        "country": float(raw_risk_shares.get("country", 0.0)),
+        "market": float(raw_risk_shares.get("market", 0.0)),
         "industry": float(raw_risk_shares.get("industry", 0.0)),
         "style": float(raw_risk_shares.get("style", 0.0)),
         "idio": float(raw_risk_shares.get("idio", 0.0)),
     }
     component_shares: ComponentSharesPayload = {
-        "country": float(raw_component_shares.get("country", 0.0)),
+        "market": float(raw_component_shares.get("market", 0.0)),
         "industry": float(raw_component_shares.get("industry", 0.0)),
         "style": float(raw_component_shares.get("style", 0.0)),
     }
@@ -268,7 +294,7 @@ def _build_preview_payload(
         ticker = str(pos.get("ticker", "")).upper()
         pos["risk_contrib_pct"] = float(position_risk_contrib.get(ticker, 0.0))
         pos["risk_mix"] = dict(position_risk_mix.get(ticker, {
-            "country": 0.0,
+            "market": 0.0,
             "industry": 0.0,
             "style": 0.0,
             "idio": 0.0,
@@ -288,6 +314,7 @@ def _build_preview_payload(
         "component_shares": component_shares,
         "factor_details": factor_details,
         "exposure_modes": exposure_modes,
+        "factor_catalog": list(universe_loadings.get("factor_catalog") or []),
     }
 
 
@@ -298,11 +325,11 @@ def _factor_delta_rows(
     mode: str,
 ) -> list[dict[str, Any]]:
     current_map = {
-        str(row.get("factor")): float(row.get("value") or 0.0)
+        str(row.get("factor_id")): float(row.get("value") or 0.0)
         for row in (current_modes.get(mode) or [])
     }
     hypothetical_map = {
-        str(row.get("factor")): float(row.get("value") or 0.0)
+        str(row.get("factor_id")): float(row.get("value") or 0.0)
         for row in (hypothetical_modes.get(mode) or [])
     }
     rows: list[dict[str, Any]] = []
@@ -311,7 +338,7 @@ def _factor_delta_rows(
         hypothetical_value = float(hypothetical_map.get(factor, 0.0))
         delta_value = hypothetical_value - current_value
         rows.append({
-            "factor": factor,
+            "factor_id": factor,
             "current": round(current_value, 6),
             "hypothetical": round(hypothetical_value, 6),
             "delta": round(delta_value, 6),
@@ -326,9 +353,16 @@ def preview_portfolio_whatif(
 ) -> dict[str, Any]:
     normalized_scenario_rows = _normalize_scenario_rows(scenario_rows)
     universe_loadings = _load_universe_loadings()
-    cov = _load_covariance_frame()
-    specific_risk = _load_specific_risk_by_ticker()
-    coverage_date, factor_coverage = load_latest_factor_coverage(cache_db=CACHE_DB)
+    cov, cov_from_serving = _load_covariance_frame_with_source()
+    specific_risk, specific_risk_from_serving = _load_specific_risk_by_ticker_with_source()
+    current_portfolio_payload = _load_serving_or_runtime_cache("portfolio", fallback_loader=cache_get) or {}
+    source_dates = (
+        (current_portfolio_payload or {}).get("source_dates")
+        or universe_loadings.get("source_dates")
+        or {}
+    )
+    coverage_date = str(source_dates.get("exposures_served_asof") or source_dates.get("exposures_asof") or "").strip() or None
+    factor_coverage: dict[str, Any] = {}
     current_rows, hypothetical_rows, deltas = _build_holdings_snapshot(normalized_scenario_rows)
     current_preview = _build_preview_payload(
         holdings_rows=current_rows,
@@ -357,7 +391,7 @@ def preview_portfolio_whatif(
             - float(current_preview["risk_shares"].get(bucket, 0.0)),
             2,
         )
-        for bucket in ("country", "industry", "style", "idio")
+        for bucket in ("market", "industry", "style", "idio")
     }
     factor_deltas = {
         mode: _factor_delta_rows(
@@ -367,10 +401,24 @@ def preview_portfolio_whatif(
         )[:20]
         for mode in ("raw", "sensitivity", "risk_contribution")
     }
-    source_dates = (
-        (load_current_payload("portfolio") or {}).get("source_dates")
-        or universe_loadings.get("source_dates")
-        or {}
+    serving_snapshot = {
+        "run_id": (
+            (current_portfolio_payload or {}).get("run_id")
+            or universe_loadings.get("run_id")
+        ),
+        "snapshot_id": (
+            (current_portfolio_payload or {}).get("snapshot_id")
+            or universe_loadings.get("snapshot_id")
+        ),
+        "refresh_started_at": (
+            (current_portfolio_payload or {}).get("refresh_started_at")
+            or universe_loadings.get("refresh_started_at")
+        ),
+    }
+    truth_surface = (
+        "live_holdings_projected_through_current_served_model"
+        if cov_from_serving and specific_risk_from_serving
+        else "live_holdings_projected_through_current_loadings_and_live_risk_cache"
     )
     return {
         "scenario_rows": [
@@ -396,5 +444,7 @@ def preview_portfolio_whatif(
             "factor_deltas": factor_deltas,
         },
         "source_dates": source_dates,
+        "serving_snapshot": serving_snapshot,
+        "truth_surface": truth_surface,
         "_preview_only": True,
     }

@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import psycopg
+
+from backend.data.neon import resolve_dsn
 
 
 @dataclass
@@ -172,12 +173,9 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
-    dsn = str(
-        args.dsn
-        or os.getenv("NEON_DATABASE_URL", "")
-        or os.getenv("DATABASE_URL", "")
-    ).strip()
-    if not dsn:
+    try:
+        dsn = resolve_dsn(args.dsn)
+    except ValueError:
         msg = "missing DSN: set NEON_DATABASE_URL or pass --dsn"
         if args.json:
             print(json.dumps({"ok": False, "error": msg}, indent=2))
@@ -236,4 +234,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

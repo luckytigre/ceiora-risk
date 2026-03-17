@@ -223,35 +223,6 @@ main {
   border-color: rgba(239, 68, 68, 0.45);
 }
 
-.dash-sync-icon-btn {
-  color: #9ea2aa;
-}
-
-.dash-sync-icon-btn:hover {
-  color: #d5d8de;
-}
-
-.dash-sync-icon-btn:disabled {
-  opacity: 0.65;
-}
-
-.dash-sync-icon-btn.failed {
-  color: rgba(239, 149, 174, 0.95);
-}
-
-.dash-sync-icon-btn svg.spin {
-  animation: dash-sync-spin 0.9s linear infinite;
-}
-
-@keyframes dash-sync-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .dash-recompute-btn {
   border: 1px solid rgba(245, 158, 11, 0.45);
   background: rgba(245, 158, 11, 0.14);
@@ -969,6 +940,17 @@ main {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px 14px;
+}
+
+.holdings-ticker-ric-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.holdings-ticker-ric-row > .holdings-form-block {
+  flex: 1;
+  min-width: 0;
 }
 
 .holdings-grid-2col {
@@ -1959,6 +1941,46 @@ main {
   color: rgba(240, 133, 160, 0.92);
 }
 
+/* ─── Operator tooltip ─── */
+/* shared tooltip base for [data-tip] */
+[data-tip] {
+  cursor: help;
+  position: relative;
+}
+
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 9999;
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(22, 27, 46, 0.97);
+  border: 1px solid rgba(154, 171, 214, 0.14);
+  color: rgba(210, 218, 240, 0.92);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  white-space: normal;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.kv-label[data-tip] {
+  border-bottom: 1px dotted rgba(169, 182, 210, 0.3);
+}
+
+.operator-lane-card[data-tip]:hover::after {
+  left: 14px;
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
 /* ─── Health diagnostics load prompt ─── */
 .health-load-prompt {
   display: flex;
@@ -2053,6 +2075,22 @@ main {
   font-size: 10px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Holdings typeahead overrides */
+.holdings-typeahead {
+  width: max-content;
+  min-width: 100%;
+  max-width: min(520px, 90vw);
+  max-height: 260px;
+}
+
+.explore-typeahead-item .ric-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Hero card — base (overridden by explore-page-overhaul block) */
@@ -2152,17 +2190,6 @@ main {
   .explore-detail-grid {
     grid-template-columns: 1fr;
   }
-}
-
-/* Factor table tier header */
-.explore-tier-header td {
-  padding: 10px 11px 4px !important;
-  font-size: 9px !important;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted) !important;
-  border-bottom: 1px solid rgba(154, 171, 214, 0.1) !important;
-  font-weight: 600;
 }
 
 .explore-error {
@@ -2702,66 +2729,6 @@ main {
     grid-template-columns: 1fr;
   }
 }
-
-/* Ineligibility warning */
-.explore-ineligible-warning {
-  margin-top: 10px;
-  padding: 10px 14px;
-  border: 1px solid rgba(245, 158, 11, 0.22);
-  background: rgba(245, 158, 11, 0.06);
-  border-left: 3px solid rgba(245, 158, 11, 0.45);
-  color: rgba(252, 211, 77, 0.82);
-  font-size: 12px;
-  line-height: 1.45;
-  border-radius: 2px;
-}
-
-/* Ineligible model analytics placeholder */
-.explore-ineligible-placeholder {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 8px 0;
-}
-
-/* Factor loadings table container */
-.explore-factor-table-wrap {
-  max-height: 360px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(154, 171, 214, 0.15) transparent;
-}
-
-.explore-factor-table-wrap::-webkit-scrollbar {
-  width: 4px;
-}
-
-.explore-factor-table-wrap::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.explore-factor-table-wrap::-webkit-scrollbar-thumb {
-  background: rgba(154, 171, 214, 0.15);
-  border-radius: 2px;
-}
-
-/* Tier header accents */
-.explore-tier-header.tier-country td { border-bottom-color: rgba(59, 169, 225, 0.2) !important; }
-.explore-tier-header.tier-industry td { border-bottom-color: rgba(215, 87, 186, 0.2) !important; }
-.explore-tier-header.tier-style td { border-bottom-color: rgba(107, 207, 154, 0.2) !important; }
-
-.explore-tier-label {
-  display: inline-block;
-  width: 3px;
-  height: 10px;
-  margin-right: 6px;
-  vertical-align: middle;
-  border-radius: 1px;
-}
-
-.tier-country .explore-tier-label { background: rgba(59, 169, 225, 0.6); }
-.tier-industry .explore-tier-label { background: rgba(215, 87, 186, 0.6); }
-.tier-style .explore-tier-label { background: rgba(107, 207, 154, 0.6); }
 
 /* Chart card headers */
 .explore-chart-header {

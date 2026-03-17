@@ -9,15 +9,15 @@ import {
   useHoldingsModes,
   useHoldingsPositions,
   usePortfolio,
-  useUniverseSearch,
+  useRisk,
 } from "@/hooks/useApi";
 import type { HoldingsImportMode } from "@/lib/types";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import HoldingsImportPanel from "@/features/holdings/components/HoldingsImportPanel";
 import HoldingsLedgerSection from "@/features/holdings/components/HoldingsLedgerSection";
 import HoldingsMutationFeedback from "@/features/holdings/components/HoldingsMutationFeedback";
 import ManualPositionEditor from "@/features/holdings/components/ManualPositionEditor";
 import { useHoldingsManager } from "@/features/holdings/hooks/useHoldingsManager";
+import { buildAnalyticsTruthCompactSummary, summarizeAnalyticsTruth } from "@/lib/analyticsTruth";
 
 function modeLabel(m: HoldingsImportMode): string {
   if (m === "replace_account") return "Full Replace Account";
@@ -48,6 +48,7 @@ function fmtQty(n: number): string {
 
 export default function PositionsPage() {
   const { data: portfolio, isLoading: pLoading, error: pError } = usePortfolio();
+  const { data: riskData, isLoading: riskLoading, error: riskError } = useRisk();
   const { data: modesData } = useHoldingsModes();
   const { data: accountsData, error: accountError } = useHoldingsAccounts();
   const [selectedAccount, setSelectedAccount] = useState("");
@@ -62,10 +63,6 @@ export default function PositionsPage() {
   const [editSource, setEditSource] = useState("ui_edit");
   const [holdingsManagerExpanded, setHoldingsManagerExpanded] = useState(true);
 
-  const tickerSearchQuery = editTicker.trim().toUpperCase();
-  const debouncedTickerSearchQuery = useDebouncedValue(tickerSearchQuery, 220);
-  const { data: tickerRicSearch } = useUniverseSearch(debouncedTickerSearchQuery, 12);
-
   useEffect(() => {
     if (!modesData?.default) return;
     setMode(modesData.default);
@@ -77,21 +74,6 @@ export default function PositionsPage() {
       setSelectedAccount(accounts[0].account_id);
     }
   }, [accountsData?.accounts, selectedAccount]);
-
-  const ricTypeahead = useMemo(
-    () =>
-      (tickerRicSearch?.results ?? []).filter(
-        (row) => typeof row.ric === "string" && row.ric.trim().length > 0,
-      ),
-    [tickerRicSearch?.results],
-  );
-
-  useEffect(() => {
-    if (!tickerSearchQuery || editRic.trim().length > 0) return;
-    const exact = ricTypeahead.find((row) => String(row.ticker || "").toUpperCase() === tickerSearchQuery);
-    if (!exact?.ric) return;
-    setEditRic(String(exact.ric).toUpperCase());
-  }, [tickerSearchQuery, editRic, ricTypeahead]);
   const positions = portfolio?.positions ?? [];
   const accountOptions = accountsData?.accounts ?? [];
   const liveHoldingsRows = holdingsData?.positions ?? [];
@@ -136,22 +118,44 @@ export default function PositionsPage() {
     );
   }, [draftEntries, liveHoldingsRows]);
   const modeledPositions = positions;
+  const truth = useMemo(
+    () => summarizeAnalyticsTruth({ portfolio, risk: riskData }),
+    [portfolio, riskData],
+  );
+  const compactTruthSummary = useMemo(() => buildAnalyticsTruthCompactSummary(truth), [truth]);
+  const snapshotMismatch = !truth.snapshotsCoherent && truth.snapshotIds.length > 1;
 
   const modelVsLiveDiffs = useMemo(() => {
-    const liveMap = new Map<string, { account: string; ticker: string; quantity: number }>();
-    const modelMap = new Map<string, { account: string; ticker: string; quantity: number }>();
+    const liveMap = new Map<string, { accountScope: string; ticker: string; quantity: number }>();
+    const accountsByTicker = new Map<string, Set<string>>();
+    const modelMap = new Map<string, { ticker: string; quantity: number }>();
 
     for (const row of liveHoldingsRows) {
       const ticker = normalizeTicker(row.ticker || row.ric);
       if (!ticker) continue;
+      const existing = liveMap.get(ticker);
+      const quantity = Number(row.quantity) || 0;
+      if (existing) {
+        existing.quantity += quantity;
+      } else {
+        liveMap.set(ticker, { accountScope: "", ticker, quantity });
+      }
       const account = normalizeAccountId(row.account_id);
-      liveMap.set(`${account}::${ticker}`, { account, ticker, quantity: Number(row.quantity) || 0 });
+      if (account) {
+        const accounts = accountsByTicker.get(ticker) ?? new Set<string>();
+        accounts.add(account);
+        accountsByTicker.set(ticker, accounts);
+      }
     }
     for (const pos of modeledPositions) {
       const ticker = normalizeTicker(pos.ticker);
       if (!ticker) continue;
-      const account = normalizeAccountId(pos.account);
-      modelMap.set(`${account}::${ticker}`, { account, ticker, quantity: Number(pos.shares) || 0 });
+      modelMap.set(ticker, { ticker, quantity: Number(pos.shares) || 0 });
+    }
+
+    for (const [ticker, liveRow] of liveMap.entries()) {
+      const accounts = [...(accountsByTicker.get(ticker) ?? new Set<string>())].sort();
+      liveRow.accountScope = accounts.length > 1 ? "MULTI" : (accounts[0]?.toUpperCase() ?? "—");
     }
 
     const keys = new Set([...liveMap.keys(), ...modelMap.keys()]);
@@ -164,7 +168,7 @@ export default function PositionsPage() {
       const status =
         live === null ? "modeled-only" : modeled === null ? "live-only" : Math.abs(delta || 0) <= 1e-6 ? "aligned" : "changed";
       return {
-        account: liveRow?.account || modeledRow?.account || "",
+        accountScope: liveRow?.accountScope || (live === null ? "MODELED" : "—"),
         ticker: liveRow?.ticker || modeledRow?.ticker || "",
         live,
         modeled,
@@ -179,7 +183,7 @@ export default function PositionsPage() {
         const rank = (status: string) => (status === "changed" ? 0 : 1);
         const deltaA = Math.abs(a.delta ?? a.live ?? a.modeled ?? 0);
         const deltaB = Math.abs(b.delta ?? b.live ?? b.modeled ?? 0);
-        return rank(a.status) - rank(b.status) || deltaB - deltaA || a.account.localeCompare(b.account) || a.ticker.localeCompare(b.ticker);
+        return rank(a.status) - rank(b.status) || deltaB - deltaA || a.accountScope.localeCompare(b.accountScope) || a.ticker.localeCompare(b.ticker);
       });
   }, [liveHoldingsRows, modeledPositions]);
 
@@ -205,11 +209,11 @@ export default function PositionsPage() {
       ticker: row.ticker,
     });
 
-  if (pLoading) {
+  if (pLoading || (riskLoading && !riskData)) {
     return <AnalyticsLoadingViz message="Loading positions..." />;
   }
-  if (pError || accountError) {
-    return <ApiErrorState title="Positions Not Ready" error={pError || accountError} />;
+  if (pError || accountError || riskError) {
+    return <ApiErrorState title="Positions Not Ready" error={pError || accountError || riskError} />;
   }
 
   return (
@@ -239,7 +243,6 @@ export default function PositionsPage() {
                 editRic={editRic}
                 editQty={editQty}
                 editSource={editSource}
-                ricTypeahead={ricTypeahead}
                 onAccountChange={setSelectedAccount}
                 onTickerChange={setEditTicker}
                 onRicChange={setEditRic}
@@ -323,70 +326,98 @@ export default function PositionsPage() {
         <div className="section-subtitle">
           This is the last modeled view across all accounts. It updates only after `RECALC`, so it is shown here as a compact check instead of a second full positions table.
         </div>
-        <div className="data-metric-grid" style={{ marginTop: 12 }}>
-          <div className="data-metric-card">
-            <h4>Live Holdings Rows</h4>
-            <div className="data-metric-value">{liveHoldingsRows.length}</div>
-            <div className="data-metric-desc">Rows currently stored in Neon across all accounts.</div>
-          </div>
-          <div className="data-metric-card">
-            <h4>Modeled Rows</h4>
-            <div className="data-metric-value">{modeledPositions.length}</div>
-            <div className="data-metric-desc">Rows in the last cached portfolio snapshot across all accounts.</div>
-          </div>
-          <div className="data-metric-card">
-            <h4>Unmodeled Differences</h4>
-            <div className="data-metric-value">{modelVsLiveDiffs.length}</div>
-            <div className="data-metric-desc">Names where live holdings and modeled snapshot still differ.</div>
-          </div>
-          <div className="data-metric-card">
-            <h4>Source Dates</h4>
-            <div className="data-metric-row">
-              <span className="data-metric-label">Prices</span>
-              <span className="data-metric-value">{portfolio?.source_dates?.prices_asof || "—"}</span>
-            </div>
-            <div className="data-metric-row">
-              <span className="data-metric-label">Fundamentals</span>
-              <span className="data-metric-value">{portfolio?.source_dates?.fundamentals_asof || "—"}</span>
-            </div>
-            <div className="data-metric-row">
-              <span className="data-metric-label">Classification</span>
-              <span className="data-metric-value">{portfolio?.source_dates?.classification_asof || "—"}</span>
-            </div>
-          </div>
-        </div>
-
-        {modelVsLiveDiffs.length > 0 ? (
-          <div className="dash-table" style={{ marginTop: 14 }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th>Ticker</th>
-                  <th>Status</th>
-                  <th className="text-right">Live Qty</th>
-                  <th className="text-right">Modeled Qty</th>
-                  <th className="text-right">Delta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {modelVsLiveDiffs.slice(0, 10).map((row) => (
-                  <tr key={`${row.account}:${row.ticker}`}>
-                    <td>{row.account || "—"}</td>
-                    <td>{row.ticker}</td>
-                    <td>{row.status}</td>
-                    <td className="text-right">{row.live === null ? "—" : fmtQty(row.live)}</td>
-                    <td className="text-right">{row.modeled === null ? "—" : fmtQty(row.modeled)}</td>
-                    <td className="text-right">{row.delta === null ? "—" : fmtQty(row.delta)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {snapshotMismatch ? (
+          <div
+            style={{
+              marginTop: 12,
+              padding: "12px 14px",
+              border: "1px solid rgba(204, 53, 88, 0.25)",
+              background: "rgba(204, 53, 88, 0.08)",
+              color: "rgba(248, 221, 228, 0.92)",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            The modeled snapshot and risk metadata are spanning multiple published snapshots ({truth.snapshotIds.join(" / ")}).
+            Live holdings above remain authoritative, but this modeled analytics section is withheld until RECALC finishes or the page reloads into one coherent publish.
           </div>
         ) : (
-          <div className="section-subtitle" style={{ marginTop: 14, marginBottom: 0 }}>
-            Live holdings and the modeled snapshot are aligned across all accounts.
-          </div>
+          <>
+            {compactTruthSummary && (
+              <div className="section-subtitle" style={{ marginTop: 12, marginBottom: 0 }}>
+                {compactTruthSummary}
+              </div>
+            )}
+            <div className="data-metric-grid" style={{ marginTop: 12 }}>
+              <div className="data-metric-card">
+                <h4>Live Holdings Rows</h4>
+                <div className="data-metric-value">{liveHoldingsRows.length}</div>
+                <div className="data-metric-desc">Rows currently stored in Neon across all accounts.</div>
+              </div>
+              <div className="data-metric-card">
+                <h4>Modeled Rows</h4>
+                <div className="data-metric-value">{modeledPositions.length}</div>
+                <div className="data-metric-desc">Rows in the last cached portfolio snapshot across all accounts.</div>
+              </div>
+              <div className="data-metric-card">
+                <h4>Unmodeled Differences</h4>
+                <div className="data-metric-value">{modelVsLiveDiffs.length}</div>
+                <div className="data-metric-desc">Tickers where aggregated live holdings and the modeled snapshot still differ.</div>
+              </div>
+              <div className="data-metric-card">
+                <h4>Source Dates</h4>
+                <div className="data-metric-row">
+                  <span className="data-metric-label">Prices</span>
+                  <span className="data-metric-value">{truth.sourceDates.prices_asof || "—"}</span>
+                </div>
+                <div className="data-metric-row">
+                  <span className="data-metric-label">Fundamentals</span>
+                  <span className="data-metric-value">{truth.sourceDates.fundamentals_asof || "—"}</span>
+                </div>
+                <div className="data-metric-row">
+                  <span className="data-metric-label">Classification</span>
+                  <span className="data-metric-value">{truth.sourceDates.classification_asof || "—"}</span>
+                </div>
+                <div className="data-metric-row">
+                  <span className="data-metric-label">Served Exposures</span>
+                  <span className="data-metric-value">{truth.exposuresServedAsOf || "—"}</span>
+                </div>
+              </div>
+            </div>
+
+            {modelVsLiveDiffs.length > 0 ? (
+              <div className="dash-table" style={{ marginTop: 14 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Account Scope</th>
+                      <th>Ticker</th>
+                      <th>Status</th>
+                      <th className="text-right">Live Qty</th>
+                      <th className="text-right">Modeled Qty</th>
+                      <th className="text-right">Delta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modelVsLiveDiffs.slice(0, 10).map((row) => (
+                      <tr key={`${row.accountScope}:${row.ticker}`}>
+                        <td>{row.accountScope || "—"}</td>
+                        <td>{row.ticker}</td>
+                        <td>{row.status}</td>
+                        <td className="text-right">{row.live === null ? "—" : fmtQty(row.live)}</td>
+                        <td className="text-right">{row.modeled === null ? "—" : fmtQty(row.modeled)}</td>
+                        <td className="text-right">{row.delta === null ? "—" : fmtQty(row.delta)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="section-subtitle" style={{ marginTop: 14, marginBottom: 0 }}>
+                Live holdings and the modeled snapshot are aligned across all accounts.
+              </div>
+            )}
+          </>
         )}
       </div>
 

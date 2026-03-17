@@ -13,6 +13,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "scipy>=1.12.0",
     "exchange-calendars>=4.5.0",
+    "openpyxl>=3.1.0",
+    "xlsxwriter>=3.2.0",
 ]
 
 [project.optional-dependencies]

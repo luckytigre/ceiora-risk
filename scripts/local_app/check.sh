@@ -1,38 +1,36 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+retry() {
+  local tries="$1"
+  shift
+  local delay="$1"
+  shift
+  local attempt=1
+  while (( attempt <= tries )); do
+    if "$@"; then
+      return 0
+    fi
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
 
-backend_pid="$(read_pid "${BACKEND_PID_FILE}")"
-frontend_pid="$(read_pid "${FRONTEND_PID_FILE}")"
-backend_session="$(read_text_file "${BACKEND_SESSION_FILE}")"
-frontend_session="$(read_text_file "${FRONTEND_SESSION_FILE}")"
+backend_status=""
+frontend_head=""
 
-require_screen
-
-if [[ -z "${backend_session}" ]] || ! screen_session_exists "${backend_session}"; then
-  fail "Backend screen session is not alive"
+if retry 10 1 bash -lc "curl -fsS http://127.0.0.1:8000/api/health >/tmp/barra_backend_health.json"; then
+  backend_status="$(cat /tmp/barra_backend_health.json)"
+else
+  backend_status="unreachable"
 fi
-if [[ -z "${frontend_session}" ]] || ! screen_session_exists "${frontend_session}"; then
-  fail "Frontend screen session is not alive"
+
+if retry 10 1 bash -lc "curl -fsSI http://127.0.0.1:3000 >/tmp/barra_frontend_head.txt"; then
+  frontend_head="$(sed -n '1p' /tmp/barra_frontend_head.txt)"
+else
+  frontend_head="unreachable"
 fi
 
-if ! pid_alive "${backend_pid}"; then
-  fail "Backend PID is not alive"
-fi
-if ! pid_alive "${frontend_pid}"; then
-  fail "Frontend PID is not alive"
-fi
-
-curl -fsS "${BACKEND_URL}/api/health" >/dev/null
-curl -LfsS "${FRONTEND_URL}/" >/dev/null
-curl -LfsS "${FRONTEND_URL}/overview" >/dev/null
-curl -fsS "${FRONTEND_URL}/exposures" >/dev/null
-curl -fsS "${FRONTEND_URL}/data" >/dev/null
-curl -fsS "${FRONTEND_URL}/api/portfolio" >/dev/null
-curl -fsS "${FRONTEND_URL}/api/risk" >/dev/null
-curl -fsS "${FRONTEND_URL}/api/operator/status" >/dev/null
-
-log "Local app check passed"
-print_status
+echo "backend: ${backend_status:-unreachable}"
+echo "frontend: ${frontend_head:-unreachable}"

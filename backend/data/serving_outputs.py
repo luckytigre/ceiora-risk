@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from psycopg.rows import dict_row
 
 from backend import config
 from backend.data.neon import connect, resolve_dsn
+from backend.data.neon_primary_write import execute_neon_primary_write
 
 DATA_DB = Path(config.DATA_DB_PATH)
 SURFACE_NAME = "serving_outputs"
@@ -55,6 +57,20 @@ def _use_neon_reads() -> bool:
     return bool(config.serving_outputs_primary_reads_enabled() and config.neon_surface_enabled(SURFACE_NAME))
 
 
+def load_runtime_payload(
+    payload_name: str,
+    *,
+    fallback_loader: Callable[[str], Any | None] | None = None,
+) -> Any | None:
+    """Load the runtime truth payload, using cache fallback only when policy allows it."""
+    payload = load_current_payload(payload_name)
+    if payload is not None:
+        return payload
+    if fallback_loader is None or not config.serving_outputs_cache_fallback_enabled():
+        return None
+    return fallback_loader(payload_name)
+
+
 def persist_current_payloads(
     *,
     data_db: Path,
@@ -76,47 +92,27 @@ def persist_current_payloads(
         )
         for name, value in payloads.items()
     ]
-    conn = sqlite3.connect(str(data_db), timeout=120)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=120000")
-    try:
-        _ensure_sqlite_schema(conn)
-        if replace_all:
-            if rows:
-                placeholders = ",".join("?" for _ in rows)
-                conn.execute(
-                    f"DELETE FROM serving_payload_current WHERE payload_name NOT IN ({placeholders})",
-                    [row[0] for row in rows],
-                )
-            else:
-                conn.execute("DELETE FROM serving_payload_current")
-        conn.executemany(
-            """
-            INSERT OR REPLACE INTO serving_payload_current (
-                payload_name,
-                snapshot_id,
-                run_id,
-                refresh_mode,
-                payload_json,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
+    result = {
+        "status": "ok",
+        "snapshot_id": str(snapshot_id),
+        "row_count": len(rows),
+        "payload_names": sorted(str(k) for k in payloads.keys()),
+        "replace_all": bool(replace_all),
+    }
+    return execute_neon_primary_write(
+        base_result=result,
+        neon_enabled=bool(config.neon_surface_enabled(SURFACE_NAME)),
+        neon_required=bool(config.serving_payload_neon_write_required()),
+        perform_neon_write=lambda: _persist_current_payloads_neon(rows, replace_all=replace_all),
+        perform_fallback_write=lambda: _persist_current_payloads_sqlite(
             rows,
-        )
-        conn.commit()
-        result = {
-            "status": "ok",
-            "snapshot_id": str(snapshot_id),
-            "row_count": len(rows),
-            "payload_names": sorted(str(k) for k in payloads.keys()),
-            "replace_all": bool(replace_all),
-        }
-        if config.neon_surface_enabled(SURFACE_NAME):
-            result["neon_write"] = _persist_current_payloads_neon(rows, replace_all=replace_all)
-        return result
-    finally:
-        conn.close()
+            data_db=data_db,
+            replace_all=replace_all,
+        ),
+        failure_label="serving payload persistence",
+        fallback_result_key="sqlite_mirror_write",
+        fallback_authority="sqlite",
+    )
 
 
 def load_current_payload(payload_name: str) -> dict[str, Any] | list[Any] | None:
@@ -125,7 +121,7 @@ def load_current_payload(payload_name: str) -> dict[str, Any] | list[Any] | None
         return None
     if _use_neon_reads():
         payload = _load_current_payload_neon(clean)
-        if payload is not None or config.cloud_mode():
+        if payload is not None or not config.serving_outputs_cache_fallback_enabled():
             return payload
     return _load_current_payload_sqlite(clean)
 
@@ -229,8 +225,26 @@ def _persist_current_payloads_neon(
                 """,
                 rows,
             )
+        verification = _verify_current_payloads_neon(
+            conn,
+            rows=rows,
+            replace_all=replace_all,
+        )
+        if str(verification.get("status") or "") != "ok":
+            conn.rollback()
+            return {
+                "status": "error",
+                "row_count": len(rows),
+                "replace_all": bool(replace_all),
+                "verification": verification,
+            }
         conn.commit()
-        return {"status": "ok", "row_count": len(rows), "replace_all": bool(replace_all)}
+        return {
+            "status": "ok",
+            "row_count": len(rows),
+            "replace_all": bool(replace_all),
+            "verification": verification,
+        }
     except Exception as exc:
         conn.rollback()
         return {
@@ -239,3 +253,150 @@ def _persist_current_payloads_neon(
         }
     finally:
         conn.close()
+
+
+def _persist_current_payloads_sqlite(
+    rows: list[tuple[str, str, str, str, str, str]],
+    *,
+    data_db: Path,
+    replace_all: bool,
+) -> dict[str, Any]:
+    conn = sqlite3.connect(str(data_db), timeout=120)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=120000")
+    try:
+        _ensure_sqlite_schema(conn)
+        if replace_all:
+            if rows:
+                placeholders = ",".join("?" for _ in rows)
+                conn.execute(
+                    f"DELETE FROM serving_payload_current WHERE payload_name NOT IN ({placeholders})",
+                    [row[0] for row in rows],
+                )
+            else:
+                conn.execute("DELETE FROM serving_payload_current")
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO serving_payload_current (
+                payload_name,
+                snapshot_id,
+                run_id,
+                refresh_mode,
+                payload_json,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.commit()
+        return {
+            "status": "ok",
+            "row_count": len(rows),
+            "replace_all": bool(replace_all),
+        }
+    except Exception as exc:
+        conn.rollback()
+        return {
+            "status": "error",
+            "error": {"type": type(exc).__name__, "message": str(exc)},
+        }
+    finally:
+        conn.close()
+
+
+def _verify_current_payloads_neon(
+    pg_conn,
+    *,
+    rows: list[tuple[str, str, str, str, str, str]],
+    replace_all: bool,
+) -> dict[str, Any]:
+    expected_by_name = {
+        str(row[0]): {
+            "snapshot_id": str(row[1]),
+            "run_id": str(row[2]),
+            "refresh_mode": str(row[3]),
+        }
+        for row in rows
+    }
+    payload_names = sorted(expected_by_name.keys())
+    out: dict[str, Any] = {
+        "status": "ok",
+        "expected_row_count": len(expected_by_name),
+        "replace_all": bool(replace_all),
+        "verified_row_count": 0,
+        "verified_payload_names": [],
+        "issues": [],
+    }
+
+    with pg_conn.cursor() as cur:
+        if replace_all:
+            cur.execute(
+                """
+                SELECT payload_name, snapshot_id, run_id, refresh_mode
+                FROM serving_payload_current
+                ORDER BY payload_name
+                """
+            )
+        elif payload_names:
+            cur.execute(
+                """
+                SELECT payload_name, snapshot_id, run_id, refresh_mode
+                FROM serving_payload_current
+                WHERE payload_name = ANY(%s)
+                ORDER BY payload_name
+                """,
+                (payload_names,),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT payload_name, snapshot_id, run_id, refresh_mode
+                FROM serving_payload_current
+                WHERE FALSE
+                """
+            )
+        fetched = cur.fetchall()
+
+    observed_by_name = {
+        str(row[0]): {
+            "snapshot_id": str(row[1]),
+            "run_id": str(row[2]),
+            "refresh_mode": str(row[3]),
+        }
+        for row in fetched
+    }
+    observed_names = sorted(observed_by_name.keys())
+    out["verified_row_count"] = len(observed_names)
+    out["verified_payload_names"] = observed_names
+
+    if replace_all:
+        unexpected = sorted(set(observed_names) - set(payload_names))
+        missing = sorted(set(payload_names) - set(observed_names))
+        if unexpected:
+            out["issues"].extend(f"unexpected_payload:{name}" for name in unexpected)
+        if missing:
+            out["issues"].extend(f"missing_payload:{name}" for name in missing)
+        if len(observed_names) != len(payload_names):
+            out["issues"].append(
+                f"row_count_mismatch:{len(observed_names)}!={len(payload_names)}"
+            )
+    else:
+        missing = sorted(set(payload_names) - set(observed_names))
+        if missing:
+            out["issues"].extend(f"missing_payload:{name}" for name in missing)
+
+    for payload_name in payload_names:
+        expected = expected_by_name.get(payload_name) or {}
+        observed = observed_by_name.get(payload_name)
+        if observed is None:
+            continue
+        for field in ("snapshot_id", "run_id", "refresh_mode"):
+            if str(observed.get(field) or "") != str(expected.get(field) or ""):
+                out["issues"].append(
+                    f"metadata_mismatch:{payload_name}:{field}:{observed.get(field)}!={expected.get(field)}"
+                )
+
+    if out["issues"]:
+        out["status"] = "error"
+    return out

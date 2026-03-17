@@ -2,10 +2,18 @@
 
 ## Core Policy
 - Holdings writes and holdings-serving reads are both Neon-authoritative when a Neon DSN is configured.
+- Local SQLite is the only direct LSEG landing zone and the optional deep archive on the local machine.
+- Neon is the intended authoritative operating database for serving and, once enabled, for core/cold-core rebuilds.
+- Model outputs and durable serving payloads now write to Neon first when Neon is configured; local SQLite remains a mirror and local diagnostic surface during migration.
+- Operator health/runtime truth is beginning to move to Neon-backed runtime state, but broader analytics cache state is still transitional.
+- The Neon-backed runtime-state surface is intentionally small and operator-facing: `risk_engine_meta`, `neon_sync_health`, and the active snapshot pointer.
+- `/api/health` and `/api/operator/status` now expose runtime-state status/source fields so missing Neon runtime truth is visible instead of looking healthy by omission.
 - `RECALC`/holdings-dirty state is backend-persisted, not browser-local.
 - Risk engine recompute cadence: weekly (`RISK_RECOMPUTE_INTERVAL_DAYS=7` by default).
 - Cross-section recency guard: regressions only use exposure snapshots at least 7 calendar days old (`CROSS_SECTION_MIN_AGE_DAYS=7`).
 - Loadings/UI cache refresh: can run daily; it reuses latest weekly risk-engine state unless recompute is due.
+- This is intentional: served holdings, prices, and factor loadings can be fresher than the weekly core risk engine between rebuilds.
+- The implementation plan for moving deep `health_diagnostics` work off the quick refresh path lives in [HEALTH_DIAGNOSTICS_REFRESH_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/docs/HEALTH_DIAGNOSTICS_REFRESH_PLAN.md).
 - Current live factor set: 45 total factors, including 14 style factors. `Book-to-Price` and `Earnings Yield` remain; there is no standalone `Value` factor.
 - Execution model: one orchestrator framework with profile-specific cadence:
   - `serve-refresh`
@@ -43,16 +51,32 @@
     - `source_dates`
     - stable risk-engine fingerprint (`method_version`, `last_recompute_date`, `factor_returns_latest_date`, snapshot-age/lookback settings, specific-risk count)
   - on that same fast path, cached `eligibility` and `cov_matrix` are reused when present instead of being rebuilt from unchanged model state
+  - deep `health_diagnostics` are no longer recomputed on the quick path; `serve-refresh` carries forward the last good diagnostics payload or records that diagnostics were deferred
   - when that reuse path is active, relational `model_outputs` persistence is skipped because the core model state is unchanged; serving payload persistence still runs normally
   - manual `serve-refresh` without that scope keeps the existing full serving-refresh behavior.
-- `source-daily`: latest-source ingest plus serving refresh only.
-- `source-daily-plus-core-if-due`: default daily maintenance lane; recomputes core only when cadence/version says due.
+- `source-daily`: local LSEG ingest into SQLite for the latest completed XNYS session, repair any missing daily price sessions up to that session, purge open-month PIT rows, backfill any missing closed-month fundamentals/classification anchors, publish the retained working window into Neon, then refresh serving only.
+- `source-daily-plus-core-if-due`: default daily maintenance lane; local ingest + Neon source-sync first, then recompute core only when cadence/version says due.
 - `core-weekly`: force core recompute without rebuilding full raw history.
   - factor-return recompute now determines uncached dates before loading prices and only reads the bounded price window needed for those dates plus the immediately prior session.
+  - this lane now owns deep `health_diagnostics` recompute for the current weekly core model state.
 - `cold-core`: full historical reset for structural data changes (new/changed historical prices, volume, fundamentals, classification, or factor methodology).
   - This path rebuilds `barra_raw_cross_section_history` over full history and clears core cache tables before recomputing factor returns/risk.
-  - UI now requires explicit confirmation before starting this lane from the operator deck.
+  - This lane is an explicit operator/API path; it is not exposed as a one-click dashboard control in the current frontend.
+  - During that run, `serving_refresh` must read the local/workspace source tables that just produced the rebuilt raw history; otherwise it can publish stale Neon factor-loadings metadata before the broad Neon mirror catches up.
+  - During ordinary `serve-refresh`, the published weekly core-state should come from the latest durable `model_run_metadata` rather than a stale runtime cache key; otherwise a quick refresh can republish fresh loadings with regressed core metadata.
+  - this lane also owns deep `health_diagnostics` recompute for structural rebuilds.
 - `universe-add`: finalization lane after explicit `security_master` merge and targeted source backfills for new names.
+
+Rebuild-authority rule:
+- While `NEON_AUTHORITATIVE_REBUILDS=false`, `core-weekly` and `cold-core` still rebuild from local SQLite. Run `source-daily` first if you need the latest local ingest reflected.
+- If Neon ever gets ahead of the intended `source-daily` target date because of a premature/invalid session stamp, rerunning `source-daily` now heals that state instead of refusing the publish.
+- When `NEON_AUTHORITATIVE_REBUILDS=true`, those rebuild lanes execute in this order:
+  - `source_sync`: publish source tables from local SQLite into Neon without downgrading newer Neon source dates
+  - `neon_readiness`: validate Neon table coverage/retention and materialize a scratch SQLite rebuild workspace from Neon
+  - core stages run from that Neon-backed scratch workspace
+  - final mirror publishes rebuilt analytics back into Neon
+  - local derived tables/cache are refreshed from the scratch workspace so the private mirror stays congruent
+- In both cases, local SQLite remains the only direct LSEG ingress point.
 
 Runtime-role rule:
 - `local-ingest`: all lanes may be used.
@@ -67,14 +91,13 @@ Runtime-role rule:
 - Data page is for source-table lineage, coverage, cache surfaces, and integrity diagnostics.
 - Operator Status and header health are the live runtime truth.
 - Data/Health diagnostics are deeper local-instance maintenance panels and may lag the cloud-serving view.
-- Operator lane cards show:
-  - plain-English lane purpose
-  - latest run state
-  - latest run elapsed time and delta versus the previous run
-  - slowest stage for the latest run
-  - recent-run history strip
-  - stage-level detail
-  - separate Neon mirror and Neon parity status
+- Health now shows compact per-lane status cards plus runtime/source-recency cards.
+- Health page refresh prompts are intentionally split:
+  - fresher loadings can be addressed with `serve-refresh`
+  - core rebuild due states should point the operator to `core-weekly` / `cold-core`, not imply that a quick refresh can fix them
+- Exposures and Positions should rely on the shared frontend truth banner for snapshot/loadings/core dates rather than reassembling those dates independently per page.
+- Header refresh UI is intentionally a single context-aware quick action so `serve-refresh` is not duplicated under multiple top-bar buttons.
+- Lane-specific refresh controls and detailed run-history drilldowns are currently API/CLI-driven rather than exposed directly in the frontend.
 
 ## Local App Lifecycle
 - Preferred local launch path: `make app-up`
@@ -85,7 +108,7 @@ Runtime-role rule:
 - Canonical launcher scripts live under `scripts/local_app/` and write runtime state under `backend/runtime/local_app/`.
 
 ## Key Commands
-- Orchestrated refresh via API (default profile from `mode=full` mapping):
+- Orchestrated refresh via API:
   - `curl -X POST "http://localhost:8000/api/refresh"`
 - API refresh explicit serve-refresh profile:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=serve-refresh"`
@@ -97,10 +120,9 @@ Runtime-role rule:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=core-weekly&force_core=true"`
 - API refresh explicit cold-core rebuild:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=cold-core"`
-- API refresh cold mode shortcut:
-  - `curl -X POST "http://localhost:8000/api/refresh?mode=cold"`
 - API refresh partial stage run:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=source-daily-plus-core-if-due&from_stage=ingest&to_stage=risk_model"`
+  - if `NEON_AUTHORITATIVE_REBUILDS=true` and you target core stages explicitly, include `neon_readiness` in the window or the run will fail closed before core work starts
 - Orchestrated refresh via CLI module:
   - `python3 -m backend.scripts.run_model_pipeline --profile serve-refresh`
 - Orchestrated refresh via script wrapper:
@@ -113,8 +135,13 @@ Runtime-role rule:
   - `python3 -m backend.scripts.run_model_pipeline --profile source-daily-plus-core-if-due --resume-run-id <run_id>`
 - Refresh data from LSEG:
   - `python3 -m backend.scripts.download_data_lseg --db-path backend/runtime/data.db`
+  - Explicit `--tickers`, `--rics`, and index-derived names only operate on instruments already present in `security_master`; the command now reports any requested names that were not seeded there.
 - Repair historical volume coverage only (writes `TR.Volume` into `security_prices_eod.volume`):
   - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/runtime/data.db --start-date 2012-01-03 --end-date 2026-03-04 --volume-only --only-null-volume`
+  - Explicit `--rics` repairs likewise only target seeded `security_master` rows and report unmatched requested RICs in the result payload.
+- PIT history backfill (monthly/quarterly anchor dates for fundamentals/classification, with optional sparse anchor-date prices):
+  - `python3 -m backend.scripts.backfill_pit_history_lseg --db-path backend/runtime/data.db --start-date 2018-01-01 --end-date 2026-03-04 --frequency monthly`
+  - This is not a substitute for full daily price-history repair. Use `backfill_prices_range_lseg.py` when you need continuous daily `security_prices_eod` history for raw-history rebuilds or factor-return recompute coverage.
 - Bootstrap cUSE4 canonical source tables:
   - `python3 -m backend.scripts.bootstrap_cuse4_source_tables --db-path backend/runtime/data.db`
 - Build cUSE4 ESTU audit snapshot:
@@ -129,10 +156,11 @@ Runtime-role rule:
 - `risk_engine_cov`: serialized factor covariance matrix (weekly cache).
 - `risk_engine_specific_risk`: stock-level specific risk map (weekly cache).
 - `daily_factor_returns`: factor-return workspace table in `cache.db`, now including `robust_se` and `t_stat`.
+- Health regression diagnostics prefer stored `t_stat`; the older proxy path remains only as a compatibility fallback for historical rows that predate the widened inference fields.
 - `daily_specific_residuals`: residual workspace table in `cache.db`, now storing both `model_residual` and `raw_residual`.
 - `cuse4_foundation`: bootstrap + latest ESTU audit summary for cUSE4 transition layer.
 - `portfolio`, `risk`, `exposures`, `universe_loadings`, `universe_factors`, `health_diagnostics`, `eligibility`, `refresh_meta`: refreshed on each `/api/refresh` call.
-  - `health_diagnostics` is now recomputed during every refresh staging pass and persisted into the durable serving surface.
+  - `health_diagnostics` is persisted into the durable serving surface, but quick refreshes carry it forward while core lanes refresh it.
   - `/api/health/diagnostics` prefers the durable current payload before falling back to cache.
 - if Neon-backed holdings cannot be read during serving projection, refresh fails instead of publishing an empty-success portfolio payload
 - `model_outputs_write`: latest relational model-output persistence status.
@@ -142,12 +170,7 @@ Runtime-role rule:
   - only the canonical serving-refresh writer opts into `replace_all=true`, which keeps destructive delete behavior explicit instead of implicit.
 - `refresh_status`: background orchestrator state snapshot.
   - includes current stage progress for in-flight runs (`current_stage`, `stage_index`, `stage_count`, `stage_started_at`) and the optional `refresh_scope` used by holdings-triggered refreshes.
-- operator lane summaries also expose additive persisted run-timing fields:
-  - `duration_seconds`
-  - `duration_delta_seconds`
-  - `duration_delta_pct`
-  - `stage_duration_seconds_total`
-  - `slowest_stage`
+- operator lane summaries expose the latest persisted run state, while richer in-flight stage progress remains part of `refresh_status` and backend/operator diagnostics.
 
 ## Factor-Return Durability And Parity
 - Durable SQLite factor-return persistence now replaces stale date slices instead of only writing rows from the latest durable date forward.
@@ -205,8 +228,13 @@ Runtime-role rule:
   - Confirm:
     - `.runtime.app_runtime_role`
     - `.runtime.allowed_profiles`
+    - `.runtime.source_authority`
+    - `.runtime.rebuild_authority`
+    - lane metadata shows `source_sync_required` / `neon_readiness_required` for Neon-authoritative core lanes
     - `.runtime.serving_outputs_primary_reads_effective`
     - `.runtime.neon_auto_sync_enabled_effective`
+    - `.source_dates` is the authoritative operating view
+    - `.local_archive_source_dates` matches or intentionally exceeds Neon after local ingest
 - One-command operator check:
   - `make operator-check`
   - or `./scripts/operator_check.sh`
@@ -235,6 +263,7 @@ Runtime-role rule:
 - Orchestrator ingest behavior:
   - Stage `ingest` now always runs bootstrap checks.
   - Live ingest remains opt-in via `ORCHESTRATOR_ENABLE_INGEST=true`.
+  - Orchestrator live ingest runs as one full-universe pass; use the direct LSEG ingest script for any manual shard/chunk workflow.
 - Security master key policy:
   - `security_master` is physically keyed by `ric`.
   - deprecated `sid`/`permid` and dead instrument metadata were removed from the canonical schema.

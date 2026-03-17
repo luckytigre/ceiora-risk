@@ -5,9 +5,25 @@ from __future__ import annotations
 from typing import Any, NotRequired, TypedDict
 
 
+class FactorCatalogEntryPayload(TypedDict, total=False):
+    factor_id: str
+    factor_name: str
+    short_label: str
+    family: str
+    block: str
+    source_column: str | None
+    display_order: int
+    covariance_display: bool
+    exposure_publish: bool
+    active: bool
+    method_version: str
+
+
 class SourceDatesPayload(TypedDict, total=False):
     fundamentals_asof: str | None
     exposures_asof: str | None
+    exposures_latest_available_asof: str | None
+    exposures_served_asof: str | None
     prices_asof: str | None
     classification_asof: str | None
 
@@ -45,7 +61,7 @@ class RiskEngineStatePayload(TypedDict):
 
 
 class PositionRiskMixPayload(TypedDict):
-    country: float
+    market: float
     industry: float
     style: float
     idio: float
@@ -69,26 +85,26 @@ class PositionPayload(TypedDict, total=False):
     specific_var: float | None
     specific_vol: float | None
     risk_contrib_pct: float
-    eligible_for_model: bool
+    model_status: str
     eligibility_reason: str
     risk_mix: PositionRiskMixPayload
 
 
 class RiskSharesPayload(TypedDict):
-    country: float
+    market: float
     industry: float
     style: float
     idio: float
 
 
 class ComponentSharesPayload(TypedDict):
-    country: float
+    market: float
     industry: float
     style: float
 
 
 class FactorDetailPayload(TypedDict, total=False):
-    factor: str
+    factor_id: str
     category: str
     exposure: float
     factor_vol: float
@@ -124,7 +140,7 @@ class ExposureDrilldownPayload(TypedDict, total=False):
 
 
 class ExposureFactorPayload(TypedDict, total=False):
-    factor: str
+    factor_id: str
     value: float
     factor_vol: float
     cross_section_n: int
@@ -155,7 +171,7 @@ class UniverseTickerPayload(TypedDict, total=False):
     risk_loading: float | None
     specific_var: float | None
     specific_vol: float | None
-    eligible_for_model: bool
+    model_status: str
     eligibility_reason: str
     model_warning: str
     as_of_date: str
@@ -164,12 +180,20 @@ class UniverseTickerPayload(TypedDict, total=False):
 class UniverseLoadingsPayload(TypedDict, total=False):
     ticker_count: int
     eligible_ticker_count: int
+    core_estimated_ticker_count: int
+    projected_only_ticker_count: int
+    ineligible_ticker_count: int
+    as_of_date: str | None
+    latest_available_asof: str | None
     factor_count: int
     factors: list[str]
     factor_vols: dict[str, float]
+    factor_catalog: list[FactorCatalogEntryPayload]
     index: list[dict[str, Any]]
     by_ticker: dict[str, UniverseTickerPayload]
     risk_engine: RiskEngineStatePayload
+    run_id: str
+    snapshot_id: str
     refresh_started_at: str
     source_dates: SourceDatesPayload
 
@@ -177,11 +201,18 @@ class UniverseLoadingsPayload(TypedDict, total=False):
 class UniverseFactorsPayload(TypedDict, total=False):
     factors: list[str]
     factor_vols: dict[str, float]
+    factor_catalog: list[FactorCatalogEntryPayload]
     r_squared: float
     ticker_count: int
     eligible_ticker_count: int
+    core_estimated_ticker_count: int
+    projected_only_ticker_count: int
+    ineligible_ticker_count: int
     risk_engine: RiskEngineStatePayload
+    run_id: str
+    snapshot_id: str
     refresh_started_at: str
+    source_dates: SourceDatesPayload
 
 
 class EligibilitySummaryPayload(TypedDict, total=False):
@@ -190,9 +221,13 @@ class EligibilitySummaryPayload(TypedDict, total=False):
     exp_date: str | None
     exposure_n: int
     structural_eligible_n: int
+    core_structural_eligible_n: int
     regression_member_n: int
+    projectable_n: int
+    projected_only_n: int
     structural_coverage: float
     regression_coverage: float
+    projectable_coverage: float
     drop_pct_from_prev: float
     alert_level: str
     selection_mode: str
@@ -207,7 +242,10 @@ class ModelSanityChecksPayload(TypedDict):
     factor_sign_mismatch_count: int
     latest_regression_coverage_pct: float
     latest_structural_eligible_n: int
-    country_risk_share_pct: float
+    latest_core_structural_eligible_n: int
+    latest_projectable_n: int
+    latest_projected_only_n: int
+    market_risk_share_pct: float
     industry_risk_share_pct: float
     style_risk_share_pct: float
     idio_risk_share_pct: float
@@ -243,6 +281,7 @@ class RefreshMetaPayload(TypedDict, total=False):
     model_sanity_status: str
     cuse4_foundation: dict[str, Any]
     health_refreshed: bool
+    health_refresh_state: str
 
 
 class StageRefreshSnapshotResult(TypedDict):
@@ -250,3 +289,4 @@ class StageRefreshSnapshotResult(TypedDict):
     risk_engine_state: RiskEngineStatePayload
     sanity: ModelSanityPayload
     health_refreshed: bool
+    health_refresh_state: str

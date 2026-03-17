@@ -11,10 +11,13 @@ from typing import Any
 
 from backend import config
 from backend.data.cache import cache_get, cache_set
-from backend.orchestration.run_model_pipeline import (
+from backend.orchestration.profiles import (
     PROFILE_CONFIG,
     STAGES,
+    planned_stages_for_profile,
     resolve_profile_name,
+)
+from backend.orchestration.run_model_pipeline import (
     run_model_pipeline,
 )
 from backend.services.holdings_runtime_state import mark_refresh_started
@@ -25,6 +28,7 @@ logger = logging.getLogger(__name__)
 _STATUS_CACHE_KEY = "refresh_status"
 _RUN_LOCK = threading.Lock()
 _STATE_LOCK = threading.Lock()
+_ACTIVE_WORKER: threading.Thread | None = None
 
 
 def _now_iso() -> str:
@@ -89,6 +93,17 @@ def _snapshot() -> dict[str, Any]:
         return dict(_STATE)
 
 
+def _set_active_worker(worker: threading.Thread | None) -> None:
+    global _ACTIVE_WORKER
+    with _STATE_LOCK:
+        _ACTIVE_WORKER = worker
+
+
+def _get_active_worker() -> threading.Thread | None:
+    with _STATE_LOCK:
+        return _ACTIVE_WORKER
+
+
 def _set_state(**updates: Any) -> dict[str, Any]:
     with _STATE_LOCK:
         _STATE.update(updates)
@@ -97,12 +112,58 @@ def _set_state(**updates: Any) -> dict[str, Any]:
     return snap
 
 
+def _reconcile_orphaned_running_state() -> dict[str, Any]:
+    snap = _snapshot()
+    if str(snap.get("status") or "") != "running":
+        return snap
+    worker = _get_active_worker()
+    if worker is not None and worker.is_alive():
+        return snap
+    if _RUN_LOCK.locked():
+        try:
+            _RUN_LOCK.release()
+        except RuntimeError:
+            logger.exception("Failed to release orphaned refresh lock")
+    try:
+        mark_refresh_finished(
+            profile=str(snap.get("profile") or "") or None,
+            run_id=str(snap.get("pipeline_run_id") or "") or None,
+            status="unknown",
+            message="Refresh worker is no longer running; state reconciled locally.",
+            clear_pending=False,
+        )
+    except Exception:
+        logger.exception("Failed to reconcile holdings state for orphaned refresh")
+    reconciled = _set_state(
+        status="unknown",
+        finished_at=_now_iso(),
+        current_stage=None,
+        stage_started_at=None,
+        current_stage_message=None,
+        current_stage_progress_pct=None,
+        current_stage_items_processed=None,
+        current_stage_items_total=None,
+        current_stage_unit=None,
+        current_stage_heartbeat_at=None,
+        error={
+            "type": "refresh_worker_missing",
+            "message": "Refresh state was running but no background worker is alive.",
+        },
+    )
+    _set_active_worker(None)
+    return reconciled
+
+
 def get_refresh_status() -> dict[str, Any]:
     """Return current or most recent refresh status."""
-    return _snapshot()
+    return _reconcile_orphaned_running_state()
 
 
-def _resolve_profile(profile: str | None, mode: str | None) -> str:
+def _default_profile() -> str:
+    return "serve-refresh" if config.cloud_mode() else "source-daily-plus-core-if-due"
+
+
+def _resolve_profile(profile: str | None) -> str:
     prof = str(profile or "").strip().lower()
     if prof:
         prof = resolve_profile_name(prof)
@@ -111,14 +172,7 @@ def _resolve_profile(profile: str | None, mode: str | None) -> str:
                 f"Invalid profile '{profile}'. Valid profiles: {', '.join(sorted(PROFILE_CONFIG.keys()))}"
             )
         return prof
-    clean_mode = str(mode or "full").strip().lower()
-    if clean_mode == "light":
-        return "serve-refresh"
-    if clean_mode == "cold":
-        return "cold-core"
-    if clean_mode == "full":
-        return "source-daily-plus-core-if-due"
-    raise ValueError("Invalid mode. Expected 'full', 'light', or 'cold' when profile is omitted.")
+    return _default_profile()
 
 
 def _runtime_allowed_profiles() -> set[str]:
@@ -148,9 +202,17 @@ def _normalize_stage(name: str | None) -> str | None:
     return clean
 
 
+def _validate_stage_window(from_stage: str | None, to_stage: str | None) -> None:
+    if from_stage is None or to_stage is None:
+        return
+    if STAGES.index(from_stage) > STAGES.index(to_stage):
+        raise ValueError("--from-stage must be before or equal to --to-stage")
+
+
 def _run_in_background(
     *,
     job_id: str,
+    pipeline_run_id: str,
     profile: str,
     mode: str,
     as_of_date: str | None,
@@ -178,7 +240,7 @@ def _run_in_background(
         result = run_model_pipeline(
             profile=profile,
             as_of_date=as_of_date,
-            run_id=(None if resume_run_id else f"api_{job_id}"),
+            run_id=(None if resume_run_id else pipeline_run_id),
             resume_run_id=resume_run_id,
             from_stage=from_stage,
             to_stage=to_stage,
@@ -210,7 +272,7 @@ def _run_in_background(
         try:
             mark_refresh_finished(
                 profile=profile,
-                run_id=(str(resume_run_id).strip() if resume_run_id else f"api_{job_id}"),
+                run_id=str(pipeline_run_id).strip() or None,
                 status="failed",
                 message=str(exc),
                 clear_pending=False,
@@ -235,13 +297,13 @@ def _run_in_background(
             },
         )
     finally:
+        _set_active_worker(None)
         _RUN_LOCK.release()
         logger.info("Background refresh %s finished", job_id)
 
 
 def start_refresh(
     *,
-    mode: str,
     force_risk_recompute: bool,
     profile: str | None = None,
     refresh_scope: str | None = None,
@@ -252,21 +314,32 @@ def start_refresh(
     force_core: bool = False,
 ) -> tuple[bool, dict[str, Any]]:
     """Start refresh in a background thread. Returns (started, status)."""
-    resolved_profile = _resolve_profile(profile, mode)
+    resolved_profile = _resolve_profile(profile)
     _assert_profile_allowed(resolved_profile)
+    mode = str(PROFILE_CONFIG.get(resolved_profile, {}).get("serving_mode") or "full")
     stage_from = _normalize_stage(from_stage)
     stage_to = _normalize_stage(to_stage)
+    _validate_stage_window(stage_from, stage_to)
     force_core_effective = bool(force_core or force_risk_recompute)
+    planned_stages_for_profile(
+        profile=resolved_profile,
+        from_stage=stage_from,
+        to_stage=stage_to,
+        force_core=force_core_effective,
+    )
 
     if not _RUN_LOCK.acquire(blocking=False):
-        return False, _snapshot()
+        reconciled = _reconcile_orphaned_running_state()
+        if not _RUN_LOCK.acquire(blocking=False):
+            return False, reconciled
 
     job_id = uuid.uuid4().hex[:12]
+    pipeline_run_id = (str(resume_run_id).strip() if resume_run_id else f"api_{job_id}")
     now = _now_iso()
     running_state = _set_state(
         status="running",
         job_id=job_id,
-        pipeline_run_id=(str(resume_run_id).strip() if resume_run_id else None),
+        pipeline_run_id=pipeline_run_id,
         profile=resolved_profile,
         requested_profile=(str(profile).strip().lower() if profile else None),
         mode=mode,
@@ -294,7 +367,7 @@ def start_refresh(
         error=None,
     )
     try:
-        mark_refresh_started(profile=resolved_profile, run_id=job_id)
+        mark_refresh_started(profile=resolved_profile, run_id=pipeline_run_id)
     except Exception:
         logger.exception("Failed to mark holdings refresh start state")
 
@@ -302,6 +375,7 @@ def start_refresh(
         target=_run_in_background,
         kwargs={
             "job_id": job_id,
+            "pipeline_run_id": pipeline_run_id,
             "profile": resolved_profile,
             "mode": str(mode),
             "refresh_scope": (str(refresh_scope).strip().lower() if refresh_scope else None),
@@ -316,12 +390,14 @@ def start_refresh(
     )
     try:
         worker.start()
+        _set_active_worker(worker)
     except Exception as exc:  # noqa: BLE001
+        _set_active_worker(None)
         _RUN_LOCK.release()
         try:
             mark_refresh_finished(
                 profile=resolved_profile,
-                run_id=job_id,
+                run_id=pipeline_run_id,
                 status="failed",
                 message=str(exc),
                 clear_pending=False,

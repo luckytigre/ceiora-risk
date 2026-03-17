@@ -5,8 +5,9 @@
       "weight": 0.6,
       "trbc_sector": "Technology",
       "exposures": {
-        "Beta": 1.1
+        "style_beta_score": 1.1
       },
+      "model_status": "core_estimated",
       "trbc_economic_sector_short": "Technology",
       "trbc_economic_sector_short_abbr": "Tech"
     },
@@ -16,8 +17,9 @@
       "trbc_economic_sector_short": "Financials",
       "trbc_economic_sector_short_abbr": "Fins",
       "exposures": {
-        "Beta": 0.9
-      }
+        "style_beta_score": 0.9
+      },
+      "model_status": "core_estimated"
     }
   ],
   "total_value": 1000.0,

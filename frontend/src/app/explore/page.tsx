@@ -32,6 +32,7 @@ export default function ExplorePage() {
 
   const item = tickerData?.item;
   const factorVols = factorsData?.factor_vols ?? {};
+  const factorCatalog = factorsData?.factor_catalog ?? [];
   const results = searchData?.results ?? [];
   const historyPoints = historyData?.points ?? [];
 
@@ -70,11 +71,11 @@ export default function ExplorePage() {
     if (!item) return [];
     const exposures = item.exposures ?? {};
     const sensitivities = item.sensitivities ?? {};
-    return Object.entries(exposures).map(([factor, rawVal]) => {
+    return Object.entries(exposures).map(([factorId, rawVal]) => {
       const loading = Number(rawVal) || 0;
-      const fv = Number(factorVols[factor] ?? 0) || 0;
+      const fv = Number(factorVols[factorId] ?? 0) || 0;
       return {
-        factor,
+        factor_id: factorId,
         value: loading,
         factor_vol: fv,
         drilldown: [
@@ -82,7 +83,7 @@ export default function ExplorePage() {
             ticker: item.ticker,
             weight: loading >= 0 ? 1 : -1,
             exposure: loading,
-            sensitivity: Number(sensitivities[factor] ?? loading * fv) || 0,
+            sensitivity: Number(sensitivities[factorId] ?? loading * fv) || 0,
             contribution: loading,
           },
         ],
@@ -118,6 +119,7 @@ export default function ExplorePage() {
             historyLoading={historyLoading}
             historyError={historyError}
             chartFactors={chartFactors}
+            factorCatalog={factorCatalog}
           />
         </>
       )}

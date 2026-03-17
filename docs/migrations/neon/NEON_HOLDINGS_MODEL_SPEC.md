@@ -27,7 +27,7 @@ Use account + RIC as canonical position key.
 - `ric` (text, not null)
 - `ticker` (text, nullable convenience copy)
 - `quantity` (numeric(20,6), not null)
-- `source` (text, not null)  # ui_edit / csv_import / seed_mock / etc.
+- `source` (text, not null)  # ui_edit / csv_import / what_if / etc.
 - `import_batch_id` (uuid, nullable)
 - `updated_at` (timestamptz, not null)
 - PK: (`account_id`, `ric`)

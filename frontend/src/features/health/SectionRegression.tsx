@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import HelpLabel from "@/components/HelpLabel";
 import TableRowToggle from "@/components/TableRowToggle";
+import { shortFactorLabel } from "@/lib/factorLabels";
 import type { HealthDiagnosticsData } from "@/lib/types";
 import { Bar, ChartJS, Line, type ChartData } from "./charts";
 import {
@@ -30,8 +31,8 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
     labels: blockRows.map((r) => r.date),
     datasets: [
       {
-        label: "Industry R²",
-        data: blockRows.map((r) => (Number(r.r2_industry) || 0) * 100),
+        label: "Structural R²",
+        data: blockRows.map((r) => (Number(r.r2_structural) || 0) * 100),
         borderColor: "rgba(204, 53, 88, 0.45)",
         backgroundColor: (ctx) => {
           const chart = ctx.chart;
@@ -120,9 +121,11 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
     style_mean_abs_t: 0,
   };
   const varianceSplit = data.section1.portfolio_variance_split ?? {
+    market_pct_total: 0,
     industry_pct_total: 0,
     style_pct_total: 0,
     idio_pct_total: 0,
+    market_pct_factor_only: 0,
     industry_pct_factor_only: 0,
     style_pct_factor_only: 0,
   };
@@ -169,24 +172,24 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
         <h4 style={{ margin: 0 }}>
           <HelpLabel
             label="Incremental R² By Block"
-            plain="Shows how much fit comes from industry first, then extra fit added by style."
-            math="Industry R², Style ΔR² = Full R² − Industry R²"
+            plain="Shows how much fit comes from the structural block first, then extra fit added by style."
+            math="Structural R², Style ΔR² = Full R² − Structural R²"
             interpret={{
               lookFor: "Stable block contributions with style adding incremental fit.",
-              good: "Industry R² is stable, and style ΔR² is positive and persistent.",
+              good: "Structural R² is stable, and style ΔR² is positive and persistent.",
               distribution: "Avoid abrupt structural jumps or long flatline in style ΔR².",
             }}
           />
         </h4>
         {blockRows.length > 0 && (() => {
           const last = blockRows[blockRows.length - 1];
-          const indR2 = (Number(last.r2_industry) || 0) * 100;
+          const structuralR2 = (Number(last.r2_structural) || 0) * 100;
           const styleR2 = (Number(last.r2_style_incremental) || 0) * 100;
           const fullR2 = (Number(last.r2_full) || 0) * 100;
           return (
             <div className="detail-history-stats">
               <span className="detail-history-stat" style={{ color: "rgba(204, 53, 88, 0.85)" }}>
-                Ind {indR2.toFixed(1)}%
+                Struct {structuralR2.toFixed(1)}%
               </span>
               <span className="detail-history-stat" style={{ color: "rgba(107, 207, 154, 0.85)" }}>
                 +Style {styleR2.toFixed(1)}%
@@ -287,8 +290,8 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
           </thead>
           <tbody>
             {showTStatRows.map((row) => (
-              <tr key={row.factor}>
-                <td>{row.factor}</td>
+              <tr key={row.factor_id}>
+                <td>{shortFactorLabel(row.factor_id, data.factor_catalog)}</td>
                 <td className="text-right">{row.value.toFixed(2)}%</td>
               </tr>
             ))}
@@ -306,12 +309,14 @@ export default function SectionRegression({ data }: { data: HealthDiagnosticsDat
       <div className="health-kpi-strip">
         <div className="health-kpi">
           <div className="health-kpi-label">Portfolio Variance Split (Total)</div>
+          <div className="health-kpi-subrow"><span>Market</span><strong>{varianceSplit.market_pct_total.toFixed(1)}%</strong></div>
           <div className="health-kpi-subrow"><span>Industry</span><strong>{varianceSplit.industry_pct_total.toFixed(1)}%</strong></div>
           <div className="health-kpi-subrow"><span>Style</span><strong>{varianceSplit.style_pct_total.toFixed(1)}%</strong></div>
           <div className="health-kpi-subrow"><span>Idio</span><strong>{varianceSplit.idio_pct_total.toFixed(1)}%</strong></div>
         </div>
         <div className="health-kpi">
           <div className="health-kpi-label">Portfolio Variance Split (Factor-Only)</div>
+          <div className="health-kpi-subrow"><span>Market</span><strong>{varianceSplit.market_pct_factor_only.toFixed(1)}%</strong></div>
           <div className="health-kpi-subrow"><span>Industry</span><strong>{varianceSplit.industry_pct_factor_only.toFixed(1)}%</strong></div>
           <div className="health-kpi-subrow"><span>Style</span><strong>{varianceSplit.style_pct_factor_only.toFixed(1)}%</strong></div>
           <div className="health-kpi-subrow">

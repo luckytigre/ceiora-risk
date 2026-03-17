@@ -1,18 +1,19 @@
 {
   "risk_shares": {
-    "country": 0.0,
+    "market": 0.0,
     "industry": 28.0,
     "style": 32.0,
     "idio": 40.0
   },
   "component_shares": {
-    "country": 0.0,
+    "market": 0.0,
     "industry": 0.467,
     "style": 0.533
   },
   "factor_details": [
     {
-      "factor": "Beta",
+      "factor_id": "style_beta_score",
+      "factor_name": "style_beta_score",
       "category": "style",
       "exposure": 0.13,
       "factor_vol": 0.05,
@@ -24,8 +25,8 @@
   ],
   "cov_matrix": {
     "factors": [
-      "Beta",
-      "Book-to-Price"
+      "style_beta_score",
+      "style_book_to_price_score"
     ],
     "correlation": [
       [
@@ -38,9 +39,37 @@
       ]
     ]
   },
+  "factor_catalog": [
+    {
+      "factor_id": "style_beta_score",
+      "factor_name": "Beta",
+      "short_label": "Beta",
+      "family": "style",
+      "block": "core_style",
+      "source_column": "beta_score",
+      "display_order": 1000,
+      "covariance_display": true,
+      "exposure_publish": true,
+      "active": true,
+      "method_version": "v8_use4_us_core_market_one_stage_projected_non_us_2026_03_15"
+    },
+    {
+      "factor_id": "style_book_to_price_score",
+      "factor_name": "Book-to-Price",
+      "short_label": "Book-to-Price",
+      "family": "style",
+      "block": "core_style",
+      "source_column": "book_to_price_score",
+      "display_order": 1001,
+      "covariance_display": true,
+      "exposure_publish": true,
+      "active": true,
+      "method_version": "v8_use4_us_core_market_one_stage_projected_non_us_2026_03_15"
+    }
+  ],
   "risk_engine": {
     "specific_risk_ticker_count": 100,
-    "method_version": "v7_country_split_hc1_no_value_factor_2026_03_14"
+    "method_version": "v8_use4_us_core_market_one_stage_projected_non_us_2026_03_15"
   },
   "r_squared": 0.41,
   "model_sanity": {

@@ -16,8 +16,8 @@ import {
   type Plugin,
 } from "chart.js";
 import { Chart } from "react-chartjs-2";
-import type { FactorExposure } from "@/lib/types";
-import { shortFactorLabel, factorTier } from "@/lib/factorLabels";
+import type { FactorCatalogEntry, FactorExposure } from "@/lib/types";
+import { factorDisplayName, shortFactorLabel, factorTier } from "@/lib/factorLabels";
 
 ChartJS.register(
   CategoryScale,
@@ -34,6 +34,7 @@ interface ExposureBarChartProps {
   onBarClick?: (factor: string) => void;
   mode?: "raw" | "sensitivity" | "risk_contribution";
   orderByFactors?: string[];
+  factorCatalog?: FactorCatalogEntry[];
 }
 
 const zeroLinePlugin: Plugin<"bar" | "line"> = {
@@ -83,7 +84,13 @@ const netMarkerPlugin: Plugin<"bar" | "line"> = {
   },
 };
 
-export default function ExposureBarChart({ factors, onBarClick, mode = "raw", orderByFactors }: ExposureBarChartProps) {
+export default function ExposureBarChart({
+  factors,
+  onBarClick,
+  mode = "raw",
+  orderByFactors,
+  factorCatalog,
+}: ExposureBarChartProps) {
   const axisLabel = mode === "risk_contribution"
     ? "% of total risk"
     : mode === "sensitivity"
@@ -124,31 +131,33 @@ export default function ExposureBarChart({ factors, onBarClick, mode = "raw", or
   // Sort by Toraniko regression hierarchy: industry → style (non-orth → orth).
   // Within each tier, sort by absolute net magnitude descending.
   const baseSorted = [...decomposed].sort((a, b) => {
-    const tierDiff = factorTier(a.factor) - factorTier(b.factor);
+    const tierDiff = factorTier(a.factor_id, factorCatalog) - factorTier(b.factor_id, factorCatalog);
     if (tierDiff !== 0) return tierDiff;
     const byMagnitude = Math.abs(b.net) - Math.abs(a.net);
     if (byMagnitude !== 0) return byMagnitude;
-    return a.factor.localeCompare(b.factor);
+    return factorDisplayName(a.factor_id, factorCatalog).localeCompare(
+      factorDisplayName(b.factor_id, factorCatalog),
+    );
   });
-  const orderMap = orderByFactors ? new Map(orderByFactors.map((factor, index) => [factor, index])) : null;
-  const baseOrderMap = new Map(baseSorted.map((row, index) => [row.factor, index]));
+  const orderMap = orderByFactors ? new Map(orderByFactors.map((factorId, index) => [factorId, index])) : null;
+  const baseOrderMap = new Map(baseSorted.map((row, index) => [row.factor_id, index]));
   const sorted = orderMap
     ? [...baseSorted].sort((a, b) => {
-        const aIndex = orderMap.has(a.factor) ? Number(orderMap.get(a.factor)) : Number.POSITIVE_INFINITY;
-        const bIndex = orderMap.has(b.factor) ? Number(orderMap.get(b.factor)) : Number.POSITIVE_INFINITY;
+        const aIndex = orderMap.has(a.factor_id) ? Number(orderMap.get(a.factor_id)) : Number.POSITIVE_INFINITY;
+        const bIndex = orderMap.has(b.factor_id) ? Number(orderMap.get(b.factor_id)) : Number.POSITIVE_INFINITY;
         if (aIndex !== bIndex) return aIndex - bIndex;
-        return Number(baseOrderMap.get(a.factor) ?? 0) - Number(baseOrderMap.get(b.factor) ?? 0);
+        return Number(baseOrderMap.get(a.factor_id) ?? 0) - Number(baseOrderMap.get(b.factor_id) ?? 0);
       })
     : baseSorted;
   // Find tier boundary indices (last index of each tier before the next tier starts)
   const tierBoundaries: number[] = [];
   for (let i = 0; i < sorted.length - 1; i++) {
-    if (factorTier(sorted[i].factor) !== factorTier(sorted[i + 1].factor)) {
+    if (factorTier(sorted[i].factor_id, factorCatalog) !== factorTier(sorted[i + 1].factor_id, factorCatalog)) {
       tierBoundaries.push(i);
     }
   }
 
-  const TIER_LABELS: Record<number, string> = { 1: "COUNTRY", 2: "INDUSTRY", 3: "STYLE" };
+  const TIER_LABELS: Record<number, string> = { 1: "MARKET", 2: "INDUSTRY", 3: "STYLE" };
 
   const tierSeparatorPlugin: Plugin<"bar" | "line"> = {
     id: "tierSeparator",
@@ -173,7 +182,7 @@ export default function ExposureBarChart({ factors, onBarClick, mode = "raw", or
         ctx.stroke();
 
         // Tier label below the separator
-        const nextTier = factorTier(sorted[boundaryIdx + 1].factor);
+        const nextTier = factorTier(sorted[boundaryIdx + 1].factor_id, factorCatalog);
         const tierLabel = TIER_LABELS[nextTier];
         if (tierLabel) {
           ctx.font = "600 9px -apple-system, BlinkMacSystemFont, sans-serif";
@@ -186,7 +195,7 @@ export default function ExposureBarChart({ factors, onBarClick, mode = "raw", or
 
       // Label for the first tier
       if (sorted.length > 0) {
-        const firstTier = factorTier(sorted[0].factor);
+        const firstTier = factorTier(sorted[0].factor_id, factorCatalog);
         const firstLabel = TIER_LABELS[firstTier];
         if (firstLabel) {
           ctx.font = "600 9px -apple-system, BlinkMacSystemFont, sans-serif";
@@ -200,7 +209,7 @@ export default function ExposureBarChart({ factors, onBarClick, mode = "raw", or
       ctx.restore();
     },
   };
-  const labels = sorted.map((f) => shortFactorLabel(f.factor));
+  const labels = sorted.map((f) => shortFactorLabel(f.factor_id, factorCatalog));
   const longValues = sorted.map((f) => f.longArm);
   const shortValues = sorted.map((f) => f.shortArm);
   const netValues = sorted.map((f) => f.net);
@@ -299,7 +308,7 @@ export default function ExposureBarChart({ factors, onBarClick, mode = "raw", or
     onClick: (_: ChartEvent, elements: ActiveElement[]) => {
       if (elements.length > 0 && onBarClick) {
         const idx = elements[0].index;
-        onBarClick(sorted[idx].factor);
+        onBarClick(sorted[idx].factor_id);
       }
     },
   };

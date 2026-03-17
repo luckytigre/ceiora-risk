@@ -1,4 +1,4 @@
-"""Export the canonical security_master seed artifact for git versioning."""
+"""Export the canonical security_master registry seed artifact for git versioning."""
 
 from __future__ import annotations
 
@@ -20,12 +20,7 @@ def export_seed(*, data_db: Path, output_path: Path) -> int:
                 ric,
                 ticker,
                 isin,
-                exchange_name,
-                classification_ok,
-                is_equity_eligible,
-                source,
-                job_run_id,
-                updated_at
+                exchange_name
             FROM security_master
             ORDER BY ric
             """
@@ -41,18 +36,13 @@ def export_seed(*, data_db: Path, output_path: Path) -> int:
             "ticker",
             "isin",
             "exchange_name",
-            "classification_ok",
-            "is_equity_eligible",
-            "source",
-            "job_run_id",
-            "updated_at",
         ])
         writer.writerows(rows)
     return len(rows)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Export security_master seed artifact.")
+    parser = argparse.ArgumentParser(description="Export registry-only security_master seed artifact.")
     parser.add_argument("--data-db", default="backend/runtime/data.db", help="Path to SQLite data DB")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="CSV output path")
     args = parser.parse_args()

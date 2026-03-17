@@ -1,349 +1,103 @@
-"""Relational persistence for Layer B model outputs."""
+"""Durable model-output persistence facade."""
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
-def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    return {str(r[1]) for r in rows}
+from backend import config
+from backend.data import (
+    model_output_payloads as payloads,
+    model_output_schema as schema,
+    model_output_state as state,
+    model_output_writers as writers,
+)
+from backend.data.neon import connect, resolve_dsn
 
 
-def _drop_if_columns_missing(conn: sqlite3.Connection, *, table: str, required: set[str]) -> None:
-    cols = _table_columns(conn, table)
-    if cols and not required.issubset(cols):
-        conn.execute(f"DROP TABLE IF EXISTS {table}")
+def _neon_model_output_writes_enabled() -> bool:
+    return bool(str(config.neon_dsn() or "").strip())
 
 
-def _ensure_schema(conn: sqlite3.Connection) -> None:
-    _drop_if_columns_missing(
-        conn,
-        table="model_factor_returns_daily",
-        required={"date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol", "run_id", "updated_at"},
-    )
-    _drop_if_columns_missing(
-        conn,
-        table="model_specific_risk_daily",
-        required={"as_of_date", "ric", "ticker", "specific_var", "specific_vol", "obs", "trbc_business_sector", "run_id", "updated_at"},
+def _neon_model_output_writes_required() -> bool:
+    return bool(
+        _neon_model_output_writes_enabled()
+        and config.neon_primary_model_data_enabled()
     )
 
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS model_factor_returns_daily (
-            date TEXT NOT NULL,
-            factor_name TEXT NOT NULL,
-            factor_return REAL NOT NULL,
-            robust_se REAL NOT NULL DEFAULT 0.0,
-            t_stat REAL NOT NULL DEFAULT 0.0,
-            r_squared REAL NOT NULL,
-            residual_vol REAL NOT NULL,
-            cross_section_n INTEGER NOT NULL DEFAULT 0,
-            eligible_n INTEGER NOT NULL DEFAULT 0,
-            coverage REAL NOT NULL DEFAULT 0.0,
-            run_id TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            PRIMARY KEY (date, factor_name)
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS model_factor_covariance_daily (
-            as_of_date TEXT NOT NULL,
-            factor_name TEXT NOT NULL,
-            factor_name_2 TEXT NOT NULL,
-            covariance REAL NOT NULL,
-            run_id TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            PRIMARY KEY (as_of_date, factor_name, factor_name_2)
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS model_specific_risk_daily (
-            as_of_date TEXT NOT NULL,
-            ric TEXT NOT NULL,
-            ticker TEXT,
-            specific_var REAL NOT NULL,
-            specific_vol REAL NOT NULL,
-            obs INTEGER NOT NULL DEFAULT 0,
-            trbc_business_sector TEXT,
-            run_id TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            PRIMARY KEY (as_of_date, ric)
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS model_run_metadata (
-            run_id TEXT PRIMARY KEY,
-            refresh_mode TEXT NOT NULL,
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            completed_at TEXT NOT NULL,
-            factor_returns_asof TEXT,
-            source_dates_json TEXT NOT NULL,
-            params_json TEXT NOT NULL,
-            risk_engine_state_json TEXT NOT NULL,
-            row_counts_json TEXT NOT NULL,
-            error_type TEXT,
-            error_message TEXT,
-            updated_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_model_factor_returns_daily_date ON model_factor_returns_daily(date)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_model_factor_covariance_daily_asof ON model_factor_covariance_daily(as_of_date)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_model_specific_risk_daily_asof ON model_specific_risk_daily(as_of_date)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_model_run_metadata_completed ON model_run_metadata(completed_at)"
-    )
-    # Residual history is intentionally cache-only (daily_specific_residuals in cache.db).
-    # Remove deprecated duplicated persistence table from data.db when present.
-    conn.execute("DROP TABLE IF EXISTS model_specific_residuals_daily")
+def load_latest_persisted_risk_engine_state() -> dict[str, Any]:
+    data_db = Path(config.DATA_DB_PATH)
+    if not data_db.exists():
+        local_state: dict[str, Any] = {}
+    else:
+        conn = sqlite3.connect(str(data_db))
+        try:
+            schema.ensure_schema(conn)
+            local_state = state.latest_risk_engine_state(conn)
+        finally:
+            conn.close()
+        if local_state:
+            return local_state
+    if _neon_model_output_writes_enabled():
+        try:
+            conn = connect(dsn=resolve_dsn(None), autocommit=True)
+            try:
+                return state.pg_latest_risk_engine_state(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    return {}
 
 
-def _load_factor_returns(cache_db: Path, *, date_from: str | None = None) -> pd.DataFrame:
-    conn = sqlite3.connect(str(cache_db))
-    try:
-        cols = _table_columns(conn, "daily_factor_returns")
-        if not cols:
-            return pd.DataFrame()
-        coverage_col = "coverage" if "coverage" in cols else None
-        cross_col = "cross_section_n" if "cross_section_n" in cols else None
-        elig_col = "eligible_n" if "eligible_n" in cols else None
-        where_sql = ""
-        params: list[Any] = []
-        if date_from:
-            where_sql = "WHERE date >= ?"
-            params.append(str(date_from))
-        df = pd.read_sql_query(
-            f"""
-            SELECT
-                date,
-                factor_name,
-                factor_return,
-                {('robust_se' if 'robust_se' in cols else '0.0')} AS robust_se,
-                {('t_stat' if 't_stat' in cols else '0.0')} AS t_stat,
-                r_squared,
-                residual_vol,
-                {cross_col if cross_col else '0'} AS cross_section_n,
-                {elig_col if elig_col else '0'} AS eligible_n,
-                {coverage_col if coverage_col else '0.0'} AS coverage
-            FROM daily_factor_returns
-            {where_sql}
-            ORDER BY date, factor_name
-            """,
-            conn,
-            params=params,
-        )
-    finally:
-        conn.close()
-    if df.empty:
-        return df
-    df["date"] = df["date"].astype(str)
-    df["factor_name"] = df["factor_name"].astype(str)
-    for col in ["factor_return", "robust_se", "t_stat", "r_squared", "residual_vol", "coverage"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
-    for col in ["cross_section_n", "eligible_n"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
-    return df.dropna(subset=["date", "factor_name", "factor_return", "r_squared", "residual_vol"])
+def load_latest_persisted_covariance_payload() -> dict[str, Any]:
+    data_db = Path(config.DATA_DB_PATH)
+    if data_db.exists():
+        conn = sqlite3.connect(str(data_db))
+        try:
+            schema.ensure_schema(conn)
+            local_payload = state.latest_covariance_payload(conn)
+        finally:
+            conn.close()
+        if local_payload:
+            return local_payload
+    if _neon_model_output_writes_enabled():
+        try:
+            conn = connect(dsn=resolve_dsn(None), autocommit=True)
+            try:
+                return state.pg_latest_covariance_payload(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    return {}
 
 
-def _upsert_factor_returns(
-    conn: sqlite3.Connection,
-    *,
-    rows: pd.DataFrame,
-    run_id: str,
-    updated_at: str,
-) -> int:
-    if rows.empty:
-        return 0
-    min_date = str(rows["date"].min())
-    conn.execute("DELETE FROM model_factor_returns_daily WHERE date >= ?", (min_date,))
-    payload = [
-        (
-            str(r.date),
-            str(r.factor_name),
-            float(r.factor_return),
-            float(r.robust_se),
-            float(r.t_stat),
-            float(r.r_squared),
-            float(r.residual_vol),
-            int(r.cross_section_n),
-            int(r.eligible_n),
-            float(r.coverage),
-            run_id,
-            updated_at,
-        )
-        for r in rows.itertuples(index=False)
-    ]
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO model_factor_returns_daily (
-            date, factor_name, factor_return, robust_se, t_stat, r_squared, residual_vol,
-            cross_section_n, eligible_n, coverage, run_id, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        payload,
-    )
-    return len(payload)
-
-
-def _upsert_covariance(
-    conn: sqlite3.Connection,
-    *,
-    as_of_date: str,
-    cov: pd.DataFrame,
-    run_id: str,
-    updated_at: str,
-) -> int:
-    if cov is None or cov.empty:
-        return 0
-    factors = [str(c) for c in cov.columns]
-    placeholders = ",".join("?" for _ in factors)
-    if placeholders:
-        conn.execute(
-            f"""
-            DELETE FROM model_factor_covariance_daily
-            WHERE factor_name NOT IN ({placeholders})
-               OR factor_name_2 NOT IN ({placeholders})
-            """,
-            [*factors, *factors],
-        )
-    conn.execute("DELETE FROM model_factor_covariance_daily WHERE as_of_date = ?", (as_of_date,))
-    payload: list[tuple[Any, ...]] = []
-    for f1 in factors:
-        for f2 in factors:
-            payload.append(
-                (
-                    as_of_date,
-                    f1,
-                    f2,
-                    float(cov.loc[f1, f2]),
-                    run_id,
-                    updated_at,
-                )
-            )
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO model_factor_covariance_daily (
-            as_of_date, factor_name, factor_name_2, covariance, run_id, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        payload,
-    )
-    return len(payload)
-
-
-def _upsert_specific_risk(
-    conn: sqlite3.Connection,
-    *,
-    as_of_date: str,
-    specific_risk_by_ticker: dict[str, dict[str, float | int | str]],
-    run_id: str,
-    updated_at: str,
-) -> int:
-    if not specific_risk_by_ticker:
-        return 0
-    conn.execute("DELETE FROM model_specific_risk_daily WHERE as_of_date = ?", (as_of_date,))
-    payload: list[tuple[Any, ...]] = []
-    for key, row in specific_risk_by_ticker.items():
-        ric = str(row.get("ric") or key or "").upper().strip()
-        ticker = str(row.get("ticker") or "").upper().strip()
-        if not ric:
-            continue
-        spec_var = float(row.get("specific_var", 0.0) or 0.0)
-        spec_vol = float(row.get("specific_vol", 0.0) or 0.0)
-        obs = int(row.get("obs", 0) or 0)
-        business_sector = str(row.get("trbc_business_sector") or "").strip()
-        payload.append(
-            (
-                as_of_date,
-                ric,
-                ticker or None,
-                spec_var,
-                spec_vol,
-                obs,
-                business_sector,
-                run_id,
-                updated_at,
-            )
-        )
-    if not payload:
-        return 0
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO model_specific_risk_daily (
-            as_of_date, ric, ticker, specific_var, specific_vol, obs, trbc_business_sector, run_id, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        payload,
-    )
-    return len(payload)
-
-
-def _latest_date(conn: sqlite3.Connection, *, table: str, col: str) -> str | None:
-    row = conn.execute(f"SELECT MAX({col}) FROM {table}").fetchone()
-    if not row or row[0] is None:
-        return None
-    return str(row[0])
-
-
-def _latest_risk_engine_state(conn: sqlite3.Connection) -> dict[str, Any]:
-    row = conn.execute(
-        """
-        SELECT risk_engine_state_json
-        FROM model_run_metadata
-        ORDER BY completed_at DESC, updated_at DESC
-        LIMIT 1
-        """
-    ).fetchone()
-    if not row or row[0] is None:
-        return {}
-    try:
-        decoded = json.loads(str(row[0]))
-    except Exception:
-        return {}
-    return decoded if isinstance(decoded, dict) else {}
-
-
-def _factor_returns_load_start(
-    conn: sqlite3.Connection,
-    *,
-    as_of_date: str,
-    risk_engine_state: dict[str, Any],
-) -> tuple[str | None, str]:
-    latest_persisted_date = _latest_date(conn, table="model_factor_returns_daily", col="date")
-    if not latest_persisted_date:
-        return None, "full"
-
-    previous_state = _latest_risk_engine_state(conn)
-    previous_method_version = str(previous_state.get("method_version") or "").strip()
-    current_method_version = str(risk_engine_state.get("method_version") or "").strip()
-    if current_method_version and previous_method_version and current_method_version != previous_method_version:
-        return None, "full"
-    if current_method_version and not previous_method_version:
-        return None, "full"
-
-    if as_of_date and as_of_date < latest_persisted_date:
-        return str(as_of_date), "incremental"
-    return str(latest_persisted_date), "incremental"
+def load_latest_persisted_specific_risk_payload() -> dict[str, Any]:
+    data_db = Path(config.DATA_DB_PATH)
+    if data_db.exists():
+        conn = sqlite3.connect(str(data_db))
+        try:
+            schema.ensure_schema(conn)
+            local_payload = state.latest_specific_risk_payload(conn)
+        finally:
+            conn.close()
+        if local_payload:
+            return local_payload
+    if _neon_model_output_writes_enabled():
+        try:
+            conn = connect(dsn=resolve_dsn(None), autocommit=True)
+            try:
+                return state.pg_latest_specific_risk_payload(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    return {}
 
 
 def persist_model_outputs(
@@ -369,99 +123,198 @@ def persist_model_outputs(
         or source_dates.get("fundamentals_asof")
         or completed_at[:10]
     )
+    factor_returns_date_from: str | None = None
+    factor_returns_mode = "full"
 
-    conn = sqlite3.connect(str(data_db), timeout=120)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=120000")
-    try:
-        _ensure_schema(conn)
-        factor_returns_date_from, factor_returns_mode = _factor_returns_load_start(
-            conn,
-            as_of_date=as_of_date,
-            risk_engine_state=risk_engine_state,
-        )
-        factor_returns = _load_factor_returns(cache_db, date_from=factor_returns_date_from)
+    if _neon_model_output_writes_enabled():
+        try:
+            pg_conn = connect(dsn=resolve_dsn(None), autocommit=False)
+            try:
+                writers.ensure_postgres_schema(pg_conn)
+                factor_returns_date_from, factor_returns_mode = state.factor_returns_load_start_postgres(
+                    pg_conn,
+                    as_of_date=as_of_date,
+                    risk_engine_state=risk_engine_state,
+                )
+            finally:
+                pg_conn.close()
+        except Exception:
+            if _neon_model_output_writes_required():
+                raise
+            conn = sqlite3.connect(str(data_db), timeout=120)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA busy_timeout=120000")
+            try:
+                schema.ensure_schema(conn)
+                factor_returns_date_from, factor_returns_mode = state.factor_returns_load_start_sqlite(
+                    conn,
+                    as_of_date=as_of_date,
+                    risk_engine_state=risk_engine_state,
+                )
+            finally:
+                conn.close()
+    else:
+        conn = sqlite3.connect(str(data_db), timeout=120)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=120000")
+        try:
+            schema.ensure_schema(conn)
+            factor_returns_date_from, factor_returns_mode = state.factor_returns_load_start_sqlite(
+                conn,
+                as_of_date=as_of_date,
+                risk_engine_state=risk_engine_state,
+            )
+        finally:
+            conn.close()
 
-        n_factor = _upsert_factor_returns(conn, rows=factor_returns, run_id=run_id, updated_at=now_iso)
-        n_cov = _upsert_covariance(
-            conn,
-            as_of_date=as_of_date,
-            cov=cov,
-            run_id=run_id,
-            updated_at=now_iso,
-        )
-        n_spec = _upsert_specific_risk(
-            conn,
-            as_of_date=as_of_date,
-            specific_risk_by_ticker=specific_risk_by_ticker,
-            run_id=run_id,
-            updated_at=now_iso,
-        )
-        row_counts = {
-            "model_factor_returns_daily": int(n_factor),
-            "model_factor_covariance_daily": int(n_cov),
-            "model_specific_risk_daily": int(n_spec),
+    factor_returns = payloads.load_factor_returns(cache_db, date_from=factor_returns_date_from)
+    factor_returns_payload = payloads.factor_returns_payload(
+        rows=factor_returns,
+        run_id=run_id,
+        updated_at=now_iso,
+    )
+    factor_returns_min_date = str(factor_returns["date"].min()) if not factor_returns.empty else None
+    covariance_factors, covariance_payload = payloads.covariance_payload(
+        as_of_date=as_of_date,
+        cov=cov,
+        run_id=run_id,
+        updated_at=now_iso,
+    )
+    specific_risk_payload = payloads.specific_risk_payload(
+        as_of_date=as_of_date,
+        specific_risk_by_ticker=specific_risk_by_ticker,
+        run_id=run_id,
+        updated_at=now_iso,
+    )
+    row_counts = {
+        "model_factor_returns_daily": int(len(factor_returns_payload)),
+        "model_factor_covariance_daily": int(len(covariance_payload)),
+        "model_specific_risk_daily": int(len(specific_risk_payload)),
+    }
+    quality_errors = payloads.quality_gate_errors(
+        status=str(status),
+        n_factor=row_counts["model_factor_returns_daily"],
+        n_cov=row_counts["model_factor_covariance_daily"],
+        n_spec=row_counts["model_specific_risk_daily"],
+    )
+    effective_status = "failed" if quality_errors else str(status)
+    effective_error = dict(error or {})
+    if quality_errors:
+        effective_error = {
+            "type": "quality_gate_failed",
+            "message": " | ".join(quality_errors),
         }
-        quality_errors: list[str] = []
-        if str(status).lower() == "ok":
-            if n_factor <= 0:
-                quality_errors.append("factor_returns_empty")
-            if n_cov <= 0:
-                quality_errors.append("factor_covariance_empty")
-            if n_spec <= 0:
-                quality_errors.append("specific_risk_empty")
-        effective_status = "failed" if quality_errors else str(status)
-        effective_error = dict(error or {})
-        if quality_errors:
-            effective_error = {
-                "type": "quality_gate_failed",
-                "message": " | ".join(quality_errors),
+    metadata_values = payloads.metadata_values(
+        run_id=run_id,
+        refresh_mode=refresh_mode,
+        status=effective_status,
+        started_at=started_at,
+        completed_at=completed_at,
+        factor_returns_asof=as_of_date,
+        source_dates=source_dates,
+        params=params,
+        risk_engine_state=risk_engine_state,
+        row_counts=row_counts,
+        error=effective_error,
+        updated_at=now_iso,
+    )
+
+    neon_write: dict[str, Any] = {"status": "skipped", "reason": "neon_not_configured"}
+    sqlite_mirror_write: dict[str, Any] = {"status": "skipped", "reason": "neon_primary"}
+    authority_store = "sqlite"
+
+    if _neon_model_output_writes_enabled():
+        authority_store = "neon"
+        pg_conn = connect(dsn=resolve_dsn(None), autocommit=False)
+        try:
+            neon_write = writers.write_model_outputs_postgres(
+                pg_conn,
+                factor_returns_payload=factor_returns_payload,
+                factor_returns_min_date=factor_returns_min_date,
+                covariance_factors=covariance_factors,
+                covariance_payload=covariance_payload,
+                specific_risk_payload=specific_risk_payload,
+                metadata_values=metadata_values,
+                as_of_date=as_of_date,
+            )
+        except Exception as exc:
+            try:
+                pg_conn.rollback()
+            except Exception:
+                pass
+            neon_write = {
+                "status": "error",
+                "error": {"type": type(exc).__name__, "message": str(exc)},
             }
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO model_run_metadata (
-                run_id,
-                refresh_mode,
-                status,
-                started_at,
-                completed_at,
-                factor_returns_asof,
-                source_dates_json,
-                params_json,
-                risk_engine_state_json,
-                row_counts_json,
-                error_type,
-                error_message,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                run_id,
-                str(refresh_mode),
-                effective_status,
-                str(started_at),
-                str(completed_at),
-                as_of_date,
-                json.dumps(source_dates or {}, sort_keys=True),
-                json.dumps(params or {}, sort_keys=True),
-                json.dumps(risk_engine_state or {}, sort_keys=True),
-                json.dumps(row_counts, sort_keys=True),
-                effective_error.get("type"),
-                effective_error.get("message"),
-                now_iso,
-            ),
-        )
-        conn.commit()
-        if quality_errors:
-            raise RuntimeError(f"model output quality gate failed: {'; '.join(quality_errors)}")
-        return {
-            "status": "ok",
-            "run_id": run_id,
-            "factor_returns_asof": as_of_date,
-            "factor_returns_persistence_mode": factor_returns_mode,
-            "factor_returns_reload_from": factor_returns_date_from,
-            "row_counts": row_counts,
-        }
-    finally:
-        conn.close()
+        finally:
+            pg_conn.close()
+
+        if str(neon_write.get("status") or "") != "ok" and _neon_model_output_writes_required():
+            err = neon_write.get("error") if isinstance(neon_write, dict) else None
+            raise RuntimeError(
+                "Neon model output persistence failed: "
+                + str((err or {}).get("type") or "unknown")
+                + ": "
+                + str((err or {}).get("message") or "unknown")
+            )
+
+        try:
+            conn = sqlite3.connect(str(data_db), timeout=120)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA busy_timeout=120000")
+            try:
+                sqlite_mirror_write = writers.write_model_outputs_sqlite(
+                    conn,
+                    factor_returns_payload=factor_returns_payload,
+                    factor_returns_min_date=factor_returns_min_date,
+                    covariance_factors=covariance_factors,
+                    covariance_payload=covariance_payload,
+                    specific_risk_payload=specific_risk_payload,
+                    metadata_values=metadata_values,
+                    as_of_date=as_of_date,
+                )
+            finally:
+                conn.close()
+        except Exception as exc:
+            sqlite_mirror_write = {
+                "status": "error",
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            }
+
+        if str(neon_write.get("status") or "") != "ok" and not _neon_model_output_writes_required():
+            authority_store = "sqlite" if str(sqlite_mirror_write.get("status") or "") == "ok" else "neon"
+    else:
+        conn = sqlite3.connect(str(data_db), timeout=120)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=120000")
+        try:
+            sqlite_mirror_write = writers.write_model_outputs_sqlite(
+                conn,
+                factor_returns_payload=factor_returns_payload,
+                factor_returns_min_date=factor_returns_min_date,
+                covariance_factors=covariance_factors,
+                covariance_payload=covariance_payload,
+                specific_risk_payload=specific_risk_payload,
+                metadata_values=metadata_values,
+                as_of_date=as_of_date,
+            )
+        finally:
+            conn.close()
+
+    if quality_errors:
+        raise RuntimeError(f"model output quality gate failed: {'; '.join(quality_errors)}")
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "authority_store": authority_store,
+        "factor_returns_asof": as_of_date,
+        "factor_returns_persistence_mode": factor_returns_mode,
+        "factor_returns_reload_from": factor_returns_date_from,
+        "row_counts": row_counts,
+        "neon_write": neon_write,
+        "sqlite_mirror_write": sqlite_mirror_write,
+    }

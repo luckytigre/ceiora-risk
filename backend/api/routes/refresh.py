@@ -34,38 +34,29 @@ def _refresh_authorized(x_refresh_token: str | None, authorization: str | None) 
 async def refresh(
     force_risk_recompute: bool = Query(False),
     force_core: bool = Query(False),
-    mode: str | None = Query(None),
     profile: str | None = Query(None),
     as_of_date: str | None = Query(None),
     resume_run_id: str | None = Query(None),
     from_stage: str | None = Query(None),
     to_stage: str | None = Query(None),
+    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
     x_refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
     authorization: str | None = Header(default=None),
 ):
     if config.cloud_mode():
         require_role(
             "operator",
-            x_operator_token=x_refresh_token,
+            x_operator_token=x_operator_token,
             x_refresh_token=x_refresh_token,
             authorization=authorization,
         )
     elif not _refresh_authorized(x_refresh_token, authorization):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-    requested_mode = str(mode).strip().lower() if mode is not None else None
-    clean_mode = requested_mode or "full"
-    if clean_mode not in {"full", "light", "cold"}:
-        clean_mode = "full"
-    effective_profile = profile
-    if config.cloud_mode() and not str(profile or "").strip() and requested_mode is None:
-        effective_profile = "serve-refresh"
-        clean_mode = "light"
     try:
         started, state = start_refresh(
             force_risk_recompute=bool(force_risk_recompute),
             force_core=bool(force_core),
-            mode=clean_mode,
-            profile=effective_profile,
+            profile=profile,
             as_of_date=as_of_date,
             resume_run_id=resume_run_id,
             from_stage=from_stage,
@@ -80,6 +71,15 @@ async def refresh(
             },
         )
     if not started:
+        if str(state.get("status") or "") != "running":
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "failed_to_start",
+                    "message": "Refresh failed to start.",
+                    "refresh": state,
+                },
+            )
         return JSONResponse(
             status_code=409,
             content={
@@ -97,13 +97,14 @@ async def refresh(
 
 @router.get("/refresh/status")
 async def refresh_status(
+    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
     x_refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
     authorization: str | None = Header(default=None),
 ):
     if config.cloud_mode():
         require_role(
             "operator",
-            x_operator_token=x_refresh_token,
+            x_operator_token=x_operator_token,
             x_refresh_token=x_refresh_token,
             authorization=authorization,
         )

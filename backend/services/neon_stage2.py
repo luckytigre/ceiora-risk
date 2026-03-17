@@ -52,6 +52,30 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         date_col="as_of_date",
         overlap_days=14,
     ),
+    "model_factor_returns_daily": TableConfig(
+        name="model_factor_returns_daily",
+        pk_cols=("date", "factor_name"),
+        date_col="date",
+        overlap_days=14,
+    ),
+    "model_factor_covariance_daily": TableConfig(
+        name="model_factor_covariance_daily",
+        pk_cols=("as_of_date", "factor_name", "factor_name_2"),
+        date_col="as_of_date",
+        overlap_days=14,
+    ),
+    "model_specific_risk_daily": TableConfig(
+        name="model_specific_risk_daily",
+        pk_cols=("as_of_date", "ric"),
+        date_col="as_of_date",
+        overlap_days=14,
+    ),
+    "model_run_metadata": TableConfig(
+        name="model_run_metadata",
+        pk_cols=("run_id",),
+        date_col="completed_at",
+        overlap_days=31,
+    ),
     "serving_payload_current": TableConfig(
         name="serving_payload_current",
         pk_cols=("payload_name",),
@@ -68,6 +92,20 @@ def _sqlite_columns(conn: sqlite3.Connection, table: str) -> list[str]:
     return [str(r[1]) for r in rows]
 
 
+def _sqlite_column_defs(conn: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return [
+        {
+            "name": str(r[1]),
+            "type": str(r[2] or ""),
+            "notnull": bool(r[3]),
+            "default": r[4],
+            "pk": bool(r[5]),
+        }
+        for r in rows
+    ]
+
+
 def _pg_columns(pg_conn, table: str) -> list[str]:
     with pg_conn.cursor() as cur:
         cur.execute(
@@ -81,6 +119,69 @@ def _pg_columns(pg_conn, table: str) -> list[str]:
             (table,),
         )
         return [str(r[0]) for r in cur.fetchall()]
+
+
+def _sqlite_declared_type_to_pg(column_name: str, declared_type: str | None) -> str:
+    clean_name = str(column_name or "").strip().lower()
+    clean_type = str(declared_type or "").strip().upper()
+    if clean_name == "payload_json":
+        return "JSONB"
+    if clean_name in {"date", "as_of_date", "stat_date", "period_end_date"}:
+        return "DATE"
+    if clean_name.endswith("_at"):
+        return "TIMESTAMPTZ"
+    if "BOOL" in clean_type:
+        return "BOOLEAN"
+    if "INT" in clean_type:
+        return "INTEGER"
+    if any(token in clean_type for token in ("REAL", "FLOA", "DOUB", "NUM")):
+        return "DOUBLE PRECISION"
+    return "TEXT"
+
+
+def ensure_target_columns_from_sqlite(
+    sqlite_conn: sqlite3.Connection,
+    pg_conn,
+    *,
+    source_table: str,
+    target_table: str | None = None,
+) -> dict[str, Any]:
+    target = str(target_table or source_table)
+    if not _table_exists_pg(pg_conn, target):
+        raise RuntimeError(f"target table missing in Neon: {target}")
+
+    source_cols = _sqlite_column_defs(sqlite_conn, source_table)
+    if not source_cols:
+        raise RuntimeError(f"source table missing in SQLite: {source_table}")
+    target_cols = set(_pg_columns(pg_conn, target))
+    added_columns: list[dict[str, str]] = []
+    for col in source_cols:
+        name = str(col.get("name") or "").strip()
+        if not name or name in target_cols:
+            continue
+        pg_type = _sqlite_declared_type_to_pg(name, str(col.get("type") or ""))
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} {}").format(
+                    sql.Identifier(target),
+                    sql.Identifier(name),
+                    sql.SQL(pg_type),
+                )
+            )
+        target_cols.add(name)
+        added_columns.append(
+            {
+                "column": name,
+                "pg_type": pg_type,
+                "sqlite_type": str(col.get("type") or ""),
+            }
+        )
+    return {
+        "status": "ok",
+        "source_table": str(source_table),
+        "target_table": target,
+        "added_columns": added_columns,
+    }
 
 
 def _table_exists_pg(pg_conn, table: str) -> bool:
@@ -301,8 +402,12 @@ def sync_from_sqlite_to_neon(
     try:
         for cfg in selected_cfgs:
             table = cfg.name
-            if not _table_exists_pg(pg_conn, table):
-                raise RuntimeError(f"target table missing in Neon: {table}")
+            schema_update = ensure_target_columns_from_sqlite(
+                sqlite_conn,
+                pg_conn,
+                source_table=table,
+                target_table=table,
+            )
 
             src_cols = _sqlite_columns(sqlite_conn, table)
             tgt_cols = _pg_columns(pg_conn, table)
@@ -331,11 +436,11 @@ def sync_from_sqlite_to_neon(
                     columns=cols,
                     batch_size=max(500, int(batch_size)),
                 )
-                pg_conn.commit()
                 out["tables"][table] = {
                     "action": "upsert",
                     "source_rows": int(src_count),
                     "rows_loaded": int(copied),
+                    "schema_update": schema_update,
                 }
                 continue
 
@@ -389,7 +494,9 @@ def sync_from_sqlite_to_neon(
                 "rows_loaded": int(copied),
                 "where_sql": where_sql or None,
                 "where_params": list(params),
+                "schema_update": schema_update,
             }
+        pg_conn.commit()
     except Exception:
         pg_conn.rollback()
         raise
@@ -440,7 +547,7 @@ def _profile_pg_table(pg_conn, cfg: TableConfig) -> dict[str, Any]:
             row = cur.fetchone()
             out["min_date"] = (str(row[0]) if row and row[0] is not None else None)
             out["max_date"] = (str(row[1]) if row and row[1] is not None else None)
-            if out["max_date"]:
+            if out["max_date"] and _has_ric_column_pg(pg_conn, table):
                 cur.execute(
                     sql.SQL("SELECT COUNT(DISTINCT ric) FROM {} WHERE {} = %s")
                     .format(sql.Identifier(table), sql.Identifier(cfg.date_col)),
@@ -467,6 +574,57 @@ def _duplicate_group_count_pg(pg_conn, cfg: TableConfig) -> int:
         cur.execute(query)
         row = cur.fetchone()
     return int(row[0] or 0) if row else 0
+
+
+def _sqlite_count_from_date(
+    conn: sqlite3.Connection,
+    *,
+    table: str,
+    date_col: str,
+    min_date: str,
+) -> int:
+    row = conn.execute(
+        f"SELECT COUNT(*) FROM {table} WHERE {date_col} >= ?",
+        (min_date,),
+    ).fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def _expected_retention_gap(
+    conn: sqlite3.Connection,
+    *,
+    cfg: TableConfig,
+    source: dict[str, Any],
+    target: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not cfg.date_col:
+        return None
+    source_min = str(source.get("min_date") or "").strip()
+    target_min = str(target.get("min_date") or "").strip()
+    source_max = str(source.get("max_date") or "").strip()
+    target_max = str(target.get("max_date") or "").strip()
+    if not source_min or not target_min or not source_max or not target_max:
+        return None
+    if target_min <= source_min:
+        return None
+    if source_max != target_max:
+        return None
+
+    source_rows_in_target_window = _sqlite_count_from_date(
+        conn,
+        table=cfg.name,
+        date_col=str(cfg.date_col),
+        min_date=target_min,
+    )
+    target_row_count = int(target.get("row_count") or 0)
+    status = "ok" if source_rows_in_target_window == target_row_count else "mismatch"
+    return {
+        "status": status,
+        "source_archive_min_date": source_min,
+        "target_retained_min_date": target_min,
+        "source_rows_in_target_window": int(source_rows_in_target_window),
+        "target_row_count": target_row_count,
+    }
 
 
 def _orphan_ric_sqlite(conn: sqlite3.Connection, table: str) -> int:
@@ -499,6 +657,14 @@ def _orphan_ric_pg(pg_conn, table: str) -> int:
     return int(row[0] or 0) if row else 0
 
 
+def _has_ric_column_sqlite(conn: sqlite3.Connection, table: str) -> bool:
+    return "ric" in set(_sqlite_columns(conn, table))
+
+
+def _has_ric_column_pg(pg_conn, table: str) -> bool:
+    return "ric" in set(_pg_columns(pg_conn, table))
+
+
 def run_parity_audit(
     *,
     sqlite_path: Path,
@@ -520,6 +686,7 @@ def run_parity_audit(
         "sqlite_path": str(db),
         "tables": {},
         "issues": [],
+        "notes": [],
     }
 
     sqlite_conn = sqlite3.connect(str(db))
@@ -553,8 +720,24 @@ def run_parity_audit(
                     "target": int(dup_tgt),
                 },
             }
+            retention_gap = _expected_retention_gap(
+                sqlite_conn,
+                cfg=cfg,
+                source=src,
+                target=tgt,
+            )
+            expected_retention_gap = bool(
+                isinstance(retention_gap, dict)
+                and str(retention_gap.get("status") or "") == "ok"
+            )
+            if retention_gap is not None:
+                table_out["retention_gap"] = retention_gap
+                if expected_retention_gap:
+                    out["notes"].append(
+                        f"expected_retention_gap:{cfg.name}:{retention_gap['source_archive_min_date']}->{retention_gap['target_retained_min_date']}"
+                    )
 
-            if cfg.name != "security_master":
+            if cfg.name != "security_master" and _has_ric_column_sqlite(sqlite_conn, cfg.name) and _has_ric_column_pg(pg_conn, cfg.name):
                 orphan_src = _orphan_ric_sqlite(sqlite_conn, cfg.name)
                 orphan_tgt = _orphan_ric_pg(pg_conn, cfg.name)
                 table_out["orphan_ric_rows"] = {
@@ -564,12 +747,16 @@ def run_parity_audit(
                 if orphan_src != orphan_tgt:
                     out["issues"].append(f"orphan_mismatch:{cfg.name}:{orphan_src}!={orphan_tgt}")
 
-            if int(src.get("row_count") or 0) != int(tgt.get("row_count") or 0):
+            if int(src.get("row_count") or 0) != int(tgt.get("row_count") or 0) and not expected_retention_gap:
                 out["issues"].append(
                     f"row_count_mismatch:{cfg.name}:{src.get('row_count')}!={tgt.get('row_count')}"
                 )
             if cfg.date_col:
-                for key in ("min_date", "max_date", "latest_distinct_ric"):
+                if src.get("min_date") != tgt.get("min_date") and not expected_retention_gap:
+                    out["issues"].append(
+                        f"min_date_mismatch:{cfg.name}:{src.get('min_date')}!={tgt.get('min_date')}"
+                    )
+                for key in ("max_date", "latest_distinct_ric"):
                     if src.get(key) != tgt.get(key):
                         out["issues"].append(
                             f"{key}_mismatch:{cfg.name}:{src.get(key)}!={tgt.get(key)}"

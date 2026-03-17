@@ -5,7 +5,7 @@ import LazyMountOnVisible from "@/components/LazyMountOnVisible";
 import CovarianceHeatmap from "@/components/CovarianceHeatmap";
 import HelpLabel from "@/components/HelpLabel";
 import TableRowToggle from "@/components/TableRowToggle";
-import { STYLE_FACTORS, shortFactorLabel } from "@/lib/factorLabels";
+import { factorFamily, shortFactorLabel } from "@/lib/factorLabels";
 import type { HealthDiagnosticsData, HealthExposureStats } from "@/lib/types";
 import { Bar, Line } from "./charts";
 import {
@@ -27,16 +27,16 @@ export default function SectionExposure({ data }: { data: HealthDiagnosticsData 
     const stats = data.section2.factor_stats || [];
     const EPS = 1e-6;
     return stats
-      .filter((s) => STYLE_FACTORS.has(s.factor))
+      .filter((s) => factorFamily(s.factor_id, data.factor_catalog) === "style")
       .filter((s) => !(Math.abs(s.p1) <= EPS && Math.abs(s.p99 - 1.0) <= EPS))
-      .map((s) => s.factor)
-      .sort();
+      .map((s) => s.factor_id)
+      .sort((a, b) => shortFactorLabel(a, data.factor_catalog).localeCompare(shortFactorLabel(b, data.factor_catalog)));
   }, [data]);
   const exposureFactor = selectedExposureFactor || exposureFactors[0] || "";
 
   const sortedExposureRows = useMemo(() => {
     const rows = data.section2.factor_stats ?? [];
-    return sortExposureRows(rows, expSortKey, expSortAsc);
+    return sortExposureRows(rows, expSortKey, expSortAsc, data.factor_catalog);
   }, [data, expSortKey, expSortAsc]);
 
   const turnoverSeries = data.section2.turnover_series ?? [];
@@ -108,7 +108,7 @@ export default function SectionExposure({ data }: { data: HealthDiagnosticsData 
         fallback={<div className="detail-history-empty">Scroll to load the exposure correlation heatmap.</div>}
       >
         <div className="heatmap-centered-70">
-          <CovarianceHeatmap data={data.section2.exposure_corr} />
+          <CovarianceHeatmap data={data.section2.exposure_corr} factorCatalog={data.factor_catalog} />
         </div>
       </LazyMountOnVisible>
 
@@ -117,9 +117,9 @@ export default function SectionExposure({ data }: { data: HealthDiagnosticsData 
           <thead>
             <tr>
               <th onClick={() => {
-                if (expSortKey === "factor") setExpSortAsc((s) => !s);
-                else { setExpSortKey("factor"); setExpSortAsc(true); }
-              }}>Factor{expSortKey === "factor" ? (expSortAsc ? " ↑" : " ↓") : ""}</th>
+                if (expSortKey === "factor_id") setExpSortAsc((s) => !s);
+                else { setExpSortKey("factor_id"); setExpSortAsc(true); }
+              }}>Factor{expSortKey === "factor_id" ? (expSortAsc ? " ↑" : " ↓") : ""}</th>
               <th className="text-right" onClick={() => {
                 if (expSortKey === "mean") setExpSortAsc((s) => !s);
                 else { setExpSortKey("mean"); setExpSortAsc(false); }
@@ -138,8 +138,8 @@ export default function SectionExposure({ data }: { data: HealthDiagnosticsData 
           </thead>
           <tbody>
             {showExposureRows.map((row) => (
-              <tr key={row.factor}>
-                <td>{shortFactorLabel(row.factor)}</td>
+              <tr key={row.factor_id}>
+                <td>{shortFactorLabel(row.factor_id, data.factor_catalog)}</td>
                 <td className="text-right">{fmtNum(row.mean, 3)}</td>
                 <td className="text-right">{fmtNum(row.std, 3)}</td>
                 <td className="text-right">{fmtNum(row.p1, 3)}</td>

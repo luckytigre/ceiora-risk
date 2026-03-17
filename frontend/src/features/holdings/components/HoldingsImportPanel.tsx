@@ -46,7 +46,9 @@ export default function HoldingsImportPanel({
         </div>
         <div>
           <div className="holdings-panel-title">CSV Import</div>
-          <div className="holdings-panel-desc">Upload a CSV to stage positions</div>
+          <div className="holdings-panel-desc">
+            Upload a CSV to write live holdings for the selected account. Dashboard analytics stay on the last published snapshot until you run `RECALC`.
+          </div>
         </div>
       </div>
 
@@ -114,7 +116,7 @@ export default function HoldingsImportPanel({
           onClick={onRunImport}
           disabled={busy}
         >
-          {busy ? "Running..." : "Run CSV Import"}
+          {busy ? "Running..." : "Run Live Import"}
         </button>
       </div>
     </div>

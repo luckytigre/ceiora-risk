@@ -37,7 +37,7 @@ function marketValueTone(n: number): string {
 function normalizeRiskMix(pos: Position) {
   const raw = (pos.risk_mix ?? {}) as Partial<NonNullable<Position["risk_mix"]>>;
   return {
-    country: Number(raw.country ?? 0) || 0,
+    market: Number(raw.market ?? 0) || 0,
     industry: Number(raw.industry ?? 0) || 0,
     style: Number(raw.style ?? 0) || 0,
     idio: Number(raw.idio ?? 0) || 0,
@@ -46,7 +46,7 @@ function normalizeRiskMix(pos: Position) {
 
 function riskMixLabel(pos: Position): string {
   const mix = normalizeRiskMix(pos);
-  return `Ctry ${mix.country.toFixed(1)}% / Ind ${mix.industry.toFixed(1)}% / Sty ${mix.style.toFixed(1)}% / Idio ${mix.idio.toFixed(1)}%`;
+  return `Mkt ${mix.market.toFixed(1)}% / Ind ${mix.industry.toFixed(1)}% / Sty ${mix.style.toFixed(1)}% / Idio ${mix.idio.toFixed(1)}%`;
 }
 
 function riskMixSortValue(pos: Position): number {
@@ -136,7 +136,7 @@ export default function ExposurePositionsTable({
             <th className="text-right" onClick={() => handleSort("shares")}>Share Count{arrow("shares")}</th>
             <th className="text-right" onClick={() => handleSort("market_value")}>Market Value{arrow("market_value")}</th>
             <th className="text-right" onClick={() => handleSort("risk_mix")}>
-              Risk Mix (Ctry/Ind/Sty/Idio){arrow("risk_mix")}
+              Risk Mix (Mkt/Ind/Sty/Idio){arrow("risk_mix")}
             </th>
           </tr>
         </thead>

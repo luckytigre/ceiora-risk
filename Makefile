@@ -1,4 +1,4 @@
-.PHONY: dev backend backend-prod frontend frontend-safe refresh refresh-light refresh-cold setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status
+.PHONY: dev backend backend-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status
 
 setup:
 	python3 -m venv backend/.venv || true
@@ -44,18 +44,18 @@ refresh:
 		curl -X POST "http://localhost:8000/api/refresh"; \
 	fi
 
-refresh-light:
+refresh-serve:
 	@if [ -n "$$REFRESH_API_TOKEN" ]; then \
-		curl -X POST -H "X-Refresh-Token: $$REFRESH_API_TOKEN" "http://localhost:8000/api/refresh?mode=light"; \
+		curl -X POST -H "X-Refresh-Token: $$REFRESH_API_TOKEN" "http://localhost:8000/api/refresh?profile=serve-refresh"; \
 	else \
-		curl -X POST "http://localhost:8000/api/refresh?mode=light"; \
+		curl -X POST "http://localhost:8000/api/refresh?profile=serve-refresh"; \
 	fi
 
-refresh-cold:
+refresh-cold-core:
 	@if [ -n "$$REFRESH_API_TOKEN" ]; then \
-		curl -X POST -H "X-Refresh-Token: $$REFRESH_API_TOKEN" "http://localhost:8000/api/refresh?mode=cold"; \
+		curl -X POST -H "X-Refresh-Token: $$REFRESH_API_TOKEN" "http://localhost:8000/api/refresh?profile=cold-core"; \
 	else \
-		curl -X POST "http://localhost:8000/api/refresh?mode=cold"; \
+		curl -X POST "http://localhost:8000/api/refresh?profile=cold-core"; \
 	fi
 
 cuse4-bootstrap:

@@ -1,11 +1,11 @@
-"""Daily cross-sectional Barra factor returns via two-phase WLS.
+"""Daily cross-sectional Barra factor returns via staged migration logic.
 
 Runs WLS regression for each trading day:
   1. Carry-forward quarterly exposures to each trading day
   2. Compute daily stock returns from prices
   3. Carry-forward market caps per ticker from fundamental snapshots
   4. Inner-join returns + exposures + market_caps
-  5. Two-phase WLS: intercept+industry (phase A), style scores (phase B)
+  5. One-stage constrained WLS: market + industry + style
   6. Cache results incrementally in SQLite
 """
 
@@ -22,37 +22,25 @@ import pandas as pd
 
 from backend import config
 from backend.data.trbc_schema import pick_trbc_business_sector_column, pick_trbc_industry_column
-from backend.risk_model.eligibility import (
-    build_eligibility_context,
-    structural_eligibility_for_date,
+from backend.risk_model.eligibility import build_eligibility_context, structural_eligibility_for_date
+from backend.risk_model.descriptors import (
+    FULL_STYLE_ORTH_RULES,
+    apply_style_canonicalization,
+    fit_and_apply_style_canonicalization,
 )
-from backend.risk_model.descriptors import FULL_STYLE_ORTH_RULES, canonicalize_style_scores
-from backend.risk_model.risk_attribution import COUNTRY_FACTOR, STYLE_COLUMN_TO_LABEL
-from backend.risk_model.wls_regression import estimate_factor_returns_two_phase
+from backend.risk_model.factor_catalog import MARKET_FACTOR, STYLE_COLUMN_TO_LABEL
+from backend.risk_model.regression_frame import RegressionFrameBuilder
+from backend.risk_model.wls_regression import (
+    estimate_factor_returns_one_stage,
+    fitted_returns_one_stage,
+)
 from backend.trading_calendar import filter_xnys_sessions, non_xnys_dates, previous_or_same_xnys_session
 
 logger = logging.getLogger(__name__)
 
-# Style score columns in the raw cross-section table.
-STYLE_SCORE_COLS = list(STYLE_COLUMN_TO_LABEL.keys())
 MIN_CROSS_SECTION_SIZE = 30
 MIN_ELIGIBLE_COVERAGE = 0.60
-CACHE_METHOD_VERSION = "v18_country_split_hc1_no_value_factor_trbc_business_sector_2026_03_14"
-
-
-def _supported_style_score_columns(style_scores: pd.DataFrame) -> list[str]:
-    """Keep style columns that have non-zero cross-sectional support on the date."""
-    supported: list[str] = []
-    for col in style_scores.columns:
-        series = pd.to_numeric(style_scores[col], errors="coerce")
-        values = series.to_numpy(dtype=float)
-        finite = values[np.isfinite(values)]
-        if finite.size == 0:
-            continue
-        if float(np.nanmax(np.abs(finite))) <= 0.0:
-            continue
-        supported.append(str(col))
-    return supported
+CACHE_METHOD_VERSION = "v20_use4_us_core_market_one_stage_projected_non_us_trbc_business_sector_2026_03_15"
 
 
 _DAILY_FR_SCHEMA = """
@@ -97,9 +85,13 @@ CREATE TABLE IF NOT EXISTS daily_universe_eligibility_summary (
     exp_date TEXT,
     exposure_n INTEGER NOT NULL DEFAULT 0,
     structural_eligible_n INTEGER NOT NULL DEFAULT 0,
+    core_structural_eligible_n INTEGER NOT NULL DEFAULT 0,
     regression_member_n INTEGER NOT NULL DEFAULT 0,
+    projectable_n INTEGER NOT NULL DEFAULT 0,
+    projected_only_n INTEGER NOT NULL DEFAULT 0,
     structural_coverage REAL NOT NULL DEFAULT 0.0,
     regression_coverage REAL NOT NULL DEFAULT 0.0,
+    projectable_coverage REAL NOT NULL DEFAULT 0.0,
     drop_pct_from_prev REAL NOT NULL DEFAULT 0.0,
     alert_level TEXT NOT NULL DEFAULT '',
     missing_style_n INTEGER NOT NULL DEFAULT 0,
@@ -447,11 +439,12 @@ def _save_daily_eligibility_summary(cache_db: Path, rows: list[dict]) -> None:
     conn.executemany(
         """
         INSERT OR REPLACE INTO daily_universe_eligibility_summary (
-            date, exp_date, exposure_n, structural_eligible_n, regression_member_n,
-            structural_coverage, regression_coverage, drop_pct_from_prev, alert_level,
+            date, exp_date, exposure_n, structural_eligible_n, core_structural_eligible_n,
+            regression_member_n, projectable_n, projected_only_n,
+            structural_coverage, regression_coverage, projectable_coverage, drop_pct_from_prev, alert_level,
             missing_style_n, missing_market_cap_n, missing_trbc_economic_sector_short_n,
             missing_trbc_industry_n, non_equity_n, missing_return_n
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -459,9 +452,13 @@ def _save_daily_eligibility_summary(cache_db: Path, rows: list[dict]) -> None:
                 r.get("exp_date"),
                 int(r.get("exposure_n", 0)),
                 int(r.get("structural_eligible_n", 0)),
+                int(r.get("core_structural_eligible_n", 0)),
                 int(r.get("regression_member_n", 0)),
+                int(r.get("projectable_n", 0)),
+                int(r.get("projected_only_n", 0)),
                 float(r.get("structural_coverage", 0.0)),
                 float(r.get("regression_coverage", 0.0)),
+                float(r.get("projectable_coverage", 0.0)),
                 float(r.get("drop_pct_from_prev", 0.0)),
                 str(r.get("alert_level") or ""),
                 int(r.get("missing_style_n", 0)),
@@ -679,6 +676,18 @@ def compute_daily_factor_returns(
             }
         )
 
+    frame_builder = RegressionFrameBuilder(
+        daily_returns=daily_returns,
+        eligibility_ctx=eligibility_ctx,
+        lag_days=lag_days,
+        returns_winsor_pct=float(config.RETURNS_WINSOR_PCT),
+        eligibility_resolver=structural_eligibility_for_date,
+        style_fit_canonicalizer=fit_and_apply_style_canonicalization,
+        style_apply_canonicalizer=apply_style_canonicalization,
+        orth_rules=FULL_STYLE_ORTH_RULES,
+        core_country_codes={"US"},
+    )
+
     # Process each trading day
     batch_results: list[dict] = []
     batch_residuals: list[dict] = []
@@ -696,58 +705,17 @@ def compute_daily_factor_returns(
     structural_counts = _load_structural_counts(cache_db)
 
     for i, date in enumerate(dates_to_compute):
-        # 1. Daily stock returns for this date
-        if date not in daily_returns.index:
-            skip_counts["missing_return_row"] += 1
-            continue
-        ret_row = daily_returns.loc[date]
-        ret_row = pd.to_numeric(ret_row, errors="coerce")
-        ret_row = ret_row[np.isfinite(ret_row.to_numpy(dtype=float))]
-
-        # 2. Structural eligibility for this date from centralized context.
-        # Enforce minimum cross-section age by resolving eligibility at (date - lag_days).
         eligibility_date = _shift_date_by_days(date, lag_days)
-        exp_date, eligibility = structural_eligibility_for_date(eligibility_ctx, eligibility_date)
-        if exp_date is None or eligibility.empty:
-            skip_counts["missing_eligibility"] += 1
-            batch_eligibility.append({
-                "date": date,
-                "exp_date": exp_date,
-                "exposure_n": 0,
-                "structural_eligible_n": 0,
-                "regression_member_n": 0,
-                "structural_coverage": 0.0,
-                "regression_coverage": 0.0,
-                "drop_pct_from_prev": 0.0,
-                "alert_level": "",
-                "missing_style_n": 0,
-                "missing_market_cap_n": 0,
-                "missing_trbc_economic_sector_short_n": 0,
-                "missing_trbc_industry_n": 0,
-                "non_equity_n": 0,
-                "missing_return_n": 0,
-            })
-            continue
-
-        exp_snap = eligibility_ctx.exposure_snapshots[exp_date]
-        exposure_n = int(len(eligibility))
-        structural_mask = eligibility["is_structural_eligible"].astype(bool)
-        structural_n = int(structural_mask.sum())
-        has_return = eligibility.index.isin(ret_row.index)
-        regression_mask = structural_mask & has_return
-        regression_n = int(regression_mask.sum())
-
-        no_struct = eligibility.loc[~structural_mask, "exclusion_reason"].astype(str)
-        exploded = no_struct.str.split("|").explode()
-        missing_style_n = int((exploded == "missing_style").sum())
-        missing_market_cap_n = int((exploded == "missing_market_cap").sum())
-        missing_trbc_economic_sector_short_n = int((exploded == "missing_trbc_economic_sector_short").sum())
-        missing_trbc_industry_n = int((exploded == "missing_trbc_industry").sum())
-        non_equity_n = int((exploded == "non_equity").sum())
-        missing_return_n = int((structural_mask & ~has_return).sum())
-
-        structural_coverage = float(structural_n / max(1, exposure_n))
-        regression_coverage = float(regression_n / max(1, structural_n))
+        build_result = frame_builder.build(date=date, eligibility_date=eligibility_date)
+        summary = build_result.summary
+        exp_date = summary.exposure_date
+        structural_n = summary.structural_eligible_n
+        core_structural_n = summary.core_structural_eligible_n
+        regression_n = summary.regression_member_n
+        projectable_n = summary.projectable_n
+        structural_coverage = summary.structural_coverage
+        regression_coverage = summary.regression_coverage
+        projectable_coverage = summary.projectable_coverage
         prev_structural_n = _previous_structural_count(structural_counts, date)
         if prev_structural_n is None or prev_structural_n <= 0:
             drop_pct_from_prev = 0.0
@@ -770,20 +738,29 @@ def compute_daily_factor_returns(
         batch_eligibility.append({
             "date": date,
             "exp_date": exp_date,
-            "exposure_n": exposure_n,
+            "exposure_n": summary.exposure_n,
             "structural_eligible_n": structural_n,
+            "core_structural_eligible_n": core_structural_n,
             "regression_member_n": regression_n,
+            "projectable_n": projectable_n,
+            "projected_only_n": summary.projected_only_n,
             "structural_coverage": structural_coverage,
             "regression_coverage": regression_coverage,
+            "projectable_coverage": projectable_coverage,
             "drop_pct_from_prev": drop_pct_from_prev,
             "alert_level": alert_level,
-            "missing_style_n": missing_style_n,
-            "missing_market_cap_n": missing_market_cap_n,
-            "missing_trbc_economic_sector_short_n": missing_trbc_economic_sector_short_n,
-            "missing_trbc_industry_n": missing_trbc_industry_n,
-            "non_equity_n": non_equity_n,
-            "missing_return_n": missing_return_n,
+            "missing_style_n": summary.missing_style_n,
+            "missing_market_cap_n": summary.missing_market_cap_n,
+            "missing_trbc_economic_sector_short_n": summary.missing_trbc_economic_sector_short_n,
+            "missing_trbc_industry_n": summary.missing_trbc_industry_n,
+            "non_equity_n": summary.non_equity_n,
+            "missing_return_n": summary.missing_return_n,
         })
+
+        skip_reason = build_result.skip_reason
+        if skip_reason is not None:
+            skip_counts[skip_reason] += 1
+            continue
 
         if structural_n < MIN_CROSS_SECTION_SIZE or regression_n < MIN_CROSS_SECTION_SIZE:
             skip_counts["small_cross_section"] += 1
@@ -792,76 +769,21 @@ def compute_daily_factor_returns(
             skip_counts["low_coverage"] += 1
             continue
 
-        valid_idx = eligibility.index[regression_mask]
-        returns_series = ret_row.loc[valid_idx].astype(float)
-        market_cap_series = pd.to_numeric(eligibility.loc[valid_idx, "market_cap"], errors="coerce").astype(float)
-        industry_series = (
-            eligibility.loc[valid_idx, "trbc_business_sector"]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-        )
-        country_series = (
-            eligibility.loc[valid_idx, "hq_country_code"]
-            .fillna("")
-            .astype(str)
-            .str.upper()
-            .str.strip()
-        )
-        if industry_series.eq("").all():
-            skip_counts["missing_l2_sector"] += 1
-            continue
-        if country_series.eq("").all():
-            skip_counts["missing_country"] += 1
+        frame = build_result.frame
+        if frame is None:
             continue
 
-        raw_returns = returns_series.to_numpy(dtype=float)
-        returns = _winsorize_cross_section(raw_returns, float(config.RETURNS_WINSOR_PCT))
-        market_caps = market_cap_series.to_numpy(dtype=float)
-
-        # Style exposures (canonicalized cross-sectionally using only structurally eligible names)
-        style_cols_present = [c for c in STYLE_SCORE_COLS if c in exp_snap.columns]
-        style_scores_raw = exp_snap.loc[valid_idx, style_cols_present].copy()
-        style_cols_supported = _supported_style_score_columns(style_scores_raw)
-        style_names = [STYLE_COLUMN_TO_LABEL[c] for c in style_cols_supported]
-        style_scores = style_scores_raw[style_cols_supported].copy()
-        style_scores.columns = style_names
-
-        # Structural exposures: unconstrained US country dummy plus constrained TRBC L2 business-sector groups.
-        structural_dummies = pd.get_dummies(industry_series, dtype=float)
-        if structural_dummies.empty:
-            skip_counts["empty_dummies"] += 1
-            continue
-        country_dummies = pd.DataFrame(index=country_series.index)
-        if country_series.eq("US").any() and country_series.ne("US").any():
-            country_dummies[COUNTRY_FACTOR] = np.where(country_series.eq("US"), 1.0, 0.0)
-        country_x = country_dummies.to_numpy(dtype=float) if not country_dummies.empty else None
-        country_names = list(country_dummies.columns)
-        ind_x = structural_dummies.to_numpy(dtype=float)
-        ind_names = list(structural_dummies.columns)
-
-        if style_names:
-            style_canonical = canonicalize_style_scores(
-                style_scores=style_scores,
-                market_caps=market_cap_series.loc[valid_idx],
-                orth_rules=FULL_STYLE_ORTH_RULES,
-                industry_exposures=structural_dummies,
-            )
-            style_x = style_canonical[style_names].to_numpy(dtype=float)
-        else:
-            style_x = None
-
-        # 6. Run two-phase WLS
-        result = estimate_factor_returns_two_phase(
-            returns=returns,
-            raw_returns=raw_returns,
-            market_caps=market_caps,
-            country_exposures=country_x,
-            industry_exposures=ind_x if ind_x is not None else None,
-            style_exposures=style_x if style_x is not None else None,
-            country_names=country_names,
-            industry_names=ind_names,
-            style_names=style_names,
+        # 6. Run one-stage constrained WLS
+        result = estimate_factor_returns_one_stage(
+            returns=frame.returns,
+            raw_returns=frame.raw_returns,
+            market_caps=frame.market_caps,
+            market_exposures=np.ones((int(regression_n), 1), dtype=float),
+            industry_exposures=frame.industry_dummies.to_numpy(dtype=float),
+            style_exposures=frame.style_matrix,
+            market_name=MARKET_FACTOR,
+            industry_names=frame.industry_names,
+            style_names=frame.style_names,
         )
 
         # 7. Store factor returns
@@ -879,24 +801,38 @@ def compute_daily_factor_returns(
                 "r_squared": result.r_squared if np.isfinite(result.r_squared) else 0.0,
                 "residual_vol": result.residual_vol if np.isfinite(result.residual_vol) else 0.0,
                 "cross_section_n": int(regression_n),
-                "eligible_n": int(structural_n),
+                "eligible_n": int(core_structural_n),
                 "coverage": float(regression_coverage) if np.isfinite(regression_coverage) else 0.0,
             })
 
         # 8. Store per-stock residual history for specific-risk forecasting.
-        residuals = np.asarray(getattr(result, "residuals", []), dtype=float)
-        raw_residuals = np.asarray(getattr(result, "raw_residuals", residuals), dtype=float)
-        for idx, ric in enumerate(valid_idx):
-            if idx >= residuals.shape[0] or idx >= raw_residuals.shape[0]:
+        projected_fitted = fitted_returns_one_stage(
+            result,
+            n_obs=len(frame.projectable_index),
+            market_exposures=np.ones((len(frame.projectable_index), 1), dtype=float),
+            industry_exposures=(
+                frame.projectable_industry_dummies.to_numpy(dtype=float)
+                if not frame.projectable_industry_dummies.empty
+                else None
+            ),
+            style_exposures=frame.projectable_style_matrix,
+            market_name=MARKET_FACTOR,
+            industry_names=frame.industry_names,
+            style_names=frame.style_names,
+        )
+        projected_model_residuals = frame.projectable_returns - projected_fitted
+        projected_raw_residuals = frame.projectable_raw_returns - projected_fitted
+        for idx, ric in enumerate(frame.projectable_index):
+            if idx >= projected_model_residuals.shape[0] or idx >= projected_raw_residuals.shape[0]:
                 break
-            resid_val = float(residuals[idx])
-            raw_resid_val = float(raw_residuals[idx])
+            resid_val = float(projected_model_residuals[idx])
+            raw_resid_val = float(projected_raw_residuals[idx])
             if not np.isfinite(resid_val) or not np.isfinite(raw_resid_val):
                 continue
-            mcap_val = float(market_cap_series.loc[ric])
+            mcap_val = float(frame.projectable_market_cap_series.loc[ric])
             if not np.isfinite(mcap_val) or mcap_val <= 0:
                 continue
-            industry = str(industry_series.loc[ric]) if ric in industry_series.index else ""
+            industry = str(frame.projectable_industry_series.loc[ric]) if ric in frame.projectable_industry_series.index else ""
             ric_key = str(ric).upper()
             batch_residuals.append({
                 "date": date,

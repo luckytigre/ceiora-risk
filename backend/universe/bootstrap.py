@@ -1,7 +1,8 @@
 """Canonical cUSE4 bootstrap.
 
-Legacy bootstrap from compatibility views has been retired. This module now
-only ensures canonical tables exist and reports current row counts.
+Legacy bootstrap from compatibility views has been retired. Canonical bootstrap
+now ensures tables exist, syncs the committed universe registry into
+`security_master`, and reports current row counts.
 """
 
 from __future__ import annotations
@@ -19,6 +20,10 @@ from backend.universe.schema import (
     TRBC_HISTORY_TABLE,
     ensure_cuse4_schema,
 )
+from backend.universe.security_master_sync import (
+    DEFAULT_SECURITY_MASTER_SEED_PATH,
+    sync_security_master_seed,
+)
 
 
 def _count(conn: sqlite3.Connection, table: str) -> int:
@@ -29,14 +34,13 @@ def _count(conn: sqlite3.Connection, table: str) -> int:
 def bootstrap_cuse4_source_tables(
     *,
     db_path: Path,
-    replace_all: bool = True,
+    seed_path: Path = DEFAULT_SECURITY_MASTER_SEED_PATH,
 ) -> dict[str, Any]:
-    """Ensure canonical schema exists and return current canonical row counts.
+    """Ensure canonical schema exists, sync the committed seed registry, and report row counts.
 
     Args:
         db_path: Path to the canonical SQLite DB.
-        replace_all: Kept for API compatibility; no destructive behavior is
-            performed in canonical mode.
+        seed_path: Versioned security_master seed artifact to upsert into the DB.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
     job_run_id = f"cuse4_bootstrap_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
@@ -48,15 +52,16 @@ def bootstrap_cuse4_source_tables(
 
     try:
         ensure_cuse4_schema(conn)
+        seed_sync = sync_security_master_seed(conn, seed_path=seed_path)
         conn.commit()
 
         return {
             "status": "ok",
-            "mode": "canonical_noop",
+            "mode": "bootstrap_only",
             "db_path": str(db_path),
-            "replace_all": bool(replace_all),
             "job_run_id": job_run_id,
             "updated_at": now_iso,
+            "seed_sync": seed_sync,
             "security_master_rows": _count(conn, SECURITY_MASTER_TABLE),
             "security_fundamentals_pit_rows": _count(conn, FUNDAMENTALS_HISTORY_TABLE),
             "security_classification_pit_rows": _count(conn, TRBC_HISTORY_TABLE),

@@ -26,14 +26,27 @@ const SectionCoverage = dynamic(() => import("./SectionCoverage"), {
 });
 
 export default function HealthDiagnosticsRoot({ data }: { data: HealthDiagnosticsData }) {
+  const refreshState = String(data.diagnostics_refresh_state || "").trim().toLowerCase();
+  const freshnessLabel = refreshState === "recomputed"
+    ? "Recomputed on core lane"
+    : refreshState === "carried_forward"
+      ? "Carried forward from last core diagnostics"
+      : data._cached
+        ? "Cached"
+        : "Freshly Computed";
   return (
     <>
       <div className="chart-card">
         <h3 style={{ marginBottom: 6 }}>Model Health Diagnostics</h3>
         <div className="health-meta-row">
           <span>As of {data.as_of ?? "—"}</span>
-          <span>{data._cached ? "Cached" : "Freshly Computed"}</span>
+          <span>{freshnessLabel}</span>
         </div>
+        {refreshState === "carried_forward" && (
+          <div className="section-subtitle" style={{ marginBottom: 0 }}>
+            Deep diagnostics were reused from the last core rebuild and may lag the newest quick-refresh snapshot.
+          </div>
+        )}
         {data.notes?.length > 0 && (
           <ul className="health-notes">
             {data.notes.map((n) => <li key={n}>{n}</li>)}

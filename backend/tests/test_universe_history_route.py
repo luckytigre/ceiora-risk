@@ -39,14 +39,18 @@ def _seed_prices(db_path: Path) -> None:
 def test_universe_history_aggregates_to_weekly_closes(monkeypatch, tmp_path: Path) -> None:
     data_db = tmp_path / "data.db"
     _seed_prices(data_db)
-    monkeypatch.setattr(universe_routes, "DATA_DB", data_db)
+    monkeypatch.setattr(universe_routes.universe_service, "DATA_DB", data_db)
     payload = {
         "by_ticker": {
             "ABC": {"ticker": "ABC", "ric": "ABC.N"},
         }
     }
-    monkeypatch.setattr(universe_routes, "load_current_payload", lambda name: payload if name == "universe_loadings" else None)
-    monkeypatch.setattr(universe_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(
+        universe_routes.universe_service,
+        "load_runtime_payload",
+        lambda name, *, fallback_loader=None: payload if name == "universe_loadings" else None,
+    )
+    monkeypatch.setattr(universe_routes.universe_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/universe/ticker/abc/history?years=1")
@@ -63,8 +67,12 @@ def test_universe_history_aggregates_to_weekly_closes(monkeypatch, tmp_path: Pat
 
 
 def test_universe_history_returns_404_for_missing_ticker(monkeypatch) -> None:
-    monkeypatch.setattr(universe_routes, "load_current_payload", lambda name: {"by_ticker": {}} if name == "universe_loadings" else None)
-    monkeypatch.setattr(universe_routes, "cache_get", lambda key: None)
+    monkeypatch.setattr(
+        universe_routes.universe_service,
+        "load_runtime_payload",
+        lambda name, *, fallback_loader=None: {"by_ticker": {}} if name == "universe_loadings" else None,
+    )
+    monkeypatch.setattr(universe_routes.universe_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/universe/ticker/DOES_NOT_EXIST/history")

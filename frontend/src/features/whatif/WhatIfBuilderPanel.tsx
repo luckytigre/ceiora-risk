@@ -232,7 +232,7 @@ export default function WhatIfBuilderPanel({
             disabled={!previewReady}
             title="Preview risk impact of all staged scenario rows without committing changes"
           >
-            {busy ? "..." : awaitingRefresh ? "RECALC..." : "Preview"}
+            {awaitingRefresh ? "RECALC..." : busy ? "..." : "Preview"}
           </button>
           <button
             className={`btn-action apply${applyReady ? " ready ready-apply" : ""}`}

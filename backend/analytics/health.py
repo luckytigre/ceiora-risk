@@ -13,10 +13,16 @@ import pandas as pd
 from backend.risk_model.daily_factor_returns import load_specific_residuals
 from backend.risk_model.descriptors import FULL_STYLE_FACTORS, FULL_STYLE_ORTH_RULES, canonicalize_style_scores
 from backend.risk_model.eligibility import build_eligibility_context, structural_eligibility_for_date
+from backend.risk_model.factor_catalog import (
+    build_factor_catalog_for_factors,
+    factor_name_to_id_map,
+    serialize_factor_catalog,
+)
 from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
 from backend.data.sqlite import cache_get
 
 ANNUALIZATION = 252.0
+HEALTH_CORE_COUNTRY_CODES = {"US"}
 
 
 def _to_date_str(dt: Any) -> str:
@@ -121,7 +127,29 @@ def _find_most_recent(sorted_dates: list[str], target: str) -> str | None:
     return result
 
 
-def _load_style_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, pd.DataFrame]]:
+def _load_exposure_dates(data_db: Path) -> list[str]:
+    conn = sqlite3.connect(str(data_db))
+    try:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT as_of_date
+            FROM barra_raw_cross_section_history
+            WHERE as_of_date IS NOT NULL
+            ORDER BY as_of_date
+            """
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
+    return [str(row[0]) for row in rows if row and row[0]]
+
+
+def _load_style_exposure_snapshots(
+    data_db: Path,
+    *,
+    required_dates: set[str] | None = None,
+) -> tuple[list[str], dict[str, pd.DataFrame]]:
     conn = sqlite3.connect(str(data_db))
     try:
         cols = [str(r[1]) for r in conn.execute("PRAGMA table_info(barra_raw_cross_section_history)").fetchall()]
@@ -131,18 +159,50 @@ def _load_style_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, 
         key_col = "ric" if "ric" in cols else ("ticker" if "ticker" in cols else None)
         if key_col is None:
             return [], {}
-        df = pd.read_sql_query(
-            f"""
-            SELECT UPPER({key_col}) AS security_key, as_of_date, {", ".join(style_cols_present)}
-            FROM barra_raw_cross_section_history
-            ORDER BY as_of_date, UPPER({key_col})
-            """,
-            conn,
-        )
+        exposure_dates = [
+            str(row[0])
+            for row in conn.execute(
+                """
+                SELECT DISTINCT as_of_date
+                FROM barra_raw_cross_section_history
+                ORDER BY as_of_date
+                """
+            ).fetchall()
+            if row and row[0]
+        ]
+        if not exposure_dates:
+            return [], {}
+
+        required = {str(d).strip() for d in (required_dates or set()) if str(d).strip()}
+        dates_to_load: list[str]
+        if required:
+            dates_to_load = [d for d in exposure_dates if d in required]
+            if not dates_to_load:
+                return exposure_dates, {}
+            placeholders = ",".join("?" for _ in dates_to_load)
+            df = pd.read_sql_query(
+                f"""
+                SELECT UPPER({key_col}) AS security_key, as_of_date, {", ".join(style_cols_present)}
+                FROM barra_raw_cross_section_history
+                WHERE as_of_date IN ({placeholders})
+                ORDER BY as_of_date, UPPER({key_col})
+                """,
+                conn,
+                params=tuple(dates_to_load),
+            )
+        else:
+            df = pd.read_sql_query(
+                f"""
+                SELECT UPPER({key_col}) AS security_key, as_of_date, {", ".join(style_cols_present)}
+                FROM barra_raw_cross_section_history
+                ORDER BY as_of_date, UPPER({key_col})
+                """,
+                conn,
+            )
     finally:
         conn.close()
     if df.empty:
-        return [], {}
+        return exposure_dates, {}
     df["security_key"] = df["security_key"].astype(str).str.upper()
     df["as_of_date"] = df["as_of_date"].astype(str)
     for c in style_cols_present:
@@ -157,7 +217,6 @@ def _load_style_exposure_snapshots(data_db: Path) -> tuple[list[str], dict[str, 
             .fillna(0.0)
         )
         snapshots[str(as_of)] = snap
-    exposure_dates = sorted(snapshots.keys())
     return exposure_dates, snapshots
 
 
@@ -175,7 +234,7 @@ def _compute_incremental_r2_by_block(
     - Full-model R² comes directly from `daily_factor_returns`.
     - Reconstruct style fitted return per stock/date from style factor returns and
       canonicalized style exposures.
-    - Industry-only residual = full residual + style_fitted.
+    - Structural-block residual = full residual + style_fitted.
     - Convert to weighted R² using the same sqrt(mcap) weighting convention.
     """
     if df_ret.empty:
@@ -223,8 +282,20 @@ def _compute_incremental_r2_by_block(
         .str.strip()
     )
 
-    exposure_dates, exposure_snaps = _load_style_exposure_snapshots(data_db)
-    if not exposure_dates or not exposure_snaps:
+    exposure_dates = _load_exposure_dates(data_db)
+    if not exposure_dates:
+        return []
+    required_exposure_dates = {
+        exp_date
+        for sample_date in sorted(residuals["date_str"].unique().tolist())
+        for exp_date in [_find_most_recent(exposure_dates, str(sample_date))]
+        if exp_date is not None
+    }
+    exposure_dates, exposure_snaps = _load_style_exposure_snapshots(
+        data_db,
+        required_dates=required_exposure_dates,
+    )
+    if not exposure_snaps:
         return []
 
     out: list[dict[str, float | str]] = []
@@ -317,7 +388,7 @@ def _compute_incremental_r2_by_block(
         out.append({
             "date": dstr,
             "r2_full": r2_full,
-            "r2_industry": r2_ind,
+            "r2_structural": r2_ind,
             "r2_style_incremental": r2_style_inc,
         })
 
@@ -327,7 +398,7 @@ def _compute_incremental_r2_by_block(
     # Week-end series: use weekly analogs of 60d/252d windows.
     # 60 trading days ~ 12 weeks, 252 trading days ~ 52 weeks.
     block_df["roll60_full"] = block_df["r2_full"].rolling(window=12, min_periods=4).mean()
-    block_df["roll60_industry"] = block_df["r2_industry"].rolling(window=12, min_periods=4).mean()
+    block_df["roll60_structural"] = block_df["r2_structural"].rolling(window=12, min_periods=4).mean()
     block_df["roll60_style_incremental"] = block_df["r2_style_incremental"].rolling(window=12, min_periods=4).mean()
 
     rows: list[dict[str, float | str]] = []
@@ -335,10 +406,10 @@ def _compute_incremental_r2_by_block(
         rows.append({
             "date": str(r["date"]),
             "r2_full": float(r["r2_full"]),
-            "r2_industry": float(r["r2_industry"]),
+            "r2_structural": float(r["r2_structural"]),
             "r2_style_incremental": float(r["r2_style_incremental"]),
             "roll60_full": float(r["roll60_full"]) if np.isfinite(r["roll60_full"]) else float(r["r2_full"]),
-            "roll60_industry": float(r["roll60_industry"]) if np.isfinite(r["roll60_industry"]) else float(r["r2_industry"]),
+            "roll60_structural": float(r["roll60_structural"]) if np.isfinite(r["roll60_structural"]) else float(r["r2_structural"]),
             "roll60_style_incremental": float(r["roll60_style_incremental"]) if np.isfinite(r["roll60_style_incremental"]) else float(r["r2_style_incremental"]),
         })
     return rows
@@ -348,6 +419,7 @@ def _build_factor_exposure_matrix(
     snapshot_df: pd.DataFrame,
     *,
     eligibility: pd.DataFrame,
+    core_country_codes: set[str] | None = None,
 ) -> pd.DataFrame:
     if snapshot_df.empty or eligibility.empty:
         return pd.DataFrame()
@@ -361,6 +433,16 @@ def _build_factor_exposure_matrix(
         return pd.DataFrame()
 
     eligible = eligibility[eligibility["is_structural_eligible"].astype(bool)].copy()
+    if core_country_codes:
+        allowed = {str(code).upper().strip() for code in core_country_codes if str(code).strip()}
+        country = (
+            eligible["hq_country_code"]
+            .fillna("")
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+        eligible = eligible[country.isin(allowed)].copy()
     if eligible.empty:
         return pd.DataFrame()
     eligible_idx = eligible.index.astype(str).str.upper()
@@ -407,31 +489,42 @@ def _compute_exposure_turnover(
     data_db: Path,
     factor_cols: list[str],
     *,
-    eligibility_ctx=None,
+    core_country_codes: set[str] | None = None,
+    sample_dates: list[str] | None = None,
 ) -> list[dict[str, float | str]]:
     if not factor_cols:
         return []
-    ctx = eligibility_ctx or build_eligibility_context(data_db)
-    if not ctx.exposure_dates:
+    exposure_dates = _load_exposure_dates(data_db)
+    if not exposure_dates:
         return []
 
     per_date: dict[str, pd.DataFrame] = {}
-    for d in sorted(ctx.exposure_dates):
-        snap = ctx.exposure_snapshots.get(d)
-        if snap is None or snap.empty:
+    requested_dates = (
+        sorted({str(d).strip() for d in (sample_dates or []) if str(d).strip()})
+        if sample_dates
+        else list(exposure_dates)
+    )
+    for requested_date in requested_dates:
+        target_date = _find_most_recent(exposure_dates, requested_date)
+        if target_date is None or target_date in per_date:
             continue
-        exp_date, eligibility = structural_eligibility_for_date(ctx, d)
+        ctx = build_eligibility_context(data_db, dates=[target_date])
+        exp_date, eligibility = structural_eligibility_for_date(ctx, target_date)
         if exp_date is None or eligibility.empty:
+            continue
+        snap = ctx.exposure_snapshots.get(exp_date)
+        if snap is None or snap.empty:
             continue
         snap_with_ric = snap.reset_index().rename(columns={"index": "ric"})
         m = _build_factor_exposure_matrix(
             snap_with_ric,
             eligibility=eligibility,
+            core_country_codes=core_country_codes,
         )
         if m.empty:
             continue
         m = m.reindex(columns=factor_cols, fill_value=0.0)
-        per_date[d] = m
+        per_date[str(exp_date)] = m
     dates = sorted(per_date.keys())
     if len(dates) < 2:
         return []
@@ -818,6 +911,7 @@ def compute_health_diagnostics(
     portfolio_cache = dict(portfolio_payload or (cache_get("portfolio") or {}))
     universe_cache = dict(universe_payload or (cache_get("universe_loadings") or {}))
     cov_payload = dict(covariance_payload or (cache_get("risk_engine_cov") or {}))
+    model_method_version = str((risk_cache.get("risk_engine") or {}).get("method_version") or "")
     week_end_dates = _week_end_sample_dates(df_ret["date"])
     week_end_str = {_to_date_str(d) for d in week_end_dates}
 
@@ -875,20 +969,21 @@ def compute_health_diagnostics(
     }
 
     portfolio_variance_split = {
-        "country_pct_total": float((risk_cache.get("risk_shares") or {}).get("country", 0.0) or 0.0),
+        "market_pct_total": float((risk_cache.get("risk_shares") or {}).get("market", 0.0) or 0.0),
         "industry_pct_total": float((risk_cache.get("risk_shares") or {}).get("industry", 0.0) or 0.0),
         "style_pct_total": float((risk_cache.get("risk_shares") or {}).get("style", 0.0) or 0.0),
         "idio_pct_total": float((risk_cache.get("risk_shares") or {}).get("idio", 0.0) or 0.0),
-        "country_pct_factor_only": float((risk_cache.get("component_shares") or {}).get("country", 0.0) or 0.0) * 100.0,
+        "market_pct_factor_only": float((risk_cache.get("component_shares") or {}).get("market", 0.0) or 0.0) * 100.0,
         "industry_pct_factor_only": float((risk_cache.get("component_shares") or {}).get("industry", 0.0) or 0.0) * 100.0,
         "style_pct_factor_only": float((risk_cache.get("component_shares") or {}).get("style", 0.0) or 0.0) * 100.0,
     }
 
     # SECTION 2 — Exposure diagnostics (latest cross-section)
-    elig_ctx = build_eligibility_context(data_db)
-    exp_as_of = max(elig_ctx.exposure_dates) if elig_ctx.exposure_dates else None
+    exposure_dates = _load_exposure_dates(data_db)
+    exp_as_of = exposure_dates[-1] if exposure_dates else None
     exp_matrix = pd.DataFrame()
     if exp_as_of is not None:
+        elig_ctx = build_eligibility_context(data_db, dates=[exp_as_of])
         exp_date, exp_elig = structural_eligibility_for_date(elig_ctx, exp_as_of)
         snap = elig_ctx.exposure_snapshots.get(exp_date or "")
         if snap is not None and not snap.empty and not exp_elig.empty:
@@ -896,7 +991,21 @@ def compute_health_diagnostics(
             exp_matrix = _build_factor_exposure_matrix(
                 snap_df,
                 eligibility=exp_elig,
+                core_country_codes=HEALTH_CORE_COUNTRY_CODES,
             )
+    health_factor_names = {str(name) for name in df_ret["factor_name"].astype(str).tolist()}
+    if not exp_matrix.empty:
+        health_factor_names.update(str(name) for name in exp_matrix.columns)
+    health_factor_catalog = build_factor_catalog_for_factors(
+        sorted(health_factor_names),
+        method_version=model_method_version,
+    )
+    health_factor_name_to_id = factor_name_to_id_map(health_factor_catalog)
+
+    def _health_factor_id(factor_name: Any) -> str:
+        factor = str(factor_name or "").strip()
+        return health_factor_name_to_id.get(factor, factor)
+
     factor_stats: list[dict[str, Any]] = []
     factor_hists: dict[str, dict[str, list[float | int]]] = {}
     exp_corr = {"factors": [], "correlation": []}
@@ -908,7 +1017,7 @@ def compute_health_diagnostics(
             if finite.size == 0:
                 continue
             factor_stats.append({
-                "factor": str(f),
+                "factor_id": _health_factor_id(f),
                 "mean": float(np.mean(finite)),
                 "std": float(np.std(finite, ddof=0)),
                 "p1": float(np.percentile(finite, 1)),
@@ -917,16 +1026,17 @@ def compute_health_diagnostics(
             })
             factor_hists[str(f)] = _hist(finite, bins=30)
 
-        factor_stats = sorted(factor_stats, key=lambda r: str(r["factor"]))
+        factor_stats = sorted(factor_stats, key=lambda r: str(r["factor_id"]))
         corr_df = exp_matrix.corr().fillna(0.0)
         exp_corr = {
-            "factors": [str(c) for c in corr_df.columns],
+            "factors": [_health_factor_id(c) for c in corr_df.columns],
             "correlation": [[float(v) for v in row] for row in corr_df.to_numpy(dtype=float)],
         }
         turnover_series = _compute_exposure_turnover(
             data_db,
             list(exp_matrix.columns),
-            eligibility_ctx=elig_ctx,
+            core_country_codes=HEALTH_CORE_COUNTRY_CODES,
+            sample_dates=sorted(week_end_str),
         )
 
     # SECTION 3 — Factor return health
@@ -944,18 +1054,18 @@ def compute_health_diagnostics(
             s = piv[f].astype(float)
             cum = (1.0 + s).cumprod() - 1.0
             rv = s.rolling(window=60, min_periods=20).std(ddof=1) * np.sqrt(ANNUALIZATION)
-            cumulative[f] = [{"date": _to_date_str(d), "value": float(v)} for d, v in cum.items()]
-            rolling_vol_60d[f] = [{"date": _to_date_str(d), "value": float(v if np.isfinite(v) else 0.0)} for d, v in rv.items()]
-            return_dist[f] = _hist(s.to_numpy(dtype=float), bins=40)
+            factor_id = _health_factor_id(f)
+            cumulative[factor_id] = [{"date": _to_date_str(d), "value": float(v)} for d, v in cum.items()]
+            rolling_vol_60d[factor_id] = [{"date": _to_date_str(d), "value": float(v if np.isfinite(v) else 0.0)} for d, v in rv.items()]
+            return_dist[factor_id] = _hist(s.to_numpy(dtype=float), bins=40)
 
     ret_corr_df = piv.corr().fillna(0.0) if not piv.empty else pd.DataFrame()
     ret_corr = {
-        "factors": [str(c) for c in ret_corr_df.columns],
+        "factors": [_health_factor_id(c) for c in ret_corr_df.columns],
         "correlation": [[float(v) for v in row] for row in ret_corr_df.to_numpy(dtype=float)],
     }
 
     # SECTION 4 — Covariance quality
-    factor_details = {str(d.get("factor")): d for d in (risk_cache.get("factor_details") or [])}
     cov_df = _deserialize_full_covariance(cov_payload)
     cov_factors = [str(f) for f in cov_df.columns]
     cov_mat = cov_df.to_numpy(dtype=float) if not cov_df.empty else np.zeros((0, 0), dtype=float)
@@ -1134,12 +1244,13 @@ def compute_health_diagnostics(
         "run_id": str(run_id) if run_id else None,
         "snapshot_id": str(snapshot_id) if snapshot_id else None,
         "source_dates": dict(source_dates or {}),
+        "factor_catalog": serialize_factor_catalog(health_factor_catalog),
         "notes": [
             "Daily factor t-stat uses stored heteroskedasticity-robust coefficient statistics from the estimator layer.",
             "Incremental block R² is reconstructed from cached full residuals plus canonicalized style-fitted returns.",
             "Computationally intensive Section 1 time-series are sampled at week-end over 10 years.",
             "Exposure turnover is normalized by elapsed calendar days between snapshots, then smoothed with a 60-observation rolling mean.",
-            "Section 2 uses strict structural eligibility only (no cap fill-ins, no unmapped industry bucket).",
+            "Section 2 is anchored on the US-core structural universe used by the live estimator (no cap fill-ins, no unmapped industry bucket).",
             "Section 4 forecast-vs-realized uses the full model covariance from risk_engine_cov, not the style-only display correlation matrix.",
         ],
         "section1": {
@@ -1156,7 +1267,7 @@ def compute_health_diagnostics(
             "incremental_block_r2_series": incremental_r2_series,
             "t_stat_hist": t_hist,
             "pct_days_abs_t_gt_2": [
-                {"factor": str(r["factor_name"]), "value": float(r["pct_days_abs_t_gt_2"])}
+                {"factor_id": _health_factor_id(r["factor_name"]), "value": float(r["pct_days_abs_t_gt_2"])}
                 for _, r in hit_rate.iterrows()
             ],
             "bucket_breadth_series": breadth_rows,
@@ -1167,12 +1278,15 @@ def compute_health_diagnostics(
             "as_of": exp_as_of,
             "style_scores": "canonicalized",
             "factor_stats": factor_stats,
-            "factor_histograms": factor_hists,
+            "factor_histograms": {
+                _health_factor_id(factor_name): hist
+                for factor_name, hist in factor_hists.items()
+            },
             "exposure_corr": exp_corr,
             "turnover_series": turnover_series,
         },
         "section3": {
-            "factors": factors,
+            "factors": [_health_factor_id(f) for f in factors],
             "cumulative_returns": cumulative,
             "rolling_vol_60d": rolling_vol_60d,
             "return_corr": ret_corr,

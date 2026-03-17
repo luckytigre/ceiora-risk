@@ -2,79 +2,38 @@
 
 from __future__ import annotations
 
-import math
-
 from fastapi import APIRouter, Query
 
-from backend import config
 from backend.api.routes.readiness import raise_cache_not_ready
-from backend.data.history_queries import load_factor_return_history
-from backend.data.serving_outputs import load_current_payload
-from backend.data.sqlite import cache_get
+from backend.services import dashboard_payload_service, factor_history_service
 
 router = APIRouter()
 
-
-def _normalize_factor_rows(rows) -> list[dict]:
-    if not isinstance(rows, list):
-        return []
-    out: list[dict] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        clean = dict(row)
-        if not isinstance(clean.get("drilldown"), list):
-            clean["drilldown"] = []
-        out.append(clean)
-    return out
-
-
 @router.get("/exposures")
 async def get_exposures(mode: str = Query("raw", pattern="^(raw|sensitivity|risk_contribution)$")):
-    data = load_current_payload("exposures")
-    if data is None and not config.cloud_mode():
-        data = cache_get("exposures")
-    if data is None:
+    try:
+        return dashboard_payload_service.load_exposures_response(mode=mode)
+    except dashboard_payload_service.DashboardPayloadNotReady as exc:
         raise_cache_not_ready(
-            cache_key="exposures",
-            message="Exposure cache is not ready yet. Run refresh and try again.",
-            refresh_mode="light",
+            cache_key=exc.cache_key,
+            message=exc.message,
+            refresh_profile=exc.refresh_profile,
         )
-    factors = _normalize_factor_rows(data.get(mode, []))
-    return {"mode": mode, "factors": factors, "_cached": True}
 
 
 @router.get("/exposures/history")
 async def get_exposure_history(
-    factor: str = Query(..., min_length=1),
+    factor_id: str = Query(..., min_length=1),
     years: int = Query(5, ge=1, le=10),
 ):
-    latest, rows = load_factor_return_history(
-        config.SQLITE_PATH,
-        factor=str(factor),
-        years=int(years),
-    )
-    if latest is None:
-        raise_cache_not_ready(
-            cache_key="daily_factor_returns",
-            message="Historical factor returns are not available yet.",
-            refresh_mode="full",
+    try:
+        return factor_history_service.load_factor_history_response(
+            factor_token=factor_id,
+            years=int(years),
         )
-
-    if not rows:
-        return {"factor": factor, "years": years, "points": [], "_cached": True}
-
-    points = []
-    cumulative = 1.0
-    for dt, raw_ret in rows:
-        r = float(raw_ret or 0.0)
-        if not math.isfinite(r):
-            r = 0.0
-        cumulative *= (1.0 + r)
-        points.append({
-            "date": str(dt),
-            "factor_return": round(r, 8),
-            "cum_return": round(cumulative - 1.0, 8),
-        })
-
-    return {"factor": factor, "years": years, "points": points, "_cached": True}
+    except factor_history_service.FactorHistoryNotReady as exc:
+        raise_cache_not_ready(
+            cache_key=exc.cache_key,
+            message=exc.message,
+            refresh_profile=exc.refresh_profile,
+        )

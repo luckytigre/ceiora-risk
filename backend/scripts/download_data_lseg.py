@@ -28,6 +28,12 @@ from backend.universe.schema import (
     TRBC_HISTORY_TABLE,
     ensure_cuse4_schema,
 )
+from backend.universe.security_master_sync import (
+    derive_security_master_flags,
+    load_default_source_universe_rows,
+    ticker_from_ric,
+    upsert_security_master_rows,
+)
 from backend.trading_calendar import previous_or_same_xnys_session
 
 _DB_RAW = Path(os.getenv("DATA_DB_PATH", "data.db")).expanduser()
@@ -40,6 +46,9 @@ SQLITE_RETRY_SLEEP_SECONDS = 2.0
 PRICE_VOLUME_FIELD = "TR.Volume"
 
 LSEG_FIELDS_ALL = [
+    "TR.TickerSymbol",
+    "TR.ISIN",
+    "TR.ExchangeName",
     "TR.CommonName",
     "TR.TRBCEconomicSector",
     "TR.TRBCBusinessSector",
@@ -125,6 +134,13 @@ PRICE_FIELD_SET = {
     "TR.PriceClose.currency",
 }
 
+SECURITY_MASTER_FIELD_SET = {
+    "TR.TickerSymbol",
+    "TR.ISIN",
+    "TR.ExchangeName",
+    *CLASSIFICATION_FIELD_SET,
+}
+
 
 def _select_lseg_fields(
     *,
@@ -132,7 +148,9 @@ def _select_lseg_fields(
     write_prices: bool,
     write_classification: bool,
 ) -> list[str]:
-    wanted: set[str] = set()
+    if not any((write_fundamentals, write_prices, write_classification)):
+        return []
+    wanted: set[str] = set(SECURITY_MASTER_FIELD_SET)
     if write_fundamentals:
         wanted.update(FUNDAMENTALS_FIELD_SET)
     if write_prices:
@@ -277,23 +295,26 @@ def _load_universe_from_security_master(
     tickers: list[str] | None,
     rics: list[str] | None,
 ) -> list[dict[str, str]]:
+    explicit_request = bool(tickers or rics)
     where = [
-        "ticker IS NOT NULL",
-        "TRIM(ticker) <> ''",
         "ric IS NOT NULL",
         "TRIM(ric) <> ''",
-        "COALESCE(classification_ok, 0) = 1",
-        "COALESCE(is_equity_eligible, 0) = 1",
     ]
     params: list[Any] = []
-    if tickers:
-        placeholders = ",".join("?" for _ in tickers)
-        where.append(f"UPPER(TRIM(ticker)) IN ({placeholders})")
-        params.extend([str(t).strip().upper() for t in tickers])
-    if rics:
-        placeholders = ",".join("?" for _ in rics)
-        where.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
-        params.extend([str(r).strip().upper() for r in rics])
+    requested_filters: list[str] = []
+    if explicit_request:
+        if tickers:
+            placeholders = ",".join("?" for _ in tickers)
+            requested_filters.append(f"UPPER(TRIM(ticker)) IN ({placeholders})")
+            params.extend([str(t).strip().upper() for t in tickers])
+        if rics:
+            placeholders = ",".join("?" for _ in rics)
+            requested_filters.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
+            params.extend([str(r).strip().upper() for r in rics])
+        if requested_filters:
+            where.append("(" + " OR ".join(requested_filters) + ")")
+    else:
+        return load_default_source_universe_rows(conn, include_pending_seed=True)
 
     rows = conn.execute(
         f"""
@@ -304,7 +325,16 @@ def _load_universe_from_security_master(
         """,
         params,
     ).fetchall()
-    return [{"ticker": str(r[0]), "ric": str(r[1])} for r in rows if r and r[0] and r[1]]
+    out: list[dict[str, str]] = []
+    for row in rows:
+        if not row or not row[1]:
+            continue
+        ric = str(row[1]).strip().upper()
+        ticker = str(row[0]).strip().upper() if row[0] else (ticker_from_ric(ric) or "")
+        if not ticker:
+            continue
+        out.append({"ticker": ticker, "ric": ric})
+    return out
 
 
 def _resolve_requested_tickers(
@@ -363,11 +393,19 @@ def download_from_lseg(
         if rics_csv
         else None
     )
+    requested_ticker_set = set(requested_tickers or [])
+    requested_ric_set = set(requested_rics or [])
     universe_rows = _load_universe_from_security_master(
         conn,
         tickers=requested_tickers,
         rics=requested_rics,
     )
+    available_ticker_set = {str(row.get("ticker") or "").strip().upper() for row in universe_rows if row.get("ticker")}
+    available_ric_set = {str(row.get("ric") or "").strip().upper() for row in universe_rows if row.get("ric")}
+    matched_ticker_set = available_ticker_set & requested_ticker_set
+    matched_ric_set = available_ric_set & requested_ric_set
+    missing_requested_tickers = sorted(requested_ticker_set - matched_ticker_set)
+    missing_requested_rics = sorted(requested_ric_set - matched_ric_set)
 
     shard_count = max(1, int(shard_count))
     shard_index = int(shard_index)
@@ -387,6 +425,13 @@ def download_from_lseg(
             "as_of": as_of,
             "shard_index": int(shard_index),
             "shard_count": int(shard_count),
+            "requested_ticker_count": int(len(requested_ticker_set)),
+            "requested_ric_count": int(len(requested_ric_set)),
+            "matched_requested_ticker_count": int(len(matched_ticker_set)),
+            "matched_requested_ric_count": int(len(matched_ric_set)),
+            "missing_requested_tickers": missing_requested_tickers,
+            "missing_requested_rics": missing_requested_rics,
+            "requires_seeded_security_master": bool(requested_ticker_set or requested_ric_set),
         }
 
     ric_universe = sorted({r["ric"] for r in universe_rows})
@@ -427,7 +472,17 @@ def download_from_lseg(
     company = pd.concat(company_parts, ignore_index=True) if company_parts else pd.DataFrame()
     if company is None or company.empty:
         conn.close()
-        return {"status": "no-data", "as_of": as_of, "universe": len(universe_rows)}
+        return {
+            "status": "no-data",
+            "as_of": as_of,
+            "universe": len(universe_rows),
+            "requested_ticker_count": int(len(requested_ticker_set)),
+            "requested_ric_count": int(len(requested_ric_set)),
+            "matched_requested_ticker_count": int(len(matched_ticker_set)),
+            "matched_requested_ric_count": int(len(matched_ric_set)),
+            "missing_requested_tickers": missing_requested_tickers,
+            "missing_requested_rics": missing_requested_rics,
+        }
 
     instrument_col = _pick_col(company, ["Instrument"])
     if not instrument_col:
@@ -435,6 +490,9 @@ def download_from_lseg(
         raise RuntimeError("LSEG response missing Instrument column")
 
     col = {
+        "ticker_symbol": _pick_col(company, ["Ticker Symbol", "TR.TickerSymbol"]),
+        "isin": _pick_col(company, ["ISIN", "TR.ISIN"]),
+        "exchange_name": _pick_col(company, ["Exchange Name", "TR.ExchangeName"]),
         "price_open": _pick_col(company, ["Price Open"]),
         "price_high": _pick_col(company, ["Price High"]),
         "price_low": _pick_col(company, ["Price Low"]),
@@ -488,9 +546,11 @@ def download_from_lseg(
     }
 
     job_run_id = f"lseg_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    security_master_rows: list[dict[str, Any]] = []
     fundamentals_rows: list[dict[str, Any]] = []
     prices_rows: list[dict[str, Any]] = []
     classification_rows: list[dict[str, Any]] = []
+    prices_rows_skipped_missing_close = 0
 
     def _txt(v: Any) -> str | None:
         if isinstance(v, pd.Series):
@@ -512,6 +572,33 @@ def download_from_lseg(
         ric = str(row.get(instrument_col) or "").strip().upper()
         if ric not in ric_universe:
             continue
+        trbc_economic_sector = _txt(row.get(col["trbc_economic_sector"]) if col["trbc_economic_sector"] else None)
+        trbc_business_sector = _txt(row.get(col["trbc_business_sector"]) if col["trbc_business_sector"] else None)
+        trbc_industry_group = _txt(row.get(col["trbc_industry_group"]) if col["trbc_industry_group"] else None)
+        trbc_industry = _txt(row.get(col["trbc_industry"]) if col["trbc_industry"] else None)
+        trbc_activity = _txt(row.get(col["trbc_activity"]) if col["trbc_activity"] else None)
+        hq_country_code = (_txt(row.get(col["hq_country_code"]) if col["hq_country_code"] else None) or "").upper() or None
+        classification_ok, is_equity_eligible = derive_security_master_flags(
+            trbc_economic_sector=trbc_economic_sector,
+            trbc_business_sector=trbc_business_sector,
+            trbc_industry_group=trbc_industry_group,
+            trbc_industry=trbc_industry,
+            trbc_activity=trbc_activity,
+            hq_country_code=hq_country_code,
+        )
+        security_master_rows.append(
+            {
+                "ric": ric,
+                "ticker": _txt(row.get(col["ticker_symbol"]) if col["ticker_symbol"] else None) or ticker_from_ric(ric),
+                "isin": _txt(row.get(col["isin"]) if col["isin"] else None),
+                "exchange_name": _txt(row.get(col["exchange_name"]) if col["exchange_name"] else None),
+                "classification_ok": classification_ok,
+                "is_equity_eligible": is_equity_eligible,
+                "source": "lseg_toolkit",
+                "job_run_id": job_run_id,
+                "updated_at": updated_at,
+            }
+        )
 
         period_end_date = _iso_date(row.get(col["fundamental_period_end_date"]) if col["fundamental_period_end_date"] else None)
         fiscal_year, _, period_type = _parse_fiscal_period(
@@ -559,32 +646,35 @@ def download_from_lseg(
         volume_px = _float_or_none(row.get(col["price_volume"]) if col["price_volume"] else None)
         price_ccy = _txt(row.get(col["price_currency"]) if col["price_currency"] else None)
         report_ccy = _txt(row.get(col["report_currency"]) if col["report_currency"] else None)
-        prices_rows.append(
-            {
-                "ric": ric,
-                "date": as_of,
-                "open": open_px if open_px is not None else close,
-                "high": high_px if high_px is not None else close,
-                "low": low_px if low_px is not None else close,
-                "close": close,
-                "adj_close": close,
-                "volume": volume_px,
-                "currency": (price_ccy or report_ccy),
-                "source": "lseg_toolkit",
-                "updated_at": updated_at,
-            }
-        )
+        if close is None:
+            prices_rows_skipped_missing_close += 1
+        else:
+            prices_rows.append(
+                {
+                    "ric": ric,
+                    "date": as_of,
+                    "open": open_px if open_px is not None else close,
+                    "high": high_px if high_px is not None else close,
+                    "low": low_px if low_px is not None else close,
+                    "close": close,
+                    "adj_close": close,
+                    "volume": volume_px,
+                    "currency": (price_ccy or report_ccy),
+                    "source": "lseg_toolkit",
+                    "updated_at": updated_at,
+                }
+            )
 
         classification_rows.append(
             {
                 "ric": ric,
                 "as_of_date": as_of,
-                "trbc_economic_sector": _txt(row.get(col["trbc_economic_sector"]) if col["trbc_economic_sector"] else None),
-                "trbc_business_sector": _txt(row.get(col["trbc_business_sector"]) if col["trbc_business_sector"] else None),
-                "trbc_industry_group": _txt(row.get(col["trbc_industry_group"]) if col["trbc_industry_group"] else None),
-                "trbc_industry": _txt(row.get(col["trbc_industry"]) if col["trbc_industry"] else None),
-                "trbc_activity": _txt(row.get(col["trbc_activity"]) if col["trbc_activity"] else None),
-                "hq_country_code": (_txt(row.get(col["hq_country_code"]) if col["hq_country_code"] else None) or "").upper() or None,
+                "trbc_economic_sector": trbc_economic_sector,
+                "trbc_business_sector": trbc_business_sector,
+                "trbc_industry_group": trbc_industry_group,
+                "trbc_industry": trbc_industry,
+                "trbc_activity": trbc_activity,
+                "hq_country_code": hq_country_code,
                 "source": "lseg_toolkit",
                 "job_run_id": job_run_id,
                 "updated_at": updated_at,
@@ -594,7 +684,10 @@ def download_from_lseg(
     n_f = 0
     n_p = 0
     n_c = 0
+    n_sm = 0
     try:
+        n_sm = upsert_security_master_rows(conn, security_master_rows)
+        conn.commit()
         if write_fundamentals:
             n_f = _insert_rows(conn, FUNDAMENTALS_HISTORY_TABLE, fundamentals_rows, replace=True)
             conn.commit()
@@ -612,13 +705,21 @@ def download_from_lseg(
         "as_of": as_of,
         "universe": len(universe_rows),
         "price_volume_metric": PRICE_VOLUME_FIELD,
+        "security_master_rows_upserted": int(n_sm),
         "fundamental_rows_inserted": int(n_f),
         "price_rows_inserted": int(n_p),
+        "price_rows_skipped_missing_close": int(prices_rows_skipped_missing_close),
         "classification_rows_inserted": int(n_c),
         "db_path": str(db_path),
         "shard_index": int(shard_index),
         "shard_count": int(shard_count),
         "bad_instruments_skipped": int(bad_instruments),
+        "requested_ticker_count": int(len(requested_ticker_set)),
+        "requested_ric_count": int(len(requested_ric_set)),
+        "matched_requested_ticker_count": int(len(matched_ticker_set)),
+        "matched_requested_ric_count": int(len(matched_ric_set)),
+        "missing_requested_tickers": missing_requested_tickers,
+        "missing_requested_rics": missing_requested_rics,
     }
     print(out)
     return out

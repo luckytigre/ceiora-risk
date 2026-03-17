@@ -1,14 +1,14 @@
+import type { FactorCatalogEntry, FactorFamily } from "@/lib/types";
+
 /** Short display names for Barra factor labels (style + industry). */
 const SHORT_LABELS: Record<string, string> = {
-  "Country: US": "Country",
-  // Style factors
+  Market: "Market",
   "Book-to-Price": "B/P",
   "Earnings Yield": "Earn Yld",
   "Dividend Yield": "Div Yld",
   "Nonlinear Size": "NL Size",
   "Short-Term Reversal": "ST Rev",
   "Residual Volatility": "Resid Vol",
-  // Industry factors
   "Software & Services": "Software",
   "Diversified Financials": "Div Fin",
   "Health Care Equipment & Services": "Healthcare",
@@ -24,10 +24,10 @@ const SHORT_LABELS: Record<string, string> = {
   "Applied Resources": "App Res",
   "Banking Services": "Banks",
   "Banking & Investment Services": "Bank/Inv",
-  "Beverages": "Bev",
+  Beverages: "Bev",
   "Biotechnology & Medical Research": "Biotech",
-  "Chemicals": "Chem",
-  "Coal": "Coal",
+  Chemicals: "Chem",
+  Coal: "Coal",
   "Collective Investments": "Coll Inv",
   "Communications & Networking": "Comm/Net",
   "Construction & Engineering": "Constr Eng",
@@ -55,7 +55,7 @@ const SHORT_LABELS: Record<string, string> = {
   "Household Goods": "HH Goods",
   "Industrial & Commercial Services": "Ind/Com",
   "Industrial Goods": "Ind Goods",
-  "Insurance": "Insur",
+  Insurance: "Insur",
   "Integrated Hardware & Software": "HW/SW",
   "Investment Banking & Investment Services": "IB & Inv",
   "Investment Holding Companies": "Inv Hold",
@@ -73,43 +73,103 @@ const SHORT_LABELS: Record<string, string> = {
   "Paper & Forest Products": "Paper/For",
   "Passenger Transportation Services": "Passenger",
   "Personal & Household Products & Services": "Pers/HH",
-  "Pharmaceuticals": "Pharma",
+  Pharmaceuticals: "Pharma",
   "Pharmaceuticals & Medical Research": "Pharma/Med",
   "Professional & Business Education": "Prof Edu",
   "Professional & Commercial Services": "Prof Svcs",
   "Real Estate Operations": "RE Ops",
   "Residential & Commercial REITs": "REITs",
   "Renewable Energy": "Renewables",
-  "Retailers": "Retail",
+  Retailers: "Retail",
   "Schools, Colleges & Universities": "Schools",
   "Software & IT Services": "Software",
   "Specialty Retailers": "Spec Retail",
   "Technology Equipment": "Tech Equip",
   "Telecommunications Services": "Telecom",
   "Textiles & Apparel": "Textiles",
-  "Transportation": "Transport",
+  Transportation: "Transport",
   "Transport Infrastructure": "Transport",
-  "Uranium": "Uranium",
+  Uranium: "Uranium",
   "Water & Related Utilities": "Water Utils",
-  // TRBC sectors (for any sector-level chart categories)
   "Basic Materials": "Matls",
   "Consumer Cyclicals": "ConsCyc",
   "Consumer Non-Cyclicals": "ConsDef",
-  "Energy": "Energy",
-  "Financials": "Fins",
-  "Healthcare": "Health",
-  "Industrials": "Inds",
+  Energy: "Energy",
+  Financials: "Fins",
+  Healthcare: "Health",
+  Industrials: "Inds",
   "Real Estate": "RealEst",
-  "Technology": "Tech",
+  Technology: "Tech",
   "Telecommunication Services": "Telco",
-  "Utilities": "Utils",
+  Utilities: "Utils",
   "Digital Assets": "Crypto",
   "Commodity Derivatives": "Cmdty Deriv",
   "FX Derivatives": "FX Deriv",
 };
 
+const STYLE_FACTOR_NAME_BY_ID: Record<string, string> = {
+  style_beta_score: "Beta",
+  style_momentum_score: "Momentum",
+  style_size_score: "Size",
+  style_nonlinear_size_score: "Nonlinear Size",
+  style_short_term_reversal_score: "Short-Term Reversal",
+  style_resid_vol_score: "Residual Volatility",
+  style_liquidity_score: "Liquidity",
+  style_book_to_price_score: "Book-to-Price",
+  style_earnings_yield_score: "Earnings Yield",
+  style_leverage_score: "Leverage",
+  style_growth_score: "Growth",
+  style_profitability_score: "Profitability",
+  style_investment_score: "Investment",
+  style_dividend_yield_score: "Dividend Yield",
+};
+
+export const STYLE_FACTORS = new Set(Object.values(STYLE_FACTOR_NAME_BY_ID));
+export const STYLE_FACTOR_IDS = new Set(Object.keys(STYLE_FACTOR_NAME_BY_ID));
+
+function lookupCatalogEntry(
+  factorIdOrName: string,
+  factorCatalog?: FactorCatalogEntry[],
+): FactorCatalogEntry | null {
+  const key = String(factorIdOrName || "").trim();
+  if (!key || !factorCatalog?.length) return null;
+  return factorCatalog.find((entry) => entry.factor_id === key || entry.factor_name === key) ?? null;
+}
+
+function fallbackFactorName(factorIdOrName: string): string {
+  const key = String(factorIdOrName || "").trim();
+  if (!key) return "";
+  if (STYLE_FACTOR_NAME_BY_ID[key]) return STYLE_FACTOR_NAME_BY_ID[key];
+  if (key === "market") return "Market";
+  return key;
+}
+
+export function factorDisplayName(
+  factorIdOrName: string,
+  factorCatalog?: FactorCatalogEntry[],
+): string {
+  return lookupCatalogEntry(factorIdOrName, factorCatalog)?.factor_name ?? fallbackFactorName(factorIdOrName);
+}
+
+export function factorFamily(
+  factorIdOrName: string,
+  factorCatalog?: FactorCatalogEntry[],
+): FactorFamily {
+  const fromCatalog = lookupCatalogEntry(factorIdOrName, factorCatalog)?.family;
+  if (fromCatalog) return fromCatalog;
+  const key = String(factorIdOrName || "").trim();
+  if (key === "market") return "market";
+  if (key.startsWith("industry_")) return "industry";
+  if (key.startsWith("style_") || STYLE_FACTORS.has(key)) return "style";
+  return "industry";
+}
+
 /** Return a shortened factor name suitable for chart axes. */
-export function shortFactorLabel(name: string): string {
+export function shortFactorLabel(
+  factorIdOrName: string,
+  factorCatalog?: FactorCatalogEntry[],
+): string {
+  const name = factorDisplayName(factorIdOrName, factorCatalog);
   const direct = SHORT_LABELS[name];
   if (direct) return direct;
 
@@ -121,32 +181,20 @@ export function shortFactorLabel(name: string): string {
   return SHORT_LABELS[normalized] ?? name;
 }
 
-/*
- * Regression hierarchy tier for Toraniko-style ordering.
- * Phase A: intercept + industry dummies, estimated first.
- * Phase B: all style factors, estimated on Phase A residuals.
- * Size is not orthogonalised itself — other factors are orthogonalised *to* it.
- */
 type FactorTier = 1 | 2 | 3;
-
-export const STYLE_FACTORS = new Set([
-  "Size", "Nonlinear Size", "Liquidity", "Beta",
-  "Book-to-Price", "Earnings Yield", "Leverage",
-  "Growth", "Profitability", "Investment", "Dividend Yield",
-  "Momentum", "Short-Term Reversal", "Residual Volatility",
-]);
-
-export function isCountryFactor(name: string): boolean {
-  return String(name || "").startsWith("Country:");
-}
 
 /**
  * Sort key for regression hierarchy:
- *  1 = industry (Phase A alongside intercept)
- *  2 = style (Phase B, on Phase A residuals)
+ *  1 = market
+ *  2 = industry
+ *  3 = style
  */
-export function factorTier(name: string): FactorTier {
-  if (isCountryFactor(name)) return 1;
-  if (STYLE_FACTORS.has(name)) return 3;
-  return 2; // industry
+export function factorTier(
+  factorIdOrName: string,
+  factorCatalog?: FactorCatalogEntry[],
+): FactorTier {
+  const family = factorFamily(factorIdOrName, factorCatalog);
+  if (family === "market") return 1;
+  if (family === "industry") return 2;
+  return 3;
 }

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useBackground, type BgMode } from "./BackgroundContext";
-import { triggerServeRefresh, useOperatorStatus } from "@/hooks/useApi";
+import { useOperatorStatus } from "@/hooks/useApi";
+import { runServeRefreshAndRevalidate } from "@/lib/refresh";
 
 const TABS = [
   { href: "/exposures", label: "Risk" },
@@ -44,8 +45,7 @@ function formatAgeFromIso(iso: string | null | undefined, nowMs: number): string
 export default function TabNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [recomputeState, setRecomputeState] = useState<"idle" | "running" | "failed">("idle");
-  const [syncState, setSyncState] = useState<"idle" | "running" | "failed">("idle");
+  const [refreshActionState, setRefreshActionState] = useState<"idle" | "running" | "failed">("idle");
   const [clockMs, setClockMs] = useState<number>(0);
   const navRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -87,7 +87,7 @@ export default function TabNav() {
 
   useEffect(() => {
     if (!pending) {
-      setRecomputeState("idle");
+      setRefreshActionState("idle");
     }
   }, [pending]);
 
@@ -98,10 +98,10 @@ export default function TabNav() {
   }, []);
 
   useEffect(() => {
-    if (!refreshIsRunning && syncState === "running") {
-      setSyncState("idle");
+    if (!refreshIsRunning && refreshActionState === "running") {
+      setRefreshActionState("idle");
     }
-  }, [refreshIsRunning, syncState]);
+  }, [refreshIsRunning, refreshActionState]);
 
   useEffect(() => {
     if (!refreshIsRunning) return;
@@ -128,27 +128,15 @@ export default function TabNav() {
     };
   }, [refreshIsRunning, mutateOperatorStatus]);
 
-  async function handleRecalculateNow() {
-    if (recomputeState === "running" || refreshIsRunning) return;
-    setRecomputeState("running");
+  async function handleRefreshNow() {
+    if (refreshActionState === "running" || refreshIsRunning) return;
+    setRefreshActionState("running");
     try {
-      await triggerServeRefresh();
+      await runServeRefreshAndRevalidate();
       await mutateOperatorStatus();
-      setRecomputeState("idle");
+      setRefreshActionState("idle");
     } catch {
-      setRecomputeState("failed");
-    }
-  }
-
-  async function handleSyncNow() {
-    if (syncState === "running" || refreshIsRunning) return;
-    setSyncState("running");
-    try {
-      await triggerServeRefresh();
-      await mutateOperatorStatus();
-      setSyncState("idle");
-    } catch {
-      setSyncState("failed");
+      setRefreshActionState("failed");
     }
   }
 
@@ -164,7 +152,7 @@ export default function TabNav() {
     const neonParityError = neonParity === "failed" || neonParity === "mismatch";
     let tone: "success" | "warning" | "error" = "success";
     if (
-      syncState === "failed" ||
+      refreshActionState === "failed" ||
       refreshStatus === "failed" ||
       refreshStatus === "unknown" ||
       neonMirrorError ||
@@ -195,7 +183,7 @@ export default function TabNav() {
     }
     if (refreshStatus === "running") segments.push("Sync status: running");
     if (refreshStatus === "failed") segments.push("Sync status: failed");
-    if (syncState === "failed") segments.push("Latest sync attempt did not start");
+    if (refreshActionState === "failed") segments.push("Latest refresh attempt did not start");
     if (neonMirror) segments.push(`Neon mirror: ${neonMirror}`);
     if (neonParity) segments.push(`Neon parity: ${neonParity}`);
     return {
@@ -203,7 +191,12 @@ export default function TabNav() {
       detail: segments.join(" | "),
       aria: `Health ${tone}. ${segments.join(". ")}`,
     };
-  }, [refreshState, refreshStatus, pending, pendingCount, dirtySince, clockMs, syncState, neonSyncHealth]);
+  }, [refreshActionState, refreshState, refreshStatus, pending, pendingCount, dirtySince, clockMs, neonSyncHealth]);
+
+  const refreshActionLabel = pending ? "RECALC" : "SYNC";
+  const refreshActionTitle = pending
+    ? "Publish latest holdings edits into the served analytics snapshot"
+    : "Run serve-refresh";
 
   return (
     <nav ref={navRef} className="dash-tabs">
@@ -226,7 +219,7 @@ export default function TabNav() {
           className={`dash-health-signal ${signal.tone}`}
           type="button"
           onClick={() => {
-            setSyncState("idle");
+            setRefreshActionState("idle");
             void mutateOperatorStatus();
           }}
           title={signal.detail}
@@ -235,40 +228,13 @@ export default function TabNav() {
           <span className="dash-health-dot" />
           <span className="dash-health-detail">{signal.detail}</span>
         </button>
-        {pending && (
-          <button
-            className={`dash-recompute-btn ${recomputeState === "failed" ? "failed" : ""}`}
-            onClick={handleRecalculateNow}
-            disabled={recomputeState === "running" || refreshIsRunning}
-            title="Recompute factor analytics from latest holdings edits"
-          >
-            RECALC
-          </button>
-        )}
         <button
-          className={`dash-menu-btn dash-sync-icon-btn ${syncState === "failed" ? "failed" : ""}`}
-          type="button"
-          onClick={handleSyncNow}
-          disabled={syncState === "running" || refreshIsRunning}
-          title="Run serve-refresh"
-          aria-label="Sync"
+          className={`dash-recompute-btn ${refreshActionState === "failed" ? "failed" : ""}`}
+          onClick={handleRefreshNow}
+          disabled={refreshActionState === "running" || refreshIsRunning}
+          title={refreshActionTitle}
         >
-          <svg
-            className={syncState === "running" || refreshIsRunning ? "spin" : ""}
-            width="18"
-            height="18"
-            viewBox="0 0 18 18"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M3.5 8.2A5.8 5.8 0 0 1 13 4.9" />
-            <polyline points="12.8 2.8 13.2 5.2 10.8 5.6" />
-            <path d="M14.5 9.8A5.8 5.8 0 0 1 5 13.1" />
-            <polyline points="5.2 15.2 4.8 12.8 7.2 12.4" />
-          </svg>
+          {refreshActionState === "running" || refreshIsRunning ? "RUNNING" : refreshActionLabel}
         </button>
         <div ref={menuRef} style={{ position: "relative" }}>
           <button

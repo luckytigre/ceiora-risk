@@ -1,4 +1,5 @@
-import type { RefreshStatusState, WhatIfScenarioRow } from "@/lib/types";
+import type { WhatIfScenarioRow } from "@/lib/types";
+export { refreshFailureMessage } from "@/lib/refresh";
 
 export type WhatIfMode = "raw" | "sensitivity" | "risk_contribution";
 
@@ -89,16 +90,4 @@ export function buildScenarioPayloadRows({
     });
   }
   return { rows };
-}
-
-export function refreshFailureMessage(refresh: RefreshStatusState | null | undefined): string {
-  const errorMessage = typeof refresh?.error?.message === "string" ? refresh.error.message.trim() : "";
-  if (errorMessage) return errorMessage;
-  const resultMessage =
-    refresh?.result && typeof refresh.result === "object" && typeof refresh.result.message === "string"
-      ? refresh.result.message.trim()
-      : "";
-  if (resultMessage) return resultMessage;
-  const status = String(refresh?.status || "").trim().toLowerCase();
-  return status === "unknown" ? "Refresh status became unknown." : "Refresh did not complete successfully.";
 }

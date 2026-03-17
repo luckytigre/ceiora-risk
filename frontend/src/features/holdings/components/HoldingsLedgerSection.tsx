@@ -30,10 +30,6 @@ type MarketValueSortMode = "abs" | "signed";
 
 const COLLAPSED_ROWS = 18;
 
-function normalizeAccountId(value: string | null | undefined): string {
-  return String(value || "").trim().toLowerCase();
-}
-
 function normalizeTicker(value: string | null | undefined): string {
   return String(value || "").trim().toUpperCase();
 }
@@ -82,14 +78,14 @@ export default function HoldingsLedgerSection({
   const modeledMap = useMemo(() => {
     const out = new Map<string, Position>();
     for (const pos of modeledPositions) {
-      out.set(`${normalizeAccountId(pos.account)}::${normalizeTicker(pos.ticker)}`, pos);
+      out.set(normalizeTicker(pos.ticker), pos);
     }
     return out;
   }, [modeledPositions]);
 
   const enrichedRows = useMemo(() => {
     return holdingsRows.map((row) => {
-      const modeled = modeledMap.get(`${normalizeAccountId(row.account_id)}::${normalizeTicker(row.ticker)}`);
+      const modeled = modeledMap.get(normalizeTicker(row.ticker));
       return {
         row,
         modeled,

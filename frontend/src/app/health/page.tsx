@@ -7,12 +7,14 @@ import ApiErrorState from "@/components/ApiErrorState";
 import KpiCard from "@/components/KpiCard";
 import {
   triggerDailyMaintenanceRefresh,
-  triggerServeRefresh,
   useHealthDiagnostics,
   useOperatorStatus,
   useRisk,
 } from "@/hooks/useApi";
 import OperatorStatusSection from "@/features/health/OperatorStatusSection";
+import { formatAsOfDate } from "@/lib/analyticsTruth";
+import { runServeRefreshAndRevalidate } from "@/lib/refresh";
+import type { SourceDates } from "@/lib/types";
 
 const HealthDiagnosticsRoot = dynamic(() => import("@/features/health/HealthDiagnosticsRoot"), {
   ssr: false,
@@ -21,12 +23,10 @@ const HealthDiagnosticsRoot = dynamic(() => import("@/features/health/HealthDiag
 
 function fmtAsOfDate(isoDate?: string | null): string {
   if (!isoDate) return "N/A";
-  const d = new Date(`${isoDate}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return isoDate;
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" });
+  return formatAsOfDate(isoDate);
 }
 
-function latestSourceDate(dates: Record<string, string | null | undefined> | undefined): string {
+function latestSourceDate(dates: SourceDates | undefined): string {
   const rows = Object.values(dates ?? {}).filter((value): value is string => Boolean(value));
   if (rows.length === 0) return "";
   return [...rows].sort().at(-1) ?? "";
@@ -52,17 +52,21 @@ export default function HealthPage() {
   }
 
   const modelAsOf = riskData?.risk_engine?.factor_returns_latest_date || riskData?.model_sanity?.coverage_date || null;
-  const latestSourceAsOf = riskData?.model_sanity?.latest_available_date || latestSourceDate(operatorData?.source_dates);
+  const latestSourceAsOf = operatorData?.source_dates?.exposures_asof
+    || riskData?.model_sanity?.latest_available_date
+    || latestSourceDate(operatorData?.source_dates);
   const lagDays = riskData?.risk_engine?.cross_section_min_age_days;
   const rSquared = riskData?.r_squared;
   const allowedProfiles = new Set(operatorData?.runtime?.allowed_profiles ?? []);
   const onlyServeRefreshAllowed = allowedProfiles.size > 0 && allowedProfiles.size === 1 && allowedProfiles.has("serve-refresh");
+  const neonAuthoritativeRebuilds = Boolean(operatorData?.runtime?.neon_authoritative_rebuilds);
+  const coreDue = Boolean(operatorData?.core_due?.due);
+  const servedLoadingsBehind = Boolean(riskData?.model_sanity?.update_available);
+  const coreRefreshActionAvailable = coreDue && !onlyServeRefreshAllowed;
+  const canRunRefreshAction = servedLoadingsBehind || coreRefreshActionAvailable;
   const updateAvailable = Boolean(
     !dismissUpdatePrompt
-    && (
-      riskData?.model_sanity?.update_available
-      || (modelAsOf && latestSourceAsOf && latestSourceAsOf > modelAsOf)
-    ),
+    && (servedLoadingsBehind || coreDue),
   );
 
   async function handleRefreshPrompt() {
@@ -73,7 +77,7 @@ export default function HealthPage() {
     setRefreshState("running");
     try {
       if (onlyServeRefreshAllowed) {
-        await triggerServeRefresh();
+        await runServeRefreshAndRevalidate();
       } else {
         await triggerDailyMaintenanceRefresh();
       }
@@ -114,17 +118,38 @@ export default function HealthPage() {
     <div className="update-banner">
       <div className="update-banner-title">Update Available</div>
       <div className="update-banner-body">
-        Newer source data exists for <strong>{latestSourceAsOf}</strong>, while the model currently uses the latest
-        well-covered date <strong>{modelAsOf || "n/a"}</strong>.
+        {servedLoadingsBehind ? (
+          <>
+            Newer {neonAuthoritativeRebuilds ? "authoritative Neon" : "source"} factor loadings exist for <strong>{fmtAsOfDate(latestSourceAsOf)}</strong>,
+            while the currently served well-covered loadings are older. A serving refresh can publish them without recomputing the full core model.
+          </>
+        ) : coreDue ? (
+          <>
+            The core model is due for a rebuild{operatorData?.core_due?.reason ? ` (${operatorData.core_due.reason})` : ""}.
+            The current factor-return fit is <strong>{fmtAsOfDate(modelAsOf)}</strong>.
+          </>
+        ) : null}
+        {coreDue && onlyServeRefreshAllowed && (
+          <> Core rebuilds are not available from this runtime. Run `core-weekly` or `cold-core` from the maintenance environment.</>
+        )}
+        {!onlyServeRefreshAllowed && (
+          <> The maintenance lane will sync local LSEG updates first, then rebuild core only if cadence or policy requires it.</>
+        )}
       </div>
       <div className="update-banner-actions">
-        <button
-          className="btn-refresh"
-          onClick={handleRefreshPrompt}
-          disabled={refreshState === "running"}
-        >
-          {refreshState === "running" ? "Refreshing…" : "Run Refresh"}
-        </button>
+        {canRunRefreshAction && (
+          <button
+            className="btn-refresh"
+            onClick={handleRefreshPrompt}
+            disabled={refreshState === "running"}
+          >
+            {refreshState === "running"
+              ? "Refreshing…"
+              : servedLoadingsBehind && onlyServeRefreshAllowed
+                ? "Run Serving Refresh"
+                : "Run Maintenance Refresh"}
+          </button>
+        )}
         <button
           className="btn-dismiss"
           onClick={() => setDismissUpdatePrompt(true)}
@@ -134,7 +159,9 @@ export default function HealthPage() {
       </div>
       {refreshState === "done" && (
         <div className="update-banner-feedback success">
-          Refresh started in background.
+          {servedLoadingsBehind && onlyServeRefreshAllowed
+            ? "Serving refresh completed."
+            : "Refresh started in background."}
         </div>
       )}
       {refreshState === "failed" && (
@@ -158,7 +185,7 @@ export default function HealthPage() {
               This page runs the heaviest diagnostic study in the app. Sections mount lazily as you scroll so routine dashboard use stays fast.
             </div>
             <div className="section-subtitle" style={{ marginBottom: 0 }}>
-              Operator Status above is the live control-room truth. Diagnostics below are a deeper local maintenance study and may lag the cloud-serving view.
+              Operator Status above is the live control-room truth. Diagnostics below are a deeper local maintenance study of this machine and may lag the Neon-served view.
             </div>
             <button className="health-load-btn" onClick={() => setLoadDiagnostics(true)}>
               Load Diagnostics
@@ -181,6 +208,7 @@ export default function HealthPage() {
   }
 
   if (!data || data.status !== "ok") {
+    const diagnosticsDeferred = data?.status === "deferred";
     return (
       <div className="health-wrap">
         {operatorSection}
@@ -191,7 +219,9 @@ export default function HealthPage() {
           <div className="detail-history-empty">
             {isLoading
               ? "Health diagnostics are still loading."
-              : "No diagnostics payload is available yet. Run refresh and reload this page."}
+              : diagnosticsDeferred
+                ? "Deep health diagnostics were deferred on the quick refresh path. Run core-weekly or cold-core to refresh them."
+                : "No diagnostics payload is available yet. Run a core lane and reload this page."}
           </div>
         </div>
       </div>

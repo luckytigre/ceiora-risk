@@ -173,18 +173,24 @@ def test_compute_daily_factor_returns_bounds_price_window_and_eligibility_dates(
     )
     monkeypatch.setattr(
         dfr,
-        "canonicalize_style_scores",
+        "fit_and_apply_style_canonicalization",
+        lambda **kwargs: (kwargs["style_scores"], object()),
+    )
+    monkeypatch.setattr(
+        dfr,
+        "apply_style_canonicalization",
         lambda **kwargs: kwargs["style_scores"],
     )
     monkeypatch.setattr(
         dfr,
-        "estimate_factor_returns_two_phase",
+        "estimate_factor_returns_one_stage",
         lambda **kwargs: SimpleNamespace(
             factor_returns={"Size": 0.01},
             robust_se={"Size": 0.0},
             t_stats={"Size": 0.0},
             r_squared=0.5,
             residual_vol=0.2,
+            constraint_residual=0.0,
             residuals=[0.01, -0.01],
             raw_residuals=[0.01, -0.01],
         ),

@@ -8,7 +8,9 @@ import type {
   HealthHistogram,
   OperatorLaneStatus,
   SeriesPoint,
+  FactorCatalogEntry,
 } from "@/lib/types";
+import { factorDisplayName } from "@/lib/factorLabels";
 import type { ChartData, ChartOptions } from "./charts";
 
 export const COLLAPSED_ROWS = 12;
@@ -226,10 +228,13 @@ export function sortExposureRows(
   rows: HealthExposureStats[],
   key: keyof HealthExposureStats,
   asc: boolean,
+  factorCatalog?: FactorCatalogEntry[],
 ): HealthExposureStats[] {
-  if (key === "factor") {
+  if (key === "factor_id") {
     return [...rows].sort((a, b) =>
-      asc ? a.factor.localeCompare(b.factor) : b.factor.localeCompare(a.factor),
+      asc
+        ? factorDisplayName(a.factor_id, factorCatalog).localeCompare(factorDisplayName(b.factor_id, factorCatalog))
+        : factorDisplayName(b.factor_id, factorCatalog).localeCompare(factorDisplayName(a.factor_id, factorCatalog)),
     );
   }
   return sortNumber(rows, (r) => Number(r[key]) || 0, asc);

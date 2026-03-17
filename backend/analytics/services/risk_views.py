@@ -14,6 +14,7 @@ from backend.analytics.contracts import (
     PositionRiskMixPayload,
     SpecificRiskPayload,
 )
+from backend.risk_model.model_status import derive_model_status
 from backend.risk_model.risk_attribution import (
     SYSTEMATIC_CATEGORIES,
     portfolio_factor_exposure,
@@ -81,12 +82,16 @@ def build_positions_from_snapshot(
         total_value += mv
         gross_value += abs(mv)
         exposures = dict(base.get("exposures") or {})
-        raw_eligible = bool(base.get("eligible_for_model", False))
         has_factor_exposures = bool(exposures)
-        model_eligible = bool(raw_eligible and has_factor_exposures)
+        model_status = str(base.get("model_status") or "").strip() or derive_model_status(
+            is_core_regression_member=False,
+            is_projectable=bool(has_factor_exposures),
+        )
         eligibility_reason = str(base.get("eligibility_reason") or "")
-        if raw_eligible and not has_factor_exposures and not eligibility_reason:
-            eligibility_reason = "missing_factor_exposures"
+        if model_status != "ineligible" and not has_factor_exposures:
+            model_status = "ineligible"
+            if not eligibility_reason:
+                eligibility_reason = "missing_factor_exposures"
         meta_base = dynamic_meta.get(t, {})
         meta = {
             "account": str(meta_base.get("account") or DEFAULT_ACCOUNT),
@@ -127,7 +132,7 @@ def build_positions_from_snapshot(
                 else None
             ),
             "risk_contrib_pct": 0.0,
-            "eligible_for_model": model_eligible,
+            "model_status": model_status,
             "eligibility_reason": eligibility_reason,
         })
 
@@ -162,7 +167,7 @@ def compute_exposures_modes(
     for pos in positions:
         all_factors.update(pos.get("exposures", {}).keys())
 
-    factor_detail_map = {d["factor"]: d for d in factor_details}
+    factor_detail_map = {d["factor_id"]: d for d in factor_details if "factor_id" in d}
     coverage_map = factor_coverage or {}
     exposure_map = {factor: portfolio_factor_exposure(positions, factor) for factor in all_factors}
 
@@ -231,7 +236,7 @@ def compute_exposures_modes(
         eligible_n = int(cov_stats.get("eligible_n", 0) or 0)
         coverage_pct = float(cov_stats.get("coverage_pct", 0.0) or 0.0)
         result["raw"].append({
-            "factor": factor,
+            "factor_id": factor,
             "value": round(raw_exp, 6),
             "factor_vol": fv_rounded,
             "cross_section_n": cross_section_n,
@@ -241,7 +246,7 @@ def compute_exposures_modes(
             "drilldown": drilldown_raw,
         })
         result["sensitivity"].append({
-            "factor": factor,
+            "factor_id": factor,
             "value": round(sensitivity, 6),
             "factor_vol": fv_rounded,
             "cross_section_n": cross_section_n,
@@ -251,7 +256,7 @@ def compute_exposures_modes(
             "drilldown": drilldown_sens,
         })
         result["risk_contribution"].append({
-            "factor": factor,
+            "factor_id": factor,
             "value": round(risk_pct, 4),
             "factor_vol": fv_rounded,
             "cross_section_n": cross_section_n,
@@ -275,7 +280,7 @@ def compute_position_risk_mix(
         for pos in positions:
             ticker = str(pos.get("ticker", "")).upper()
             if ticker:
-                out[ticker] = {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}
+                out[ticker] = {"market": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}
         return out
 
     factors = [str(c) for c in cov.columns]
@@ -302,7 +307,7 @@ def compute_position_risk_mix(
 
         total = float(sum(systematic.values())) + spec_var
         if total <= 0:
-            out[ticker] = {"country": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}
+            out[ticker] = {"market": 0.0, "industry": 0.0, "style": 0.0, "idio": 0.0}
             continue
 
         systematic_pct = {
@@ -322,7 +327,7 @@ def compute_position_risk_mix(
             idio_pct *= k
 
         out[ticker] = {
-            "country": round(systematic_pct.get("country", 0.0), 2),
+            "market": round(systematic_pct.get("market", 0.0), 2),
             "industry": round(systematic_pct.get("industry", 0.0), 2),
             "style": round(systematic_pct.get("style", 0.0), 2),
             "idio": round(idio_pct, 2),

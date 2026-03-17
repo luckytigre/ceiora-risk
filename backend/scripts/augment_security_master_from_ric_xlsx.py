@@ -91,8 +91,8 @@ def run(
             {
                 "ric": ric,
                 "ticker": _to_ticker(ric),
-                "classification_ok": 1,
-                "is_equity_eligible": 1,
+                "classification_ok": 0,
+                "is_equity_eligible": 0,
                 "source": source,
                 "job_run_id": job_run_id,
                 "updated_at": now_iso,
@@ -120,7 +120,7 @@ def run(
                 ],
             )
 
-        # Ensure names in this coverage universe are marked active/eligible.
+        # Touch coverage registry metadata without forcing eligibility flags.
         if rics:
             chunk = 500
             for i in range(0, len(rics), chunk):
@@ -130,8 +130,6 @@ def run(
                     f"""
                     UPDATE {SECURITY_MASTER_TABLE}
                     SET
-                        classification_ok = 1,
-                        is_equity_eligible = 1,
                         updated_at = ?,
                         source = COALESCE(source, ?),
                         job_run_id = COALESCE(job_run_id, ?)
