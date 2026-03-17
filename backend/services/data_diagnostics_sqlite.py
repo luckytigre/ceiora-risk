@@ -25,8 +25,6 @@ def table_exists(conn: sqlite3.Connection, table: str) -> bool:
 
 
 def table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    if not table_exists(conn, table):
-        return set()
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return {str(r[1]) for r in rows}
 
@@ -68,9 +66,9 @@ def table_stats(
     include_exact_row_counts: bool = False,
     include_expensive_checks: bool = False,
 ) -> dict[str, Any]:
-    if not table_exists(conn, table):
-        return {"table": table, "exists": False}
     cols = table_columns(conn, table)
+    if not cols:
+        return {"table": table, "exists": False}
     date_col = first_existing(cols, ["as_of_date", "fetch_date", "date", "snapshot_date", "start_date"])
     updated_col = first_existing(cols, ["updated_at"])
     ticker_col = "ticker" if "ticker" in cols else None
@@ -90,26 +88,15 @@ def table_stats(
 
     min_date = max_date = None
     if date_col:
-        min_row = conn.execute(
+        min_max_row = conn.execute(
             f"""
-            SELECT {date_col}
+            SELECT MIN({date_col}), MAX({date_col})
             FROM {table}
             WHERE {date_col} IS NOT NULL
-            ORDER BY {date_col} ASC
-            LIMIT 1
             """
         ).fetchone()
-        max_row = conn.execute(
-            f"""
-            SELECT {date_col}
-            FROM {table}
-            WHERE {date_col} IS NOT NULL
-            ORDER BY {date_col} DESC
-            LIMIT 1
-            """
-        ).fetchone()
-        min_date = min_row[0] if min_row else None
-        max_date = max_row[0] if max_row else None
+        min_date = min_max_row[0] if min_max_row else None
+        max_date = min_max_row[1] if min_max_row else None
 
     last_updated_at = None
     if updated_col and include_expensive_checks:

@@ -6,7 +6,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
-from backend.data.cache import cache_get, cache_set
+from backend.data.sqlite import cache_get, cache_set
 
 _CACHE_KEY = "holdings_sync_state"
 _STATE_LOCK = threading.Lock()

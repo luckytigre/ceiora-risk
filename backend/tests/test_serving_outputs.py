@@ -211,11 +211,14 @@ def test_persist_current_payloads_raises_before_sqlite_mirror_when_neon_required
 def test_load_current_payload_does_not_fallback_to_sqlite_when_neon_is_primary(tmp_path: Path, monkeypatch) -> None:
     data_db = tmp_path / "data.db"
     monkeypatch.setattr(serving_outputs, "DATA_DB", data_db)
-    monkeypatch.setattr(serving_outputs.config, "APP_RUNTIME_ROLE", "local-ingest")
-    monkeypatch.setattr(serving_outputs.config, "DATA_BACKEND", "neon")
-    monkeypatch.setattr(serving_outputs.config, "SERVING_OUTPUTS_PRIMARY_READS", False)
-    monkeypatch.setattr(serving_outputs.config, "neon_surface_enabled", lambda surface: surface == "serving_outputs")
+    monkeypatch.setattr(serving_outputs, "_use_neon_reads", lambda: True)
+    monkeypatch.setattr(serving_outputs.config, "serving_outputs_cache_fallback_enabled", lambda: False)
     monkeypatch.setattr(serving_outputs, "_load_current_payload_neon", lambda payload_name: None)
+    monkeypatch.setattr(
+        serving_outputs,
+        "_load_current_payload_sqlite",
+        lambda payload_name: (_ for _ in ()).throw(AssertionError("sqlite fallback should be disabled when neon is primary")),
+    )
 
     serving_outputs.persist_current_payloads(
         data_db=data_db,
@@ -229,3 +232,54 @@ def test_load_current_payload_does_not_fallback_to_sqlite_when_neon_is_primary(t
     out = serving_outputs.load_current_payload("portfolio")
 
     assert out is None
+
+
+def test_load_current_payloads_reads_multiple_rows_in_one_surface(tmp_path: Path, monkeypatch) -> None:
+    data_db = tmp_path / "data.db"
+    monkeypatch.setattr(serving_outputs, "DATA_DB", data_db)
+    monkeypatch.setattr(serving_outputs.config, "neon_surface_enabled", lambda _surface: False)
+
+    serving_outputs.persist_current_payloads(
+        data_db=data_db,
+        run_id="run_1",
+        snapshot_id="snap_1",
+        refresh_mode="serve-refresh",
+        payloads={
+            "portfolio": {"positions": [{"ticker": "AAPL"}]},
+            "risk": {"risk_shares": {"style": 50.0}},
+        },
+        replace_all=True,
+    )
+
+    out = serving_outputs.load_current_payloads(("portfolio", "risk", "missing"))
+
+    assert out == {
+        "portfolio": {"positions": [{"ticker": "AAPL"}]},
+        "risk": {"risk_shares": {"style": 50.0}},
+        "missing": None,
+    }
+
+
+def test_load_runtime_payloads_only_calls_fallback_for_missing_keys(monkeypatch) -> None:
+    fallback_calls: list[str] = []
+
+    monkeypatch.setattr(
+        serving_outputs,
+        "load_current_payloads",
+        lambda names: {
+            "risk": {"risk_shares": {"style": 50.0}},
+            "model_sanity": None,
+        },
+    )
+    monkeypatch.setattr(serving_outputs.config, "serving_outputs_cache_fallback_enabled", lambda: True)
+
+    out = serving_outputs.load_runtime_payloads(
+        ("risk", "model_sanity"),
+        fallback_loader=lambda key: (fallback_calls.append(key), {"status": "ok"})[1],
+    )
+
+    assert out == {
+        "risk": {"risk_shares": {"style": 50.0}},
+        "model_sanity": {"status": "ok"},
+    }
+    assert fallback_calls == ["model_sanity"]

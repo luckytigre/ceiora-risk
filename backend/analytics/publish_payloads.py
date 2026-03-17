@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from backend import config
 from backend.data import serving_outputs, sqlite
 
 _PUBLISH_ONLY_PAYLOAD_NAMES = (
@@ -66,76 +65,3 @@ def restamp_publishable_payloads(
         stamped["refresh_started_at"] = str(refresh_started_at)
         restamped[payload_name] = stamped
     return restamped
-
-
-def persist_publish_only_payloads(
-    *,
-    data_db,
-    cache_db: Path | None = None,
-    run_id: str,
-    refresh_mode: str,
-    refresh_scope_key: str | None,
-    refresh_started_at: str,
-) -> dict[str, Any]:
-    payloads, missing_payloads = load_publishable_payloads(cache_db=cache_db)
-    if missing_payloads:
-        raise RuntimeError(
-            "publish-only requested but cached serving payloads are incomplete: "
-            + ", ".join(sorted(missing_payloads))
-        )
-    snapshot_id = run_id
-    payloads = restamp_publishable_payloads(
-        payloads,
-        run_id=run_id,
-        snapshot_id=snapshot_id,
-        refresh_started_at=refresh_started_at,
-    )
-    refresh_meta = dict(payloads.get("refresh_meta") or {})
-    risk_payload = dict(payloads.get("risk") or {})
-    portfolio_payload = dict(payloads.get("portfolio") or {})
-    health_payload = dict(payloads.get("health_diagnostics") or {})
-    serving_outputs_write = serving_outputs.persist_current_payloads(
-        data_db=data_db,
-        run_id=run_id,
-        snapshot_id=snapshot_id,
-        refresh_mode=refresh_mode,
-        payloads=payloads,
-        replace_all=True,
-    )
-    neon_write = serving_outputs_write.get("neon_write") if isinstance(serving_outputs_write, dict) else None
-    if (
-        config.serving_payload_neon_write_required()
-        and isinstance(neon_write, dict)
-        and str(neon_write.get("status") or "") != "ok"
-    ):
-        raise RuntimeError(f"Serving payload Neon write failed: {neon_write}")
-    model_outputs_write = {
-        "status": "skipped",
-        "reason": "publish_only",
-        "run_id": run_id,
-    }
-    sqlite.cache_set("model_outputs_write", model_outputs_write, db_path=cache_db)
-    sqlite.cache_set("serving_outputs_write", serving_outputs_write, db_path=cache_db)
-    return {
-        "status": "ok",
-        "run_id": run_id,
-        "snapshot_id": snapshot_id,
-        "positions": int((portfolio_payload.get("position_count") or 0)),
-        "total_value": round(float(portfolio_payload.get("total_value") or 0.0), 2),
-        "mode": refresh_mode,
-        "refresh_scope": refresh_scope_key,
-        "cross_section_snapshot": dict(refresh_meta.get("cross_section_snapshot") or {"status": "reused"}),
-        "risk_engine": dict(risk_payload.get("risk_engine") or refresh_meta.get("risk_engine") or {}),
-        "model_sanity": dict(payloads.get("model_sanity") or {"status": "unknown"}),
-        "cuse4_foundation": dict(refresh_meta.get("cuse4_foundation") or {"status": "reused"}),
-        "health_refreshed": False,
-        "health_refresh_state": str(
-            health_payload.get("diagnostics_refresh_state")
-            or refresh_meta.get("health_refresh_state")
-            or "carried_forward"
-        ),
-        "universe_loadings_reused": True,
-        "universe_loadings_reuse_reason": "publish_only_cached_payloads",
-        "model_outputs_write": model_outputs_write,
-        "serving_outputs_write": serving_outputs_write,
-    }

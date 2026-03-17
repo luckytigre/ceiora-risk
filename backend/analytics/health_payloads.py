@@ -61,19 +61,6 @@ def health_reuse_signature(
     }
 
 
-def can_reuse_cached_health_payload(
-    cached_payload: Any,
-    *,
-    signature: dict[str, Any],
-) -> bool:
-    if not isinstance(cached_payload, dict):
-        return False
-    cached_signature = cached_payload.get("_reuse_signature")
-    if not isinstance(cached_signature, dict):
-        return False
-    return cached_signature == signature
-
-
 def carry_forward_health_payload(
     cached_payload: dict[str, Any] | None,
     *,

@@ -23,19 +23,16 @@ def load_source_tables(
         "barra_raw_cross_section_history": "barra_raw_cross_section_history",
         "universe_cross_section_snapshot": "universe_cross_section_snapshot",
     }
-    return {
-        label: (
-            sqlite_diag.table_stats(
-                conn,
-                table,
-                include_exact_row_counts=include_exact_row_counts,
-                include_expensive_checks=include_expensive_checks,
-            )
-            if sqlite_diag.table_exists(conn, table)
-            else None
+    out: dict[str, dict[str, Any] | None] = {}
+    for label, table in canonical_tables.items():
+        stats = sqlite_diag.table_stats(
+            conn,
+            table,
+            include_exact_row_counts=include_exact_row_counts,
+            include_expensive_checks=include_expensive_checks,
         )
-        for label, table in canonical_tables.items()
-    }
+        out[label] = stats if bool(stats.get("exists")) else None
+    return out
 
 
 def resolve_exposure_source(conn: sqlite3.Connection) -> dict[str, Any]:

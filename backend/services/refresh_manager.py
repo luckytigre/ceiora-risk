@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend import config
-from backend.data.cache import cache_get, cache_set
+from backend.data.sqlite import cache_get, cache_set
 from backend.orchestration.profiles import (
     PROFILE_CONFIG,
     STAGES,

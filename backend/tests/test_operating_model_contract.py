@@ -1623,7 +1623,7 @@ def test_run_refresh_publish_only_republishes_cached_payloads_without_recompute(
         "universe_loadings": {"run_id": "old_run", "snapshot_id": "old_snapshot"},
     }
 
-    monkeypatch.setattr(pipeline, "_load_publishable_payloads", lambda **kwargs: (dict(payloads), []))
+    monkeypatch.setattr(pipeline.publish_payloads, "load_publishable_payloads", lambda **kwargs: (dict(payloads), []))
     monkeypatch.setattr(
         pipeline.serving_outputs,
         "persist_current_payloads",
@@ -1669,7 +1669,7 @@ def test_load_publishable_payloads_prefers_durable_serving_payloads(monkeypatch:
         lambda name: cache_payload if name == "portfolio" else None,
     )
 
-    payloads, missing = pipeline._load_publishable_payloads()
+    payloads, missing = pipeline.publish_payloads.load_publishable_payloads()
 
     assert missing == []
     assert payloads["portfolio"] == durable_payload

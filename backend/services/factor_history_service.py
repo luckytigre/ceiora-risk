@@ -24,7 +24,7 @@ class FactorHistoryNotReady(RuntimeError):
 
 
 def _resolve_from_payload_catalog(clean: str) -> tuple[str, str]:
-    payload_names = ("risk", "universe_factors", "universe_loadings")
+    payload_names = ("universe_factors", "risk", "universe_loadings")
     for payload_name in payload_names:
         payload = load_runtime_payload(payload_name, fallback_loader=cache_get)
         catalog = (payload or {}).get("factor_catalog") if isinstance(payload, dict) else None
@@ -37,6 +37,7 @@ def _resolve_from_payload_catalog(clean: str) -> tuple[str, str]:
             entry_name = str(entry.get("factor_name") or "").strip()
             if clean == entry_id or clean == entry_name:
                 return entry_id or clean, entry_name or clean
+        return "", ""
     return "", ""
 
 

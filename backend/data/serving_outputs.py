@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -63,12 +63,28 @@ def load_runtime_payload(
     fallback_loader: Callable[[str], Any | None] | None = None,
 ) -> Any | None:
     """Load the runtime truth payload, using cache fallback only when policy allows it."""
-    payload = load_current_payload(payload_name)
-    if payload is not None:
-        return payload
-    if fallback_loader is None or not config.serving_outputs_cache_fallback_enabled():
+    clean = str(payload_name or "").strip()
+    if not clean:
         return None
-    return fallback_loader(payload_name)
+    return load_runtime_payloads((clean,), fallback_loader=fallback_loader).get(clean)
+
+
+def load_runtime_payloads(
+    payload_names: Iterable[str],
+    *,
+    fallback_loader: Callable[[str], Any | None] | None = None,
+) -> dict[str, Any | None]:
+    """Load multiple runtime truth payloads with durable reads first and per-key fallback second."""
+    clean_names = _normalize_payload_names(payload_names)
+    if not clean_names:
+        return {}
+    payloads = load_current_payloads(clean_names)
+    if fallback_loader is None or not config.serving_outputs_cache_fallback_enabled():
+        return payloads
+    for payload_name in clean_names:
+        if payloads.get(payload_name) is None:
+            payloads[payload_name] = fallback_loader(payload_name)
+    return payloads
 
 
 def persist_current_payloads(
@@ -126,58 +142,110 @@ def load_current_payload(payload_name: str) -> dict[str, Any] | list[Any] | None
     return _load_current_payload_sqlite(clean)
 
 
+def load_current_payloads(payload_names: Iterable[str]) -> dict[str, Any | None]:
+    """Load multiple durable serving payloads in one read path where possible."""
+    clean_names = _normalize_payload_names(payload_names)
+    if not clean_names:
+        return {}
+    if _use_neon_reads():
+        payloads = _load_current_payloads_neon(clean_names)
+        if config.serving_outputs_cache_fallback_enabled():
+            missing = [name for name in clean_names if payloads.get(name) is None]
+            if missing:
+                sqlite_payloads = _load_current_payloads_sqlite(missing)
+                for name in missing:
+                    if payloads.get(name) is None:
+                        payloads[name] = sqlite_payloads.get(name)
+        return payloads
+    return _load_current_payloads_sqlite(clean_names)
+
+
 def _load_current_payload_sqlite(payload_name: str) -> dict[str, Any] | list[Any] | None:
-    db = DATA_DB
-    if not db.exists():
-        return None
-    conn = sqlite3.connect(str(db))
-    try:
-        _ensure_sqlite_schema(conn)
-        row = conn.execute(
-            """
-            SELECT payload_json
-            FROM serving_payload_current
-            WHERE payload_name = ?
-            LIMIT 1
-            """,
-            (payload_name,),
-        ).fetchone()
-    finally:
-        conn.close()
-    if not row or row[0] is None:
-        return None
-    return json.loads(str(row[0]))
+    return _load_current_payloads_sqlite((payload_name,)).get(payload_name)
 
 
-def _load_current_payload_neon(payload_name: str) -> dict[str, Any] | list[Any] | None:
-    try:
-        conn = connect(dsn=resolve_dsn(None), autocommit=True)
-    except Exception:
-        return None
-    try:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT payload_json
-                FROM serving_payload_current
-                WHERE payload_name = %s
-                LIMIT 1
-                """,
-                (payload_name,),
-            )
-            row = cur.fetchone()
-    except Exception:
-        return None
-    finally:
-        conn.close()
-    if not row:
-        return None
-    raw = row.get("payload_json")
+def _normalize_payload_names(payload_names: Iterable[str]) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for raw in payload_names:
+        clean = str(raw or "").strip()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        names.append(clean)
+    return names
+
+
+def _decode_payload_json(raw: Any) -> dict[str, Any] | list[Any] | None:
     if raw is None:
         return None
     if isinstance(raw, (dict, list)):
         return raw
     return json.loads(str(raw))
+
+
+def _load_current_payloads_sqlite(payload_names: Iterable[str]) -> dict[str, Any | None]:
+    clean_names = _normalize_payload_names(payload_names)
+    if not clean_names:
+        return {}
+    db = DATA_DB
+    if not db.exists():
+        return {name: None for name in clean_names}
+    conn = sqlite3.connect(str(db))
+    try:
+        _ensure_sqlite_schema(conn)
+        placeholders = ",".join("?" for _ in clean_names)
+        rows = conn.execute(
+            """
+            SELECT payload_name, payload_json
+            FROM serving_payload_current
+            WHERE payload_name IN ("""
+            + placeholders
+            + ")",
+            clean_names,
+        ).fetchall()
+    finally:
+        conn.close()
+    out = {name: None for name in clean_names}
+    for payload_name, raw_payload in rows:
+        out[str(payload_name)] = _decode_payload_json(raw_payload)
+    return out
+
+
+def _load_current_payload_neon(payload_name: str) -> dict[str, Any] | list[Any] | None:
+    return _load_current_payloads_neon((payload_name,)).get(payload_name)
+
+
+def _load_current_payloads_neon(payload_names: Iterable[str]) -> dict[str, Any | None]:
+    clean_names = _normalize_payload_names(payload_names)
+    if not clean_names:
+        return {}
+    try:
+        conn = connect(dsn=resolve_dsn(None), autocommit=True)
+    except Exception:
+        return {name: None for name in clean_names}
+    try:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT payload_name, payload_json
+                FROM serving_payload_current
+                WHERE payload_name = ANY(%s)
+                """,
+                (clean_names,),
+            )
+            rows = cur.fetchall()
+    except Exception:
+        return {name: None for name in clean_names}
+    finally:
+        conn.close()
+    out = {name: None for name in clean_names}
+    for row in rows:
+        payload_name = str(row.get("payload_name") or "").strip()
+        if not payload_name:
+            continue
+        out[payload_name] = _decode_payload_json(row.get("payload_json"))
+    return out
 
 
 def _persist_current_payloads_neon(

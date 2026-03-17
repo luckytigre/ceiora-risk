@@ -11,15 +11,12 @@ from backend.analytics.contracts import (
     ComponentSharesPayload,
     CovarianceMatrixPayload,
     CovariancePayload,
-    EligibilitySummaryPayload,
     ExposureModesPayload,
     FactorCatalogEntryPayload,
     FactorDetailPayload,
-    ModelSanityPayload,
     PositionPayload,
     RefreshMetaPayload,
     RiskEngineMetaPayload,
-    RiskEngineStatePayload,
     RiskSharesPayload,
     SnapshotBuildPayload,
     SourceDatesPayload,
@@ -33,85 +30,6 @@ from backend.data import sqlite
 
 logger = logging.getLogger(__name__)
 HEALTH_DIAGNOSTICS_CACHE_VERSION = health_payloads.HEALTH_DIAGNOSTICS_CACHE_VERSION
-
-
-def build_risk_engine_state(
-    *,
-    risk_engine_meta: RiskEngineMetaPayload,
-    recomputed_this_refresh: bool,
-    recompute_reason: str,
-    estimation_exposure_anchor_date: str | None = None,
-) -> RiskEngineStatePayload:
-    return refresh_metadata.build_risk_engine_state(
-        risk_engine_meta=risk_engine_meta,
-        recomputed_this_refresh=recomputed_this_refresh,
-        recompute_reason=recompute_reason,
-        estimation_exposure_anchor_date=estimation_exposure_anchor_date,
-    )
-
-
-def _health_reuse_signature(
-    *,
-    source_dates: SourceDatesPayload,
-    risk_engine_state: RiskEngineStatePayload,
-    positions: list[PositionPayload],
-    total_value: float,
-) -> dict[str, Any]:
-    return health_payloads.health_reuse_signature(
-        source_dates=source_dates,
-        risk_engine_state=risk_engine_state,
-        positions=positions,
-        total_value=total_value,
-    )
-
-
-def _serving_source_dates(
-    *,
-    source_dates: SourceDatesPayload,
-    universe_loadings: UniverseLoadingsPayload,
-    eligibility_summary: EligibilitySummaryPayload | None = None,
-) -> SourceDatesPayload:
-    return refresh_metadata.serving_source_dates(
-        source_dates=source_dates,
-        universe_loadings=universe_loadings,
-        eligibility_summary=eligibility_summary,
-    )
-
-
-def _carry_forward_health_payload(
-    cached_payload: dict[str, Any] | None,
-    *,
-    run_id: str,
-    snapshot_id: str,
-    refresh_started_at: str,
-    source_dates: SourceDatesPayload,
-    risk_engine_state: RiskEngineStatePayload,
-) -> tuple[dict[str, Any], str]:
-    return health_payloads.carry_forward_health_payload(
-        cached_payload,
-        run_id=run_id,
-        snapshot_id=snapshot_id,
-        refresh_started_at=refresh_started_at,
-        source_dates=source_dates,
-        risk_engine_state=risk_engine_state,
-    )
-
-
-def build_model_sanity_report(
-    *,
-    risk_shares: RiskSharesPayload,
-    factor_details: list[FactorDetailPayload],
-    eligibility_summary: EligibilitySummaryPayload,
-) -> ModelSanityPayload:
-    return refresh_metadata.build_model_sanity_report(
-        risk_shares=risk_shares,
-        factor_details=factor_details,
-        eligibility_summary=eligibility_summary,
-    )
-
-
-def load_latest_eligibility_summary(cache_db: Path) -> EligibilitySummaryPayload:
-    return refresh_metadata.load_latest_eligibility_summary(cache_db)
 
 
 def stage_refresh_cache_snapshot(
@@ -155,13 +73,13 @@ def stage_refresh_cache_snapshot(
         else None
     )
     if not isinstance(eligibility_summary, dict) or not eligibility_summary:
-        eligibility_summary = load_latest_eligibility_summary(cache_db)
+        eligibility_summary = refresh_metadata.load_latest_eligibility_summary(cache_db)
     eligibility_summary = refresh_metadata.refreshed_eligibility_summary(
         eligibility_summary=eligibility_summary,
         universe_loadings=universe_loadings,
         source_dates=source_dates,
     )
-    risk_engine_state = build_risk_engine_state(
+    risk_engine_state = refresh_metadata.build_risk_engine_state(
         risk_engine_meta=risk_engine_meta,
         recomputed_this_refresh=bool(recomputed_this_refresh),
         recompute_reason=str(recompute_reason),
@@ -171,7 +89,7 @@ def stage_refresh_cache_snapshot(
             existing_anchor_date=risk_engine_meta.get("estimation_exposure_anchor_date"),
         ),
     )
-    effective_source_dates = _serving_source_dates(
+    effective_source_dates = refresh_metadata.serving_source_dates(
         source_dates=source_dates,
         universe_loadings=universe_loadings,
         eligibility_summary=eligibility_summary,
@@ -190,7 +108,7 @@ def stage_refresh_cache_snapshot(
         "source_dates": effective_source_dates,
     }
     _stage_cache("portfolio", portfolio_data)
-    health_reuse_signature = _health_reuse_signature(
+    health_reuse_signature = health_payloads.health_reuse_signature(
         source_dates=effective_source_dates,
         risk_engine_state=risk_engine_state,
         positions=positions,
@@ -247,7 +165,7 @@ def stage_refresh_cache_snapshot(
     )
 
     _stage_cache("eligibility", eligibility_summary)
-    sanity = build_model_sanity_report(
+    sanity = refresh_metadata.build_model_sanity_report(
         risk_shares=risk_shares,
         factor_details=factor_details,
         eligibility_summary=eligibility_summary,
@@ -272,7 +190,7 @@ def stage_refresh_cache_snapshot(
         health_refreshed = True
         health_refresh_state = "recomputed"
     else:
-        health_payload, health_refresh_state = _carry_forward_health_payload(
+        health_payload, health_refresh_state = health_payloads.carry_forward_health_payload(
             cached_health_payload if isinstance(cached_health_payload, dict) else None,
             run_id=str(run_id),
             snapshot_id=str(snapshot_id),

@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 
 from backend import config
 from backend.api import API_ROUTERS
+from backend.data import sqlite
+from backend.data import runtime_state
 
 app = FastAPI(title="Barra Factor Risk Dashboard", version="0.1.0")
 
@@ -43,12 +45,10 @@ async def request_validation_exception_handler(_, exc: RequestValidationError):
 
 @app.get("/api/health")
 async def health():
-    from backend.data.cache import cache_get, get_cache_age
-    from backend.data.runtime_state import read_runtime_state
     try:
-        neon_sync_health_state = read_runtime_state(
+        neon_sync_health_state = runtime_state.read_runtime_state(
             "neon_sync_health",
-            fallback_loader=cache_get,
+            fallback_loader=sqlite.cache_get,
         )
         neon_sync_health = neon_sync_health_state.get("value")
         api_status = "ok"
@@ -58,7 +58,7 @@ async def health():
             api_status = "degraded"
         return {
             "status": api_status,
-            "cache_age_seconds": get_cache_age(),
+            "cache_age_seconds": sqlite.get_cache_age(),
             "neon_sync_health": neon_sync_health,
             "runtime_state_status": {
                 "neon_sync_health": {

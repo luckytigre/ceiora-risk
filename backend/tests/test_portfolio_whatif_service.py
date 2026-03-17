@@ -151,7 +151,7 @@ def test_preview_portfolio_whatif_prefers_published_risk_payloads(monkeypatch) -
     monkeypatch.setattr(portfolio_whatif, "load_current_payload", lambda key: published_payloads.get(key))
     monkeypatch.setattr(
         portfolio_whatif,
-        "cache_get_live",
+        "cache_get_live_first",
         lambda key: {"factors": ["Wrong"], "matrix": [[9.0]]} if key == "risk_engine_cov" else {"AAA.OQ": {"ticker": "AAA", "specific_var": 9.0}},
     )
     monkeypatch.setattr(portfolio_whatif, "cache_get", lambda key: {})
@@ -205,7 +205,7 @@ def test_preview_portfolio_whatif_labels_live_risk_cache_fallback(monkeypatch) -
     )
     monkeypatch.setattr(
         portfolio_whatif,
-        "cache_get_live",
+        "cache_get_live_first",
         lambda key: {"factors": ["Beta"], "matrix": [[0.04]]} if key == "risk_engine_cov" else {"AAA.OQ": {"ticker": "AAA", "specific_var": 0.01}},
     )
     monkeypatch.setattr(portfolio_whatif, "cache_get", lambda key: {})
