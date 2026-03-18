@@ -46,6 +46,7 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         pk_cols=("ric", "as_of_date", "stat_date"),
         date_col="as_of_date",
         entity_col="ric",
+        identifier_history_backfill=True,
         overlap_days=62,
     ),
     "security_classification_pit": TableConfig(
@@ -53,6 +54,7 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         pk_cols=("ric", "as_of_date"),
         date_col="as_of_date",
         entity_col="ric",
+        identifier_history_backfill=True,
         overlap_days=62,
     ),
     "barra_raw_cross_section_history": TableConfig(

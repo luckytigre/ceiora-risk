@@ -111,7 +111,7 @@ Rule:
 - Neon receives a pruned rolling publish window from this layer:
   - source tables: 10 years
   - analytics tables: 5 years
-- Identifier-based historical source tables must sync into Neon with identifier-aware semantics:
+- Identifier-based historical source tables such as `security_prices_eod`, `security_fundamentals_pit`, and `security_classification_pit` must sync into Neon with identifier-aware semantics:
   - identifiers already fully initialized in Neon may use the normal incremental overlap reload
   - identifiers that are absent in Neon, or only partially initialized there, must receive full retained history for that identifier up to Neon's retained-history floor
 - This rule exists so "add ticker + local backfill" converges correctly into the Neon-primary app without manual repair steps.

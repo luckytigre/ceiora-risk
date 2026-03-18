@@ -62,7 +62,7 @@
   - serving-time prices remain read-only inputs to the projection layer; they must never write into canonical historical model-estimation tables such as `security_prices_eod`
   - projection-only outputs are read from persisted `projected_instrument_*` rows for the active `core_state_through_date`; if those rows are missing, the instrument is surfaced as projection-unavailable rather than being recomputed on the quick path
 - `source-daily`: local LSEG ingest into SQLite for the latest completed XNYS session, repair any missing daily price sessions up to that session, purge open-month PIT rows, backfill any missing closed-month fundamentals/classification anchors, publish the retained working window into Neon, then refresh serving only.
-- For identifier-based historical serving surfaces such as `security_prices_eod`, stage-2 Neon sync is identifier-aware:
+- For identifier-based historical source/serving surfaces such as `security_prices_eod`, `security_fundamentals_pit`, and `security_classification_pit`, stage-2 Neon sync is identifier-aware:
   - existing identifiers that are already fully initialized in Neon continue to use the normal overlap-window sync
   - newly introduced or partially initialized identifiers receive retained-history backfill from local SQLite up to Neon's retained-history floor
 - This prevents the Neon-primary app from seeing truncated history after a local ticker add/backfill.

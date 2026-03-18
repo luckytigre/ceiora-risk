@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from backend.services import neon_stage2
 
 
@@ -83,6 +85,53 @@ def _create_prices_sqlite(db_path: Path) -> None:
             ("BBB.OQ", "2026-03-15", 21.0),
         ],
     )
+    conn.commit()
+    conn.close()
+
+
+def _create_pit_sqlite(db_path: Path, *, table: str) -> None:
+    conn = sqlite3.connect(str(db_path))
+    if table == "security_fundamentals_pit":
+        conn.execute(
+            """
+            CREATE TABLE security_fundamentals_pit (
+                ric TEXT,
+                as_of_date TEXT,
+                stat_date TEXT,
+                market_cap REAL
+            )
+            """
+        )
+        conn.executemany(
+            "INSERT INTO security_fundamentals_pit (ric, as_of_date, stat_date, market_cap) VALUES (?, ?, ?, ?)",
+            [
+                ("AAA.OQ", "2026-01-31", "2025-12-31", 100.0),
+                ("AAA.OQ", "2026-04-30", "2026-03-31", 110.0),
+                ("BBB.OQ", "2026-01-31", "2025-12-31", 200.0),
+                ("BBB.OQ", "2026-04-30", "2026-03-31", 210.0),
+            ],
+        )
+    elif table == "security_classification_pit":
+        conn.execute(
+            """
+            CREATE TABLE security_classification_pit (
+                ric TEXT,
+                as_of_date TEXT,
+                trbc_business_sector TEXT
+            )
+            """
+        )
+        conn.executemany(
+            "INSERT INTO security_classification_pit (ric, as_of_date, trbc_business_sector) VALUES (?, ?, ?)",
+            [
+                ("AAA.OQ", "2026-01-31", "Technology Equipment"),
+                ("AAA.OQ", "2026-04-30", "Technology Equipment"),
+                ("BBB.OQ", "2026-01-31", "Software"),
+                ("BBB.OQ", "2026-04-30", "Software"),
+            ],
+        )
+    else:
+        raise AssertionError(f"unexpected table: {table}")
     conn.commit()
     conn.close()
 
@@ -191,3 +240,99 @@ def test_sync_from_sqlite_to_neon_backfills_full_history_for_partially_initializ
             ("BBB.OQ", "2026-03-01", 20.0),
         ],
     ]
+
+
+@pytest.mark.parametrize(
+    ("table", "expected_columns", "recent_row", "historical_row"),
+    [
+        (
+            "security_fundamentals_pit",
+            ["ric", "as_of_date", "stat_date", "market_cap"],
+            ("BBB.OQ", "2026-04-30", "2026-03-31", 210.0),
+            ("BBB.OQ", "2026-01-31", "2025-12-31", 200.0),
+        ),
+        (
+            "security_classification_pit",
+            ["ric", "as_of_date", "trbc_business_sector"],
+            ("BBB.OQ", "2026-04-30", "Software"),
+            ("BBB.OQ", "2026-01-31", "Software"),
+        ),
+    ],
+)
+def test_sync_from_sqlite_to_neon_backfills_pit_history_for_partially_initialized_identifiers(
+    tmp_path: Path,
+    monkeypatch,
+    table: str,
+    expected_columns: list[str],
+    recent_row: tuple[object, ...],
+    historical_row: tuple[object, ...],
+) -> None:
+    db_path = tmp_path / "data.db"
+    _create_pit_sqlite(db_path, table=table)
+
+    copied_batches: list[list[tuple[object, ...]]] = []
+    deleted_entities: list[str] = []
+
+    monkeypatch.setattr(neon_stage2, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(neon_stage2, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(
+        neon_stage2,
+        "ensure_target_columns_from_sqlite",
+        lambda *_args, **_kwargs: {"status": "ok", "added_columns": []},
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_columns",
+        lambda _pg_conn, _table: expected_columns,
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_max_date",
+        lambda _pg_conn, **_kwargs: "2026-05-15",
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_min_date",
+        lambda _pg_conn, **_kwargs: "2026-01-31",
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_entity_min_dates",
+        lambda _pg_conn, **_kwargs: {"AAA.OQ": "2026-01-31", "BBB.OQ": "2026-04-30"},
+    )
+
+    def _fake_delete(_pg_conn, *, table: str, entity_col: str, entities: list[str]) -> int:
+        assert entity_col == "ric"
+        deleted_entities.extend(entities)
+        return len(entities)
+
+    def _fake_copy(_pg_conn, *, table: str, columns: list[str], rows) -> int:
+        assert columns == expected_columns
+        batch = list(rows)
+        copied_batches.append(batch)
+        return len(batch)
+
+    monkeypatch.setattr(neon_stage2, "_delete_pg_rows_for_entities", _fake_delete)
+    monkeypatch.setattr(neon_stage2, "_copy_into_postgres", _fake_copy)
+
+    out = neon_stage2.sync_from_sqlite_to_neon(
+        sqlite_path=db_path,
+        dsn="postgresql://example",
+        tables=[table],
+        mode="incremental",
+    )
+
+    table_out = out["tables"][table]
+    assert table_out["action"] == "incremental_overlap_plus_identifier_backfill"
+    assert table_out["identifier_backfill"] == {
+        "entity_col": "ric",
+        "count": 1,
+        "sample": ["BBB.OQ"],
+        "rows_loaded": 1,
+        "rows_deleted": 1,
+    }
+    assert table_out["source_rows"] == 2
+    assert table_out["rows_loaded"] == 3
+    assert deleted_entities == ["BBB.OQ"]
+    assert copied_batches[0][-1] == recent_row
+    assert copied_batches[1] == [historical_row]
