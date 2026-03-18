@@ -44,8 +44,8 @@ These decisions are not optional implementation details. They are the governing 
 
 The live engine currently uses a sequential two-phase estimator:
 
-- [backend/risk_model/wls_regression.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/wls_regression.py)
-- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
+- [backend/risk_model/wls_regression.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/wls_regression.py)
+- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
 
 Current mechanics:
 
@@ -59,7 +59,7 @@ This is internally coherent, but it is not the public USE4-style single-stage co
 
 Structural eligibility does not require `US` domicile:
 
-- [backend/risk_model/eligibility.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/eligibility.py)
+- [backend/risk_model/eligibility.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/eligibility.py)
 
 As long as a non-US equity has:
 
@@ -83,11 +83,11 @@ That is the main architectural mismatch for the actual trading book.
 
 Factor identity and grouping are currently spread across multiple modules:
 
-- [backend/risk_model/risk_attribution.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/risk_attribution.py)
-- [backend/analytics/pipeline.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/pipeline.py)
-- [backend/analytics/services/universe_loadings.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/universe_loadings.py)
-- [backend/risk_model/eligibility.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/eligibility.py)
-- [frontend/src/lib/factorLabels.ts](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/frontend/src/lib/factorLabels.ts)
+- [backend/risk_model/risk_attribution.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/risk_attribution.py)
+- [backend/analytics/pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/pipeline.py)
+- [backend/analytics/services/universe_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/universe_loadings.py)
+- [backend/risk_model/eligibility.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/eligibility.py)
+- [frontend/src/lib/factorLabels.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/lib/factorLabels.ts)
 
 Current issues:
 
@@ -248,7 +248,7 @@ Those are later evolutions.
 
 ## 5) Proposed New Intermediate Structures
 
-The current pipeline assembles too much logic inline inside [backend/risk_model/daily_factor_returns.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py). The migration should introduce explicit intermediate structures.
+The current pipeline assembles too much logic inline inside [backend/risk_model/daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py). The migration should introduce explicit intermediate structures.
 
 ### 5.1 `FactorCatalogEntry`
 
@@ -401,11 +401,11 @@ Goal:
 
 Primary files:
 
-- [backend/risk_model/risk_attribution.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/risk_attribution.py)
-- [backend/analytics/pipeline.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/pipeline.py)
-- [backend/analytics/services/universe_loadings.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/universe_loadings.py)
-- [backend/risk_model/eligibility.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/eligibility.py)
-- [frontend/src/lib/factorLabels.ts](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/frontend/src/lib/factorLabels.ts)
+- [backend/risk_model/risk_attribution.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/risk_attribution.py)
+- [backend/analytics/pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/pipeline.py)
+- [backend/analytics/services/universe_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/universe_loadings.py)
+- [backend/risk_model/eligibility.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/eligibility.py)
+- [frontend/src/lib/factorLabels.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/lib/factorLabels.ts)
 
 Implementation steps:
 
@@ -430,9 +430,9 @@ Goal:
 
 Primary files:
 
-- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
-- [backend/risk_model/eligibility.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/eligibility.py)
-- [backend/risk_model/wls_regression.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/wls_regression.py)
+- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
+- [backend/risk_model/eligibility.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/eligibility.py)
+- [backend/risk_model/wls_regression.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/wls_regression.py)
 
 Implementation steps:
 
@@ -456,10 +456,10 @@ Goal:
 
 Primary files:
 
-- [backend/risk_model/eligibility.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/eligibility.py)
-- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
-- [backend/analytics/services/universe_loadings.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/universe_loadings.py)
-- [backend/analytics/services/risk_views.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/risk_views.py)
+- [backend/risk_model/eligibility.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/eligibility.py)
+- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
+- [backend/analytics/services/universe_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/universe_loadings.py)
+- [backend/analytics/services/risk_views.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/risk_views.py)
 
 Implementation steps:
 
@@ -489,9 +489,9 @@ Goal:
 
 Primary files:
 
-- [backend/risk_model/wls_regression.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/wls_regression.py)
-- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
-- [backend/tests/test_cuse4_priority_efficiency.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/tests/test_cuse4_priority_efficiency.py)
+- [backend/risk_model/wls_regression.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/wls_regression.py)
+- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
+- [backend/tests/test_cuse4_priority_efficiency.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/tests/test_cuse4_priority_efficiency.py)
 
 Proposed solver shape:
 
@@ -529,9 +529,9 @@ Goal:
 
 Primary files:
 
-- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
-- [backend/risk_model/risk_attribution.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/risk_attribution.py)
-- [backend/analytics/services/universe_loadings.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/universe_loadings.py)
+- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
+- [backend/risk_model/risk_attribution.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/risk_attribution.py)
+- [backend/analytics/services/universe_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/universe_loadings.py)
 
 Implementation steps:
 
@@ -558,9 +558,9 @@ Goal:
 
 Primary files:
 
-- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
-- [backend/risk_model/specific_risk.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/specific_risk.py)
-- [backend/analytics/services/universe_loadings.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/universe_loadings.py)
+- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
+- [backend/risk_model/specific_risk.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/specific_risk.py)
+- [backend/analytics/services/universe_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/universe_loadings.py)
 
 Initial implementation policy:
 
@@ -585,12 +585,12 @@ Goal:
 
 Primary files:
 
-- [backend/analytics/contracts.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/contracts.py)
-- [backend/analytics/services/cache_publisher.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/cache_publisher.py)
-- [backend/data/model_outputs.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/data/model_outputs.py)
-- [backend/data/serving_outputs.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/data/serving_outputs.py)
-- [frontend/src/lib/types.ts](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/frontend/src/lib/types.ts)
-- [frontend/src/lib/factorLabels.ts](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/frontend/src/lib/factorLabels.ts)
+- [backend/analytics/contracts.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/contracts.py)
+- [backend/analytics/services/cache_publisher.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/cache_publisher.py)
+- [backend/data/model_outputs.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/data/model_outputs.py)
+- [backend/data/serving_outputs.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/data/serving_outputs.py)
+- [frontend/src/lib/types.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/lib/types.ts)
+- [frontend/src/lib/factorLabels.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/lib/factorLabels.ts)
 
 Local/Neon boundary inventory to cover explicitly:
 
@@ -636,13 +636,13 @@ Goal:
 
 Primary files:
 
-- [backend/analytics/contracts.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/contracts.py)
-- [backend/analytics/services/cache_publisher.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/cache_publisher.py)
-- [backend/analytics/services/risk_views.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/risk_views.py)
-- [backend/analytics/health.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/health.py)
-- [backend/api/routes/data.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/api/routes/data.py)
-- [frontend/src/lib/types.ts](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/frontend/src/lib/types.ts)
-- [frontend/src/lib/factorLabels.ts](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/frontend/src/lib/factorLabels.ts)
+- [backend/analytics/contracts.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/contracts.py)
+- [backend/analytics/services/cache_publisher.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/cache_publisher.py)
+- [backend/analytics/services/risk_views.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/risk_views.py)
+- [backend/analytics/health.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/health.py)
+- [backend/api/routes/data.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/api/routes/data.py)
+- [frontend/src/lib/types.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/lib/types.ts)
+- [frontend/src/lib/factorLabels.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/lib/factorLabels.ts)
 - health/operator-facing frontend components that still assume `country` semantics or legacy booleans
 
 Implementation steps:
@@ -1207,27 +1207,27 @@ This gives us:
 
 Backend:
 
-- [backend/risk_model/wls_regression.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/wls_regression.py)
-- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
-- [backend/risk_model/eligibility.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/eligibility.py)
-- [backend/risk_model/risk_attribution.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/risk_attribution.py)
-- [backend/risk_model/__init__.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/risk_model/__init__.py)
-- [backend/analytics/pipeline.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/pipeline.py)
-- [backend/analytics/contracts.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/contracts.py)
-- [backend/analytics/services/universe_loadings.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/universe_loadings.py)
-- [backend/analytics/services/risk_views.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/analytics/services/risk_views.py)
-- [backend/data/model_outputs.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/data/model_outputs.py)
-- [backend/data/serving_outputs.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/data/serving_outputs.py)
+- [backend/risk_model/wls_regression.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/wls_regression.py)
+- [backend/risk_model/daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
+- [backend/risk_model/eligibility.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/eligibility.py)
+- [backend/risk_model/risk_attribution.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/risk_attribution.py)
+- [backend/risk_model/__init__.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/__init__.py)
+- [backend/analytics/pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/pipeline.py)
+- [backend/analytics/contracts.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/contracts.py)
+- [backend/analytics/services/universe_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/universe_loadings.py)
+- [backend/analytics/services/risk_views.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/risk_views.py)
+- [backend/data/model_outputs.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/data/model_outputs.py)
+- [backend/data/serving_outputs.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/data/serving_outputs.py)
 - local/Neon mirror and parity code paths touched by the active model-output publish flow
 
 Frontend:
 
-- [frontend/src/lib/factorLabels.ts](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/frontend/src/lib/factorLabels.ts)
-- [frontend/src/lib/types.ts](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/frontend/src/lib/types.ts)
+- [frontend/src/lib/factorLabels.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/lib/factorLabels.ts)
+- [frontend/src/lib/types.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/lib/types.ts)
 - exposure and health components that assume current category/order semantics
 
 Tests:
 
-- [backend/tests/test_cuse4_priority_efficiency.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/tests/test_cuse4_priority_efficiency.py)
-- [backend/tests/test_risk_attribution_country_factor.py](/Users/shaun/Dropbox%20(Personal)/040%20-%20Creating/barra-dashboard/backend/tests/test_risk_attribution_country_factor.py)
+- [backend/tests/test_cuse4_priority_efficiency.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/tests/test_cuse4_priority_efficiency.py)
+- [backend/tests/test_risk_attribution_country_factor.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/tests/test_risk_attribution_country_factor.py)
 - new tests for factor catalog, one-stage constraints, and coverage/core split

@@ -1,8 +1,8 @@
 # cPAR (Parsimonious and Actionable Regression)
 ## Full Mission, Design, and Execution Specification
 
-Repo: `luckytigre/barra-dashboard`
-Local path: `/Users/shaun/Library/CloudStorage/Dropbox/040 - Creating/barra-dashboard`
+Repo: `luckytigre/ceiora-risk`
+Local path: `/Users/shaun/Library/CloudStorage/Dropbox/040 - Creating/ceiora-risk`
 
 This document is the canonical execution brief for cPAR planning and implementation.
 

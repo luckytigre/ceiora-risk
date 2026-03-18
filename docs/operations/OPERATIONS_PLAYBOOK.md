@@ -17,7 +17,7 @@
   - `Fundamental Projection` for single-name equities carried by descriptor/fundamental scoring outside the US-core ESTU
   - `Returns Projection` for ETFs/ETPs derived from durable `model_factor_returns_daily`
 - Returns-projection outputs are a core-bound derived surface: they persist into `projected_instrument_*`, sync through the normal Neon stage-2 table flow, and remain frozen with the active core package until the next core lane refreshes them.
-- The historical implementation plan for moving deep `health_diagnostics` work off the quick refresh path lives in [HEALTH_DIAGNOSTICS_REFRESH_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/docs/archive/legacy-plans/HEALTH_DIAGNOSTICS_REFRESH_PLAN.md).
+- The historical implementation plan for moving deep `health_diagnostics` work off the quick refresh path lives in [HEALTH_DIAGNOSTICS_REFRESH_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/archive/legacy-plans/HEALTH_DIAGNOSTICS_REFRESH_PLAN.md).
 - Current live factor set: 45 total factors, including 14 style factors. `Book-to-Price` and `Earnings Yield` remain; there is no standalone `Value` factor.
 - Execution model: one orchestrator framework with profile-specific cadence:
   - `serve-refresh`

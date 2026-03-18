@@ -73,10 +73,10 @@ This is an operating-model cleanup, not a model-methodology change.
 ## Current Problem
 
 `health_diagnostics` is currently computed inside serving snapshot staging in
-[cache_publisher.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/analytics/services/cache_publisher.py).
+[cache_publisher.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/cache_publisher.py).
 
 That means a nominally light `serve-refresh` can still trigger heavy work from
-[health.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/analytics/health.py), including:
+[health.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/health.py), including:
 
 - long factor-return history analysis
 - residual history analysis
@@ -329,5 +329,5 @@ Use this file as the implementation reference for the diagnostics / refresh spli
 
 Related documents:
 
-- [NEON_LEAN_CONSOLIDATION_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/docs/NEON_LEAN_CONSOLIDATION_PLAN.md)
-- [OPERATIONS_PLAYBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/docs/OPERATIONS_PLAYBOOK.md)
+- [NEON_LEAN_CONSOLIDATION_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/NEON_LEAN_CONSOLIDATION_PLAN.md)
+- [OPERATIONS_PLAYBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/OPERATIONS_PLAYBOOK.md)

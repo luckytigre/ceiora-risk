@@ -2,7 +2,7 @@
 
 Date: 2026-03-04
 System identity: cUSE4
-Repository: barra-dashboard (historical repo name)
+Repository: ceiora-risk (historically barra-dashboard)
 
 ## 0) Purpose and Operating Intent
 

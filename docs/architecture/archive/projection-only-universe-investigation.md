@@ -6,8 +6,8 @@ This document is the initial broad investigation for projection-only support.
 
 For the current implementation review and the core-package follow-up corrections, see:
 
-- [projection-only-followup-review.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/docs/architecture/archive/projection-only-followup-review.md)
-- [projection-only-universe-target.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/docs/architecture/archive/projection-only-universe-target.md)
+- [projection-only-followup-review.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/archive/projection-only-followup-review.md)
+- [projection-only-universe-target.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/archive/projection-only-universe-target.md)
 
 This document summarizes how the cUSE4 system currently handles instrument eligibility, and identifies clean insertion points for supporting **projection-only** instruments (e.g., ETFs like SPY, XLE, XLF).
 

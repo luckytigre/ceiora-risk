@@ -27,19 +27,19 @@ The reviewed surfaces were:
 
 Explicit core-artifact compute lives in:
 
-- [stage_core.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/orchestration/stage_core.py)
+- [stage_core.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/orchestration/stage_core.py)
   - `factor_returns`
   - `risk_model`
-- [daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
+- [daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
   - computes the factor-return series and eligibility summaries
-- [model_outputs.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/data/model_outputs.py)
+- [model_outputs.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/data/model_outputs.py)
   - persists durable factor returns / covariance / specific risk / run metadata
 
 This already matched the intended core-package design.
 
 ### 2. A serving-only path could still fall through into core recompute
 
-Before this pass, the orchestrated `serving_refresh` path called [run_refresh()](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/analytics/pipeline.py) in light mode.
+Before this pass, the orchestrated `serving_refresh` path called [run_refresh()](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/pipeline.py) in light mode.
 
 If `serving_refresh_skip_risk_engine(...)` returned `False` because:
 
@@ -60,9 +60,9 @@ That meant a `serve-refresh`-class path could effectively advance the stable cor
 
 Canonical historical price updates are performed through approved ingest/history paths:
 
-- [download_data_lseg.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/scripts/download_data_lseg.py)
-- [backfill_prices_range_lseg.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/scripts/backfill_prices_range_lseg.py)
-- [backfill_pit_history_lseg.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/scripts/backfill_pit_history_lseg.py)
+- [download_data_lseg.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/scripts/download_data_lseg.py)
+- [backfill_prices_range_lseg.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/scripts/backfill_prices_range_lseg.py)
+- [backfill_pit_history_lseg.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/scripts/backfill_pit_history_lseg.py)
 
 These are the approved writers to canonical `security_prices_eod`.
 
@@ -94,7 +94,7 @@ The current compact summary and Health page were already close to the desired mo
 
 ### 1. `serve-refresh` now fails closed if the stable core package is not reusable
 
-[stage_serving.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/orchestration/stage_serving.py) now rejects a serving-only refresh when the current core package is:
+[stage_serving.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/orchestration/stage_serving.py) now rejects a serving-only refresh when the current core package is:
 
 - missing
 - stale
@@ -104,7 +104,7 @@ instead of falling through into recompute.
 
 ### 2. Light refresh has an explicit stable-core guard
 
-[pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/analytics/pipeline.py) now supports an explicit `enforce_stable_core_package` guard so serving-only callers fail closed instead of silently recomputing core artifacts.
+[pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/pipeline.py) now supports an explicit `enforce_stable_core_package` guard so serving-only callers fail closed instead of silently recomputing core artifacts.
 
 ## Current Behavior After This Pass
 

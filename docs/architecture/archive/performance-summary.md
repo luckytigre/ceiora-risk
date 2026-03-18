@@ -8,7 +8,7 @@ Owner: Codex
 
 ### 1. Batched durable serving-payload reads
 
-Added multi-payload helpers in [serving_outputs.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/data/serving_outputs.py):
+Added multi-payload helpers in [serving_outputs.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/data/serving_outputs.py):
 
 - `load_current_payloads(...)`
 - `load_runtime_payloads(...)`
@@ -18,13 +18,13 @@ multiple payloads.
 
 ### 2. Risk route stops paying two separate serving-output reads
 
-[dashboard_payload_service.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/services/dashboard_payload_service.py)
+[dashboard_payload_service.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/services/dashboard_payload_service.py)
 now batch-loads `risk` and `model_sanity` in the default path, while preserving custom loader test
 seams.
 
 ### 3. What-if preview reduces serving-output round-trips
 
-[portfolio_whatif.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/services/portfolio_whatif.py)
+[portfolio_whatif.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/services/portfolio_whatif.py)
 now batch-loads current durable serving payloads for:
 
 - `portfolio`
@@ -36,13 +36,13 @@ in the default path, instead of opening separate durable reads for each payload.
 
 ### 4. Factor-history lookup avoids unnecessary large payload reads
 
-[factor_history_service.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/services/factor_history_service.py)
+[factor_history_service.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/services/factor_history_service.py)
 now prefers `universe_factors` first and stops after the first available factor catalog instead of
 walking redundant payload catalogs by default.
 
 ### 5. Diagnostics table stats use fewer SQL round-trips
 
-[data_diagnostics_sqlite.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/services/data_diagnostics_sqlite.py)
+[data_diagnostics_sqlite.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/services/data_diagnostics_sqlite.py)
 now:
 
 - uses one `MIN/MAX` query instead of separate ascending/descending date queries
@@ -104,12 +104,12 @@ Confirmed:
 
 These remain the most likely future profiling targets:
 
-- [universe_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/analytics/services/universe_loadings.py)
-- [pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/analytics/pipeline.py)
-- [daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/risk_model/daily_factor_returns.py)
-- [raw_cross_section_history.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/risk_model/raw_cross_section_history.py)
-- [health.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/analytics/health.py)
-- fallback factor-resolution in [history_queries.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/data/history_queries.py)
+- [universe_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/services/universe_loadings.py)
+- [pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/pipeline.py)
+- [daily_factor_returns.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/daily_factor_returns.py)
+- [raw_cross_section_history.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/raw_cross_section_history.py)
+- [health.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/health.py)
+- fallback factor-resolution in [history_queries.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/data/history_queries.py)
 
 ## What Was Intentionally Deferred
 

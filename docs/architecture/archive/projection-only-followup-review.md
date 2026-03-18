@@ -8,7 +8,7 @@ Owner: Codex
 
 ### Factor-return source
 
-Projection-only loadings are currently computed in [projected_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/risk_model/projected_loadings.py).
+Projection-only loadings are currently computed in [projected_loadings.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/risk_model/projected_loadings.py).
 
 - `_load_factor_returns_wide(...)` reads from legacy cache-era `daily_factor_returns` in `cache.db`.
 - It does not read from durable `model_factor_returns_daily`.
@@ -16,7 +16,7 @@ Projection-only loadings are currently computed in [projected_loadings.py](/User
 
 ### Cadence boundary
 
-Projection-only loadings are currently computed from the serving refresh path in [pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/backend/analytics/pipeline.py).
+Projection-only loadings are currently computed from the serving refresh path in [pipeline.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/analytics/pipeline.py).
 
 - When universe loadings are rebuilt, `run_refresh(...)` loads projection-only RICs from `security_master`.
 - It then calls `compute_projected_loadings(...)` before building `universe_loadings`.
