@@ -126,3 +126,51 @@ def test_run_parity_audit_treats_trimmed_neon_history_as_expected_retention_gap(
         "source_rows_in_target_window": 1,
         "target_row_count": 1,
     }
+
+
+def test_run_parity_audit_normalizes_timestamp_text_for_model_run_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        """
+        CREATE TABLE model_run_metadata (
+            run_id TEXT PRIMARY KEY,
+            completed_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO model_run_metadata (run_id, completed_at)
+        VALUES ('run-1', '2026-03-16T09:11:33.903327+00:00')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(neon_stage2, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(neon_stage2, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(neon_stage2, "_table_exists_pg", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(
+        neon_stage2,
+        "_profile_pg_table",
+        lambda _pg_conn, cfg: {
+            "row_count": 1,
+            "min_date": "2026-03-16 09:11:33.903327+00",
+            "max_date": "2026-03-16 09:11:33.903327+00",
+        },
+    )
+    monkeypatch.setattr(neon_stage2, "_duplicate_group_count_pg", lambda _pg_conn, _cfg: 0)
+    monkeypatch.setattr(neon_stage2, "_pg_columns", lambda _pg_conn, _table: ["run_id", "completed_at"])
+
+    out = neon_stage2.run_parity_audit(
+        sqlite_path=db_path,
+        dsn="postgresql://example",
+        tables=["model_run_metadata"],
+    )
+
+    assert out["status"] == "ok"
+    assert out["issues"] == []

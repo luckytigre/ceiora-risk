@@ -232,6 +232,24 @@ def _format_iso_date(value: date | None, fallback: str | None = None) -> str | N
     return value.isoformat()
 
 
+def _canonical_temporal_text(value: Any) -> str | None:
+    txt = str(value or "").strip()
+    if not txt:
+        return None
+    if "T" not in txt and " " not in txt:
+        try:
+            return date.fromisoformat(txt[:10]).isoformat()
+        except ValueError:
+            return txt
+    try:
+        return datetime.fromisoformat(txt.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        try:
+            return date.fromisoformat(txt[:10]).isoformat()
+        except ValueError:
+            return txt
+
+
 def _sqlite_count(conn: sqlite3.Connection, table: str, where_sql: str = "", params: tuple[Any, ...] = ()) -> int:
     row = conn.execute(f"SELECT COUNT(*) FROM {table} {where_sql}", params).fetchone()
     return int(row[0] or 0) if row else 0
@@ -621,10 +639,10 @@ def _expected_retention_gap(
 ) -> dict[str, Any] | None:
     if not cfg.date_col:
         return None
-    source_min = str(source.get("min_date") or "").strip()
-    target_min = str(target.get("min_date") or "").strip()
-    source_max = str(source.get("max_date") or "").strip()
-    target_max = str(target.get("max_date") or "").strip()
+    source_min = str(_canonical_temporal_text(source.get("min_date")) or "").strip()
+    target_min = str(_canonical_temporal_text(target.get("min_date")) or "").strip()
+    source_max = str(_canonical_temporal_text(source.get("max_date")) or "").strip()
+    target_max = str(_canonical_temporal_text(target.get("max_date")) or "").strip()
     if not source_min or not target_min or not source_max or not target_max:
         return None
     if target_min <= source_min:
@@ -774,12 +792,16 @@ def run_parity_audit(
                     f"row_count_mismatch:{cfg.name}:{src.get('row_count')}!={tgt.get('row_count')}"
                 )
             if cfg.date_col:
-                if src.get("min_date") != tgt.get("min_date") and not expected_retention_gap:
+                src_min = _canonical_temporal_text(src.get("min_date"))
+                tgt_min = _canonical_temporal_text(tgt.get("min_date"))
+                if src_min != tgt_min and not expected_retention_gap:
                     out["issues"].append(
                         f"min_date_mismatch:{cfg.name}:{src.get('min_date')}!={tgt.get('min_date')}"
                     )
                 for key in ("max_date", "latest_distinct_ric"):
-                    if src.get(key) != tgt.get(key):
+                    src_value = _canonical_temporal_text(src.get(key)) if key == "max_date" else src.get(key)
+                    tgt_value = _canonical_temporal_text(tgt.get(key)) if key == "max_date" else tgt.get(key)
+                    if src_value != tgt_value:
                         out["issues"].append(
                             f"{key}_mismatch:{cfg.name}:{src.get(key)}!={tgt.get(key)}"
                         )

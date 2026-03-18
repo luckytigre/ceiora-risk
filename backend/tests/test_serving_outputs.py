@@ -211,9 +211,15 @@ def test_persist_current_payloads_raises_before_sqlite_mirror_when_neon_required
 def test_load_current_payload_does_not_fallback_to_sqlite_when_neon_is_primary(tmp_path: Path, monkeypatch) -> None:
     data_db = tmp_path / "data.db"
     monkeypatch.setattr(serving_outputs, "DATA_DB", data_db)
+    monkeypatch.setattr(serving_outputs.config, "neon_surface_enabled", lambda _surface: False)
     monkeypatch.setattr(serving_outputs, "_use_neon_reads", lambda: True)
     monkeypatch.setattr(serving_outputs.config, "serving_outputs_cache_fallback_enabled", lambda: False)
     monkeypatch.setattr(serving_outputs, "_load_current_payload_neon", lambda payload_name: None)
+    monkeypatch.setattr(
+        serving_outputs,
+        "_persist_current_payloads_neon",
+        lambda rows, *, replace_all: (_ for _ in ()).throw(AssertionError("test should not hit real Neon writes")),
+    )
     monkeypatch.setattr(
         serving_outputs,
         "_load_current_payload_sqlite",
