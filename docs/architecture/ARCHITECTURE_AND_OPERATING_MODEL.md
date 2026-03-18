@@ -211,6 +211,7 @@ Key rule:
 - They should not trigger full cUSE4 recompute unless explicitly requested.
 - Their job is to publish the latest holdings, prices, and factor-loadings projection against the currently accepted core risk-engine state.
 - If the current stable core package is missing or stale, `serve-refresh` should fail closed and direct the operator to a core rebuild lane instead of recomputing core artifacts on the serving path.
+- The durable serving publish boundary comes before deep diagnostics. Once payload persistence plus active snapshot publish completes, the run should emit a publish milestone and clients may revalidate app-facing surfaces without waiting for diagnostics tail completion.
 - Deep model-health diagnostics belong to `core-weekly`, `cold-core`, or another explicit diagnostics-producing lane rather than the ordinary quick refresh path.
 - The currently active serving payload set should be durable and mirrorable (`serving_payload_current`), not only present in the local cache layer.
 

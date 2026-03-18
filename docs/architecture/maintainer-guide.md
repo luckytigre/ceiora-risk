@@ -16,6 +16,17 @@ The repository is organized around five backend layers:
 
 Frontend pages should read a small number of backend surfaces and rely on shared freshness/truth helpers rather than rebuilding semantics locally.
 
+## Local Environment
+
+Use a single root virtualenv for local work:
+
+- bootstrap with `make setup` or `./scripts/setup_local_env.sh`
+- activate with `source .venv_local/bin/activate`
+- the local app scripts and backend commands assume `.venv_local`
+- the repository is standardized on Python `3.14.x`
+- `make doctor` verifies interpreter wiring, core imports, and basic LSEG readiness
+- `make doctor` performs a live non-destructive LSEG connectivity check against a real instrument query; it validates real session/credential readiness, not just local imports
+
 ## Where New Code Should Go
 
 ### Add to `backend/api`
@@ -104,6 +115,8 @@ Rule:
 - canonical historical price writes belong only to approved ingest/history paths, not serving-time logic.
 - projection-only ETF outputs are derived from the stable core package, but they are not native core artifacts. Refresh them on core lanes, persist them, and let serving read them as a durable surface.
 - `projection_asof` should track the active `core_state_through_date`, not an incidental overlap date.
+- `serving_refresh` progress should be observable at the substage level. Keep publish/persist milestones, diagnostics-section heartbeats, and finished-stage timing summaries intact rather than collapsing them into one terminal message.
+- Universe-loadings reuse keys must be based on the current serving snapshot's source dates. Do not let stale eligibility metadata advance `exposures_latest_available_asof` and accidentally force rebuilds.
 - Current v1 projection-only estimation is intentionally plain OLS with residual-variance-based projected specific risk. Do not introduce intercept/EWLS/outlier changes unless there is concrete evidence the current method is materially wrong.
 - detailed operating semantics for refresh lanes, health surfaces, and retention live in `../operations/OPERATIONS_PLAYBOOK.md`.
 

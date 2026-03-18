@@ -52,9 +52,12 @@
 - `serve-refresh`: quick serving refresh; no core recompute and no source ingest.
   - it reuses the current stable core package only when the live cache is both present and current for the active method version
   - if that stable core package is missing, stale, or due for rebuild, `serve-refresh` now fails closed and requires a core lane instead of recomputing factor returns / covariance / specific risk on the serving path
+  - serving payload publish is the freshness boundary: after durable payload persistence plus active snapshot publish, the run emits an explicit `serving_publish_complete` milestone and app-facing surfaces may revalidate immediately even if deep diagnostics are still running
+  - operator progress during `serving_refresh` is expected to show granular substages such as `universe_inputs`, `universe_loadings`, `persist_outputs`, and `health.sectionN`; a long-running refresh without substage heartbeats should be treated as suspect
   - holdings-triggered light refreshes now pass an explicit `holdings_only` scope and may reuse the current published `universe_loadings` payload when both of these still match:
     - `source_dates`
     - stable risk-engine fingerprint (`method_version`, `last_recompute_date`, `factor_returns_latest_date`, snapshot-age/lookback settings, specific-risk count)
+  - the `source_dates` reuse check must reflect the current serving snapshot's actual exposure availability dates; stale carried-forward eligibility metadata must not force rebuilds when the underlying serving exposure date is unchanged
   - on that same fast path, cached `eligibility` and `cov_matrix` are reused when present instead of being rebuilt from unchanged model state
   - deep `health_diagnostics` are no longer recomputed on the quick path; `serve-refresh` carries forward the last good diagnostics payload or records that diagnostics were deferred
   - when that reuse path is active, relational `model_outputs` persistence is skipped because the core model state is unchanged; serving payload persistence still runs normally
@@ -71,6 +74,7 @@
   - factor-return recompute now determines uncached dates before loading prices and only reads the bounded price window needed for those dates plus the immediately prior session.
   - when projection-only instruments are registered, this lane also refreshes their persisted projected outputs from durable `model_factor_returns_daily` for the active core package date.
   - this lane now owns deep `health_diagnostics` recompute for the current weekly core model state.
+  - during the `serving_refresh` stage inside this lane, app-facing payloads still publish before deep diagnostics; the rest of the stage is diagnostics tail work plus diagnostics persistence
 - `cold-core`: full historical reset for structural data changes (new/changed historical prices, volume, fundamentals, classification, or factor methodology).
   - This path rebuilds `barra_raw_cross_section_history` over full history and clears core cache tables before recomputing factor returns/risk.
   - This lane is an explicit operator/API path; it is not exposed as a one-click dashboard control in the current frontend.

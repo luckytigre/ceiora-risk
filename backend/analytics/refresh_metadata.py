@@ -74,6 +74,27 @@ def max_iso_date(*values: Any) -> str | None:
     return clean[-1] if clean else None
 
 
+def _current_exposure_latest_available(
+    *,
+    source_dates: SourceDatesPayload,
+    universe_loadings: UniverseLoadingsPayload,
+    eligibility_summary: EligibilitySummaryPayload | None = None,
+) -> str | None:
+    current_latest = max_iso_date(
+        source_dates.get("exposures_latest_available_asof"),
+        source_dates.get("exposures_asof"),
+        universe_loadings.get("latest_available_asof"),
+    )
+    if current_latest is not None:
+        return current_latest
+    return max_iso_date(
+        (eligibility_summary or {}).get("latest_available_date"),
+        (eligibility_summary or {}).get("date"),
+        source_dates.get("exposures_served_asof"),
+        universe_loadings.get("as_of_date"),
+    )
+
+
 def build_risk_engine_state(
     *,
     risk_engine_meta: RiskEngineMetaPayload,
@@ -116,11 +137,10 @@ def serving_source_dates(
     eligibility_summary: EligibilitySummaryPayload | None = None,
 ) -> SourceDatesPayload:
     out: SourceDatesPayload = dict(source_dates or {})
-    latest_available = max_iso_date(
-        out.get("exposures_latest_available_asof"),
-        out.get("exposures_asof"),
-        universe_loadings.get("latest_available_asof"),
-        (eligibility_summary or {}).get("latest_available_date"),
+    latest_available = _current_exposure_latest_available(
+        source_dates=out,
+        universe_loadings=universe_loadings,
+        eligibility_summary=eligibility_summary,
     )
     served_asof = str(
         universe_loadings.get("as_of_date")
@@ -149,22 +169,25 @@ def refreshed_eligibility_summary(
         or source_dates.get("exposures_asof")
         or ""
     ).strip() or None
-    latest_available = max_iso_date(
-        out.get("latest_available_date"),
-        out.get("date"),
-        universe_loadings.get("latest_available_asof"),
-        source_dates.get("exposures_latest_available_asof"),
-        source_dates.get("exposures_asof"),
-        served_asof,
+    latest_available = _current_exposure_latest_available(
+        source_dates=source_dates,
+        universe_loadings=universe_loadings,
+        eligibility_summary=out,
     )
+    if latest_available is None:
+        latest_available = max_iso_date(
+            out.get("latest_available_date"),
+            out.get("date"),
+            served_asof,
+        )
     current_date = str(out.get("date") or "").strip() or None
     current_latest = str(out.get("latest_available_date") or "").strip() or None
     needs_overlay = bool(
         served_asof
         and (
             current_date is None
-            or current_date < served_asof
-            or (latest_available is not None and (current_latest is None or current_latest < latest_available))
+            or current_date != served_asof
+            or current_latest != latest_available
         )
     )
     if not needs_overlay:
