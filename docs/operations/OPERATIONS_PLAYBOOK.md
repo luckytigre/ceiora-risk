@@ -13,7 +13,10 @@
 - Cross-section recency guard: regressions only use exposure snapshots at least 7 calendar days old (`CROSS_SECTION_MIN_AGE_DAYS=7`).
 - Loadings/UI cache refresh: can run daily; it reuses latest weekly risk-engine state unless recompute is due.
 - This is intentional: served holdings, prices, and factor loadings can be fresher than the weekly core risk engine between rebuilds.
-- Projection-only ETF outputs are a core-bound derived surface: they read durable `model_factor_returns_daily`, persist into `projected_instrument_*`, sync through the normal Neon stage-2 table flow, and remain frozen with the active core package until the next core lane refreshes them.
+- Non-core served exposures now use two explicit methodologies:
+  - `Fundamental Projection` for single-name equities carried by descriptor/fundamental scoring outside the US-core ESTU
+  - `Returns Projection` for ETFs/ETPs derived from durable `model_factor_returns_daily`
+- Returns-projection outputs are a core-bound derived surface: they persist into `projected_instrument_*`, sync through the normal Neon stage-2 table flow, and remain frozen with the active core package until the next core lane refreshes them.
 - The historical implementation plan for moving deep `health_diagnostics` work off the quick refresh path lives in [HEALTH_DIAGNOSTICS_REFRESH_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/barra-dashboard/docs/archive/legacy-plans/HEALTH_DIAGNOSTICS_REFRESH_PLAN.md).
 - Current live factor set: 45 total factors, including 14 style factors. `Book-to-Price` and `Earnings Yield` remain; there is no standalone `Value` factor.
 - Execution model: one orchestrator framework with profile-specific cadence:
@@ -59,6 +62,10 @@
   - serving-time prices remain read-only inputs to the projection layer; they must never write into canonical historical model-estimation tables such as `security_prices_eod`
   - projection-only outputs are read from persisted `projected_instrument_*` rows for the active `core_state_through_date`; if those rows are missing, the instrument is surfaced as projection-unavailable rather than being recomputed on the quick path
 - `source-daily`: local LSEG ingest into SQLite for the latest completed XNYS session, repair any missing daily price sessions up to that session, purge open-month PIT rows, backfill any missing closed-month fundamentals/classification anchors, publish the retained working window into Neon, then refresh serving only.
+- For identifier-based historical serving surfaces such as `security_prices_eod`, stage-2 Neon sync is identifier-aware:
+  - existing identifiers that are already fully initialized in Neon continue to use the normal overlap-window sync
+  - newly introduced or partially initialized identifiers receive retained-history backfill from local SQLite up to Neon's retained-history floor
+- This prevents the Neon-primary app from seeing truncated history after a local ticker add/backfill.
 - `source-daily-plus-core-if-due`: default daily maintenance lane; local ingest + Neon source-sync first, then recompute core only when cadence/version says due.
 - `core-weekly`: force core recompute without rebuilding full raw history.
   - factor-return recompute now determines uncached dates before loading prices and only reads the bounded price window needed for those dates plus the immediately prior session.

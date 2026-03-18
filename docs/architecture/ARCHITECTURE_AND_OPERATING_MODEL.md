@@ -111,6 +111,10 @@ Rule:
 - Neon receives a pruned rolling publish window from this layer:
   - source tables: 10 years
   - analytics tables: 5 years
+- Identifier-based historical source tables must sync into Neon with identifier-aware semantics:
+  - identifiers already fully initialized in Neon may use the normal incremental overlap reload
+  - identifiers that are absent in Neon, or only partially initialized there, must receive full retained history for that identifier up to Neon's retained-history floor
+- This rule exists so "add ticker + local backfill" converges correctly into the Neon-primary app without manual repair steps.
 - Fundamentals and classification PIT backfills run monthly by default.
 - `source-daily` enforces closed-month PIT anchors only; open-month fundamentals/classification rows are purged and missing prior month anchors are backfilled automatically.
 - `source-daily` also repairs missing daily price sessions between the previous local price date and the latest completed session.
@@ -149,6 +153,10 @@ Purpose:
 - Support instruments such as SPY and sector ETFs without letting them enter native cUSE estimation.
 
 Rules:
+- Served exposure methodology is explicit:
+  - `Core` = `model_status = core_estimated` with `exposure_origin = native`
+  - `Fundamental Projection` = `model_status = projected_only` with `exposure_origin = projected_fundamental` for single-name equities carried by descriptor/fundamental scoring outside the US core ESTU
+  - `Returns Projection` = `model_status = projected_only` with `exposure_origin = projected_returns` for ETFs/ETPs projected from returns regression onto core factor returns
 - Projection-only instruments remain outside native factor-return, covariance, and specific-risk estimation.
 - Their projected outputs are derived from durable `model_factor_returns_daily`, not cache-era factor-return tables.
 - They refresh only on core lanes, persist once per active `core_state_through_date`, and are then read by serving as a durable surface.

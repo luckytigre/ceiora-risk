@@ -32,10 +32,27 @@ def test_canonical_schema_defines_durable_model_tables() -> None:
     assert "CREATE TABLE IF NOT EXISTS model_factor_covariance_daily" in schema_sql
     assert "CREATE TABLE IF NOT EXISTS model_specific_risk_daily" in schema_sql
     assert "CREATE TABLE IF NOT EXISTS model_run_metadata" in schema_sql
+    assert "CREATE TABLE IF NOT EXISTS projected_instrument_loadings" in schema_sql
+    assert "CREATE TABLE IF NOT EXISTS projected_instrument_meta" in schema_sql
     assert "ADD COLUMN IF NOT EXISTS run_id TEXT" in schema_sql
 
 
 class _DummyPgConn:
+    class _Cursor:
+        rowcount = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, _query, _params=None) -> None:
+            return None
+
+    def cursor(self):
+        return self._Cursor()
+
     def commit(self) -> None:
         return None
 
@@ -44,6 +61,30 @@ class _DummyPgConn:
 
     def close(self) -> None:
         return None
+
+
+def _create_prices_sqlite(db_path: Path) -> None:
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        """
+        CREATE TABLE security_prices_eod (
+            ric TEXT,
+            date TEXT,
+            close REAL
+        )
+        """
+    )
+    conn.executemany(
+        "INSERT INTO security_prices_eod (ric, date, close) VALUES (?, ?, ?)",
+        [
+            ("AAA.OQ", "2026-03-01", 10.0),
+            ("AAA.OQ", "2026-03-15", 11.0),
+            ("BBB.OQ", "2026-03-01", 20.0),
+            ("BBB.OQ", "2026-03-15", 21.0),
+        ],
+    )
+    conn.commit()
+    conn.close()
 
 
 def test_sync_from_sqlite_to_neon_skips_missing_projection_tables(tmp_path: Path, monkeypatch) -> None:
@@ -66,3 +107,87 @@ def test_sync_from_sqlite_to_neon_skips_missing_projection_tables(tmp_path: Path
     assert out["tables"]["projected_instrument_loadings"] == {
         "status": "skipped_missing_source"
     }
+
+
+def test_sync_from_sqlite_to_neon_backfills_full_history_for_partially_initialized_identifiers(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "data.db"
+    _create_prices_sqlite(db_path)
+
+    copied_batches: list[list[tuple[object, ...]]] = []
+    deleted_entities: list[str] = []
+
+    monkeypatch.setattr(neon_stage2, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(neon_stage2, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(
+        neon_stage2,
+        "ensure_target_columns_from_sqlite",
+        lambda *_args, **_kwargs: {"status": "ok", "added_columns": []},
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_columns",
+        lambda _pg_conn, _table: ["ric", "date", "close"],
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_max_date",
+        lambda _pg_conn, **_kwargs: "2026-03-17",
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_min_date",
+        lambda _pg_conn, **_kwargs: "2026-03-01",
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_entity_min_dates",
+        lambda _pg_conn, **_kwargs: {"AAA.OQ": "2026-03-01", "BBB.OQ": "2026-03-15"},
+    )
+
+    def _fake_delete(_pg_conn, *, table: str, entity_col: str, entities: list[str]) -> int:
+        assert table == "security_prices_eod"
+        assert entity_col == "ric"
+        deleted_entities.extend(entities)
+        return len(entities)
+
+    def _fake_copy(_pg_conn, *, table: str, columns: list[str], rows) -> int:
+        assert table == "security_prices_eod"
+        assert columns == ["ric", "date", "close"]
+        batch = list(rows)
+        copied_batches.append(batch)
+        return len(batch)
+
+    monkeypatch.setattr(neon_stage2, "_delete_pg_rows_for_entities", _fake_delete)
+    monkeypatch.setattr(neon_stage2, "_copy_into_postgres", _fake_copy)
+
+    out = neon_stage2.sync_from_sqlite_to_neon(
+        sqlite_path=db_path,
+        dsn="postgresql://example",
+        tables=["security_prices_eod"],
+        mode="incremental",
+    )
+
+    table_out = out["tables"]["security_prices_eod"]
+    assert table_out["action"] == "incremental_overlap_plus_identifier_backfill"
+    assert table_out["identifier_backfill"] == {
+        "entity_col": "ric",
+        "count": 1,
+        "sample": ["BBB.OQ"],
+        "rows_loaded": 1,
+        "rows_deleted": 1,
+    }
+    assert table_out["source_rows"] == 2
+    assert table_out["rows_loaded"] == 3
+    assert deleted_entities == ["BBB.OQ"]
+    assert copied_batches == [
+        [
+            ("AAA.OQ", "2026-03-15", 11.0),
+            ("BBB.OQ", "2026-03-15", 21.0),
+        ],
+        [
+            ("BBB.OQ", "2026-03-01", 20.0),
+        ],
+    ]

@@ -21,6 +21,8 @@ class TableConfig:
     name: str
     pk_cols: tuple[str, ...]
     date_col: str | None = None
+    entity_col: str | None = None
+    identifier_history_backfill: bool = False
     overlap_days: int = 7
     sync_mode: str = "replace"  # replace | upsert
 
@@ -35,24 +37,29 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         name="security_prices_eod",
         pk_cols=("ric", "date"),
         date_col="date",
+        entity_col="ric",
+        identifier_history_backfill=True,
         overlap_days=10,
     ),
     "security_fundamentals_pit": TableConfig(
         name="security_fundamentals_pit",
         pk_cols=("ric", "as_of_date", "stat_date"),
         date_col="as_of_date",
+        entity_col="ric",
         overlap_days=62,
     ),
     "security_classification_pit": TableConfig(
         name="security_classification_pit",
         pk_cols=("ric", "as_of_date"),
         date_col="as_of_date",
+        entity_col="ric",
         overlap_days=62,
     ),
     "barra_raw_cross_section_history": TableConfig(
         name="barra_raw_cross_section_history",
         pk_cols=("ric", "as_of_date"),
         date_col="as_of_date",
+        entity_col="ric",
         overlap_days=14,
     ),
     "model_factor_returns_daily": TableConfig(
@@ -71,6 +78,7 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         name="model_specific_risk_daily",
         pk_cols=("as_of_date", "ric"),
         date_col="as_of_date",
+        entity_col="ric",
         overlap_days=14,
     ),
     "model_run_metadata": TableConfig(
@@ -83,12 +91,14 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         name="projected_instrument_loadings",
         pk_cols=("ric", "as_of_date", "factor_name"),
         date_col="as_of_date",
+        entity_col="ric",
         overlap_days=14,
     ),
     "projected_instrument_meta": TableConfig(
         name="projected_instrument_meta",
         pk_cols=("ric", "as_of_date"),
         date_col="as_of_date",
+        entity_col="ric",
         overlap_days=14,
     ),
     "serving_payload_current": TableConfig(
@@ -274,6 +284,63 @@ def _sqlite_select_rows(
             yield tuple(row)
 
 
+def _sqlite_entity_min_dates(
+    conn: sqlite3.Connection,
+    *,
+    table: str,
+    entity_col: str,
+    date_col: str,
+) -> dict[str, str]:
+    cur = conn.execute(
+        f"""
+        SELECT "{entity_col}", MIN("{date_col}")
+        FROM {table}
+        WHERE "{entity_col}" IS NOT NULL
+        GROUP BY "{entity_col}"
+        """
+    )
+    out: dict[str, str] = {}
+    for row in cur.fetchall():
+        if not row or row[0] is None or row[1] is None:
+            continue
+        out[str(row[0])] = str(row[1])
+    return out
+
+
+def _sqlite_select_rows_for_entities_before_date(
+    conn: sqlite3.Connection,
+    *,
+    table: str,
+    columns: list[str],
+    entity_col: str,
+    entities: list[str],
+    date_col: str,
+    from_date: str | None = None,
+    before_date: str,
+    batch_size: int = 25_000,
+):
+    if not entities:
+        return
+    placeholders = ", ".join("?" for _ in entities)
+    where_parts = [f'"{entity_col}" IN ({placeholders})']
+    params_list: list[Any] = list(entities)
+    if from_date is not None:
+        where_parts.append(f'"{date_col}" >= ?')
+        params_list.append(from_date)
+    where_parts.append(f'"{date_col}" < ?')
+    params_list.append(before_date)
+    where_sql = "WHERE " + " AND ".join(where_parts)
+    params: tuple[Any, ...] = tuple(params_list)
+    yield from _sqlite_select_rows(
+        conn,
+        table=table,
+        columns=columns,
+        where_sql=where_sql,
+        params=params,
+        batch_size=batch_size,
+    )
+
+
 def _pg_max_date(pg_conn, *, table: str, date_col: str) -> str | None:
     with pg_conn.cursor() as cur:
         cur.execute(
@@ -284,6 +351,80 @@ def _pg_max_date(pg_conn, *, table: str, date_col: str) -> str | None:
         if not row or row[0] is None:
             return None
         return str(row[0])
+
+
+def _pg_min_date(pg_conn, *, table: str, date_col: str) -> str | None:
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("SELECT MIN({})::text FROM {}")
+            .format(sql.Identifier(date_col), sql.Identifier(table))
+        )
+        row = cur.fetchone()
+        if not row or row[0] is None:
+            return None
+        return str(row[0])
+
+
+def _pg_entity_min_dates(
+    pg_conn,
+    *,
+    table: str,
+    entity_col: str,
+    date_col: str,
+) -> dict[str, str]:
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            sql.SQL(
+                """
+                SELECT {}, MIN({})::text
+                FROM {}
+                WHERE {} IS NOT NULL
+                GROUP BY {}
+                """
+            ).format(
+                sql.Identifier(entity_col),
+                sql.Identifier(date_col),
+                sql.Identifier(table),
+                sql.Identifier(entity_col),
+                sql.Identifier(entity_col),
+            ),
+        )
+        out: dict[str, str] = {}
+        for row in cur.fetchall():
+            if not row or row[0] is None or row[1] is None:
+                continue
+            out[str(row[0])] = str(row[1])
+        return out
+
+
+def _chunked_strings(values: list[str], chunk_size: int = 1_000):
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    for idx in range(0, len(values), chunk_size):
+        yield values[idx : idx + chunk_size]
+
+
+def _delete_pg_rows_for_entities(
+    pg_conn,
+    *,
+    table: str,
+    entity_col: str,
+    entities: list[str],
+) -> int:
+    if not entities:
+        return 0
+    deleted = 0
+    with pg_conn.cursor() as cur:
+        for chunk in _chunked_strings(entities):
+            cur.execute(
+                sql.SQL("DELETE FROM {} WHERE {} = ANY(%s)").format(
+                    sql.Identifier(table),
+                    sql.Identifier(entity_col),
+                ),
+                (chunk,),
+            )
+            deleted += int(cur.rowcount or 0)
+    return deleted
 
 
 def _copy_into_postgres(
@@ -466,6 +607,10 @@ def sync_from_sqlite_to_neon(
             where_sql = ""
             params: tuple[Any, ...] = ()
             action = "replace"
+            identifier_backfill_entities: list[str] = []
+            identifier_backfill_deleted = 0
+            identifier_backfill_rows = 0
+            identifier_backfill_from_date: str | None = None
 
             if cfg.sync_mode == "upsert":
                 src_count = _sqlite_count(sqlite_conn, table)
@@ -500,6 +645,45 @@ def sync_from_sqlite_to_neon(
                     cutoff_txt = _format_iso_date(cutoff, fallback=max_date)
                     if cutoff_txt is None:
                         raise RuntimeError(f"unable to derive cutoff for table {table}")
+                    if (
+                        cfg.identifier_history_backfill
+                        and cfg.entity_col
+                        and cfg.date_col
+                    ):
+                        target_retained_min = _pg_min_date(
+                            pg_conn,
+                            table=table,
+                            date_col=str(cfg.date_col),
+                        )
+                        identifier_backfill_from_date = target_retained_min
+                        source_entity_min_dates = _sqlite_entity_min_dates(
+                            sqlite_conn,
+                            table=table,
+                            entity_col=str(cfg.entity_col),
+                            date_col=str(cfg.date_col),
+                        )
+                        target_entity_min_dates = _pg_entity_min_dates(
+                            pg_conn,
+                            table=table,
+                            entity_col=str(cfg.entity_col),
+                            date_col=str(cfg.date_col),
+                        )
+                        if target_retained_min:
+                            for entity, source_min in source_entity_min_dates.items():
+                                desired_min = max(str(source_min), str(target_retained_min))
+                                target_entity_min = target_entity_min_dates.get(entity)
+                                if desired_min >= cutoff_txt:
+                                    continue
+                                if target_entity_min is None or str(target_entity_min) > desired_min:
+                                    identifier_backfill_entities.append(entity)
+                        identifier_backfill_entities = sorted(set(identifier_backfill_entities))
+                        if identifier_backfill_entities:
+                            identifier_backfill_deleted = _delete_pg_rows_for_entities(
+                                pg_conn,
+                                table=table,
+                                entity_col=str(cfg.entity_col),
+                                entities=identifier_backfill_entities,
+                            )
                     where_sql = f"WHERE {cfg.date_col} >= ?"
                     params = (cutoff_txt,)
                     with pg_conn.cursor() as cur:
@@ -510,7 +694,11 @@ def sync_from_sqlite_to_neon(
                             ),
                             (cutoff_txt,),
                         )
-                    action = "incremental_overlap_reload"
+                    action = (
+                        "incremental_overlap_plus_identifier_backfill"
+                        if identifier_backfill_entities
+                        else "incremental_overlap_reload"
+                    )
 
             src_count = _sqlite_count(sqlite_conn, table, where_sql, params)
             copied = _copy_into_postgres(
@@ -526,14 +714,42 @@ def sync_from_sqlite_to_neon(
                     batch_size=max(1_000, int(batch_size)),
                 ),
             )
+            if identifier_backfill_entities and cfg.entity_col and cfg.date_col:
+                identifier_backfill_rows = _copy_into_postgres(
+                    pg_conn,
+                    table=table,
+                    columns=cols,
+                    rows=_sqlite_select_rows_for_entities_before_date(
+                        sqlite_conn,
+                        table=table,
+                        columns=cols,
+                        entity_col=str(cfg.entity_col),
+                        entities=identifier_backfill_entities,
+                        date_col=str(cfg.date_col),
+                        from_date=identifier_backfill_from_date,
+                        before_date=str(params[0]),
+                        batch_size=max(1_000, int(batch_size)),
+                    ),
+                )
             pg_conn.commit()
 
             out["tables"][table] = {
                 "action": action,
                 "source_rows": int(src_count),
-                "rows_loaded": int(copied),
+                "rows_loaded": int(copied + identifier_backfill_rows),
                 "where_sql": where_sql or None,
                 "where_params": list(params),
+                "identifier_backfill": (
+                    {
+                        "entity_col": str(cfg.entity_col),
+                        "count": int(len(identifier_backfill_entities)),
+                        "sample": identifier_backfill_entities[:10],
+                        "rows_loaded": int(identifier_backfill_rows),
+                        "rows_deleted": int(identifier_backfill_deleted),
+                    }
+                    if identifier_backfill_entities
+                    else None
+                ),
                 "schema_update": schema_update,
             }
         pg_conn.commit()
