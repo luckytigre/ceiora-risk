@@ -74,7 +74,15 @@ async function gotoWithRetry(page, url, options, attempts = 3) {
   let lastError = null;
   for (let index = 0; index < attempts; index += 1) {
     try {
-      await page.goto(url, options);
+      const response = await page.goto(url, options);
+      if (response && !response.ok()) {
+        lastError = new Error(`Unexpected status ${response.status()} for ${url}`);
+        if (index === attempts - 1) {
+          throw lastError;
+        }
+        await delay(500);
+        continue;
+      }
       return;
     } catch (error) {
       lastError = error;
