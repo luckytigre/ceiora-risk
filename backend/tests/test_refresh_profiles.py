@@ -684,6 +684,33 @@ def test_neon_readiness_stage_prepares_workspace(monkeypatch: pytest.MonkeyPatch
     assert out["workspace"]["data_db"].endswith("data.db")
 
 
+def test_neon_readiness_stage_surfaces_workspace_preparation_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTHORITATIVE_REBUILDS", True)
+    monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(
+        run_model_pipeline.neon_authority,
+        "prepare_neon_rebuild_workspace",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("Neon rebuild readiness failed: missing_table:security_master")),
+    )
+
+    with pytest.raises(RuntimeError, match="Neon rebuild readiness failed: missing_table:security_master"):
+        run_model_pipeline._run_stage(
+            profile="core-weekly",
+            stage="neon_readiness",
+            as_of_date="2026-03-14",
+            should_run_core=True,
+            serving_mode="full",
+            force_core=False,
+            core_reason="due",
+            data_db=_UNUSED_DATA_DB,
+            cache_db=_UNUSED_CACHE_DB,
+            workspace_root=tmp_path / "workspace",
+        )
+
+
 @pytest.mark.parametrize(
     ("should_run_core", "expected_recompute"),
     [

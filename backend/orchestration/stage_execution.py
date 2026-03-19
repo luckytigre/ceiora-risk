@@ -12,6 +12,55 @@ from typing import Any, Callable
 logger = logging.getLogger(__name__)
 
 
+def _workspace_path_from_payload(
+    workspace_payload: dict[str, Any],
+    *,
+    field: str,
+    expect_directory: bool,
+) -> Path:
+    raw = str(workspace_payload.get(field) or "").strip()
+    if not raw:
+        raise RuntimeError(f"neon_readiness returned ok without workspace.{field}")
+    path = Path(raw).expanduser().resolve()
+    if expect_directory:
+        if not path.exists() or not path.is_dir():
+            raise RuntimeError(f"neon_readiness returned invalid workspace.{field}: {path}")
+    else:
+        if not path.exists() or not path.is_file():
+            raise RuntimeError(f"neon_readiness returned invalid workspace.{field}: {path}")
+    return path
+
+
+def _resolve_workspace_paths(
+    out: dict[str, Any],
+    *,
+    neon_authority_module,
+):
+    workspace_payload = dict(out.get("workspace") or {})
+    if not workspace_payload:
+        raise RuntimeError("neon_readiness returned ok without workspace payload")
+    workspace_root = _workspace_path_from_payload(
+        workspace_payload,
+        field="root_dir",
+        expect_directory=True,
+    )
+    workspace_data_db = _workspace_path_from_payload(
+        workspace_payload,
+        field="data_db",
+        expect_directory=False,
+    )
+    workspace_cache_db = _workspace_path_from_payload(
+        workspace_payload,
+        field="cache_db",
+        expect_directory=False,
+    )
+    return neon_authority_module.WorkspacePaths(
+        root_dir=workspace_root,
+        data_db=workspace_data_db,
+        cache_db=workspace_cache_db,
+    )
+
+
 def run_selected_stages(
     *,
     selected: list[str],
@@ -150,14 +199,9 @@ def run_selected_stages(
                 progress_callback=_emit_stage_event,
             )
             if stage == "neon_readiness" and str(out.get("status") or "") == "ok":
-                workspace_payload = dict(out.get("workspace") or {})
-                workspace_root = Path(str(workspace_payload.get("root_dir") or "")).expanduser().resolve()
-                workspace_data_db = Path(str(workspace_payload.get("data_db") or "")).expanduser().resolve()
-                workspace_cache_db = Path(str(workspace_payload.get("cache_db") or "")).expanduser().resolve()
-                workspace_paths = neon_authority_module.WorkspacePaths(
-                    root_dir=workspace_root,
-                    data_db=workspace_data_db,
-                    cache_db=workspace_cache_db,
+                workspace_paths = _resolve_workspace_paths(
+                    out,
+                    neon_authority_module=neon_authority_module,
                 )
                 neon_mirror_sqlite_path = workspace_paths.data_db
                 neon_mirror_cache_path = workspace_paths.cache_db

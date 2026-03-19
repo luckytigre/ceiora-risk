@@ -157,6 +157,7 @@ Key rule:
   - rebuild-authority readers follow the currently configured rebuild authority
   - local diagnostic readers inspect only the local SQLite archive and must not be treated as app-serving truth
 - When rebuild lanes use a workspace/local override, the orchestrator now passes explicit `data_db` / `cache_db` targets through execution instead of mutating process-wide runtime paths.
+- Neon-authoritative rebuild rehearsal must fail closed if `neon_readiness` cannot produce a valid scratch workspace or if the derived local mirror sync from that workspace fails.
 - The risk-model math window is narrower than retained model history:
   - covariance / specific risk use `LOOKBACK_DAYS` (currently ~2 trading years)
   - factor-return / raw cross-section history may be retained for longer (for example ~5 years)

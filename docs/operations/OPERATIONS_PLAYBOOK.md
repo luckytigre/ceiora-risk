@@ -95,6 +95,9 @@ Rebuild-authority rule:
   - core stages run from that Neon-backed scratch workspace
   - final mirror publishes rebuilt analytics back into Neon
   - local derived tables/cache are refreshed from the scratch workspace so the private mirror stays congruent
+- Rehearsal/cutover safety rule:
+  - `neon_readiness` must surface a valid scratch workspace payload; malformed workspace metadata now fails the run closed instead of letting later stages guess paths
+  - if syncing the rebuilt workspace derivatives back into the local mirror fails, the run also fails closed
 - In both cases, local SQLite remains the only direct LSEG ingress point.
 
 Runtime-role rule:

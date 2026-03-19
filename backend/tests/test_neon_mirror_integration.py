@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 run_model_pipeline = importlib.import_module("backend.orchestration.run_model_pipeline")
 
@@ -188,3 +189,126 @@ def test_run_model_pipeline_publishes_health_when_required_serving_write_fails(m
     assert payload.get("status") == "error"
     assert payload.get("sync_status") == "serving_payload_write_failed"
     assert payload.get("health_scope") == "serving_payload_write"
+
+
+def test_run_model_pipeline_reports_workspace_and_local_mirror_sync_for_neon_core_lane(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    _patch_lightweight_pipeline(monkeypatch)
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    workspace_data_db = workspace_root / "data.db"
+    workspace_cache_db = workspace_root / "cache.db"
+    workspace_data_db.touch()
+    workspace_cache_db.touch()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(run_model_pipeline.sqlite, "cache_get_live_first", lambda _k: {})
+    monkeypatch.setattr(run_model_pipeline.config, "APP_RUNTIME_ROLE", "local-ingest")
+    monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTHORITATIVE_REBUILDS", True)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_ENABLED", False)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_REQUIRED", False)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "")
+    monkeypatch.setattr(run_model_pipeline, "mark_refresh_finished", lambda **kwargs: None)
+    monkeypatch.setattr(run_model_pipeline.runtime_support, "profile_runs_broad_neon_mirror", lambda profile: False)
+    monkeypatch.setattr(
+        run_model_pipeline.stage_execution,
+        "run_selected_stages",
+        lambda **_kwargs: {
+            "overall_status": "ok",
+            "stage_results": [
+                {"stage": "source_sync", "status": "completed", "details": {"status": "ok"}},
+                {"stage": "neon_readiness", "status": "completed", "details": {"status": "ok"}},
+                {"stage": "factor_returns", "status": "completed", "details": {"status": "ok"}},
+                {"stage": "risk_model", "status": "completed", "details": {"status": "ok"}},
+                {"stage": "serving_refresh", "status": "completed", "details": {"status": "ok"}},
+            ],
+            "workspace_paths": run_model_pipeline.neon_authority.WorkspacePaths(
+                root_dir=workspace_root.resolve(),
+                data_db=workspace_data_db.resolve(),
+                cache_db=workspace_cache_db.resolve(),
+            ),
+            "neon_mirror_sqlite_path": workspace_data_db.resolve(),
+            "neon_mirror_cache_path": workspace_cache_db.resolve(),
+        },
+    )
+    monkeypatch.setattr(
+        run_model_pipeline.neon_authority,
+        "sync_workspace_derivatives_to_local_mirror",
+        lambda **kwargs: captured.update(kwargs) or {"status": "ok", "copied_tables": 3},
+    )
+
+    out = run_model_pipeline.run_model_pipeline(profile="core-weekly", force_core=True)
+
+    assert out["status"] == "ok"
+    assert out["workspace"] == {
+        "root_dir": str(workspace_root.resolve()),
+        "data_db": str(workspace_data_db.resolve()),
+        "cache_db": str(workspace_cache_db.resolve()),
+    }
+    assert out["local_mirror_sync"]["status"] == "ok"
+    assert captured["workspace_data_db"] == workspace_data_db.resolve()
+    assert captured["workspace_cache_db"] == workspace_cache_db.resolve()
+    assert captured["local_data_db"] == run_model_pipeline.DATA_DB
+    assert captured["local_cache_db"] == run_model_pipeline.CACHE_DB
+
+
+def test_run_model_pipeline_fails_closed_when_workspace_local_mirror_sync_fails(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    _patch_lightweight_pipeline(monkeypatch)
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    workspace_data_db = workspace_root / "data.db"
+    workspace_cache_db = workspace_root / "cache.db"
+    workspace_data_db.touch()
+    workspace_cache_db.touch()
+
+    monkeypatch.setattr(run_model_pipeline.sqlite, "cache_get_live_first", lambda _k: {})
+    monkeypatch.setattr(run_model_pipeline.config, "APP_RUNTIME_ROLE", "local-ingest")
+    monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTHORITATIVE_REBUILDS", True)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_ENABLED", False)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_REQUIRED", False)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "")
+    monkeypatch.setattr(run_model_pipeline, "mark_refresh_finished", lambda **kwargs: None)
+    monkeypatch.setattr(run_model_pipeline.runtime_support, "profile_runs_broad_neon_mirror", lambda profile: False)
+    monkeypatch.setattr(
+        run_model_pipeline.stage_execution,
+        "run_selected_stages",
+        lambda **_kwargs: {
+            "overall_status": "ok",
+            "stage_results": [
+                {"stage": "neon_readiness", "status": "completed", "details": {"status": "ok"}},
+                {"stage": "factor_returns", "status": "completed", "details": {"status": "ok"}},
+                {"stage": "risk_model", "status": "completed", "details": {"status": "ok"}},
+                {"stage": "serving_refresh", "status": "completed", "details": {"status": "ok"}},
+            ],
+            "workspace_paths": run_model_pipeline.neon_authority.WorkspacePaths(
+                root_dir=workspace_root.resolve(),
+                data_db=workspace_data_db.resolve(),
+                cache_db=workspace_cache_db.resolve(),
+            ),
+            "neon_mirror_sqlite_path": workspace_data_db.resolve(),
+            "neon_mirror_cache_path": workspace_cache_db.resolve(),
+        },
+    )
+    monkeypatch.setattr(
+        run_model_pipeline.neon_authority,
+        "sync_workspace_derivatives_to_local_mirror",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("mirror sync exploded")),
+    )
+
+    out = run_model_pipeline.run_model_pipeline(profile="core-weekly", force_core=True)
+
+    assert out["status"] == "failed"
+    assert out["workspace"] == {
+        "root_dir": str(workspace_root.resolve()),
+        "data_db": str(workspace_data_db.resolve()),
+        "cache_db": str(workspace_cache_db.resolve()),
+    }
+    assert out["local_mirror_sync"]["status"] == "error"
+    assert out["local_mirror_sync"]["error"]["message"] == "mirror sync exploded"
