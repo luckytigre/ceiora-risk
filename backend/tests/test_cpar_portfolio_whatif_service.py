@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.services import cpar_portfolio_whatif_service
+from backend.services import cpar_meta_service, cpar_portfolio_whatif_service
 
 
 def _package() -> dict[str, object]:
@@ -205,4 +205,38 @@ def test_portfolio_whatif_service_rejects_new_rows_outside_active_package(
             account_id="acct_main",
             mode="factor_neutral",
             scenario_rows=[{"ric": "AMD.OQ", "ticker": "AMD", "quantity_delta": 4.0}],
+        )
+
+
+def test_portfolio_whatif_service_propagates_typed_snapshot_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_account_context",
+        lambda **kwargs: (_ for _ in ()).throw(cpar_meta_service.CparReadUnavailable("Holdings read failed")),
+    )
+
+    with pytest.raises(cpar_meta_service.CparReadUnavailable, match="Holdings read failed"):
+        cpar_portfolio_whatif_service.load_cpar_portfolio_whatif_payload(
+            account_id="acct_main",
+            mode="factor_neutral",
+            scenario_rows=[{"ric": "AAPL.OQ", "ticker": "AAPL", "quantity_delta": 1.0}],
+        )
+
+
+def test_portfolio_whatif_service_does_not_swallow_unexpected_snapshot_bugs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_account_context",
+        lambda **kwargs: (_ for _ in ()).throw(ValueError("bad snapshot state")),
+    )
+
+    with pytest.raises(ValueError, match="bad snapshot state"):
+        cpar_portfolio_whatif_service.load_cpar_portfolio_whatif_payload(
+            account_id="acct_main",
+            mode="factor_neutral",
+            scenario_rows=[{"ric": "AAPL.OQ", "ticker": "AAPL", "quantity_delta": 1.0}],
         )

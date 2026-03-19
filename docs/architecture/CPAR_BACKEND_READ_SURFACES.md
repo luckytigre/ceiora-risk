@@ -43,7 +43,7 @@ It does not add:
 
 `GET /api/cpar/portfolio/hedge?account_id=&mode=`
 - returns a read-only account-scoped cPAR hedge workflow payload
-- reuses a lower-layer holdings read adapter only as shared infrastructure
+- reuses `backend/data/holdings_reads.py` as the shared Neon-backed holdings/account adapter only as shared infrastructure
 - values holdings rows at the latest shared-source price on or before the active package date
 - aggregates only covered persisted cPAR thresholded loadings into one hedge vector
 - reports `coverage_ratio` as covered gross market value divided by priced gross market value
@@ -52,7 +52,7 @@ It does not add:
 `POST /api/cpar/portfolio/whatif`
 - returns a preview-only account-scoped cPAR what-if payload
 - accepts `account_id`, `mode`, and `scenario_rows[{ric,ticker,quantity_delta}]`
-- reuses the active package, the same account-level hedge baseline, and live holdings/account plumbing
+- reuses the active package, the same account-level hedge baseline, and the shared `backend/data/holdings_reads.py` adapter
 - stages signed share deltas only; it does not mutate holdings or apply trades
 - additions outside the current holdings set must come from active-package search hits and therefore must be present in the active persisted cPAR fits
 - response returns `scenario_rows`, `current`, `hypothetical`, and `_preview_only = true`
@@ -62,6 +62,7 @@ It does not add:
 All cPAR read routes use the durable relational `cpar_*` tables through the cPAR data facade.
 Each backend response pins one active `package_run_id` before reading dependent rows, so one payload does not silently mix active-package metadata from one package with fit or covariance reads from a later package.
 The shared account-scoped snapshot assembly for the portfolio hedge and what-if flows now lives in `backend/services/cpar_portfolio_snapshot_service.py`, so the hedge and what-if services remain separate application-facing owners instead of calling one another’s internals.
+The shared holdings/account dependency for those account-scoped routes lives below that service owner in `backend/data/holdings_reads.py`; cPAR portfolio flows do not reach sideways into cUSE4 holdings or what-if services.
 
 These routes do not:
 - read `serving_payload_current`
@@ -98,11 +99,12 @@ Search-result limitations:
 
 Portfolio-route limitations:
 - the first portfolio workflow is account-scoped, not multi-account
-- it reuses holdings/account reads but does not reuse cUSE4 portfolio or what-if payloads
+- it reuses the shared `backend/data/holdings_reads.py` adapter but does not reuse cUSE4 portfolio or what-if payloads
 - accounts with no live holdings rows return an explicit empty portfolio state instead of a synthesized hedge result
 - accounts whose live holdings rows have no usable priced+cPAR-covered rows return an explicit unavailable portfolio state instead of a partial synthetic hedge
 - the what-if preview remains preview-only and does not create an apply/mutation path
 - staged additions must already exist in the active package; the route does not request-time fit new names
+- account-scoped cPAR flows require two authorities at once: an active cPAR package and shared holdings/account reads; SQLite-only local cPAR package fallback does not make those routes available when holdings authority is down
 
 ## Hedge Preview Behavior
 
