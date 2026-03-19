@@ -3,7 +3,7 @@
 ## Core Policy
 - Holdings writes and holdings-serving reads are both Neon-authoritative when a Neon DSN is configured.
 - Local SQLite is the only direct LSEG landing zone and the optional deep archive on the local machine.
-- Neon is the intended authoritative operating database for serving and, once enabled, for core/cold-core rebuilds.
+- Neon is the authoritative operating database for serving and, by default when Neon is the active backend with a configured DSN, for core/cold-core rebuilds too.
 - Model outputs and durable serving payloads now write to Neon first when Neon is configured; local SQLite remains a mirror and local diagnostic surface during migration.
 - Durable `model_outputs` reads are now interpreted by contract:
   - rebuild/runtime consumers should use the current rebuild-authority surface
@@ -105,9 +105,10 @@
 - `universe-add`: finalization lane after explicit `security_master` merge and targeted source backfills for new names.
 
 Rebuild-authority rule:
-- While `NEON_AUTHORITATIVE_REBUILDS=false`, `core-weekly` and `cold-core` still rebuild from local SQLite. Run `source-daily` first if you need the latest local ingest reflected.
+- By default, `core-weekly` and `cold-core` rebuild from Neon after source sync whenever `DATA_BACKEND=neon` and a Neon DSN is configured.
+- Set `NEON_AUTHORITATIVE_REBUILDS=false` only if you intentionally need to roll those lanes back to local SQLite. In that rollback mode, run `source-daily` first if you need the latest local ingest reflected.
 - If Neon ever gets ahead of the intended `source-daily` target date because of a premature/invalid session stamp, rerunning `source-daily` now heals that state instead of refusing the publish.
-- When `NEON_AUTHORITATIVE_REBUILDS=true`, those rebuild lanes execute in this order:
+- In the default Neon-authoritative path, those rebuild lanes execute in this order:
   - `source_sync`: publish source tables from local SQLite into Neon without downgrading newer Neon source dates
   - `neon_readiness`: validate Neon table coverage/retention and materialize a scratch SQLite rebuild workspace from Neon
   - core stages run from that Neon-backed scratch workspace
@@ -166,7 +167,7 @@ Parallel cPAR note:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=cold-core"`
 - API refresh partial stage run:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=source-daily-plus-core-if-due&from_stage=ingest&to_stage=risk_model"`
-  - if `NEON_AUTHORITATIVE_REBUILDS=true` and you target core stages explicitly, include `neon_readiness` in the window or the run will fail closed before core work starts
+  - if Neon-authoritative rebuilds are active and you target core stages explicitly, include `neon_readiness` in the window or the run will fail closed before core work starts
 - Orchestrated refresh via CLI module:
   - `python3 -m backend.scripts.run_model_pipeline --profile serve-refresh`
 - Orchestrated refresh via script wrapper:

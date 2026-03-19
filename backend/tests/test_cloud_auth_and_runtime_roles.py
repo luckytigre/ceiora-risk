@@ -17,6 +17,32 @@ orchestrator = importlib.import_module("backend.orchestration.run_model_pipeline
 refresh_manager = importlib.import_module("backend.services.refresh_manager")
 operator_status_service = importlib.import_module("backend.services.operator_status_service")
 
+
+def _config_snapshot_with_env(**updates: str | None) -> dict[str, object]:
+    import backend.config as config_module
+
+    prior = {key: os.environ.get(key) for key in updates}
+    try:
+        for key, value in updates.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        importlib.reload(config_module)
+        return {
+            "APP_RUNTIME_ROLE": config_module.APP_RUNTIME_ROLE,
+            "NEON_AUTHORITATIVE_REBUILDS": config_module.NEON_AUTHORITATIVE_REBUILDS,
+            "neon_authoritative_rebuilds_enabled": config_module.neon_authoritative_rebuilds_enabled(),
+        }
+    finally:
+        for key, value in prior.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        importlib.reload(config_module)
+
+
 def test_cloud_refresh_requires_operator_token(monkeypatch) -> None:
     monkeypatch.setattr(refresh_routes.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(refresh_routes.config, "OPERATOR_API_TOKEN", "op-secret")
@@ -170,19 +196,45 @@ def test_cloud_refresh_defaults_to_serve_refresh_when_profile_omitted(monkeypatc
 
 
 def test_invalid_runtime_role_defaults_fail_closed() -> None:
-    import backend.config as config_module
+    snapshot = _config_snapshot_with_env(APP_RUNTIME_ROLE="totally-invalid")
 
-    prior = os.environ.get("APP_RUNTIME_ROLE")
-    try:
-        os.environ["APP_RUNTIME_ROLE"] = "totally-invalid"
-        importlib.reload(config_module)
-        assert config_module.APP_RUNTIME_ROLE == "cloud-serve"
-    finally:
-        if prior is None:
-            os.environ.pop("APP_RUNTIME_ROLE", None)
-        else:
-            os.environ["APP_RUNTIME_ROLE"] = prior
-        importlib.reload(config_module)
+    assert snapshot["APP_RUNTIME_ROLE"] == "cloud-serve"
+
+
+def test_neon_authoritative_rebuilds_default_on_when_neon_backend_configured() -> None:
+    snapshot = _config_snapshot_with_env(
+        NEON_DATABASE_URL="postgresql://example",
+        DATABASE_URL=None,
+        DATA_BACKEND="neon",
+        NEON_AUTHORITATIVE_REBUILDS=None,
+    )
+
+    assert snapshot["NEON_AUTHORITATIVE_REBUILDS"] is True
+    assert snapshot["neon_authoritative_rebuilds_enabled"] is True
+
+
+def test_neon_authoritative_rebuilds_can_be_disabled_explicitly() -> None:
+    snapshot = _config_snapshot_with_env(
+        NEON_DATABASE_URL="postgresql://example",
+        DATABASE_URL=None,
+        DATA_BACKEND="neon",
+        NEON_AUTHORITATIVE_REBUILDS="false",
+    )
+
+    assert snapshot["NEON_AUTHORITATIVE_REBUILDS"] is False
+    assert snapshot["neon_authoritative_rebuilds_enabled"] is False
+
+
+def test_neon_authoritative_rebuilds_stay_off_without_neon_backend() -> None:
+    snapshot = _config_snapshot_with_env(
+        NEON_DATABASE_URL="",
+        DATABASE_URL="",
+        DATA_BACKEND="sqlite",
+        NEON_AUTHORITATIVE_REBUILDS=None,
+    )
+
+    assert snapshot["NEON_AUTHORITATIVE_REBUILDS"] is False
+    assert snapshot["neon_authoritative_rebuilds_enabled"] is False
 
 
 def test_serving_outputs_cloud_mode_does_not_fallback_to_sqlite(monkeypatch, tmp_path) -> None:

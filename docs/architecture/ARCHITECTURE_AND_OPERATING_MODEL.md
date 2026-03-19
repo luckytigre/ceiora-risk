@@ -64,7 +64,7 @@ Integration-layer ownership remains in the repo's normal layers and is documente
 
 - Local SQLite remains the only direct LSEG ingest landing zone and the optional deep archive.
 - Neon is the authoritative operating database for the standalone tool once source sync has published the retained working set.
-- During migration, `NEON_AUTHORITATIVE_REBUILDS` controls whether core/cold-core still rebuild from local SQLite or from Neon.
+- `NEON_AUTHORITATIVE_REBUILDS` now defaults on when Neon is the active data backend and a Neon DSN is configured; set it to `false` only to force a rollback to local-SQLite rebuild authority.
 - In `cloud-serve`, a fresh machine should be able to serve cUSE/cPAR runtime surfaces from Neon without a preexisting large local `data.db`; local SQLite remains only for ingest, archive, explicit local diagnostics, and scratch/workspace files.
 - The active cUSE model-history window is defined by retained `barra_raw_cross_section_history`, not by the deepest source archive.
 - `security_master` is the only universe authority.
@@ -152,8 +152,8 @@ Key rule:
 - Current policy remains `CROSS_SECTION_MIN_AGE_DAYS=7`.
 - The active cUSE model-history horizon is defined by retained `barra_raw_cross_section_history`.
 - Ordinary `core-weekly` recomputes should ignore deeper source/archive history outside that retained model window.
-- The intended rebuild authority is Neon so the tool can run standalone after local LSEG ingest publishes forward.
-- While `NEON_AUTHORITATIVE_REBUILDS=false`, local SQLite still remains the actual rebuild authority for core/cold-core.
+- Neon rebuild authority is now the default operating path whenever the app is running against Neon with a configured DSN, so the tool can run standalone after local LSEG ingest publishes forward.
+- Set `NEON_AUTHORITATIVE_REBUILDS=false` only when you intentionally need to pin core/cold-core rebuilds back to local SQLite for rollback or local-only troubleshooting.
 - Durable `model_outputs` readers are contract-split:
   - rebuild-authority readers follow the currently configured rebuild authority
   - local diagnostic readers inspect only the local SQLite archive and must not be treated as app-serving truth
@@ -291,8 +291,8 @@ Should not do by default:
 - full historical raw-history rebuild
 
 Migration note:
-- while `NEON_AUTHORITATIVE_REBUILDS=false`, operators should still run a source-syncing lane before `core-weekly` because the rebuild path remains local-SQLite-first
-- once `NEON_AUTHORITATIVE_REBUILDS=true`, `core-weekly` should be treated as a Neon-authoritative rebuild lane with local ingest as its prerequisite
+- `core-weekly` should now be treated as a Neon-authoritative rebuild lane with local ingest as its prerequisite whenever the app is running against Neon with a configured DSN
+- if you set `NEON_AUTHORITATIVE_REBUILDS=false`, operators should also treat `core-weekly` and `cold-core` as local-SQLite rebuild lanes again until that rollback is removed
 
 ### D) Structural data change
 

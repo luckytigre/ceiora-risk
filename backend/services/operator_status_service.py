@@ -379,9 +379,9 @@ def build_operator_status_payload() -> dict[str, Any]:
             ),
             "rebuild_authority": rebuild_authority,
             "rebuild_authority_plain_english": (
-                "Core and cold-core rebuilds are configured to read from Neon after source sync."
+                "Core rebuild lanes are configured to read from Neon after source sync."
                 if rebuild_authority == "neon"
-                else "Core and cold-core rebuilds still read from local SQLite until Neon-authoritative rebuilds are enabled."
+                else "Core rebuild lanes are pinned to local SQLite because Neon-authoritative rebuilds are disabled or Neon is not the active backend."
             ),
             "diagnostics_scope": "local_sqlite_and_cache",
             "diagnostics_scope_plain_english": (
