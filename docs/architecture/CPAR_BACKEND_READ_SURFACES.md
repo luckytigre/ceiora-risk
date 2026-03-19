@@ -61,6 +61,7 @@ It does not add:
 
 All cPAR read routes use the durable relational `cpar_*` tables through the cPAR data facade.
 Each backend response pins one active `package_run_id` before reading dependent rows, so one payload does not silently mix active-package metadata from one package with fit or covariance reads from a later package.
+The shared account-scoped snapshot assembly for the portfolio hedge and what-if flows now lives in `backend/services/cpar_portfolio_snapshot_service.py`, so the hedge and what-if services remain separate application-facing owners instead of calling one another’s internals.
 
 These routes do not:
 - read `serving_payload_current`

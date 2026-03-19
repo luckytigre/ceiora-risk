@@ -1,10 +1,10 @@
 # cPAR Frontend Surfaces
 
 Date: 2026-03-19
-Status: Active slice-6 frontend notes
+Status: Active cPAR frontend notes
 Owner: Codex
 
-This document describes the current cPAR frontend surfaces after the first narrow portfolio hedge slice.
+This document describes the current cPAR frontend surfaces after the first narrow account-scoped hedge and what-if preview slice.
 
 Related cPAR docs:
 - [CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md)
