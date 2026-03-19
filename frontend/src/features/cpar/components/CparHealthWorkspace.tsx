@@ -47,10 +47,10 @@ export default function CparLandingPage() {
 
       <div className="cpar-two-column">
         <section className="chart-card">
-          <h3>Workspace Routing</h3>
+          <h3>Route Map</h3>
           <div className="section-subtitle">
-            cPAR now exposes family-local routes under one namespaced shell. `/cpar` redirects to `/cpar/risk`, while
-            this page stays the lightweight package-health surface.
+            cPAR uses family-local routes under the shared shell. Health stays diagnostics-first, while risk, explore,
+            and hedge each own a narrower package-based workflow.
           </div>
           <div className="cpar-badge-row">
             <Link href="/cpar/risk" className="cpar-detail-chip" prefetch={false}>Open /cpar/risk</Link>
@@ -58,10 +58,10 @@ export default function CparLandingPage() {
             <Link href="/cpar/hedge" className="cpar-detail-chip" prefetch={false}>Open /cpar/hedge</Link>
           </div>
           <div className="cpar-inline-message neutral">
-            <strong>Low-risk IA migration.</strong>
+            <strong>Package-first routing.</strong>
             <span>
-              This slice keeps the current cPAR page internals mostly intact while the route family shifts to `/cpar/risk`,
-              `/cpar/explore`, `/cpar/health`, and `/cpar/hedge`.
+              `/cpar/health` stays the package diagnostics surface, `/cpar/risk` stays the account-scoped hedge and
+              what-if workspace, and `/cpar/explore` plus `/cpar/hedge` stay instrument-scoped.
             </span>
           </div>
         </section>

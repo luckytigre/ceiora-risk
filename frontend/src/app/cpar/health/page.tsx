@@ -1,5 +1,5 @@
-import CparHealthPage from "../page";
+import CparHealthWorkspace from "@/features/cpar/components/CparHealthWorkspace";
 
 export default function HealthPage() {
-  return <CparHealthPage />;
+  return <CparHealthWorkspace />;
 }

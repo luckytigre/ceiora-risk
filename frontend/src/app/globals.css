@@ -153,13 +153,13 @@ main {
 
 .dash-tabs-family-badge-slot {
   width: 58px;
-  height: 28px;
+  height: 30px;
   position: relative;
   display: inline-flex;
   align-items: flex-end;
   justify-content: flex-start;
   opacity: 0;
-  transform: translateY(1px);
+  transform: translateY(-4px);
   transition: opacity 0.24s ease;
 }
 
@@ -176,7 +176,7 @@ main {
 .dash-tabs-family-badge {
   --family-badge-top: rgba(228, 233, 241, 0.84);
   --family-badge-bottom: rgba(168, 176, 189, 0.82);
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
   letter-spacing: -0.04em;
   font-weight: 300;
@@ -2129,6 +2129,17 @@ main {
 .explore-typeahead-item:hover,
 .explore-typeahead-item.active {
   background: rgba(59, 169, 225, 0.1);
+}
+
+.explore-typeahead-item:disabled,
+.explore-typeahead-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.explore-typeahead-item:disabled:hover,
+.explore-typeahead-item.disabled:hover {
+  background: transparent;
 }
 
 .explore-typeahead-item .ticker {
@@ -4536,11 +4547,11 @@ main {
 
   .dash-tabs-family-badge-slot {
     width: 46px;
-    height: 24px;
+    height: 26px;
   }
 
   .dash-tabs-family-badge {
-    font-size: 15px;
+    font-size: 17px;
   }
 
   .family-split-landing {

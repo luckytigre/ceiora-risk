@@ -254,10 +254,11 @@ try {
           fit_insufficient_count: 12,
           query: requestUrl.searchParams.get("q") || "",
           limit: 12,
-          total: 2,
+          total: 3,
           results: [
             { ticker: "NVDA", ric: "NVDA.OQ", display_name: "NVIDIA Corp", fit_status: "ok", warnings: [], hq_country_code: "US" },
             { ticker: "AAPL", ric: "AAPL.OQ", display_name: "Apple Inc.", fit_status: "ok", warnings: [], hq_country_code: "US" },
+            { ticker: null, ric: "SHELL.L", display_name: "Shell ADR", fit_status: "limited_history", warnings: [], hq_country_code: "GB" },
           ],
         });
       }
@@ -336,6 +337,10 @@ try {
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-whatif-builder").waitFor();
+    await page.getByTestId("cpar-search-input").fill("SHELL");
+    await page.getByRole("button", { name: /Shell ADR/i }).waitFor();
+    assert.equal(await page.getByRole("button", { name: /Shell ADR/i }).isDisabled(), true);
+    await page.getByText("Ticker required").waitFor();
     await page.getByTestId("cpar-search-input").fill("NVDA");
     await page.getByRole("button", { name: /NVDA/i }).first().click();
     await page.getByTestId("cpar-whatif-quantity-input").fill("6");
@@ -354,6 +359,14 @@ try {
       mode: "factor_neutral",
       scenario_rows: [{ ric: "NVDA.OQ", ticker: "NVDA", quantity_delta: 6 }],
     });
+
+    await page.getByLabel("NVDA quantity").fill("0");
+    await page.getByTestId("cpar-portfolio-whatif-invalid").waitFor();
+    assert.equal(await page.getByTestId("cpar-portfolio-current-hedge-panel").count(), 0);
+    assert.equal(await page.getByTestId("cpar-portfolio-hypothetical-hedge-panel").count(), 0);
+    await page.getByLabel("NVDA quantity").fill("6");
+    await page.getByTestId("cpar-portfolio-current-hedge-panel").waitFor();
+    await page.getByTestId("cpar-portfolio-hypothetical-hedge-panel").waitFor();
 
     await page.getByRole("button", { name: "Market Neutral" }).first().click();
     await page.getByText("SPY-only hypothetical hedge").waitFor();

@@ -1,5 +1,5 @@
-import ExposuresPage from "../../exposures/page";
+import CuseRiskPage from "@/features/cuse4/components/CuseRiskPage";
 
 export default function CuseExposuresPage() {
-  return <ExposuresPage />;
+  return <CuseRiskPage />;
 }

@@ -24,8 +24,9 @@ It does not add:
 
 `/cpar/risk`
 - current account-level cPAR risk workspace
-- temporarily reuses the existing account hedge/what-if page internals from the earlier `/cpar/portfolio` surface
 - owns holdings-account selection, coverage summary, aggregate thresholded loadings, one account hedge preview, and one narrow read-only what-if preview
+- keeps the staged what-if builder cPAR-owned even when it visually conforms to the cUSE builder grammar
+- preserves the same active-package search semantics as the other cPAR pages, including disabled `Ticker required` rows when a search hit cannot open or stage directly
 - is the canonical route for that workflow now
 
 `/cpar/explore`
@@ -168,7 +169,7 @@ Current cPAR frontend smokes cover:
 The global brand and background menu remain shared with the rest of the app.
 
 The top header is now route-family aware:
-- `/cuse*` shows `Exposures`, `Explore`, `Health`, and shared `Positions`
+- `/cuse*` shows `Risk`, `Explore`, `Health`, and shared `Positions`
 - `/cpar*` shows `Risk`, `Explore`, `Health`, `Hedge`, and shared `Positions`
 - `/` stays intentionally minimal and uses the centered family chooser instead of a second family subnav
 

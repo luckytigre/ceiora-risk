@@ -111,6 +111,7 @@ try {
   await assertRedirect("/cuse", "/cuse/exposures");
   await assertRedirect("/cpar", "/cpar/risk");
   await assertRedirect("/cpar/portfolio", "/cpar/risk");
+  await assertRedirect("/cpar/portfolio?account_id=acct_main", "/cpar/risk?account_id=acct_main");
 
   await assertOk("/cuse/exposures");
   await assertOk("/cuse/explore");

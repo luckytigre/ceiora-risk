@@ -37,7 +37,7 @@ const DATASET_DESC: Record<string, string> = {
 
 const CACHE_DESC: Record<string, string> = {
   portfolio: "Current portfolio positions, weights, and exposure projections used across Risk, Explore, and Positions.",
-  exposures: "Factor exposure matrix for all held positions, served to the Exposures page.",
+  exposures: "Factor exposure matrix for all held positions, served to the Risk page.",
   risk: "Risk decomposition, factor contributions, and covariance-derived metrics for the Risk page.",
   health_diagnostics: "Precomputed health page payload — R², coverage, bias stats, and factor diagnostics.",
   daily_universe_eligibility_summary: "Legacy cache-era eligibility summary table kept for compatibility. Current summary metadata should come from durable serving payloads.",

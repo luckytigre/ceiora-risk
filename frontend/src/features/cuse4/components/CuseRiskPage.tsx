@@ -173,7 +173,7 @@ export default function ExposuresPage() {
       <div className="chart-card">
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
           <h3 style={{ margin: 0 }}>
-            Factor Exposures — {MODES.find((m) => m.key === mode)?.label}
+            Risk — {MODES.find((m) => m.key === mode)?.label}
           </h3>
           {crossSection && (
             <span style={{

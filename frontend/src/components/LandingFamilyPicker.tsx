@@ -125,7 +125,7 @@ export default function LandingFamilyPicker() {
       const targetScaleY = targetRect.height / sourceRect.height;
 
       const animation = ghost.animate(buildFlightKeyframes(deltaX, deltaY, targetScaleX, targetScaleY), {
-        duration: 1400,
+        duration: 1325,
         easing: "linear",
         fill: "forwards",
       });

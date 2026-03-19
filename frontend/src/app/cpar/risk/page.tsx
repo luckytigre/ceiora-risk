@@ -1,5 +1,5 @@
-import CparRiskPage from "../portfolio/page";
+import CparRiskWorkspace from "@/features/cpar/components/CparRiskWorkspace";
 
 export default function RiskPage() {
-  return <CparRiskPage />;
+  return <CparRiskWorkspace />;
 }
