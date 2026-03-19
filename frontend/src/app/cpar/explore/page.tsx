@@ -9,7 +9,6 @@ import { canNavigateCparSearchResult, readCparError, sameCparPackageIdentity } f
 import type { CparSearchItem } from "@/lib/types";
 import CparInstrumentSummaryCard from "@/features/cpar/components/CparInstrumentSummaryCard";
 import CparLoadingsTable from "@/features/cpar/components/CparLoadingsTable";
-import CparPackageBanner from "@/features/cpar/components/CparPackageBanner";
 import CparSearchPanel from "@/features/cpar/components/CparSearchPanel";
 
 function buildExploreHref(item: CparSearchItem): string {
@@ -52,17 +51,6 @@ function CparExplorePageInner() {
 
   return (
     <div className="cpar-page">
-      <section className="cpar-page-header">
-        <div className="cpar-section-kicker">cPAR / Explore</div>
-        <h1>Active Package Detail</h1>
-        <p className="cpar-page-copy">
-          Search one persisted instrument, inspect raw and thresholded loadings, and then hand off to the dedicated
-          hedge workspace when you want hedge-specific interpretation.
-        </p>
-      </section>
-
-      {meta ? <CparPackageBanner meta={meta} factors={meta.factors} title="Current Explore Package" /> : null}
-
       {metaState ? (
         <section className="chart-card cpar-alert-card" data-testid="cpar-explore-not-ready">
           <h3>{metaState.kind === "not_ready" ? "cPAR Explore Not Ready" : "cPAR Explore Unavailable"}</h3>

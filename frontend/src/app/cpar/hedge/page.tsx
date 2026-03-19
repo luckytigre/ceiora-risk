@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import CparHedgePanel from "@/features/cpar/components/CparHedgePanel";
 import CparInstrumentSummaryCard from "@/features/cpar/components/CparInstrumentSummaryCard";
-import CparPackageBanner from "@/features/cpar/components/CparPackageBanner";
 import CparSearchPanel from "@/features/cpar/components/CparSearchPanel";
 import { useCparMeta, useCparTicker } from "@/hooks/useApi";
 import { canNavigateCparSearchResult, readCparError, sameCparPackageIdentity } from "@/lib/cparTruth";
@@ -51,24 +50,6 @@ function CparHedgePageInner() {
 
   return (
     <div className="cpar-page">
-      <section className="cpar-page-header">
-        <div className="cpar-section-kicker">cPAR / Hedge</div>
-        <h1>Standalone Hedge Workspace</h1>
-        <p className="cpar-page-copy">
-          Select one persisted package row, keep package identity pinned, and inspect the deterministic hedge workflow
-          without mixing in request-time fitting or broader portfolio analytics.
-        </p>
-      </section>
-
-      {meta ? (
-        <CparPackageBanner
-          meta={meta}
-          factors={meta.factors}
-          title="Current Hedge Package"
-          subtitle="The hedge workspace reuses the active persisted package. It does not refit cPAR or trigger any build path."
-        />
-      ) : null}
-
       {metaState ? (
         <section className="chart-card cpar-alert-card" data-testid="cpar-hedge-not-ready">
           <h3>{metaState.kind === "not_ready" ? "cPAR Hedge Not Ready" : "cPAR Hedge Unavailable"}</h3>

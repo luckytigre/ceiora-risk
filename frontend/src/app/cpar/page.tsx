@@ -30,15 +30,6 @@ export default function CparLandingPage() {
 
   return (
     <div className="cpar-page">
-      <section className="cpar-page-header">
-        <div className="cpar-section-kicker">cPAR / Health</div>
-        <h1>Package Health</h1>
-        <p className="cpar-page-copy">
-          cPAR stays package-based and read-only. This page is the lightweight diagnostics surface for the active
-          package, fixed factor registry, warning legend, and the current cPAR workspace layout.
-        </p>
-      </section>
-
       {data ? (
         <CparPackageBanner meta={data} factors={data.factors} />
       ) : metaError ? (

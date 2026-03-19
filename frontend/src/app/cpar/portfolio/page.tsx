@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import CparLoadingsTable from "@/features/cpar/components/CparLoadingsTable";
-import CparPackageBanner from "@/features/cpar/components/CparPackageBanner";
 import CparPortfolioCoverageTable from "@/features/cpar/components/CparPortfolioCoverageTable";
 import CparPortfolioHedgePanel from "@/features/cpar/components/CparPortfolioHedgePanel";
 import CparSearchPanel from "@/features/cpar/components/CparSearchPanel";
@@ -148,24 +147,6 @@ function CparPortfolioPageInner() {
 
   return (
     <div className="cpar-page">
-      <section className="cpar-page-header">
-        <div className="cpar-section-kicker">cPAR / Risk</div>
-        <h1>Account Risk Workspace</h1>
-        <p className="cpar-page-copy">
-          This is the current narrow account-level cPAR risk surface: one holdings account, one active cPAR package,
-          one read-only hedge preview, and one read-only what-if preview derived from staged share deltas.
-        </p>
-      </section>
-
-      {meta ? (
-        <CparPackageBanner
-          meta={meta}
-          factors={meta.factors}
-          title="Current Account Risk Package"
-          subtitle="The account risk workspace reuses the active persisted package and the live holdings account selected below. It does not reuse cUSE4 what-if semantics."
-        />
-      ) : null}
-
       {metaState ? (
         <section className="chart-card cpar-alert-card" data-testid="cpar-portfolio-not-ready">
           <h3>{metaState.kind === "not_ready" ? "cPAR Risk Not Ready" : "cPAR Risk Unavailable"}</h3>

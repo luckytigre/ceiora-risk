@@ -3656,33 +3656,15 @@ main {
   display: flex;
   flex-direction: column;
   gap: 18px;
-}
-
-.cpar-page-header {
-  padding: 10px 0 2px;
+  padding-top: 10px;
 }
 
 .cpar-section-kicker {
-  color: var(--accent-blue);
+  color: rgba(188, 192, 201, 0.72);
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin-bottom: 6px;
-}
-
-.cpar-page-header h1 {
-  font-size: clamp(34px, 6vw, 58px);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
-  color: #f1f4fb;
-  margin-bottom: 10px;
-}
-
-.cpar-page-copy {
-  max-width: 860px;
-  color: rgba(201, 212, 237, 0.82);
-  font-size: 14px;
-  line-height: 1.5;
 }
 
 .cpar-two-column {
@@ -3692,8 +3674,8 @@ main {
 }
 
 .cpar-package-banner {
-  border-top: 1px solid rgba(59, 169, 225, 0.26);
-  background: linear-gradient(180deg, rgba(18, 25, 43, 0.18), rgba(18, 25, 43, 0.06));
+  border-top: 1px solid rgba(154, 171, 214, 0.12);
+  background: rgba(12, 16, 26, 0.18);
 }
 
 .cpar-package-grid {
@@ -3750,7 +3732,7 @@ main {
   display: inline-flex;
   align-items: center;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: 3px;
   border: 1px solid rgba(154, 171, 214, 0.18);
   background: rgba(17, 20, 31, 0.62);
   color: var(--text-secondary);
@@ -3781,11 +3763,18 @@ main {
   display: inline-flex;
   align-items: center;
   padding: 4px 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(154, 171, 214, 0.14);
-  background: rgba(154, 171, 214, 0.08);
-  color: rgba(225, 232, 245, 0.86);
+  border-radius: 3px;
+  border: 1px solid rgba(154, 171, 214, 0.12);
+  background: rgba(12, 16, 26, 0.28);
+  color: rgba(225, 232, 245, 0.78);
   font-size: 11px;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.cpar-detail-chip:hover {
+  border-color: rgba(154, 171, 214, 0.2);
+  background: rgba(17, 22, 34, 0.38);
+  color: rgba(232, 237, 249, 0.9);
 }
 
 .cpar-search-panel {
@@ -3798,19 +3787,20 @@ main {
 
 .cpar-search-input {
   width: 100%;
-  height: 44px;
-  border: 1px solid rgba(154, 171, 214, 0.18);
-  background: rgba(12, 16, 26, 0.64);
-  color: var(--text-primary);
-  padding: 0 14px;
+  height: 38px;
+  border: 1px solid rgba(226, 231, 238, 0.18);
+  background: rgba(226, 231, 238, 0.04);
+  color: rgba(232, 237, 249, 0.9);
+  padding: 8px 10px;
   outline: none;
-  font-size: 14px;
-  border-radius: 12px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  border-radius: 4px;
 }
 
 .cpar-search-input:focus {
-  border-color: rgba(59, 169, 225, 0.48);
-  box-shadow: 0 0 0 1px rgba(59, 169, 225, 0.18);
+  border-color: rgba(59, 169, 225, 0.4);
+  box-shadow: 0 0 0 1px rgba(59, 169, 225, 0.08);
 }
 
 .cpar-search-summary {
@@ -3830,21 +3820,21 @@ main {
   text-align: left;
   border: 1px solid rgba(154, 171, 214, 0.16);
   background: rgba(14, 19, 33, 0.5);
-  padding: 11px 12px;
-  border-radius: 14px;
+  padding: 10px 11px;
+  border-radius: 4px;
   cursor: pointer;
   transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .cpar-search-result:hover {
   transform: translateY(-1px);
-  border-color: rgba(59, 169, 225, 0.32);
-  background: rgba(17, 24, 41, 0.72);
+  border-color: rgba(154, 171, 214, 0.24);
+  background: rgba(17, 22, 34, 0.66);
 }
 
 .cpar-search-result.active {
-  border-color: rgba(59, 169, 225, 0.52);
-  background: rgba(19, 31, 56, 0.76);
+  border-color: rgba(154, 171, 214, 0.28);
+  background: rgba(18, 24, 36, 0.72);
 }
 
 .cpar-search-result:disabled,
@@ -3902,7 +3892,7 @@ main {
   gap: 6px;
   padding: 12px 13px;
   margin-top: 12px;
-  border-radius: 14px;
+  border-radius: 4px;
   border: 1px solid rgba(154, 171, 214, 0.16);
   background: rgba(12, 16, 26, 0.52);
   color: var(--text-secondary);
@@ -3925,8 +3915,8 @@ main {
 }
 
 .cpar-inline-message.neutral {
-  border-color: rgba(59, 169, 225, 0.22);
-  background: rgba(22, 45, 71, 0.18);
+  border-color: rgba(154, 171, 214, 0.14);
+  background: rgba(12, 16, 26, 0.42);
 }
 
 .cpar-registry-summary {
@@ -3996,23 +3986,23 @@ main {
   border: 1px solid rgba(154, 171, 214, 0.18);
   background: rgba(12, 16, 26, 0.56);
   color: var(--text-secondary);
-  border-radius: 999px;
-  padding: 7px 12px;
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  border-radius: 4px;
+  padding: 7px 11px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   cursor: pointer;
 }
 
 .cpar-mode-btn:hover {
   color: var(--text-primary);
-  border-color: rgba(59, 169, 225, 0.28);
+  border-color: rgba(154, 171, 214, 0.22);
 }
 
 .cpar-mode-btn.active {
   color: #eef3ff;
-  border-color: rgba(59, 169, 225, 0.44);
-  background: rgba(22, 45, 71, 0.48);
+  border-color: rgba(154, 171, 214, 0.28);
+  background: rgba(18, 24, 36, 0.74);
 }
 
 .cpar-hedge-panel {
@@ -4039,12 +4029,8 @@ main {
     align-items: flex-start;
   }
 
-  .cpar-page-header h1 {
-    font-size: 36px;
-  }
-
   .cpar-search-input {
-    border-radius: 10px;
+    border-radius: 4px;
   }
 }
 
