@@ -8,7 +8,7 @@ import { useOperatorStatus } from "@/hooks/useCuse4Api";
 import { runServeRefreshAndRevalidate } from "@/lib/cuse4Refresh";
 
 const CUSE_TABS = [
-  { href: "/cuse/exposures", label: "Exposures", matchPrefix: "/cuse/exposures" },
+  { href: "/cuse/exposures", label: "Risk", matchPrefix: "/cuse/exposures" },
   { href: "/cuse/explore", label: "Explore", matchPrefix: "/cuse/explore" },
   { href: "/cuse/health", label: "Health", matchPrefix: "/cuse/health" },
   { href: "/positions", label: "Positions" },

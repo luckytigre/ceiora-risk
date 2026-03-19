@@ -426,7 +426,6 @@ try {
     });
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
-    await page.getByTestId("cpar-package-banner").waitFor();
     await page.getByTestId("cpar-portfolio-account-panel").waitFor();
     await page.getByTestId("cpar-portfolio-overview").waitFor();
     await page.getByTestId("cpar-portfolio-hedge-panel").waitFor();

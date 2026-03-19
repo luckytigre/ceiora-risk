@@ -132,7 +132,7 @@ try {
 
     await gotoWithRetry(page, `${BASE_URL}/cuse/exposures`);
     const cuseTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();
-    assert.deepEqual(cuseTabs, ["Exposures", "Explore", "Health", "Positions"]);
+    assert.deepEqual(cuseTabs, ["Risk", "Explore", "Health", "Positions"]);
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/risk`);
     const cparTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();

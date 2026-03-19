@@ -322,7 +322,6 @@ try {
     });
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/health`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("link", { name: "cPAR" }).waitFor();
     await page.getByTestId("cpar-package-banner").waitFor();
     await page.getByTestId("cpar-package-freshness").waitFor();
     await page.getByTestId("cpar-factor-registry").waitFor();

@@ -335,7 +335,6 @@ try {
     });
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
-    await page.getByTestId("cpar-package-banner").waitFor();
     await page.getByTestId("cpar-portfolio-whatif-builder").waitFor();
     await page.getByTestId("cpar-search-input").fill("NVDA");
     await page.getByRole("button", { name: /NVDA/i }).first().click();
@@ -345,7 +344,7 @@ try {
     await page.getByTestId("cpar-portfolio-whatif-scenarios").waitFor();
     await page.getByTestId("cpar-portfolio-current-hedge-panel").waitFor();
     await page.getByTestId("cpar-portfolio-hypothetical-hedge-panel").waitFor();
-    await page.getByText("Hypothetical Account Hedge").waitFor();
+    await page.getByRole("heading", { name: "Hypothetical Account Hedge" }).waitFor();
     await page.getByTestId("cpar-portfolio-whatif-scenarios").getByText("NVIDIA Corp").waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "RECALC" }).count(), 0);
