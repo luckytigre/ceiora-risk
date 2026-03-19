@@ -213,13 +213,14 @@ def test_compute_position_total_risk_contributions_sums_to_total_variance_pct() 
 
 
 def test_holdings_runtime_state_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(holdings_runtime_state, "cache_get", lambda key: None if key != "holdings_sync_state" else None)
     recorded: dict[str, object] = {}
 
-    def _capture(_key: str, value: object) -> None:
+    def _capture(value: object) -> dict[str, object]:
         recorded["value"] = value
+        return {"status": "ok"}
 
-    monkeypatch.setattr(holdings_runtime_state, "cache_set", _capture)
+    monkeypatch.setattr(holdings_runtime_state, "_load_state", lambda: recorded.get("value"))
+    monkeypatch.setattr(holdings_runtime_state, "_persist_state", _capture)
 
     dirty = holdings_runtime_state.mark_holdings_dirty(
         action="holdings_import:replace_account",
@@ -232,7 +233,6 @@ def test_holdings_runtime_state_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_
     assert dirty["pending_count"] == 3
     assert dirty["last_import_batch_id"] == "batch_1"
 
-    monkeypatch.setattr(holdings_runtime_state, "cache_get", lambda key: recorded.get("value"))
     holdings_runtime_state.mark_refresh_started(profile="serve-refresh", run_id="run_1")
     clean = holdings_runtime_state.mark_refresh_finished(
         profile="serve-refresh",
@@ -250,8 +250,12 @@ def test_holdings_runtime_state_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_
 def test_holdings_runtime_state_does_not_clear_newer_dirty_revision(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded: dict[str, object] = {}
 
-    monkeypatch.setattr(holdings_runtime_state, "cache_get", lambda key: recorded.get("value"))
-    monkeypatch.setattr(holdings_runtime_state, "cache_set", lambda _key, value: recorded.update({"value": value}))
+    monkeypatch.setattr(holdings_runtime_state, "_load_state", lambda: recorded.get("value"))
+    monkeypatch.setattr(
+        holdings_runtime_state,
+        "_persist_state",
+        lambda value: recorded.update({"value": value}) or {"status": "ok"},
+    )
 
     holdings_runtime_state.mark_holdings_dirty(
         action="holdings_position_edit",

@@ -971,10 +971,11 @@ def test_get_refresh_status_reconciles_orphaned_running_state(monkeypatch: pytes
         def release(self) -> None:
             self._locked = False
 
-    monkeypatch.setattr(refresh_manager, "cache_set", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(refresh_manager, "_persist_state", lambda *_args, **_kwargs: {"status": "ok"})
     monkeypatch.setattr(refresh_manager, "mark_refresh_finished", lambda **kwargs: captured.update(kwargs))
     monkeypatch.setattr(refresh_manager, "_RUN_LOCK", _FakeLock())
     monkeypatch.setattr(refresh_manager, "_ACTIVE_WORKER", None)
+    monkeypatch.setattr(refresh_manager, "_STATE_LOADED", True)
     monkeypatch.setattr(
         refresh_manager,
         "_STATE",

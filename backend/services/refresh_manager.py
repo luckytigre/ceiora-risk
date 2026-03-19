@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend import config
+from backend.data import runtime_state
 from backend.data.sqlite import cache_get, cache_set
 from backend.orchestration.profiles import (
     PROFILE_CONFIG,
@@ -29,6 +30,7 @@ _STATUS_CACHE_KEY = "refresh_status"
 _RUN_LOCK = threading.Lock()
 _STATE_LOCK = threading.Lock()
 _ACTIVE_WORKER: threading.Thread | None = None
+_STATE_LOADED = False
 
 
 def _now_iso() -> str:
@@ -75,8 +77,24 @@ def _default_state() -> dict[str, Any]:
     }
 
 
+def _load_persisted_state() -> dict[str, Any] | None:
+    cached = runtime_state.load_runtime_state(
+        _STATUS_CACHE_KEY,
+        fallback_loader=cache_get,
+    )
+    return cached if isinstance(cached, dict) else None
+
+
+def _persist_state(state: dict[str, Any]) -> dict[str, Any]:
+    return runtime_state.persist_runtime_state(
+        _STATUS_CACHE_KEY,
+        state,
+        fallback_writer=cache_set,
+    )
+
+
 def _load_initial_state() -> dict[str, Any]:
-    cached = cache_get(_STATUS_CACHE_KEY)
+    cached = _load_persisted_state()
     if isinstance(cached, dict):
         base = _default_state()
         base.update(cached)
@@ -92,10 +110,24 @@ def _load_initial_state() -> dict[str, Any]:
     return _default_state()
 
 
-_STATE = _load_initial_state()
+_STATE = _default_state()
+
+
+def _ensure_state_loaded() -> None:
+    global _STATE_LOADED, _STATE
+    with _STATE_LOCK:
+        if _STATE_LOADED:
+            return
+    loaded = _load_initial_state()
+    with _STATE_LOCK:
+        if _STATE_LOADED:
+            return
+        _STATE = loaded
+        _STATE_LOADED = True
 
 
 def _snapshot() -> dict[str, Any]:
+    _ensure_state_loaded()
     with _STATE_LOCK:
         return dict(_STATE)
 
@@ -112,10 +144,17 @@ def _get_active_worker() -> threading.Thread | None:
 
 
 def _set_state(**updates: Any) -> dict[str, Any]:
+    suppress_persist_errors = bool(updates.pop("suppress_persist_errors", False))
+    _ensure_state_loaded()
     with _STATE_LOCK:
         _STATE.update(updates)
         snap = dict(_STATE)
-    cache_set(_STATUS_CACHE_KEY, snap)
+    try:
+        _persist_state(snap)
+    except Exception:
+        if not suppress_persist_errors:
+            raise
+        logger.exception("Failed to persist refresh status to runtime_state")
     return snap
 
 
@@ -159,6 +198,7 @@ def _reconcile_orphaned_running_state() -> dict[str, Any]:
             "type": "refresh_worker_missing",
             "message": "Refresh state was running but no background worker is alive.",
         },
+        suppress_persist_errors=True,
     )
     _set_active_worker(None)
     return reconciled
@@ -335,6 +375,7 @@ def _run_in_background(
                 "message": str(exc),
                 "traceback": traceback.format_exc(limit=12),
             },
+            suppress_persist_errors=True,
         )
     finally:
         _set_active_worker(None)
@@ -455,6 +496,7 @@ def start_refresh(
             status="failed",
             finished_at=_now_iso(),
             error={"type": type(exc).__name__, "message": str(exc)},
+            suppress_persist_errors=True,
         )
         return False, failed_state
     return True, running_state

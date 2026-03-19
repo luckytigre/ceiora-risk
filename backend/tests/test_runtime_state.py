@@ -91,3 +91,18 @@ def test_publish_active_snapshot_writes_neon_and_fallback(monkeypatch: pytest.Mo
 def test_runtime_state_rejects_unknown_keys() -> None:
     with pytest.raises(ValueError, match="unsupported runtime_state key"):
         runtime_state.load_runtime_state("unknown_key")
+
+
+@pytest.mark.parametrize("state_key", ["refresh_status", "holdings_sync_state"])
+def test_runtime_state_accepts_operator_state_keys(
+    monkeypatch: pytest.MonkeyPatch,
+    state_key: str,
+) -> None:
+    monkeypatch.setattr(runtime_state.config, "runtime_state_primary_reads_enabled", lambda: False)
+
+    out = runtime_state.load_runtime_state(
+        state_key,
+        fallback_loader=lambda key: {"key": key, "source": "sqlite"},
+    )
+
+    assert out == {"key": state_key, "source": "sqlite"}

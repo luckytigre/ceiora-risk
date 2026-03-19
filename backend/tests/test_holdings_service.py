@@ -157,6 +157,31 @@ def test_run_position_remove_records_dirty_and_refresh(monkeypatch) -> None:
     assert calls["refresh"] == 1
 
 
+def test_record_holdings_dirty_logs_and_does_not_raise(monkeypatch) -> None:
+    errors: list[str] = []
+
+    monkeypatch.setattr(
+        holdings_service,
+        "mark_holdings_dirty",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("runtime-state down")),
+    )
+    monkeypatch.setattr(
+        holdings_service.logger,
+        "exception",
+        lambda message, *args, **kwargs: errors.append(str(message)),
+    )
+
+    holdings_service.record_holdings_dirty(
+        action="holdings_position_edit",
+        account_id="main",
+        summary="edit",
+        import_batch_id="batch_1",
+        change_count=1,
+    )
+
+    assert errors == ["Failed to persist holdings dirty state"]
+
+
 def test_run_whatif_apply_records_dirty_without_runtime_compat_shim(monkeypatch) -> None:
     conn = _FakeConn()
 

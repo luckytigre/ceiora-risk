@@ -8,8 +8,8 @@
 - Durable `model_outputs` reads are now interpreted by contract:
   - rebuild/runtime consumers should use the current rebuild-authority surface
   - data diagnostics should read only the local SQLite archive surface
-- Operator health/runtime truth is beginning to move to Neon-backed runtime state, but broader analytics cache state is still transitional.
-- The Neon-backed runtime-state surface is intentionally small and operator-facing: `risk_engine_meta`, `neon_sync_health`, and the active snapshot pointer.
+- Operator health/runtime truth now persists through the Neon-backed runtime-state surface for the core operator/control-room keys, while broader analytics cache state remains transitional.
+- The Neon-backed runtime-state surface is intentionally operator-facing: `risk_engine_meta`, `neon_sync_health`, `refresh_status`, `holdings_sync_state`, and the active snapshot pointer.
 - `/api/health` and `/api/operator/status` now expose runtime-state status/source fields so missing Neon runtime truth is visible instead of looking healthy by omission.
 - `RECALC`/holdings-dirty state is backend-persisted, not browser-local.
 - Risk engine recompute cadence: weekly (`RISK_RECOMPUTE_INTERVAL_DAYS=7` by default).
@@ -213,8 +213,9 @@ Parallel cPAR note:
   - when model persistence does run, factor returns now load incrementally from the latest durable date when the risk-engine fingerprint still matches; schema/method drift falls back to a full reload.
 - durable serving payload writes now default to partial upsert semantics.
   - only the canonical serving-refresh writer opts into `replace_all=true`, which keeps destructive delete behavior explicit instead of implicit.
-- `refresh_status`: background orchestrator state snapshot.
+- `refresh_status`: background orchestrator state snapshot, persisted through `runtime_state_current` with local SQLite only as the local-ingest mirror/fallback lane.
   - includes current stage progress for in-flight runs (`current_stage`, `stage_index`, `stage_count`, `stage_started_at`) and the optional `refresh_scope` used by holdings-triggered refreshes.
+- `holdings_sync_state`: holdings-dirty and serving-refresh bookkeeping state, likewise persisted through `runtime_state_current` with local SQLite only as the local-ingest mirror/fallback lane.
 - operator lane summaries expose the latest persisted run state, while richer in-flight stage progress remains part of `refresh_status` and backend/operator diagnostics.
 
 ## Factor-Return Durability And Parity

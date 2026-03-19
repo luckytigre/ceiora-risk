@@ -7,6 +7,7 @@ home for older callers and tests that still bind directly to it.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from backend.data.neon import connect, resolve_dsn
@@ -22,6 +23,8 @@ from backend.services.neon_holdings import (
     remove_single_position,
 )
 from backend.services.refresh_manager import start_refresh
+
+logger = logging.getLogger(__name__)
 
 
 def trigger_light_refresh_if_requested(trigger: bool) -> dict[str, Any] | None:
@@ -46,13 +49,16 @@ def record_holdings_dirty(
     import_batch_id: str | None,
     change_count: int,
 ) -> None:
-    mark_holdings_dirty(
-        action=action,
-        account_id=account_id,
-        summary=summary,
-        import_batch_id=import_batch_id,
-        change_count=change_count,
-    )
+    try:
+        mark_holdings_dirty(
+            action=action,
+            account_id=account_id,
+            summary=summary,
+            import_batch_id=import_batch_id,
+            change_count=change_count,
+        )
+    except Exception:
+        logger.exception("Failed to persist holdings dirty state")
 
 
 def load_holdings_accounts() -> list[dict[str, Any]]:

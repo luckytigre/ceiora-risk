@@ -1,4 +1,4 @@
-"""Authoritative holdings/recalc sync state stored in the cache."""
+"""Authoritative holdings/recalc sync state persisted through runtime_state."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
+from backend.data import runtime_state
 from backend.data.sqlite import cache_get, cache_set
 
 _CACHE_KEY = "holdings_sync_state"
@@ -37,8 +38,24 @@ def _base_state() -> dict[str, Any]:
     }
 
 
+def _load_state() -> dict[str, Any] | None:
+    cached = runtime_state.load_runtime_state(
+        _CACHE_KEY,
+        fallback_loader=cache_get,
+    )
+    return cached if isinstance(cached, dict) else None
+
+
+def _persist_state(state: dict[str, Any]) -> dict[str, Any]:
+    return runtime_state.persist_runtime_state(
+        _CACHE_KEY,
+        state,
+        fallback_writer=cache_set,
+    )
+
+
 def get_holdings_sync_state() -> dict[str, Any]:
-    cached = cache_get(_CACHE_KEY)
+    cached = _load_state()
     if not isinstance(cached, dict):
         return _base_state()
     out = _base_state()
@@ -69,7 +86,7 @@ def mark_holdings_dirty(
         state["last_mutation_summary"] = str(summary or "Holdings changed")
         state["last_mutation_account_id"] = str(account_id or "").upper() or None
         state["last_import_batch_id"] = str(import_batch_id or "").strip() or None
-        cache_set(_CACHE_KEY, state)
+        _persist_state(state)
         return state
 
 
@@ -82,7 +99,7 @@ def mark_refresh_started(*, profile: str, run_id: str | None) -> dict[str, Any]:
         state["last_refresh_status"] = "running"
         state["last_refresh_message"] = "Serving refresh started"
         state["last_refresh_started_dirty_revision"] = int(state.get("dirty_revision") or 0)
-        cache_set(_CACHE_KEY, state)
+        _persist_state(state)
         return state
 
 
@@ -105,5 +122,5 @@ def mark_refresh_finished(
             state["pending"] = False
             state["pending_count"] = 0
             state["dirty_since"] = None
-        cache_set(_CACHE_KEY, state)
+        _persist_state(state)
         return state

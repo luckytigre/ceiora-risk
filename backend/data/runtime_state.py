@@ -19,6 +19,8 @@ ALLOWED_RUNTIME_STATE_KEYS = frozenset(
     {
         "risk_engine_meta",
         "neon_sync_health",
+        "refresh_status",
+        "holdings_sync_state",
         _ACTIVE_SNAPSHOT_KEY,
     }
 )
