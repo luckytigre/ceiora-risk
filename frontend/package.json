@@ -8,6 +8,7 @@
     "start": "next start",
     "typegen": "next typegen",
     "typecheck": "npm run typegen && tsc --noEmit --incremental false",
+    "test:family-routes": "node scripts/family_routes_smoke.mjs",
     "test:cpar-pages": "node scripts/cpar_pages_smoke.mjs",
     "test:cpar-hedge": "node scripts/cpar_hedge_page_smoke.mjs",
     "test:cpar-portfolio": "node scripts/cpar_portfolio_smoke.mjs",

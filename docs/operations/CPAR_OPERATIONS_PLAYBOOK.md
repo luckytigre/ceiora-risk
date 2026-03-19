@@ -86,10 +86,11 @@ The current read surfaces do not:
 ## Current Frontend/Backend Assumptions
 
 Current frontend-backed read surfaces:
-- `/cpar`
+- `/cpar/risk`
 - `/cpar/explore`
+- `/cpar/health`
 - `/cpar/hedge`
-- `/cpar/portfolio`
+- legacy redirects from `/cpar` and `/cpar/portfolio` into `/cpar/risk`
 - `GET /api/cpar/meta`
 - `GET /api/cpar/search`
 - `GET /api/cpar/ticker/{ticker}`
@@ -101,7 +102,7 @@ The current detail route is ticker-keyed.
 Persisted search rows with `ticker = NULL` remain visible in search but are intentionally non-navigable in v1.
 The standalone hedge page reuses that same ticker-keyed selection rule and must fail closed when package identity drifts between the selected subject and the hedge preview.
 The first portfolio workflow is account-scoped and read-only: it reuses the shared Neon-backed adapter in `backend/data/holdings_reads.py` plus latest shared-source prices, but it does not reuse cUSE4 portfolio or what-if payload semantics.
-The first what-if workflow is embedded in `/cpar/portfolio` and remains preview-only: it stages signed share deltas against the same active package and account hedge baseline, but it does not apply trades or mutate holdings.
+The first what-if workflow is embedded in `/cpar/risk` and remains preview-only: it stages signed share deltas against the same active package and account hedge baseline, but it does not apply trades or mutate holdings.
 The shared account-scoped snapshot assembly for both flows lives in `backend/services/cpar_portfolio_snapshot_service.py`; that shared owner is cPAR-specific and does not imply any reuse of cUSE4 what-if services.
 
 ## Fail-Closed Cases
@@ -126,13 +127,13 @@ If `/cpar*` shows `not_ready`:
 If `/cpar*` shows `unavailable`:
 - in `cloud-serve`, treat this as an authority/read-path outage until Neon-backed reads recover
 - in local development, confirm whether Neon is expected; SQLite-only fallback is local-only behavior, not cloud behavior
-- for `/cpar/portfolio*`, remember that cPAR package availability is not enough on its own; those account-scoped flows also require the shared holdings/account adapter to be healthy
+- for `/cpar/risk*`, remember that cPAR package availability is not enough on its own; those account-scoped flows also require the shared holdings/account adapter to be healthy
 
-If `/cpar/portfolio` rejects a staged addition:
+If `/cpar/risk` rejects a staged addition:
 - confirm the name was staged from an active-package cPAR search hit
 - the preview route will not request-time fit off-package RICs or synthesize missing persisted fit rows
 
-If `/cpar/portfolio` shows `empty` instead of `unavailable`:
+If `/cpar/risk` shows `empty` instead of `unavailable`:
 - `empty` means the selected account has no live holdings rows at all
 - `unavailable` means the selected account has live rows, but none are both priced and backed by a usable persisted cPAR fit in the active package
 

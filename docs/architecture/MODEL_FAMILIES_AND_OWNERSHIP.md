@@ -48,8 +48,10 @@ Current cUSE4 integration is still the default app wiring in several places, inc
 - `backend/analytics/*`
 - `backend/services/*`
 - `backend/api/routes/*`
+- `frontend/src/app/cuse/*`
 - `frontend/src/app/exposures/*`
 - `frontend/src/app/explore/*`
+- `frontend/src/app/health/*`
 - `frontend/src/app/positions/*`
 - shared frontend helpers such as `frontend/src/lib/analyticsTruth.ts`
 
@@ -94,11 +96,18 @@ Examples:
 - `backend/services/cuse4_holdings_service.py`
 - `backend/services/cuse4_operator_status_service.py`
 
-Current default-named cUSE4 frontend page family includes:
+Current cUSE4 frontend page family now resolves under:
+
+- `/cuse/exposures`
+- `/cuse/explore`
+- `/cuse/health`
+- shared global `/positions`
+
+Legacy redirects remain in place from:
 
 - `/exposures`
 - `/explore`
-- `/positions`
+- `/health`
 
 ## cPAR Ownership
 

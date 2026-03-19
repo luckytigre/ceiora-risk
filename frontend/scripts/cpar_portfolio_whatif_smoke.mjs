@@ -166,7 +166,7 @@ async function cleanup() {
 }
 
 try {
-  await waitForServer(`${BASE_URL}/cpar/portfolio?account_id=acct_main`);
+  await waitForServer(`${BASE_URL}/cpar/risk?account_id=acct_main`);
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -334,7 +334,7 @@ try {
       return fulfillJson({ error: `Unhandled API route ${pathName}` }, 500);
     });
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-package-banner").waitFor();
     await page.getByTestId("cpar-portfolio-whatif-builder").waitFor();
     await page.getByTestId("cpar-search-input").fill("NVDA");
@@ -360,7 +360,7 @@ try {
     await page.getByText("SPY-only hypothetical hedge").waitFor();
 
     scenario = "package_mismatch";
-    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-whatif-builder").waitFor();
     await page.getByTestId("cpar-search-input").fill("NVDA");
     await page.getByRole("button", { name: /NVDA/i }).first().click();
@@ -371,7 +371,7 @@ try {
     assert.equal(await page.getByTestId("cpar-portfolio-hypothetical-hedge-panel").count(), 0);
 
     scenario = "whatif_not_ready";
-    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-whatif-builder").waitFor();
     await page.getByTestId("cpar-search-input").fill("NVDA");
     await page.getByRole("button", { name: /NVDA/i }).first().click();

@@ -86,10 +86,11 @@ Read-only backend routes:
 - `POST /api/cpar/portfolio/whatif`
 
 Frontend pages:
-- `/cpar`
+- `/cpar/risk`
 - `/cpar/explore`
+- `/cpar/health`
 - `/cpar/hedge`
-- `/cpar/portfolio`
+- legacy redirects from `/cpar` and `/cpar/portfolio` into `/cpar/risk`
 
 There is no cPAR blob-serving surface in the current implementation.
 API payloads are assembled from authoritative relational `cpar_*` tables.
@@ -97,6 +98,7 @@ API payloads are assembled from authoritative relational `cpar_*` tables.
 Frontend consistency rule:
 - `/cpar/explore` must not mix package banners, detail rows, and hedge previews from different active packages
 - `/cpar/hedge` must not mix package banners, subject rows, and hedge previews from different active packages
+- `/cpar/risk` must not mix package banners, baseline account hedge payloads, and what-if envelope/current/hypothetical payloads from different active packages
 - if package identity drifts between independent reads, the page fails closed and prompts the user to reload
 - shared banner rendering exposes package freshness so stale active packages remain visible without implying any route-triggered rebuild path
 

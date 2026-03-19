@@ -8,10 +8,8 @@ import { useOperatorStatus } from "@/hooks/useCuse4Api";
 import { runServeRefreshAndRevalidate } from "@/lib/cuse4Refresh";
 
 const TABS = [
-  { href: "/exposures", label: "Risk" },
-  { href: "/cpar", label: "cPAR", matchPrefix: "/cpar" },
-  { href: "/explore", label: "Explore" },
-  { href: "/health", label: "Health" },
+  { href: "/cuse/exposures", label: "cUSE", matchPrefix: "/cuse" },
+  { href: "/cpar/risk", label: "cPAR", matchPrefix: "/cpar" },
   { href: "/positions", label: "Positions" },
 ];
 
@@ -46,14 +44,14 @@ function formatAgeFromIso(iso: string | null | undefined, nowMs: number): string
 export default function TabNav() {
   const pathname = usePathname();
   const activePath = pathname || "";
-  const isCparPath = activePath.startsWith("/cpar");
+  const showOperatorChrome = activePath.startsWith("/cuse") || activePath === "/positions" || activePath === "/data";
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshActionState, setRefreshActionState] = useState<"idle" | "running" | "failed">("idle");
   const [clockMs, setClockMs] = useState<number>(0);
   const navRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { mode, setMode } = useBackground();
-  const { data: operatorStatusData, mutate: mutateOperatorStatus } = useOperatorStatus(!isCparPath);
+  const { data: operatorStatusData, mutate: mutateOperatorStatus } = useOperatorStatus(showOperatorChrome);
   const holdingsSync = operatorStatusData?.holdings_sync;
   const neonSyncHealth = operatorStatusData?.neon_sync_health;
   const pending = Boolean(holdingsSync?.pending);
@@ -107,17 +105,17 @@ export default function TabNav() {
   }, [refreshIsRunning, refreshActionState]);
 
   useEffect(() => {
-    if (isCparPath) return;
+    if (!showOperatorChrome) return;
     if (!refreshIsRunning) return;
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void mutateOperatorStatus();
     }, 5000);
     return () => window.clearInterval(id);
-  }, [isCparPath, refreshIsRunning, mutateOperatorStatus]);
+  }, [showOperatorChrome, refreshIsRunning, mutateOperatorStatus]);
 
   useEffect(() => {
-    if (isCparPath) return undefined;
+    if (!showOperatorChrome) return undefined;
     if (refreshIsRunning) return undefined;
     const refreshVisibleState = () => {
       if (document.visibilityState !== "visible") return;
@@ -131,7 +129,7 @@ export default function TabNav() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [isCparPath, refreshIsRunning, mutateOperatorStatus]);
+  }, [showOperatorChrome, refreshIsRunning, mutateOperatorStatus]);
 
   async function handleRefreshNow() {
     if (refreshActionState === "running" || refreshIsRunning) return;
@@ -205,7 +203,9 @@ export default function TabNav() {
 
   return (
     <nav ref={navRef} className="dash-tabs">
-      <span className="dash-tabs-brand">Ceiora</span>
+      <Link href="/" className="dash-tabs-brand">
+        Ceiora
+      </Link>
 
       <div className="dash-tabs-center">
         {TABS.map((tab) => (
@@ -220,7 +220,7 @@ export default function TabNav() {
       </div>
 
       <div className="dash-tabs-actions">
-        {!isCparPath && (
+        {showOperatorChrome && (
           <>
             <button
               className={`dash-health-signal ${signal.tone}`}
@@ -283,8 +283,9 @@ export default function TabNav() {
                 className={`dash-dropdown-item${pathname === "/data" ? " active" : ""}`}
                 onClick={() => setMenuOpen(false)}
               >
-                Data
+                cUSE data
               </Link>
+              <span className="dash-dropdown-item disabled" aria-disabled="true">cPAR data</span>
               <div className="dash-dropdown-section">Background</div>
               {BG_OPTIONS.map((opt) => (
                 <button

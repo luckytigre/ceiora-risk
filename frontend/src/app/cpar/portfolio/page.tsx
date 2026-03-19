@@ -67,7 +67,7 @@ function CparPortfolioPageInner() {
     if (selectedAccountParam || !defaultAccountId) return;
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.set("account_id", defaultAccountId);
-    router.replace(`/cpar/portfolio?${params.toString()}`);
+    router.replace(`/cpar/risk?${params.toString()}`);
   }, [defaultAccountId, router, searchParams, selectedAccountParam]);
 
   const selectedAccountId = selectedAccountParam || defaultAccountId;
@@ -149,10 +149,11 @@ function CparPortfolioPageInner() {
   return (
     <div className="cpar-page">
       <section className="cpar-page-header">
-        <div className="cpar-section-kicker">cPAR / Portfolio</div>
-        <h1>Account Hedge Workflow</h1>
+        <div className="cpar-section-kicker">cPAR / Risk</div>
+        <h1>Account Risk Workspace</h1>
         <p className="cpar-page-copy">
-          This is the first narrow portfolio-level cPAR flow: one holdings account, one active cPAR package, one read-only hedge preview, and one read-only what-if preview derived from staged share deltas.
+          This is the current narrow account-level cPAR risk surface: one holdings account, one active cPAR package,
+          one read-only hedge preview, and one read-only what-if preview derived from staged share deltas.
         </p>
       </section>
 
@@ -160,14 +161,14 @@ function CparPortfolioPageInner() {
         <CparPackageBanner
           meta={meta}
           factors={meta.factors}
-          title="Current Portfolio Hedge Package"
-          subtitle="The account hedge workflow reuses the active persisted package and the live holdings account selected below. It does not reuse cUSE4 what-if semantics."
+          title="Current Account Risk Package"
+          subtitle="The account risk workspace reuses the active persisted package and the live holdings account selected below. It does not reuse cUSE4 what-if semantics."
         />
       ) : null}
 
       {metaState ? (
         <section className="chart-card cpar-alert-card" data-testid="cpar-portfolio-not-ready">
-          <h3>{metaState.kind === "not_ready" ? "cPAR Portfolio Not Ready" : "cPAR Portfolio Unavailable"}</h3>
+          <h3>{metaState.kind === "not_ready" ? "cPAR Risk Not Ready" : "cPAR Risk Unavailable"}</h3>
           <div className="section-subtitle">{metaState.message}</div>
           <div className="detail-history-empty compact">
             This workflow is package-based and read-only. Publish a durable cPAR package first, then reload.
@@ -203,7 +204,7 @@ function CparPortfolioPageInner() {
                     const nextAccountId = event.target.value;
                     const params = new URLSearchParams(searchParams?.toString() || "");
                     params.set("account_id", nextAccountId);
-                    router.push(`/cpar/portfolio?${params.toString()}`);
+                    router.push(`/cpar/risk?${params.toString()}`);
                   }}
                 >
                   {(accountsData?.accounts || []).map((account) => (
@@ -270,21 +271,21 @@ function CparPortfolioPageInner() {
               {portfolioState.kind === "missing"
                 ? "Account not found."
                 : portfolioState.kind === "not_ready"
-                  ? "Portfolio package not ready."
-                  : "Portfolio hedge unavailable."}
+                  ? "Risk package not ready."
+                  : "Risk preview unavailable."}
             </strong>
             <span>{portfolioState.message}</span>
           </div>
         </section>
       ) : packageMismatch ? (
         <section className="chart-card" data-testid="cpar-portfolio-package-mismatch">
-          <h3>Account Hedge Preview</h3>
-          <div className="cpar-inline-message error">
-            <strong>Active package changed during read.</strong>
-            <span>The portfolio workflow no longer matches the current package banner.</span>
-            <span>Reload the page to pin one cPAR package before using the account hedge preview.</span>
-          </div>
-        </section>
+            <h3>Account Hedge Preview</h3>
+            <div className="cpar-inline-message error">
+              <strong>Active package changed during read.</strong>
+              <span>The risk workflow no longer matches the current package banner.</span>
+              <span>Reload the page to pin one cPAR package before using the account hedge preview.</span>
+            </div>
+          </section>
       ) : portfolio ? (
         <>
           <section className="chart-card" data-testid="cpar-portfolio-overview">

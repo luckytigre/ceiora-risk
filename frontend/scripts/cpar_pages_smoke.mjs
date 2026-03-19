@@ -124,7 +124,7 @@ async function gotoWithRetry(page, url, options, attempts = 3) {
 }
 
 try {
-  await waitForServer(`${BASE_URL}/cpar`);
+  await waitForServer(`${BASE_URL}/cpar/health`);
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -321,12 +321,12 @@ try {
       return fulfillJson({ error: `Unhandled API route ${pathName}` }, 500);
     });
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/health`, { waitUntil: "domcontentloaded" });
     await page.getByRole("link", { name: "cPAR" }).waitFor();
     await page.getByTestId("cpar-package-banner").waitFor();
     await page.getByTestId("cpar-package-freshness").waitFor();
     await page.getByTestId("cpar-factor-registry").waitFor();
-    await page.getByRole("link", { name: "Open /cpar/portfolio" }).waitFor();
+    await page.getByRole("link", { name: "Open /cpar/risk" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "RECALC" }).count(), 0);
 

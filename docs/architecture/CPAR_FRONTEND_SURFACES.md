@@ -4,7 +4,7 @@ Date: 2026-03-19
 Status: Active cPAR frontend notes
 Owner: Codex
 
-This document describes the current cPAR frontend surfaces after the first narrow account-scoped hedge and what-if preview slice.
+This document describes the current cPAR frontend surfaces after the namespaced-family routing slice, with the existing account-scoped risk workflow still kept intentionally narrow.
 
 Related cPAR docs:
 - [CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md)
@@ -12,7 +12,7 @@ Related cPAR docs:
 
 ## Purpose
 
-This slice expands the cPAR frontend without widening backend compute scope.
+This slice expands and restructures the cPAR frontend without widening backend compute scope.
 
 It does not add:
 - cUSE4 vs cPAR comparison views
@@ -22,12 +22,11 @@ It does not add:
 
 ## Page Structure
 
-`/cpar`
-- lightweight landing page
-- shows the active cPAR package summary
-- shows the fixed cPAR1 factor registry summary
-- shows the warning/status legend
-- provides the search entry point into explore
+`/cpar/risk`
+- current account-level cPAR risk workspace
+- temporarily reuses the existing account hedge/what-if page internals from the earlier `/cpar/portfolio` surface
+- owns holdings-account selection, coverage summary, aggregate thresholded loadings, one account hedge preview, and one narrow read-only what-if preview
+- is the canonical route for that workflow now
 
 `/cpar/explore`
 - general cPAR discovery/detail page
@@ -35,20 +34,23 @@ It does not add:
 - links into `/cpar/hedge` for hedge-specific interaction
 - uses the active package only
 
+`/cpar/health`
+- lightweight cPAR package diagnostics page
+- shows the active package summary
+- shows the fixed cPAR1 factor registry summary
+- shows the warning/status legend
+- provides a lightweight entry point into `/cpar/explore`
+- is the canonical home for the old `/cpar` landing content
+
 `/cpar/hedge`
 - dedicated hedge workflow page
 - owns search, ticker selection, persisted hedge-subject summary, hedge mode toggle, hedge preview, and post-hedge display
 - links back to `/cpar/explore` for raw and thresholded loadings review
 - uses the active package only
 
-`/cpar/portfolio`
-- first narrow account-level cPAR hedge workflow
-- owns holdings-account selection, account coverage summary, aggregate thresholded loadings, one portfolio hedge preview, and one narrow read-only what-if preview
-- reuses holdings/account reads only as shared plumbing
-- does not reuse cUSE4 portfolio or what-if semantics
-- uses the active package only
-- treats `coverage_ratio` as covered gross over priced gross, not as a promise that every holdings row has a known market value
-- stages signed share deltas from active-package search hits and compares current vs hypothetical account hedge output
+Legacy redirects:
+- `/cpar` redirects to `/cpar/risk`
+- `/cpar/portfolio` redirects to `/cpar/risk`
 
 ## Backend Contracts Used By The Frontend
 
@@ -80,13 +82,13 @@ It does not add:
 
 Page consistency rule:
 - the frontend must treat `meta`, `ticker detail`, and `hedge` as one package-scoped flow
-- the frontend must treat `meta` and the portfolio hedge payload as one package-scoped flow
-- the frontend must also treat the portfolio what-if envelope plus its nested `current` and `hypothetical` payloads as part of that same package-scoped portfolio flow
+- the frontend must treat `meta` and the account-level hedge payload as one package-scoped flow
+- the frontend must also treat the account-level what-if envelope plus its nested `current` and `hypothetical` payloads as part of that same package-scoped flow
 - if those responses do not share the same `package_run_id` / `package_date`, the page must fail closed instead of mixing surfaces from different active packages
-- the frontend now uses package metadata as the first gate for dependent reads, so package-level `not_ready` / `unavailable` states do not keep probing detail or portfolio endpoints on the same page load
+- the frontend now uses package metadata as the first gate for dependent reads, so package-level `not_ready` / `unavailable` states do not keep probing detail or account-risk endpoints on the same page load
 - `/cpar/explore` enforces this for banner plus detail
 - `/cpar/hedge` enforces this for banner, selected subject, and hedge preview
-- `/cpar/portfolio` enforces this for banner, the baseline account hedge payload, and the what-if envelope/current/hypothetical payloads
+- `/cpar/risk` enforces this for banner, the baseline account hedge payload, and the what-if envelope/current/hypothetical payloads
 
 ## Status And Warning Rendering
 
@@ -108,11 +110,11 @@ Read failures:
 - a direct `/cpar/explore?ric=...` visit without `ticker=` must render an explanatory warning rather than silently failing or synthesizing a detail request
 - a direct `/cpar/hedge?ric=...` visit without `ticker=` must render the same explanatory warning because the current hedge route is also ticker-keyed
 - package-identity drift between active-package reads must render an explicit reload prompt rather than mixing banner/detail/hedge data from different packages
-- `/cpar/portfolio` must render explicit empty or unavailable account states instead of synthesizing a hedge from unpriced or uncovered holdings rows
+- `/cpar/risk` must render explicit empty or unavailable account states instead of synthesizing a hedge from unpriced or uncovered holdings rows
 - `empty` means the selected account has no live holdings rows
 - `unavailable` means the selected account has live holdings rows, but none are both priced and backed by a usable persisted cPAR fit in the active package
 
-## Hedge Workflow Split
+## Workflow Split
 
 `/cpar/explore`
 - remains the persisted fit discovery/detail surface
@@ -124,23 +126,29 @@ Read failures:
 - reuses persisted detail only to identify the selected subject and package
 - owns hedge mode switching, hedge legs, and post-hedge interpretation
 
-`/cpar/portfolio`
+`/cpar/risk`
 - remains a narrow account-level hedge workflow
 - owns account selection, coverage/exclusion explanation, aggregate loadings, staged scenario rows, and current vs hypothetical account hedge preview
 - does not own portfolio mutation, account editing, trade application, or broad scenario analytics
 
+`/cpar/health`
+- remains the lightweight diagnostics page
+- owns the package summary, registry, warning legend, and route-level orientation for the rest of the cPAR family
+- does not become a full operator-status or maintenance dashboard in this slice
+
 ## Smoke Coverage
 
 Current cPAR frontend smokes cover:
-- `/cpar` landing and `/cpar/explore` baseline flow
+- `/cpar/health` and `/cpar/explore` baseline flow
 - `/cpar/hedge` baseline flow
-- `/cpar/portfolio` baseline flow
-- `/cpar/portfolio` narrow what-if preview flow
+- `/cpar/risk` baseline flow
+- `/cpar/risk` narrow what-if preview flow
 - `not_ready`
 - `unavailable`
 - package mismatch
-- `/cpar/portfolio` fail-closed branches for `not_ready`, `unavailable`, and package mismatch
+- `/cpar/risk` fail-closed branches for `not_ready`, `unavailable`, and package mismatch
 - meta-first gating for detail/account reads when package-level `not_ready` or `unavailable` blocks the page
+- family-route redirects for `/exposures`, `/explore`, `/health`, `/cpar`, and `/cpar/portfolio`
 
 ## Deferred After This Slice
 

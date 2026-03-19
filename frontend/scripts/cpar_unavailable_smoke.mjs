@@ -98,7 +98,7 @@ async function cleanup() {
 }
 
 try {
-  await waitForServer(`${BASE_URL}/cpar`);
+  await waitForServer(`${BASE_URL}/cpar/health`);
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -308,7 +308,7 @@ try {
       return fulfillJson({ error: `Unhandled API route ${pathName}` }, 500);
     });
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/health`, { waitUntil: "domcontentloaded" });
     await page.getByText("cPAR Read Surface Unavailable").waitFor();
     await page.getByText("Neon cPAR read failed.").waitFor();
 
@@ -316,9 +316,9 @@ try {
     await page.getByTestId("cpar-hedge-not-ready").waitFor();
     await page.getByText("cPAR Hedge Unavailable").waitFor();
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-not-ready").waitFor();
-    await page.getByText("cPAR Portfolio Unavailable").waitFor();
+    await page.getByText("cPAR Risk Unavailable").waitFor();
     assert.equal(detailRequestCount, 0);
     assert.equal(portfolioRequestCount, 0);
 
@@ -338,9 +338,9 @@ try {
     assert.equal(await page.getByTestId("cpar-post-hedge-table").count(), 0);
 
     scenario = "portfolio_unavailable";
-    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-error").waitFor();
-    await page.getByText("Portfolio hedge unavailable.").waitFor();
+    await page.getByText("Risk preview unavailable.").waitFor();
     await page.getByText("Shared holdings/source read failed.").waitFor();
 
     if (capturedPageError) {

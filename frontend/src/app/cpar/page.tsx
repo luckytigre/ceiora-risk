@@ -31,11 +31,11 @@ export default function CparLandingPage() {
   return (
     <div className="cpar-page">
       <section className="cpar-page-header">
-        <div className="cpar-section-kicker">cPAR</div>
-        <h1>Package Explorer</h1>
+        <div className="cpar-section-kicker">cPAR / Health</div>
+        <h1>Package Health</h1>
         <p className="cpar-page-copy">
-          cPAR is a parallel model family beside cUSE4. This surface stays intentionally narrow: one active package,
-          one fixed factor registry, one search-led detail flow.
+          cPAR stays package-based and read-only. This page is the lightweight diagnostics surface for the active
+          package, fixed factor registry, warning legend, and the current cPAR workspace layout.
         </p>
       </section>
 
@@ -55,13 +55,25 @@ export default function CparLandingPage() {
       ) : null}
 
       <div className="cpar-two-column">
-        <CparSearchPanel
-          onSelectResult={(item) => {
-            if (!canNavigateCparSearchResult(item)) return;
-            router.push(buildExploreHref(item));
-          }}
-          helperText="Jump into the active package and open one persisted ticker detail view."
-        />
+        <section className="chart-card">
+          <h3>Workspace Routing</h3>
+          <div className="section-subtitle">
+            cPAR now exposes family-local routes under one namespaced shell. `/cpar` redirects to `/cpar/risk`, while
+            this page stays the lightweight package-health surface.
+          </div>
+          <div className="cpar-badge-row">
+            <Link href="/cpar/risk" className="cpar-detail-chip" prefetch={false}>Open /cpar/risk</Link>
+            <Link href="/cpar/explore" className="cpar-detail-chip" prefetch={false}>Open /cpar/explore</Link>
+            <Link href="/cpar/hedge" className="cpar-detail-chip" prefetch={false}>Open /cpar/hedge</Link>
+          </div>
+          <div className="cpar-inline-message neutral">
+            <strong>Low-risk IA migration.</strong>
+            <span>
+              This slice keeps the current cPAR page internals mostly intact while the route family shifts to `/cpar/risk`,
+              `/cpar/explore`, `/cpar/health`, and `/cpar/hedge`.
+            </span>
+          </div>
+        </section>
 
         <section className="chart-card">
           <h3>Warning Legend</h3>
@@ -90,15 +102,17 @@ export default function CparLandingPage() {
       </div>
 
       <section className="chart-card">
-        <h3>Available Workspaces</h3>
+        <h3>Explore Entry Point</h3>
         <div className="section-subtitle">
-          cPAR now exposes three read-only workflows: package discovery, instrument hedge inspection, and one narrow account-level hedge workflow with an optional what-if preview.
+          Health stays diagnostics-first, but you can still jump straight into the active package detail workflow from here.
         </div>
-        <div className="cpar-badge-row">
-          <Link href="/cpar/explore" className="cpar-detail-chip" prefetch={false}>Open /cpar/explore</Link>
-          <Link href="/cpar/hedge" className="cpar-detail-chip" prefetch={false}>Open /cpar/hedge</Link>
-          <Link href="/cpar/portfolio" className="cpar-detail-chip" prefetch={false}>Open /cpar/portfolio</Link>
-        </div>
+        <CparSearchPanel
+          onSelectResult={(item) => {
+            if (!canNavigateCparSearchResult(item)) return;
+            router.push(buildExploreHref(item));
+          }}
+          helperText="Jump into the active package and open one persisted ticker detail view."
+        />
       </section>
 
       {data ? (

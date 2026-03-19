@@ -194,19 +194,19 @@ Examples:
 The dashboard should stay thin. Each page should read one of a small number of serving surfaces rather than rebuilding logic in the browser.
 
 Canonical page-to-backend wiring:
-- `Risk` (`/exposures`)
+- `Risk` (`/cuse/exposures`)
   - reads: `/api/exposures`, `/api/risk`, `/api/portfolio`
   - purpose: factor-level portfolio views plus portfolio risk split and per-position drilldown
-- `Explore`
+- `Explore` (`/cuse/explore`)
   - reads: `/api/universe/search`, `/api/universe/ticker/{ticker}`, `/api/universe/ticker/{ticker}/history`, `/api/universe/factors`, `/api/portfolio`, `/api/portfolio/whatif`
   - purpose: single-name inspection plus account-aware what-if preview against the current live holdings ledger, with optional apply + `serve-refresh` once a scenario is accepted
-- `Positions`
+- `Positions` (`/positions`)
   - reads: `/api/holdings/*`, `/api/portfolio`, `/api/universe/search`
   - purpose: holdings editing/import and current model portfolio view
-- `Data`
+- `Data` (`/data`)
   - reads: `/api/data/diagnostics`
   - purpose: source-table lineage, coverage, cache surfaces, and integrity diagnostics
-- `Health`
+- `Health` (`/cuse/health`)
   - reads: `/api/operator/status`, `/api/risk`, `/api/health/diagnostics`
   - purpose: live operator control-room status plus top-level model quality and deeper model-diagnostics study, loaded on demand because it is the heaviest dashboard page
 

@@ -96,7 +96,7 @@ async function cleanup() {
 }
 
 try {
-  await waitForServer(`${BASE_URL}/cpar`);
+  await waitForServer(`${BASE_URL}/cpar/health`);
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -353,7 +353,7 @@ try {
     assert.equal(await page.getByTestId("cpar-post-hedge-table").count(), 0);
 
     scenario = "portfolio_mismatch";
-    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-package-mismatch").waitFor();
     await page.getByText("Active package changed during read.").waitFor();
     assert.equal(await page.getByTestId("cpar-portfolio-hedge-panel").count(), 0);

@@ -97,7 +97,7 @@ async function gotoWithRetry(page, url, options, attempts = 3) {
 }
 
 try {
-  await waitForServer(`${BASE_URL}/cpar`);
+  await waitForServer(`${BASE_URL}/cpar/health`);
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -339,7 +339,7 @@ try {
       return fulfillJson({ error: `Unhandled API route ${pathName}` }, 500);
     });
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/health`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-not-ready").waitFor();
     await page.getByText("No request-time fitting exists on this page.").waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);
@@ -350,9 +350,9 @@ try {
     await page.getByText("cPAR Hedge Not Ready").waitFor();
     await page.getByText("Publish a durable cPAR package first, then reload.").waitFor();
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-not-ready").waitFor();
-    await page.getByText("cPAR Portfolio Not Ready").waitFor();
+    await page.getByText("cPAR Risk Not Ready").waitFor();
     await page.getByText("This workflow is package-based and read-only. Publish a durable cPAR package first, then reload.").waitFor();
     assert.equal(detailRequestCount, 0);
     assert.equal(portfolioRequestCount, 0);

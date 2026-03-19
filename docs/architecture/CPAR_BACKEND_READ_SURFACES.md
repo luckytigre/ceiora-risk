@@ -12,7 +12,7 @@ Related cPAR docs:
 
 ## Purpose
 
-This slice exposes the backend surfaces used by `/cpar`, `/cpar/explore`, `/cpar/hedge`, and `/cpar/portfolio`.
+This slice exposes the backend surfaces used by `/cpar/risk`, `/cpar/explore`, `/cpar/health`, and `/cpar/hedge`.
 
 It does not add:
 - frontend code

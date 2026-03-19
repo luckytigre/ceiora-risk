@@ -110,7 +110,7 @@ async function cleanup() {
 }
 
 try {
-  await waitForServer(`${BASE_URL}/cpar/portfolio?account_id=acct_main`);
+  await waitForServer(`${BASE_URL}/cpar/risk?account_id=acct_main`);
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -425,7 +425,7 @@ try {
       return fulfillJson({ error: `Unhandled API route ${pathName}` }, 500);
     });
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-package-banner").waitFor();
     await page.getByTestId("cpar-portfolio-account-panel").waitFor();
     await page.getByTestId("cpar-portfolio-overview").waitFor();
