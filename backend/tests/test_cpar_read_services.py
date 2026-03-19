@@ -233,6 +233,40 @@ def test_cpar_meta_service_returns_active_package_and_factor_registry(
     assert payload["factors"][0]["factor_id"] == "SPY"
 
 
+def test_cpar_search_service_pins_one_package_for_the_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    package = _package_run("run_meta", "2026-03-14", universe_count=1)
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: package)
+    monkeypatch.setattr(
+        cpar_outputs,
+        "search_active_package_instrument_fits",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("search_active_package_instrument_fits should not be used")),
+    )
+
+    observed: dict[str, object] = {}
+
+    def fake_search(q: str, *, package_run_id: str, data_db=None):
+        observed["package_run_id"] = package_run_id
+        observed["query"] = q
+        return [
+            {
+                "ticker": "AAPL",
+                "ric": "AAPL.OQ",
+                "display_name": "Apple Inc.",
+                "fit_status": "ok",
+                "warnings": [],
+                "hq_country_code": "US",
+            }
+        ]
+
+    monkeypatch.setattr(cpar_outputs, "search_package_instrument_fits", fake_search)
+
+    payload = cpar_search_service.load_cpar_search_payload(q="aapl", limit=5)
+
+    assert observed["package_run_id"] == "run_meta"
+    assert payload["package_run_id"] == "run_meta"
+    assert payload["results"][0]["ric"] == "AAPL.OQ"
+
+
 def test_cpar_search_service_returns_active_package_hits(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -277,6 +311,40 @@ def test_cpar_ticker_service_returns_ordered_detail_payload(
     assert payload["pre_hedge_factor_variance_proxy"] == 0.2
 
 
+def test_cpar_ticker_service_pins_one_package_for_the_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    package = _package_run("run_meta", "2026-03-14", universe_count=1)
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: package)
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_active_package_instrument_fit",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("load_active_package_instrument_fit should not be used")),
+    )
+
+    observed: dict[str, object] = {}
+
+    def fake_load(ticker: str, *, package_run_id: str, ric: str | None = None, data_db=None):
+        observed["package_run_id"] = package_run_id
+        observed["ticker"] = ticker
+        observed["ric"] = ric
+        return _fit_row(
+            "run_meta",
+            "2026-03-14",
+            ric="AAPL.OQ",
+            ticker="AAPL",
+            display_name="Apple Inc.",
+            raw_loadings={"SPY": 1.2, "XLK": 0.35},
+            thresholded_loadings={"SPY": 1.2, "XLK": 0.35},
+        )
+
+    monkeypatch.setattr(cpar_outputs, "load_package_instrument_fit", fake_load)
+
+    payload = cpar_ticker_service.load_cpar_ticker_payload("AAPL", ric="AAPL.OQ")
+
+    assert observed["package_run_id"] == "run_meta"
+    assert payload["package_run_id"] == "run_meta"
+    assert payload["ric"] == "AAPL.OQ"
+
+
 def test_cpar_hedge_service_returns_factor_neutral_preview_with_stability(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -297,6 +365,50 @@ def test_cpar_hedge_service_returns_factor_neutral_preview_with_stability(
     assert payload["hedge_legs"][0]["factor_id"] == "SPY"
     assert payload["stability"]["leg_overlap_ratio"] is not None
     assert payload["post_hedge_exposures"][0]["factor_id"] == "SPY"
+
+
+def test_cpar_hedge_service_pins_one_package_for_subject_and_covariance(monkeypatch: pytest.MonkeyPatch) -> None:
+    package = _package_run("run_meta", "2026-03-14", universe_count=1)
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: package)
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_active_package_instrument_fit",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("load_active_package_instrument_fit should not be used")),
+    )
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_active_package_covariance_rows",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("load_active_package_covariance_rows should not be used")),
+    )
+
+    observed: dict[str, list[str]] = {"fit_packages": [], "covariance_packages": []}
+
+    def fake_fit(ticker: str, *, package_run_id: str, ric: str | None = None, data_db=None):
+        observed["fit_packages"].append(package_run_id)
+        return _fit_row(
+            "run_meta",
+            "2026-03-14",
+            ric="AAPL.OQ",
+            ticker="AAPL",
+            display_name="Apple Inc.",
+            raw_loadings={"SPY": 1.2, "XLK": 0.35},
+            thresholded_loadings={"SPY": 1.2, "XLK": 0.35},
+        )
+
+    def fake_covariance(package_run_id: str, *, data_db=None, require_complete: bool = False, context_label: str | None = None):
+        observed["covariance_packages"].append(package_run_id)
+        return _covariance_rows("run_meta", "2026-03-14", ["SPY", "XLK"])
+
+    monkeypatch.setattr(cpar_outputs, "load_package_instrument_fit", fake_fit)
+    monkeypatch.setattr(cpar_outputs, "load_package_covariance_rows", fake_covariance)
+    monkeypatch.setattr(cpar_outputs, "load_previous_successful_instrument_fit", lambda **kwargs: None)
+
+    payload = cpar_hedge_service.load_cpar_hedge_payload("AAPL", ric="AAPL.OQ", mode="factor_neutral")
+
+    assert observed["fit_packages"] == ["run_meta"]
+    assert observed["covariance_packages"] == ["run_meta"]
+    assert payload["package_run_id"] == "run_meta"
+    assert payload["hedge_status"] == "hedge_ok"
 
 
 def test_cpar_hedge_service_maps_missing_active_covariance_to_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -323,7 +435,7 @@ def test_cpar_hedge_service_maps_missing_active_covariance_to_not_ready(monkeypa
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_instrument_fit",
+        "load_package_instrument_fit",
         lambda **kwargs: _fit_row(
             "run_curr",
             "2026-03-14",
@@ -336,8 +448,8 @@ def test_cpar_hedge_service_maps_missing_active_covariance_to_not_ready(monkeypa
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_covariance_rows",
-        lambda **kwargs: (_ for _ in ()).throw(
+        "load_package_covariance_rows",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
             cpar_outputs.CparPackageNotReady(
                 "Active cPAR package is missing covariance rows in the cloud-serve authority store."
             )
@@ -372,7 +484,7 @@ def test_cpar_hedge_service_maps_partial_active_covariance_to_not_ready(monkeypa
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_instrument_fit",
+        "load_package_instrument_fit",
         lambda **kwargs: _fit_row(
             "run_curr",
             "2026-03-14",
@@ -385,8 +497,8 @@ def test_cpar_hedge_service_maps_partial_active_covariance_to_not_ready(monkeypa
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_covariance_rows",
-        lambda **kwargs: (_ for _ in ()).throw(
+        "load_package_covariance_rows",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
             cpar_outputs.CparPackageNotReady(
                 "Active cPAR package has incomplete covariance coverage for package_run_id=run_curr. Missing factor pairs include SPY/XLK."
             )
@@ -423,7 +535,7 @@ def test_cpar_hedge_service_ignores_incomplete_previous_covariance_for_optional_
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_instrument_fit",
+        "load_package_instrument_fit",
         lambda **kwargs: _fit_row(
             "run_curr",
             "2026-03-14",
@@ -436,8 +548,16 @@ def test_cpar_hedge_service_ignores_incomplete_previous_covariance_for_optional_
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_covariance_rows",
-        lambda **kwargs: _covariance_rows("run_curr", "2026-03-14", ["SPY", "XLK"]),
+        "load_package_covariance_rows",
+        lambda package_run_id, **kwargs: (
+            _covariance_rows("run_curr", "2026-03-14", ["SPY", "XLK"])
+            if package_run_id == "run_curr"
+            else (_ for _ in ()).throw(
+                cpar_outputs.CparPackageNotReady(
+                    "Previous cPAR package used for hedge stability diagnostics has incomplete covariance coverage."
+                )
+            )
+        ),
     )
     monkeypatch.setattr(
         cpar_outputs,
@@ -452,16 +572,6 @@ def test_cpar_hedge_service_ignores_incomplete_previous_covariance_for_optional_
             thresholded_loadings={"SPY": 1.0, "XLK": 0.20},
         ),
     )
-    monkeypatch.setattr(
-        cpar_outputs,
-        "load_package_covariance_rows",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            cpar_outputs.CparPackageNotReady(
-                "Previous cPAR package used for hedge stability diagnostics has incomplete covariance coverage."
-            )
-        ),
-    )
-
     payload = cpar_hedge_service.load_cpar_hedge_payload(
         "AAPL",
         ric="AAPL.OQ",
@@ -501,7 +611,7 @@ def test_cpar_hedge_service_ignores_unreadable_previous_covariance_for_optional_
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_instrument_fit",
+        "load_package_instrument_fit",
         lambda **kwargs: _fit_row(
             "run_curr",
             "2026-03-14",
@@ -514,8 +624,16 @@ def test_cpar_hedge_service_ignores_unreadable_previous_covariance_for_optional_
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_covariance_rows",
-        lambda **kwargs: _covariance_rows("run_curr", "2026-03-14", ["SPY", "XLK"]),
+        "load_package_covariance_rows",
+        lambda package_run_id, **kwargs: (
+            _covariance_rows("run_curr", "2026-03-14", ["SPY", "XLK"])
+            if package_run_id == "run_curr"
+            else (_ for _ in ()).throw(
+                cpar_outputs.CparAuthorityReadError(
+                    "Neon cPAR read failed during query execution: RuntimeError: connection lost"
+                )
+            )
+        ),
     )
     monkeypatch.setattr(
         cpar_outputs,
@@ -530,16 +648,6 @@ def test_cpar_hedge_service_ignores_unreadable_previous_covariance_for_optional_
             thresholded_loadings={"SPY": 1.0, "XLK": 0.20},
         ),
     )
-    monkeypatch.setattr(
-        cpar_outputs,
-        "load_package_covariance_rows",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            cpar_outputs.CparAuthorityReadError(
-                "Neon cPAR read failed during query execution: RuntimeError: connection lost"
-            )
-        ),
-    )
-
     payload = cpar_hedge_service.load_cpar_hedge_payload(
         "AAPL",
         ric="AAPL.OQ",
@@ -579,7 +687,7 @@ def test_cpar_hedge_service_ignores_generic_previous_covariance_failure_for_opti
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_instrument_fit",
+        "load_package_instrument_fit",
         lambda **kwargs: _fit_row(
             "run_curr",
             "2026-03-14",
@@ -592,8 +700,12 @@ def test_cpar_hedge_service_ignores_generic_previous_covariance_failure_for_opti
     )
     monkeypatch.setattr(
         cpar_outputs,
-        "load_active_package_covariance_rows",
-        lambda **kwargs: _covariance_rows("run_curr", "2026-03-14", ["SPY", "XLK"]),
+        "load_package_covariance_rows",
+        lambda package_run_id, **kwargs: (
+            _covariance_rows("run_curr", "2026-03-14", ["SPY", "XLK"])
+            if package_run_id == "run_curr"
+            else (_ for _ in ()).throw(RuntimeError("previous covariance decode failed"))
+        ),
     )
     monkeypatch.setattr(
         cpar_outputs,
@@ -608,12 +720,6 @@ def test_cpar_hedge_service_ignores_generic_previous_covariance_failure_for_opti
             thresholded_loadings={"SPY": 1.0, "XLK": 0.20},
         ),
     )
-    monkeypatch.setattr(
-        cpar_outputs,
-        "load_package_covariance_rows",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("previous covariance decode failed")),
-    )
-
     payload = cpar_hedge_service.load_cpar_hedge_payload(
         "AAPL",
         ric="AAPL.OQ",

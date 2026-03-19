@@ -47,7 +47,11 @@ def load_cpar_search_payload(
             "results": [],
         }
     try:
-        rows = cpar_outputs.search_active_package_instrument_fits(clean_q, data_db=data_db)
+        rows = cpar_outputs.search_package_instrument_fits(
+            clean_q,
+            package_run_id=str(package["package_run_id"]),
+            data_db=data_db,
+        )
     except cpar_outputs.CparPackageNotReady as exc:
         raise cpar_meta_service.CparReadNotReady(str(exc)) from exc
     except cpar_outputs.CparAuthorityReadError as exc:

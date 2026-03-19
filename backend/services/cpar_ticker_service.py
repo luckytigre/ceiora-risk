@@ -34,8 +34,9 @@ def load_cpar_ticker_payload(
 ) -> dict[str, object]:
     package = cpar_meta_service.require_active_package(data_db=data_db)
     try:
-        fit = cpar_outputs.load_active_package_instrument_fit(
+        fit = cpar_outputs.load_package_instrument_fit(
             ticker=ticker,
+            package_run_id=str(package["package_run_id"]),
             ric=ric,
             data_db=data_db,
         )

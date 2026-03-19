@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -20,7 +21,8 @@ StageCallback = Callable[[dict[str, Any]], None]
 
 
 def _default_run_id() -> str:
-    return f"cpar_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return f"cpar_{timestamp}_{uuid.uuid4().hex[:8]}"
 
 
 def _resolve_data_db(data_db: Path | None = None) -> Path:

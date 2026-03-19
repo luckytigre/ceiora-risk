@@ -55,8 +55,8 @@ function CparExplorePageInner() {
         <div className="cpar-section-kicker">cPAR / Explore</div>
         <h1>Active Package Detail</h1>
         <p className="cpar-page-copy">
-          Search one persisted instrument, inspect raw and thresholded loadings, then derive the hedge preview from
-          the package already on disk.
+          Search one persisted instrument, inspect raw and thresholded loadings, and then hand off to the dedicated
+          hedge workspace when you want hedge-specific interpretation.
         </p>
       </section>
 
@@ -93,12 +93,12 @@ function CparExplorePageInner() {
             </div>
           ) : !ticker ? (
             <div className="detail-history-empty">
-              Select a search result to load one cPAR package row and its persisted hedge preview.
+              Select a search result to load one cPAR package row and review its persisted fit detail.
             </div>
           ) : metaState ? (
             <div className="cpar-inline-message warning">
               <strong>Current package metadata is unavailable.</strong>
-              <span>Reload after the active cPAR package is readable again before opening detail or hedge output.</span>
+              <span>Reload after the active cPAR package is readable again before opening detail or the hedge workspace.</span>
             </div>
           ) : detailLoading && !detail ? (
             <AnalyticsLoadingViz message={`Loading cPAR detail for ${ric || ticker}...`} />

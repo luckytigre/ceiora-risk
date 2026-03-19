@@ -86,12 +86,18 @@ def load_cpar_hedge_payload(
     package = cpar_meta_service.require_active_package(data_db=data_db)
     previous_weights: dict[str, float] | None = None
     try:
-        fit = cpar_outputs.load_active_package_instrument_fit(
+        fit = cpar_outputs.load_package_instrument_fit(
             ticker=ticker,
+            package_run_id=str(package["package_run_id"]),
             ric=ric,
             data_db=data_db,
         )
-        covariance_rows = cpar_outputs.load_active_package_covariance_rows(data_db=data_db)
+        covariance_rows = cpar_outputs.load_package_covariance_rows(
+            str(package["package_run_id"]),
+            data_db=data_db,
+            require_complete=True,
+            context_label="Active cPAR package",
+        )
     except cpar_outputs.CparPackageNotReady as exc:
         raise cpar_meta_service.CparReadNotReady(str(exc)) from exc
     except cpar_outputs.CparAuthorityReadError as exc:

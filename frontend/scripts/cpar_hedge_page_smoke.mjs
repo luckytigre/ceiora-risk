@@ -201,6 +201,9 @@ try {
       }
 
       if (method === "GET" && pathName === "/api/cpar/ticker/AAPL") {
+        if (!requestUrl.searchParams.get("ric")) {
+          return fulfillJson({ detail: "Ambiguous cPAR instrument fit for ticker AAPL" }, 409);
+        }
         return fulfillJson({
           package_run_id: "run_curr",
           package_date: "2026-03-14",
@@ -296,6 +299,11 @@ try {
 
       return fulfillJson({ error: `Unhandled API route ${pathName}` }, 500);
     });
+
+    await gotoWithRetry(page, `${BASE_URL}/cpar/hedge?ticker=AAPL`, { waitUntil: "domcontentloaded" });
+    await page.getByTestId("cpar-hedge-subject-panel").getByText("Ticker is ambiguous.").waitFor();
+    await page.getByTestId("cpar-hedge-subject-panel").getByText("Choose a specific RIC from the search results on the left.").waitFor();
+    assert.equal(await page.getByTestId("cpar-hedge-panel").count(), 0);
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/hedge?ric=AAPL.NA`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-hedge-subject-panel").getByText("RIC result cannot open hedge directly.").waitFor();

@@ -232,6 +232,38 @@ def test_cpar_hedge_route_maps_not_ready_to_503(monkeypatch) -> None:
     assert res.json()["detail"]["error"] == "cpar_not_ready"
 
 
+def test_cpar_hedge_route_maps_ambiguous_ticker_to_409(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_hedge_service,
+        "load_cpar_hedge_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_routes.cpar_meta_service.CparTickerAmbiguous("Ambiguous cPAR instrument fit for ticker AAPL")
+        ),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/ticker/AAPL/hedge?mode=factor_neutral")
+
+    assert res.status_code == 409
+    assert "Ambiguous" in res.json()["detail"]
+
+
+def test_cpar_hedge_route_maps_missing_ticker_to_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_hedge_service,
+        "load_cpar_hedge_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_routes.cpar_meta_service.CparTickerNotFound("Ticker AAPL was not found in the active cPAR package.")
+        ),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/ticker/AAPL/hedge?mode=factor_neutral")
+
+    assert res.status_code == 404
+    assert "not found" in res.json()["detail"].lower()
+
+
 def test_router_registry_includes_cpar_router() -> None:
     registry_path = Path("backend/api/router_registry.py")
     module = ast.parse(registry_path.read_text())

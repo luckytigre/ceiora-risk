@@ -331,17 +331,30 @@ def search_active_package_instrument_fits(
     data_db: Path | None = None,
 ) -> list[dict[str, Any]]:
     package = require_active_package_run(data_db=data_db)
+    return search_package_instrument_fits(
+        q,
+        package_run_id=str(package["package_run_id"]),
+        data_db=data_db,
+    )
+
+
+def search_package_instrument_fits(
+    q: str,
+    *,
+    package_run_id: str,
+    data_db: Path | None = None,
+) -> list[dict[str, Any]]:
     if _use_neon_reads():
         rows = cpar_queries.active_package_search_rows(
             lambda sql, params=None: _neon_fetch(sql, params),
-            package_run_id=package["package_run_id"],
+            package_run_id=package_run_id,
             q=q,
         )
         if rows or config.cloud_mode():
             return rows
     return cpar_queries.active_package_search_rows(
         lambda sql, params=None: _sqlite_fetch_rows(sql, params, data_db=data_db),
-        package_run_id=package["package_run_id"],
+        package_run_id=package_run_id,
         q=q,
     )
 
@@ -353,10 +366,25 @@ def load_active_package_instrument_fit(
     data_db: Path | None = None,
 ) -> dict[str, Any] | None:
     package = require_active_package_run(data_db=data_db)
+    return load_package_instrument_fit(
+        ticker,
+        package_run_id=str(package["package_run_id"]),
+        ric=ric,
+        data_db=data_db,
+    )
+
+
+def load_package_instrument_fit(
+    ticker: str,
+    *,
+    package_run_id: str,
+    ric: str | None = None,
+    data_db: Path | None = None,
+) -> dict[str, Any] | None:
     if _use_neon_reads():
         fit = cpar_queries.active_package_instrument_fit(
             lambda sql, params=None: _neon_fetch(sql, params),
-            package_run_id=package["package_run_id"],
+            package_run_id=package_run_id,
             ticker=ticker,
             ric=ric,
         )
@@ -364,7 +392,7 @@ def load_active_package_instrument_fit(
             return fit
     return cpar_queries.active_package_instrument_fit(
         lambda sql, params=None: _sqlite_fetch_rows(sql, params, data_db=data_db),
-        package_run_id=package["package_run_id"],
+        package_run_id=package_run_id,
         ticker=ticker,
         ric=ric,
     )

@@ -30,6 +30,8 @@ Python entrypoint:
 CLI wrapper:
 - `backend/scripts/run_cpar_pipeline.py`
 
+Default generated `run_id` values include a UTC timestamp plus a short random suffix so concurrent or same-second cPAR builds do not collide on `package_run_id`.
+
 ## Supported Profiles
 
 `cpar-weekly`

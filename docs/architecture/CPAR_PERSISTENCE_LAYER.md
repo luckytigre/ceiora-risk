@@ -90,6 +90,7 @@ Writes replace child rows by `package_run_id` for:
 
 The package-runs table keeps one row per `package_run_id`.
 Same-date reruns therefore do not overwrite a prior successful package’s child rows.
+The default cPAR pipeline-generated `package_run_id` includes timestamp plus entropy so same-second builds remain distinct durable attempts.
 Local SQLite schema creation also fails closed on stale cPAR table layouts by rebuilding mismatched cPAR tables before writes continue.
 `status='ok'` package writes also fail closed if any durable child surface is empty.
 

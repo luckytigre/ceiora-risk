@@ -323,6 +323,24 @@ def test_cpar_cli_returns_nonzero_when_pipeline_fails(monkeypatch: pytest.Monkey
     assert run_cpar_pipeline.main() == 1
 
 
+def test_default_run_id_is_unique_even_with_same_timestamp(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixed_now = run_cpar_pipeline.datetime(2026, 3, 19, 12, 0, 0, 123456, tzinfo=run_cpar_pipeline.timezone.utc)
+
+    class FrozenDatetime:
+        @staticmethod
+        def now(tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(run_cpar_pipeline, "datetime", FrozenDatetime)
+
+    first = run_cpar_pipeline._default_run_id()
+    second = run_cpar_pipeline._default_run_id()
+
+    assert first.startswith("cpar_20260319T120000123456Z_")
+    assert second.startswith("cpar_20260319T120000123456Z_")
+    assert first != second
+
+
 def test_local_ingest_build_persists_expected_cpar_outputs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

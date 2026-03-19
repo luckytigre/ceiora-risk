@@ -1,6 +1,6 @@
 # cPAR Backend Read Surfaces
 
-Date: 2026-03-18
+Date: 2026-03-19
 Status: Active slice-4 read-only backend implementation notes
 Owner: Codex
 
@@ -12,7 +12,7 @@ Related cPAR docs:
 
 ## Purpose
 
-This slice exposes the minimal backend read surfaces needed for `/cpar` and `/cpar/explore`.
+This slice exposes the backend read surfaces used by `/cpar`, `/cpar/explore`, and `/cpar/hedge`.
 
 It does not add:
 - frontend code
@@ -43,6 +43,7 @@ It does not add:
 ## Read Authority
 
 All cPAR read routes use the durable relational `cpar_*` tables through the cPAR data facade.
+Each backend response pins one active `package_run_id` before reading dependent rows, so one payload does not silently mix active-package metadata from one package with fit or covariance reads from a later package.
 
 These routes do not:
 - read `serving_payload_current`
@@ -87,7 +88,6 @@ The hedge route:
 ## Explicit Deferred Items
 
 This slice still does not include:
-- frontend `/cpar` pages
 - cPAR operator surfaces
 - cPAR runtime-state keys
 - cPAR serving-payload surfaces
