@@ -82,7 +82,8 @@ The hedge route:
 - uses persisted thresholded loadings for the requested fit row
 - uses persisted covariance rows for the active package
 - optionally derives stability diagnostics from the previous successful persisted fit and its covariance rows
-- if the previous package needed for stability has missing, partial, or unreadable covariance coverage, the route still returns the current hedge preview and leaves stability metrics unset
+- if the optional previous-package fit lookup or covariance read is unreadable, or if that previous covariance coverage is partial, the route still returns the current hedge preview and leaves stability metrics unset
+- unexpected previous-package decode or hedge-construction errors are not swallowed; they still surface as real defects
 - never refits the model on request
 
 ## Explicit Deferred Items

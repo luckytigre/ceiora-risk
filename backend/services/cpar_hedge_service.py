@@ -129,7 +129,7 @@ def load_cpar_hedge_payload(
                 fit_status=str(previous_fit.get("fit_status") or ""),
             )
             previous_weights = dict(previous_preview.hedge_weights)
-    except Exception:
+    except (cpar_outputs.CparPackageNotReady, cpar_outputs.CparAuthorityReadError):
         previous_weights = None
     preview = hedge_engine.build_hedge_preview(
         mode=mode,

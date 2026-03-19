@@ -661,7 +661,71 @@ def test_cpar_hedge_service_ignores_unreadable_previous_covariance_for_optional_
     assert payload["stability"]["net_hedge_notional_change"] is None
 
 
-def test_cpar_hedge_service_ignores_generic_previous_covariance_failure_for_optional_stability(
+def test_cpar_hedge_service_ignores_unreadable_previous_fit_lookup_for_optional_stability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_meta_service,
+        "require_active_package",
+        lambda **kwargs: {
+            "package_run_id": "run_curr",
+            "package_date": "2026-03-14",
+            "profile": "cpar-weekly",
+            "method_version": "cPAR1",
+            "factor_registry_version": "cPAR1_registry_v1",
+            "data_authority": "neon",
+            "lookback_weeks": 52,
+            "half_life_weeks": 26,
+            "min_observations": 39,
+            "source_prices_asof": "2026-03-14",
+            "classification_asof": "2026-03-14",
+            "universe_count": 1,
+            "fit_ok_count": 1,
+            "fit_limited_count": 0,
+            "fit_insufficient_count": 0,
+        },
+    )
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_package_instrument_fit",
+        lambda **kwargs: _fit_row(
+            "run_curr",
+            "2026-03-14",
+            ric="AAPL.OQ",
+            ticker="AAPL",
+            display_name="Apple Inc.",
+            raw_loadings={"SPY": 1.2, "XLK": 0.35},
+            thresholded_loadings={"SPY": 1.2, "XLK": 0.35},
+        ),
+    )
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_package_covariance_rows",
+        lambda package_run_id, **kwargs: _covariance_rows("run_curr", "2026-03-14", ["SPY", "XLK"]),
+    )
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_previous_successful_instrument_fit",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_outputs.CparAuthorityReadError(
+                "Neon cPAR read failed during query execution: RuntimeError: previous fit lookup lost connection"
+            )
+        ),
+    )
+    payload = cpar_hedge_service.load_cpar_hedge_payload(
+        "AAPL",
+        ric="AAPL.OQ",
+        mode="factor_neutral",
+    )
+
+    assert payload["hedge_status"] == "hedge_ok"
+    assert payload["hedge_legs"][0]["factor_id"] == "SPY"
+    assert payload["stability"]["leg_overlap_ratio"] is None
+    assert payload["stability"]["gross_hedge_notional_change"] is None
+    assert payload["stability"]["net_hedge_notional_change"] is None
+
+
+def test_cpar_hedge_service_raises_generic_previous_stability_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -720,17 +784,13 @@ def test_cpar_hedge_service_ignores_generic_previous_covariance_failure_for_opti
             thresholded_loadings={"SPY": 1.0, "XLK": 0.20},
         ),
     )
-    payload = cpar_hedge_service.load_cpar_hedge_payload(
-        "AAPL",
-        ric="AAPL.OQ",
-        mode="factor_neutral",
-    )
 
-    assert payload["hedge_status"] == "hedge_ok"
-    assert payload["hedge_legs"][0]["factor_id"] == "SPY"
-    assert payload["stability"]["leg_overlap_ratio"] is None
-    assert payload["stability"]["gross_hedge_notional_change"] is None
-    assert payload["stability"]["net_hedge_notional_change"] is None
+    with pytest.raises(RuntimeError, match="previous covariance decode failed"):
+        cpar_hedge_service.load_cpar_hedge_payload(
+            "AAPL",
+            ric="AAPL.OQ",
+            mode="factor_neutral",
+        )
 
 
 def test_cpar_meta_service_fails_closed_when_no_package_exists(
