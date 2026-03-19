@@ -59,7 +59,7 @@ def resolve_effective_risk_engine_meta(
         "risk_engine_meta",
         fallback_loader=fallback_loader,
     ) or {}
-    persisted_meta = model_outputs.load_latest_persisted_risk_engine_state() or {}
+    persisted_meta = model_outputs.load_latest_rebuild_authority_risk_engine_state() or {}
     runtime_score = risk_engine_meta_score(runtime_meta)
     persisted_score = risk_engine_meta_score(persisted_meta)
     if persisted_score > runtime_score:

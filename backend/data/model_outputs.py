@@ -29,75 +29,108 @@ def _neon_model_output_writes_required() -> bool:
         and config.neon_primary_model_data_enabled()
     )
 
+def _resolve_data_db(data_db: Path | None = None) -> Path:
+    return Path(data_db or config.DATA_DB_PATH)
+
+
+def _load_latest_sqlite_payload(
+    sqlite_loader,
+    *,
+    data_db: Path | None = None,
+) -> dict[str, Any]:
+    db_path = _resolve_data_db(data_db)
+    if not db_path.exists():
+        return {}
+    conn = sqlite3.connect(str(db_path))
+    try:
+        schema.ensure_schema(conn)
+        payload = sqlite_loader(conn)
+    finally:
+        conn.close()
+    return payload if isinstance(payload, dict) else {}
+
+
+def _load_latest_neon_payload(pg_loader) -> dict[str, Any]:
+    if not _neon_model_output_writes_enabled():
+        return {}
+    try:
+        conn = connect(dsn=resolve_dsn(None), autocommit=True)
+    except Exception:
+        return {}
+    try:
+        payload = pg_loader(conn)
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+    return payload if isinstance(payload, dict) else {}
+
+
+def _rebuild_authority_uses_neon() -> bool:
+    return bool(
+        _neon_model_output_writes_enabled()
+        and config.neon_authoritative_rebuilds_enabled()
+    )
+
+
+def load_latest_rebuild_authority_risk_engine_state() -> dict[str, Any]:
+    """Read model metadata from the current rebuild-authority store."""
+    if _rebuild_authority_uses_neon():
+        return _load_latest_neon_payload(state.pg_latest_risk_engine_state)
+    return _load_latest_sqlite_payload(state.latest_risk_engine_state)
+
+
+def load_latest_rebuild_authority_covariance_payload() -> dict[str, Any]:
+    """Read covariance from the current rebuild-authority store."""
+    if _rebuild_authority_uses_neon():
+        return _load_latest_neon_payload(state.pg_latest_covariance_payload)
+    return _load_latest_sqlite_payload(state.latest_covariance_payload)
+
+
+def load_latest_rebuild_authority_specific_risk_payload() -> dict[str, Any]:
+    """Read specific risk from the current rebuild-authority store."""
+    if _rebuild_authority_uses_neon():
+        return _load_latest_neon_payload(state.pg_latest_specific_risk_payload)
+    return _load_latest_sqlite_payload(state.latest_specific_risk_payload)
+
+
+def load_latest_local_diagnostic_risk_engine_state() -> dict[str, Any]:
+    """Read local SQLite model metadata for diagnostics and archive inspection."""
+    return _load_latest_sqlite_payload(state.latest_risk_engine_state)
+
+
+def load_latest_local_diagnostic_covariance_payload() -> dict[str, Any]:
+    """Read local SQLite covariance for diagnostics and archive inspection."""
+    return _load_latest_sqlite_payload(state.latest_covariance_payload)
+
+
+def load_latest_local_diagnostic_specific_risk_payload() -> dict[str, Any]:
+    """Read local SQLite specific risk for diagnostics and archive inspection."""
+    return _load_latest_sqlite_payload(state.latest_specific_risk_payload)
+
+
 def load_latest_persisted_risk_engine_state() -> dict[str, Any]:
-    data_db = Path(config.DATA_DB_PATH)
-    if not data_db.exists():
-        local_state: dict[str, Any] = {}
-    else:
-        conn = sqlite3.connect(str(data_db))
-        try:
-            schema.ensure_schema(conn)
-            local_state = state.latest_risk_engine_state(conn)
-        finally:
-            conn.close()
-        if local_state:
-            return local_state
-    if _neon_model_output_writes_enabled():
-        try:
-            conn = connect(dsn=resolve_dsn(None), autocommit=True)
-            try:
-                return state.pg_latest_risk_engine_state(conn)
-            finally:
-                conn.close()
-        except Exception:
-            pass
-    return {}
+    """Compatibility wrapper. Prefer explicit rebuild-authority or diagnostics readers."""
+    local_state = load_latest_local_diagnostic_risk_engine_state()
+    if local_state:
+        return local_state
+    return _load_latest_neon_payload(state.pg_latest_risk_engine_state)
 
 
 def load_latest_persisted_covariance_payload() -> dict[str, Any]:
-    data_db = Path(config.DATA_DB_PATH)
-    if data_db.exists():
-        conn = sqlite3.connect(str(data_db))
-        try:
-            schema.ensure_schema(conn)
-            local_payload = state.latest_covariance_payload(conn)
-        finally:
-            conn.close()
-        if local_payload:
-            return local_payload
-    if _neon_model_output_writes_enabled():
-        try:
-            conn = connect(dsn=resolve_dsn(None), autocommit=True)
-            try:
-                return state.pg_latest_covariance_payload(conn)
-            finally:
-                conn.close()
-        except Exception:
-            pass
-    return {}
+    """Compatibility wrapper. Prefer explicit rebuild-authority or diagnostics readers."""
+    local_payload = load_latest_local_diagnostic_covariance_payload()
+    if local_payload:
+        return local_payload
+    return _load_latest_neon_payload(state.pg_latest_covariance_payload)
 
 
 def load_latest_persisted_specific_risk_payload() -> dict[str, Any]:
-    data_db = Path(config.DATA_DB_PATH)
-    if data_db.exists():
-        conn = sqlite3.connect(str(data_db))
-        try:
-            schema.ensure_schema(conn)
-            local_payload = state.latest_specific_risk_payload(conn)
-        finally:
-            conn.close()
-        if local_payload:
-            return local_payload
-    if _neon_model_output_writes_enabled():
-        try:
-            conn = connect(dsn=resolve_dsn(None), autocommit=True)
-            try:
-                return state.pg_latest_specific_risk_payload(conn)
-            finally:
-                conn.close()
-        except Exception:
-            pass
-    return {}
+    """Compatibility wrapper. Prefer explicit rebuild-authority or diagnostics readers."""
+    local_payload = load_latest_local_diagnostic_specific_risk_payload()
+    if local_payload:
+        return local_payload
+    return _load_latest_neon_payload(state.pg_latest_specific_risk_payload)
 
 
 def persist_model_outputs(

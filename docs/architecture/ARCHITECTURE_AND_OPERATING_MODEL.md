@@ -153,6 +153,9 @@ Key rule:
 - Ordinary `core-weekly` recomputes should ignore deeper source/archive history outside that retained model window.
 - The intended rebuild authority is Neon so the tool can run standalone after local LSEG ingest publishes forward.
 - While `NEON_AUTHORITATIVE_REBUILDS=false`, local SQLite still remains the actual rebuild authority for core/cold-core.
+- Durable `model_outputs` readers are contract-split:
+  - rebuild-authority readers follow the currently configured rebuild authority
+  - local diagnostic readers inspect only the local SQLite archive and must not be treated as app-serving truth
 - When rebuild lanes use a workspace/local override, the orchestrator now passes explicit `data_db` / `cache_db` targets through execution instead of mutating process-wide runtime paths.
 - The risk-model math window is narrower than retained model history:
   - covariance / specific risk use `LOOKBACK_DAYS` (currently ~2 trading years)

@@ -198,11 +198,19 @@ def test_model_outputs_load_latest_persisted_covariance_and_specific_risk(
 
     cov_payload = model_outputs.load_latest_persisted_covariance_payload()
     specific_payload = model_outputs.load_latest_persisted_specific_risk_payload()
+    rebuild_cov_payload = model_outputs.load_latest_rebuild_authority_covariance_payload()
+    rebuild_specific_payload = model_outputs.load_latest_rebuild_authority_specific_risk_payload()
+    diagnostic_cov_payload = model_outputs.load_latest_local_diagnostic_covariance_payload()
+    diagnostic_specific_payload = model_outputs.load_latest_local_diagnostic_specific_risk_payload()
 
     assert cov_payload["factors"] == ["market", "style_beta_score"]
     assert cov_payload["matrix"] == [[0.04, 0.01], [0.01, 0.09]]
     assert specific_payload["AAPL.OQ"]["ticker"] == "AAPL"
     assert specific_payload["AAPL.OQ"]["specific_var"] == 0.01
+    assert rebuild_cov_payload == cov_payload
+    assert rebuild_specific_payload == specific_payload
+    assert diagnostic_cov_payload == cov_payload
+    assert diagnostic_specific_payload == specific_payload
 
 
 def test_load_latest_persisted_risk_engine_state_backfills_latest_r2_from_factor_returns(
@@ -300,7 +308,11 @@ def test_load_latest_persisted_risk_engine_state_backfills_latest_r2_from_factor
     conn.close()
 
     state = model_outputs.load_latest_persisted_risk_engine_state()
+    rebuild_state = model_outputs.load_latest_rebuild_authority_risk_engine_state()
+    diagnostic_state = model_outputs.load_latest_local_diagnostic_risk_engine_state()
 
     assert state["factor_returns_latest_date"] == "2026-03-13"
     assert state["latest_r2"] == pytest.approx(0.42)
     assert state["estimation_exposure_anchor_date"] == "2026-03-06"
+    assert rebuild_state == state
+    assert diagnostic_state == state

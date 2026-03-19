@@ -26,7 +26,7 @@ def _effective_risk_engine_meta() -> dict[str, Any]:
     runtime_meta = cache_get_live_first("risk_engine_meta") or {}
     if isinstance(runtime_meta, dict) and runtime_meta:
         return runtime_meta
-    return model_outputs.load_latest_persisted_risk_engine_state()
+    return model_outputs.load_latest_local_diagnostic_risk_engine_state()
 
 
 def build_data_diagnostics_payload(

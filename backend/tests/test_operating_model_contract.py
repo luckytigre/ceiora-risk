@@ -23,17 +23,17 @@ class _StopRefresh(Exception):
 def _stub_persisted_model_state_reads(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_risk_engine_state",
+        "load_latest_rebuild_authority_risk_engine_state",
         lambda: {},
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_covariance_payload",
+        "load_latest_rebuild_authority_covariance_payload",
         lambda: {},
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_specific_risk_payload",
+        "load_latest_rebuild_authority_specific_risk_payload",
         lambda: {},
     )
 
@@ -347,7 +347,7 @@ def test_pipeline_prefers_fundamentals_asof(monkeypatch: pytest.MonkeyPatch) -> 
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_risk_engine_state",
+        "load_latest_rebuild_authority_risk_engine_state",
         lambda: dict(risk_meta),
     )
     monkeypatch.setattr(
@@ -1145,7 +1145,7 @@ def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_risk_engine_state",
+        "load_latest_rebuild_authority_risk_engine_state",
         lambda: {},
     )
 
@@ -1188,7 +1188,7 @@ def test_resolve_effective_risk_engine_meta_prefers_persisted_model_run_state(
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_risk_engine_state",
+        "load_latest_rebuild_authority_risk_engine_state",
         lambda: persisted_meta,
     )
     monkeypatch.setattr(
@@ -1240,7 +1240,7 @@ def test_resolve_effective_risk_engine_meta_enriches_runtime_with_persisted_late
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_risk_engine_state",
+        "load_latest_rebuild_authority_risk_engine_state",
         lambda: persisted_meta,
     )
 
@@ -1321,7 +1321,7 @@ def test_run_refresh_light_mode_prefers_persisted_model_run_state_over_stale_run
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_risk_engine_state",
+        "load_latest_rebuild_authority_risk_engine_state",
         lambda: persisted_meta,
     )
     monkeypatch.setattr(
@@ -1537,17 +1537,17 @@ def test_run_refresh_uses_persisted_risk_artifacts_when_runtime_cache_is_degrade
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_risk_engine_state",
+        "load_latest_rebuild_authority_risk_engine_state",
         lambda: persisted_meta,
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_covariance_payload",
+        "load_latest_rebuild_authority_covariance_payload",
         lambda: persisted_cov,
     )
     monkeypatch.setattr(
         pipeline.model_outputs,
-        "load_latest_persisted_specific_risk_payload",
+        "load_latest_rebuild_authority_specific_risk_payload",
         lambda: persisted_specific,
     )
     monkeypatch.setattr(

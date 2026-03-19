@@ -204,3 +204,75 @@ def test_persist_model_outputs_falls_back_to_sqlite_when_neon_optional(
     assert out["authority_store"] == "sqlite"
     assert out["neon_write"]["status"] == "error"
     assert out["sqlite_mirror_write"]["status"] == "ok"
+
+
+def test_rebuild_authority_reader_prefers_neon_when_neon_rebuilds_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(model_outputs.config, "neon_dsn", lambda: "postgresql://example")
+    monkeypatch.setattr(model_outputs.config, "neon_authoritative_rebuilds_enabled", lambda: True)
+    monkeypatch.setattr(model_outputs, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(model_outputs, "resolve_dsn", lambda _dsn=None: "postgresql://example")
+    monkeypatch.setattr(
+        model_outputs.state,
+        "latest_risk_engine_state",
+        lambda _conn: (_ for _ in ()).throw(AssertionError("should not read local rebuild authority")),
+    )
+    monkeypatch.setattr(
+        model_outputs.state,
+        "pg_latest_risk_engine_state",
+        lambda _pg_conn: {"method_version": "neon_authority"},
+    )
+
+    out = model_outputs.load_latest_rebuild_authority_risk_engine_state()
+
+    assert out["method_version"] == "neon_authority"
+
+
+def test_local_diagnostic_reader_stays_local_when_neon_rebuilds_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_db = tmp_path / "data.db"
+    data_db.touch()
+    monkeypatch.setattr(model_outputs.config, "DATA_DB_PATH", str(data_db))
+    monkeypatch.setattr(model_outputs.config, "neon_dsn", lambda: "postgresql://example")
+    monkeypatch.setattr(model_outputs.config, "neon_authoritative_rebuilds_enabled", lambda: True)
+    monkeypatch.setattr(
+        model_outputs.state,
+        "latest_risk_engine_state",
+        lambda _conn: {"method_version": "local_diagnostic"},
+    )
+    monkeypatch.setattr(
+        model_outputs.state,
+        "pg_latest_risk_engine_state",
+        lambda _pg_conn: (_ for _ in ()).throw(AssertionError("should not read Neon diagnostics")),
+    )
+
+    out = model_outputs.load_latest_local_diagnostic_risk_engine_state()
+
+    assert out["method_version"] == "local_diagnostic"
+
+
+def test_compatibility_wrapper_remains_local_first_for_risk_engine_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_db = tmp_path / "data.db"
+    data_db.touch()
+    monkeypatch.setattr(model_outputs.config, "DATA_DB_PATH", str(data_db))
+    monkeypatch.setattr(model_outputs.config, "neon_dsn", lambda: "postgresql://example")
+    monkeypatch.setattr(
+        model_outputs.state,
+        "latest_risk_engine_state",
+        lambda _conn: {"method_version": "local"},
+    )
+    monkeypatch.setattr(
+        model_outputs.state,
+        "pg_latest_risk_engine_state",
+        lambda _pg_conn: {"method_version": "neon"},
+    )
+
+    out = model_outputs.load_latest_persisted_risk_engine_state()
+
+    assert out["method_version"] == "local"

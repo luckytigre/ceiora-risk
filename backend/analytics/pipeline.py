@@ -496,8 +496,8 @@ def run_refresh(
     cached_specific_count = _specific_risk_entry_count(specific_risk_by_security)
 
     if risk_engine_meta_source == "model_run_metadata":
-        persisted_cov_payload = model_outputs.load_latest_persisted_covariance_payload()
-        persisted_specific_payload = model_outputs.load_latest_persisted_specific_risk_payload()
+        persisted_cov_payload = model_outputs.load_latest_rebuild_authority_covariance_payload()
+        persisted_specific_payload = model_outputs.load_latest_rebuild_authority_specific_risk_payload()
         if _persisted_risk_artifacts_are_richer(
             cached_cov=cov,
             cached_specific=specific_risk_by_security,
