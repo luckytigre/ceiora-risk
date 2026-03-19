@@ -173,6 +173,53 @@ def test_portfolio_hedge_service_returns_empty_payload_for_account_without_posit
     assert payload["positions"] == []
 
 
+def test_portfolio_hedge_service_returns_unavailable_payload_when_no_rows_are_covered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_holdings_accounts",
+        lambda: [{"account_id": "acct_unavailable", "account_name": "Unavailable", "positions_count": 2}],
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_holdings_positions",
+        lambda *, account_id: [
+            {"account_id": "acct_unavailable", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": None},
+            {"account_id": "acct_unavailable", "ric": "MISS.OQ", "ticker": "MISS", "quantity": 2.0, "source": "seed", "updated_at": None},
+        ],
+    )
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_package_instrument_fits_for_rics",
+        lambda rics, **kwargs: [
+            _fit_row(ric="AAPL.OQ", ticker="AAPL", fit_status="insufficient_history", thresholded_loadings={"SPY": 1.0}),
+        ],
+    )
+    monkeypatch.setattr(cpar_outputs, "load_package_covariance_rows", lambda *args, **kwargs: _covariance_rows())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda rics, **kwargs: [
+            {"ric": "AAPL.OQ", "date": "2026-03-14", "close": 200.0, "adj_close": 201.0},
+        ],
+    )
+
+    payload = cpar_portfolio_hedge_service.load_cpar_portfolio_hedge_payload(
+        account_id="acct_unavailable",
+        mode="factor_neutral",
+    )
+
+    assert payload["portfolio_status"] == "unavailable"
+    assert payload["portfolio_reason"] == (
+        "No holdings rows in this account have both price coverage and a usable persisted cPAR fit in the active package."
+    )
+    assert payload["hedge_status"] is None
+    assert payload["aggregate_thresholded_loadings"] == []
+    assert {row["coverage"] for row in payload["positions"]} == {"insufficient_history", "missing_price"}
+
+
 def test_portfolio_hedge_service_raises_when_account_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
     monkeypatch.setattr(

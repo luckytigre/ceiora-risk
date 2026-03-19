@@ -113,6 +113,7 @@ Current cPAR flows fail closed when:
 - active covariance coverage is partial for hedge preview
 - Neon authority reads are required and unavailable
 - package identity drifts between package metadata and a later detail/hedge/account payload
+- package identity drifts between the shared banner and the portfolio what-if envelope or its nested `current` / `hypothetical` payloads
 - a staged what-if addition is not present in the active persisted cPAR package
 
 ## Runtime Troubleshooting
@@ -130,6 +131,10 @@ If `/cpar*` shows `unavailable`:
 If `/cpar/portfolio` rejects a staged addition:
 - confirm the name was staged from an active-package cPAR search hit
 - the preview route will not request-time fit off-package RICs or synthesize missing persisted fit rows
+
+If `/cpar/portfolio` shows `empty` instead of `unavailable`:
+- `empty` means the selected account has no live holdings rows at all
+- `unavailable` means the selected account has live rows, but none are both priced and backed by a usable persisted cPAR fit in the active package
 
 If the shared banner shows an aging or stale package:
 - treat the current read surface as historical until a newer package is published

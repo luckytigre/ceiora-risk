@@ -118,6 +118,11 @@ def test_portfolio_whatif_service_supports_new_active_package_rows(
     assert observed_rics == ["AAPL.OQ", "MSFT.OQ", "NVDA.OQ"]
     assert payload["_preview_only"] is True
     assert payload["package_run_id"] == "run_curr"
+    assert payload["package_date"] == "2026-03-14"
+    assert payload["current"]["package_run_id"] == "run_curr"
+    assert payload["current"]["package_date"] == "2026-03-14"
+    assert payload["hypothetical"]["package_run_id"] == "run_curr"
+    assert payload["hypothetical"]["package_date"] == "2026-03-14"
     assert payload["current"]["positions_count"] == 2
     assert payload["hypothetical"]["positions_count"] == 3
     assert payload["scenario_rows"][0]["ric"] == "NVDA.OQ"
@@ -218,6 +223,28 @@ def test_portfolio_whatif_service_propagates_typed_snapshot_unavailable(
     )
 
     with pytest.raises(cpar_meta_service.CparReadUnavailable, match="Holdings read failed"):
+        cpar_portfolio_whatif_service.load_cpar_portfolio_whatif_payload(
+            account_id="acct_main",
+            mode="factor_neutral",
+            scenario_rows=[{"ric": "AAPL.OQ", "ticker": "AAPL", "quantity_delta": 1.0}],
+        )
+
+
+def test_portfolio_whatif_service_propagates_typed_snapshot_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_account_context",
+        lambda **kwargs: (_package(), _account(), _live_positions()),
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_support_rows",
+        lambda **kwargs: (_ for _ in ()).throw(cpar_meta_service.CparReadNotReady("Incomplete active package")),
+    )
+
+    with pytest.raises(cpar_meta_service.CparReadNotReady, match="Incomplete active package"):
         cpar_portfolio_whatif_service.load_cpar_portfolio_whatif_payload(
             account_id="acct_main",
             mode="factor_neutral",

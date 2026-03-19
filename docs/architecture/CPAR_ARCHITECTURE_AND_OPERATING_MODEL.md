@@ -110,6 +110,7 @@ Current read behavior:
 - account-level portfolio hedge additionally requires live holdings rows plus latest shared-source prices on or before the active package date
 - account-level what-if additionally requires one account hedge baseline, one active package, and staged signed share deltas that reference either existing holdings rows or active-package search hits
 - missing required relational coverage fails closed with cPAR-specific `503 not_ready`
+- the account-level what-if envelope and its nested `current` / `hypothetical` snapshots are part of the same package-scoped flow as the shared banner and baseline portfolio hedge payload
 - the frontend uses package metadata as the first gate for dependent reads and does not intentionally keep querying detail/hedge/account payloads after a package-level `not_ready` or `unavailable` response
 - current package freshness is interpreted from the active package date/source-as-of date, not from any cUSE4 refresh/runtime-state surface
 

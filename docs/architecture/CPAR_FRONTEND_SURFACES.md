@@ -81,11 +81,12 @@ It does not add:
 Page consistency rule:
 - the frontend must treat `meta`, `ticker detail`, and `hedge` as one package-scoped flow
 - the frontend must treat `meta` and the portfolio hedge payload as one package-scoped flow
+- the frontend must also treat the portfolio what-if envelope plus its nested `current` and `hypothetical` payloads as part of that same package-scoped portfolio flow
 - if those responses do not share the same `package_run_id` / `package_date`, the page must fail closed instead of mixing surfaces from different active packages
 - the frontend now uses package metadata as the first gate for dependent reads, so package-level `not_ready` / `unavailable` states do not keep probing detail or portfolio endpoints on the same page load
 - `/cpar/explore` enforces this for banner plus detail
 - `/cpar/hedge` enforces this for banner, selected subject, and hedge preview
-- `/cpar/portfolio` enforces this for banner plus account hedge payload
+- `/cpar/portfolio` enforces this for banner, the baseline account hedge payload, and the what-if envelope/current/hypothetical payloads
 
 ## Status And Warning Rendering
 
@@ -108,6 +109,8 @@ Read failures:
 - a direct `/cpar/hedge?ric=...` visit without `ticker=` must render the same explanatory warning because the current hedge route is also ticker-keyed
 - package-identity drift between active-package reads must render an explicit reload prompt rather than mixing banner/detail/hedge data from different packages
 - `/cpar/portfolio` must render explicit empty or unavailable account states instead of synthesizing a hedge from unpriced or uncovered holdings rows
+- `empty` means the selected account has no live holdings rows
+- `unavailable` means the selected account has live holdings rows, but none are both priced and backed by a usable persisted cPAR fit in the active package
 
 ## Hedge Workflow Split
 

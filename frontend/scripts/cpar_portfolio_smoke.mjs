@@ -183,6 +183,14 @@ try {
               gross_quantity: 0,
               last_position_updated_at: null,
             },
+            {
+              account_id: "acct_unavailable",
+              account_name: "Unavailable Account",
+              is_active: true,
+              positions_count: 2,
+              gross_quantity: 12,
+              last_position_updated_at: "2026-03-18T15:00:00Z",
+            },
           ],
         });
       }
@@ -230,6 +238,83 @@ try {
             net_hedge_notional: null,
             non_market_reduction_ratio: null,
             positions: [],
+          });
+        }
+        if (accountId === "acct_unavailable") {
+          return fulfillJson({
+            package_run_id: "run_curr",
+            package_date: "2026-03-14",
+            profile: "cpar-weekly",
+            method_version: "cPAR1",
+            factor_registry_version: "cPAR1_registry_v1",
+            data_authority: "neon",
+            lookback_weeks: 52,
+            half_life_weeks: 26,
+            min_observations: 39,
+            source_prices_asof: "2026-03-14",
+            classification_asof: "2026-03-14",
+            universe_count: 1240,
+            fit_ok_count: 1180,
+            fit_limited_count: 48,
+            fit_insufficient_count: 12,
+            account_id: "acct_unavailable",
+            account_name: "Unavailable Account",
+            mode,
+            positions_count: 2,
+            covered_positions_count: 0,
+            excluded_positions_count: 2,
+            gross_market_value: 2010,
+            net_market_value: 2010,
+            covered_gross_market_value: 0,
+            coverage_ratio: 0,
+            portfolio_status: "unavailable",
+            portfolio_reason: "No holdings rows in this account have both price coverage and a usable persisted cPAR fit in the active package.",
+            aggregate_thresholded_loadings: [],
+            hedge_status: null,
+            hedge_reason: null,
+            hedge_legs: [],
+            post_hedge_exposures: [],
+            pre_hedge_factor_variance_proxy: null,
+            post_hedge_factor_variance_proxy: null,
+            gross_hedge_notional: null,
+            net_hedge_notional: null,
+            non_market_reduction_ratio: null,
+            positions: [
+              {
+                account_id: "acct_unavailable",
+                ric: "AAPL.OQ",
+                ticker: "AAPL",
+                display_name: "Apple Inc.",
+                quantity: 10,
+                price: 201,
+                price_date: "2026-03-14",
+                price_field_used: "adj_close",
+                market_value: 2010,
+                portfolio_weight: null,
+                fit_status: "insufficient_history",
+                warnings: [],
+                beta_spy_trade: 1.12,
+                coverage: "insufficient_history",
+                coverage_reason: "The persisted cPAR fit status is `insufficient_history`, so this position is excluded from hedge aggregation.",
+              },
+              {
+                account_id: "acct_unavailable",
+                ric: "MISS.OQ",
+                ticker: "MISS",
+                display_name: null,
+                quantity: 2,
+                price: null,
+                price_date: null,
+                price_field_used: null,
+                market_value: null,
+                portfolio_weight: null,
+                fit_status: null,
+                warnings: [],
+                beta_spy_trade: null,
+                coverage: "missing_price",
+                coverage_reason: "No latest price on or before the active cPAR package date.",
+              },
+            ],
           });
         }
         return fulfillJson({
@@ -357,6 +442,12 @@ try {
     await page.selectOption('[data-testid="cpar-portfolio-account-select"]', "acct_empty");
     await page.getByTestId("cpar-portfolio-overview").getByText("Empty Account").waitFor();
     await page.getByText("No live holdings positions are loaded for this account.").waitFor();
+    assert.equal(await page.getByTestId("cpar-portfolio-hedge-panel").count(), 0);
+
+    await page.selectOption('[data-testid="cpar-portfolio-account-select"]', "acct_unavailable");
+    await page.getByTestId("cpar-portfolio-overview").getByText("Coverage Unavailable").waitFor();
+    await page.getByText("No holdings rows in this account have both price coverage and a usable persisted cPAR fit in the active package.").waitFor();
+    assert.equal(await page.getByTestId("cpar-portfolio-hedge-panel").count(), 0);
 
     if (capturedPageError) {
       throw capturedPageError;
