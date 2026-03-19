@@ -3,6 +3,8 @@ export type CparFitStatus = "ok" | "limited_history" | "insufficient_history";
 export type CparWarning = "continuity_gap" | "ex_us_caution";
 export type CparHedgeStatus = "hedge_ok" | "hedge_degraded" | "hedge_unavailable";
 export type CparHedgeMode = "factor_neutral" | "market_neutral";
+export type CparPortfolioStatus = "ok" | "partial" | "empty" | "unavailable";
+export type CparPortfolioCoverage = "covered" | "missing_price" | "missing_cpar_fit" | "insufficient_history";
 
 export interface CparPackageMeta {
   package_run_id: string;
@@ -121,4 +123,48 @@ export interface CparHedgePreviewData extends CparPackageMeta {
 export interface CparMetaData extends CparPackageMeta {
   factor_count: number;
   factors: CparFactorSpec[];
+}
+
+export interface CparPortfolioPositionRow {
+  account_id: string;
+  ric: string;
+  ticker: string | null;
+  display_name: string | null;
+  quantity: number;
+  price: number | null;
+  price_date: string | null;
+  price_field_used: string | null;
+  market_value: number | null;
+  portfolio_weight: number | null;
+  fit_status: CparFitStatus | null;
+  warnings: CparWarning[];
+  beta_spy_trade: number | null;
+  coverage: CparPortfolioCoverage;
+  coverage_reason: string | null;
+}
+
+export interface CparPortfolioHedgeData extends CparPackageMeta {
+  account_id: string;
+  account_name: string | null;
+  mode: CparHedgeMode;
+  portfolio_status: CparPortfolioStatus;
+  portfolio_reason: string | null;
+  positions_count: number;
+  covered_positions_count: number;
+  excluded_positions_count: number;
+  gross_market_value: number;
+  net_market_value: number;
+  covered_gross_market_value: number;
+  coverage_ratio: number | null;
+  aggregate_thresholded_loadings: CparLoading[];
+  hedge_status: CparHedgeStatus | null;
+  hedge_reason: string | null;
+  hedge_legs: CparHedgeLeg[];
+  post_hedge_exposures: CparPostHedgeExposure[];
+  pre_hedge_factor_variance_proxy: number | null;
+  post_hedge_factor_variance_proxy: number | null;
+  gross_hedge_notional: number | null;
+  net_hedge_notional: number | null;
+  non_market_reduction_ratio: number | null;
+  positions: CparPortfolioPositionRow[];
 }

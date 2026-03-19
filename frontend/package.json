@@ -10,6 +10,7 @@
     "typecheck": "npm run typegen && tsc --noEmit --incremental false",
     "test:cpar-pages": "node scripts/cpar_pages_smoke.mjs",
     "test:cpar-hedge": "node scripts/cpar_hedge_page_smoke.mjs",
+    "test:cpar-portfolio": "node scripts/cpar_portfolio_smoke.mjs",
     "test:cpar-not-ready": "node scripts/cpar_not_ready_smoke.mjs",
     "test:cpar-package-mismatch": "node scripts/cpar_package_mismatch_smoke.mjs",
     "test:cpar-unavailable": "node scripts/cpar_unavailable_smoke.mjs",

@@ -19,7 +19,7 @@ Define how cPAR currently operates in this repo without implying unimplemented o
 It does not describe:
 - cUSE4 refresh lanes
 - cPAR frontend page details
-- future cPAR portfolio integration
+- future cPAR what-if or portfolio mutation flows
 
 ## Runtime Roles
 
@@ -86,14 +86,17 @@ Current frontend-backed read surfaces:
 - `/cpar`
 - `/cpar/explore`
 - `/cpar/hedge`
+- `/cpar/portfolio`
 - `GET /api/cpar/meta`
 - `GET /api/cpar/search`
 - `GET /api/cpar/ticker/{ticker}`
 - `GET /api/cpar/ticker/{ticker}/hedge`
+- `GET /api/cpar/portfolio/hedge`
 
 The current detail route is ticker-keyed.
 Persisted search rows with `ticker = NULL` remain visible in search but are intentionally non-navigable in v1.
 The standalone hedge page reuses that same ticker-keyed selection rule and must fail closed when package identity drifts between the selected subject and the hedge preview.
+The first portfolio workflow is account-scoped and read-only: it reuses live holdings accounts/positions plus latest shared-source prices, but it does not reuse cUSE4 portfolio or what-if payload semantics.
 
 ## Fail-Closed Cases
 
@@ -111,5 +114,6 @@ This operations baseline still does not include:
 - cPAR operator dashboard integration
 - route-triggered cPAR builds
 - request-time cPAR fitting
-- portfolio/holdings overlays
+- cPAR what-if or mutation flows
 - cUSE4/cPAR comparison flows
+- broader portfolio analytics beyond the first account-level hedge workflow

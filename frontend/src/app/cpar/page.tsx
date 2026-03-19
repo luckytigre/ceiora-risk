@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import { useCparMeta } from "@/hooks/useApi";
@@ -87,6 +88,18 @@ export default function CparLandingPage() {
           </div>
         </section>
       </div>
+
+      <section className="chart-card">
+        <h3>Available Workspaces</h3>
+        <div className="section-subtitle">
+          cPAR now exposes three read-only workflows: package discovery, instrument hedge inspection, and one narrow account-level hedge workflow.
+        </div>
+        <div className="cpar-badge-row">
+          <Link href="/cpar/explore" className="cpar-detail-chip" prefetch={false}>Open /cpar/explore</Link>
+          <Link href="/cpar/hedge" className="cpar-detail-chip" prefetch={false}>Open /cpar/hedge</Link>
+          <Link href="/cpar/portfolio" className="cpar-detail-chip" prefetch={false}>Open /cpar/portfolio</Link>
+        </div>
+      </section>
 
       {data ? (
         <section className="chart-card" data-testid="cpar-factor-registry">

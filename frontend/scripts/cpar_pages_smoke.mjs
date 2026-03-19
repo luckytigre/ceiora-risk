@@ -316,6 +316,7 @@ try {
     await page.getByRole("link", { name: "cPAR" }).waitFor();
     await page.getByTestId("cpar-package-banner").waitFor();
     await page.getByTestId("cpar-factor-registry").waitFor();
+    await page.getByRole("link", { name: "Open /cpar/portfolio" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "RECALC" }).count(), 0);
 

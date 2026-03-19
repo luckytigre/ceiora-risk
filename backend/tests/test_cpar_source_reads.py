@@ -159,6 +159,43 @@ def test_load_price_rows_for_rics_respects_date_bounds(source_db: Path) -> None:
     ]
 
 
+def test_load_latest_price_rows_returns_latest_row_not_after_cutoff(source_db: Path) -> None:
+    rows = cpar_source_reads.load_latest_price_rows(
+        ["aapl.oq", "spy.p"],
+        as_of_date="2026-03-12",
+        data_db=source_db,
+    )
+
+    assert rows == [
+        {
+            "ric": "AAPL.OQ",
+            "date": "2026-03-06",
+            "open": 200.0,
+            "high": 201.0,
+            "low": 198.0,
+            "close": 200.0,
+            "adj_close": 199.5,
+            "volume": 2000.0,
+            "currency": "USD",
+            "source": "seed",
+            "updated_at": "2026-03-18T00:00:00Z",
+        },
+        {
+            "ric": "SPY.P",
+            "date": "2026-03-06",
+            "open": 100.0,
+            "high": 101.0,
+            "low": 99.0,
+            "close": 100.0,
+            "adj_close": 100.5,
+            "volume": 1000.0,
+            "currency": "USD",
+            "source": "seed",
+            "updated_at": "2026-03-18T00:00:00Z",
+        },
+    ]
+
+
 def test_load_latest_classification_rows_uses_latest_row_not_after_cutoff(source_db: Path) -> None:
     rows = cpar_source_reads.load_latest_classification_rows(
         ["aapl.oq", "spy.p"],

@@ -398,6 +398,27 @@ def load_package_instrument_fit(
     )
 
 
+def load_package_instrument_fits_for_rics(
+    rics: list[str] | tuple[str, ...],
+    *,
+    package_run_id: str,
+    data_db: Path | None = None,
+) -> list[dict[str, Any]]:
+    if _use_neon_reads():
+        rows = cpar_queries.package_instrument_fits_for_rics(
+            lambda sql, params=None: _neon_fetch(sql, params),
+            package_run_id=package_run_id,
+            rics=rics,
+        )
+        if rows or config.cloud_mode():
+            return rows
+    return cpar_queries.package_instrument_fits_for_rics(
+        lambda sql, params=None: _sqlite_fetch_rows(sql, params, data_db=data_db),
+        package_run_id=package_run_id,
+        rics=rics,
+    )
+
+
 def load_previous_successful_instrument_fit(
     ric: str,
     *,

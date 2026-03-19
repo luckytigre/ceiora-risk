@@ -37,6 +37,12 @@ export const apiPath = {
     if (ric && ric.trim().length > 0) params.set("ric", ric.trim());
     return `/api/cpar/ticker/${encodeURIComponent(ticker.trim().toUpperCase())}/hedge?${params.toString()}`;
   },
+  cparPortfolioHedge: (accountId: string, mode: string) => {
+    const params = new URLSearchParams();
+    params.set("account_id", accountId.trim());
+    params.set("mode", mode);
+    return `/api/cpar/portfolio/hedge?${params.toString()}`;
+  },
   portfolio: () => "/api/portfolio",
   portfolioWhatIf: () => "/api/portfolio/whatif",
   portfolioWhatIfApply: () => "/api/portfolio/whatif/apply",

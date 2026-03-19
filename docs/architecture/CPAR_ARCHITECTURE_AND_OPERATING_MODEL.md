@@ -78,11 +78,13 @@ Read-only backend routes:
 - `GET /api/cpar/search?q=&limit=`
 - `GET /api/cpar/ticker/{ticker}?ric=`
 - `GET /api/cpar/ticker/{ticker}/hedge?mode=&ric=`
+- `GET /api/cpar/portfolio/hedge?account_id=&mode=`
 
 Frontend pages:
 - `/cpar`
 - `/cpar/explore`
 - `/cpar/hedge`
+- `/cpar/portfolio`
 
 There is no cPAR blob-serving surface in the current implementation.
 API payloads are assembled from authoritative relational `cpar_*` tables.
@@ -99,6 +101,7 @@ The active package is the latest successful `cpar_package_runs` row that has the
 Current read behavior:
 - metadata/search/detail use the active successful package
 - hedge preview additionally requires complete covariance coverage
+- account-level portfolio hedge additionally requires live holdings rows plus latest shared-source prices on or before the active package date
 - missing required relational coverage fails closed with cPAR-specific `503 not_ready`
 
 Current runtime authority:
@@ -134,12 +137,13 @@ Current UI contract:
 ## Current Deferred Limits
 
 The current cPAR implementation intentionally defers:
-- portfolio or holdings overlays
 - cUSE4 vs cPAR comparison views
 - runtime-state/operator dashboard integration
 - route-triggered cPAR builds
 - request-time cPAR fitting
 - any reuse of cUSE4 serving payload surfaces
+- broader portfolio analytics beyond the first narrow account-level hedge workflow
+- any cPAR what-if or mutation flow
 
 One current v1 limitation is explicit:
 - search results may include persisted rows with `ticker = NULL`

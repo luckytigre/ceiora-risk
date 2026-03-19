@@ -264,6 +264,77 @@ def test_cpar_hedge_route_maps_missing_ticker_to_404(monkeypatch) -> None:
     assert "not found" in res.json()["detail"].lower()
 
 
+def test_cpar_portfolio_hedge_route_returns_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_portfolio_hedge_service,
+        "load_cpar_portfolio_hedge_payload",
+        lambda **kwargs: {
+            "account_id": kwargs["account_id"],
+            "mode": kwargs["mode"],
+            "portfolio_status": "ok",
+            "hedge_status": "hedge_ok",
+            "positions": [],
+        },
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/portfolio/hedge?account_id=acct_main&mode=factor_neutral")
+
+    assert res.status_code == 200
+    assert res.json()["account_id"] == "acct_main"
+    assert res.json()["mode"] == "factor_neutral"
+
+
+def test_cpar_portfolio_hedge_route_maps_not_ready_to_503(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_portfolio_hedge_service,
+        "load_cpar_portfolio_hedge_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_routes.cpar_meta_service.CparReadNotReady("No successful cPAR package")
+        ),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/portfolio/hedge?account_id=acct_main")
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["status"] == "not_ready"
+    assert res.json()["detail"]["error"] == "cpar_not_ready"
+
+
+def test_cpar_portfolio_hedge_route_maps_unavailable_to_503(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_portfolio_hedge_service,
+        "load_cpar_portfolio_hedge_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_routes.cpar_meta_service.CparReadUnavailable("Holdings read failed")
+        ),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/portfolio/hedge?account_id=acct_main")
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["status"] == "unavailable"
+    assert res.json()["detail"]["error"] == "cpar_authority_unavailable"
+
+
+def test_cpar_portfolio_hedge_route_maps_missing_account_to_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_portfolio_hedge_service,
+        "load_cpar_portfolio_hedge_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_routes.cpar_portfolio_hedge_service.CparPortfolioAccountNotFound("account missing")
+        ),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/portfolio/hedge?account_id=acct_missing")
+
+    assert res.status_code == 404
+    assert "account missing" in res.json()["detail"]
+
+
 def test_router_registry_includes_cpar_router() -> None:
     registry_path = Path("backend/api/router_registry.py")
     module = ast.parse(registry_path.read_text())

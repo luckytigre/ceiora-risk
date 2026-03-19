@@ -6,7 +6,13 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
-from backend.services import cpar_hedge_service, cpar_meta_service, cpar_search_service, cpar_ticker_service
+from backend.services import (
+    cpar_hedge_service,
+    cpar_meta_service,
+    cpar_portfolio_hedge_service,
+    cpar_search_service,
+    cpar_ticker_service,
+)
 
 router = APIRouter()
 
@@ -89,4 +95,22 @@ async def get_cpar_hedge(
     except cpar_meta_service.CparTickerAmbiguous as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except cpar_meta_service.CparTickerNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/cpar/portfolio/hedge")
+async def get_cpar_portfolio_hedge(
+    account_id: str = Query(..., min_length=1),
+    mode: Literal["factor_neutral", "market_neutral"] = Query(default="factor_neutral"),
+):
+    try:
+        return cpar_portfolio_hedge_service.load_cpar_portfolio_hedge_payload(
+            account_id=account_id,
+            mode=str(mode),
+        )
+    except cpar_meta_service.CparReadNotReady as exc:
+        _raise_cpar_not_ready(str(exc))
+    except cpar_meta_service.CparReadUnavailable as exc:
+        _raise_cpar_unavailable(str(exc))
+    except cpar_portfolio_hedge_service.CparPortfolioAccountNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

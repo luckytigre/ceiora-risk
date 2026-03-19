@@ -12,7 +12,7 @@ Related cPAR docs:
 
 ## Purpose
 
-This slice exposes the backend read surfaces used by `/cpar`, `/cpar/explore`, and `/cpar/hedge`.
+This slice exposes the backend read surfaces used by `/cpar`, `/cpar/explore`, `/cpar/hedge`, and `/cpar/portfolio`.
 
 It does not add:
 - frontend code
@@ -38,6 +38,14 @@ It does not add:
 
 `GET /api/cpar/ticker/{ticker}/hedge?mode=&ric=`
 - returns a read-only hedge preview derived from persisted thresholded loadings and persisted covariance
+- supported `mode` values are `factor_neutral` and `market_neutral`
+
+`GET /api/cpar/portfolio/hedge?account_id=&mode=`
+- returns a read-only account-scoped cPAR hedge workflow payload
+- reuses a lower-layer holdings read adapter only as shared infrastructure
+- values holdings rows at the latest shared-source price on or before the active package date
+- aggregates only covered persisted cPAR thresholded loadings into one hedge vector
+- reports `coverage_ratio` as covered gross market value divided by priced gross market value
 - supported `mode` values are `factor_neutral` and `market_neutral`
 
 ## Read Authority
@@ -76,6 +84,12 @@ Search-result limitations:
 - rows with `ticker = NULL` are therefore visible in search but not directly detail-addressable in v1
 - the frontend must render that limitation explicitly instead of silently hiding those rows
 
+Portfolio-route limitations:
+- the first portfolio workflow is account-scoped, not multi-account
+- it reuses holdings/account reads but does not reuse cUSE4 portfolio or what-if payloads
+- accounts with no live holdings rows return an explicit empty portfolio state instead of a synthesized hedge result
+- accounts whose live holdings rows have no usable priced+cPAR-covered rows return an explicit unavailable portfolio state instead of a partial synthetic hedge
+
 ## Hedge Preview Behavior
 
 The hedge route:
@@ -93,3 +107,4 @@ This slice still does not include:
 - cPAR runtime-state keys
 - cPAR serving-payload surfaces
 - any route-triggered build path
+- any cPAR mutation or what-if route

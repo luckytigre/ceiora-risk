@@ -99,6 +99,18 @@ def _normalize_search_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalize_filter_tokens(values: list[str] | tuple[str, ...]) -> list[str]:
+    clean: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        token = str(raw or "").strip().upper()
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        clean.append(token)
+    return clean
+
+
 def latest_successful_package(fetch_rows: FetchRowsFn) -> dict[str, Any] | None:
     rows = fetch_rows(
         f"""
@@ -217,6 +229,29 @@ def active_package_instrument_fit(
     if len(rows) > 1 and not ric:
         raise CparAmbiguousInstrumentFit(f"Ambiguous cPAR instrument fit for ticker {clean_ticker}")
     return _normalize_fit_row(rows[0])
+
+
+def package_instrument_fits_for_rics(
+    fetch_rows: FetchRowsFn,
+    *,
+    package_run_id: str,
+    rics: list[str] | tuple[str, ...],
+) -> list[dict[str, Any]]:
+    clean_rics = _normalize_filter_tokens(rics)
+    if not clean_rics:
+        return []
+    placeholders = ",".join("?" for _ in clean_rics)
+    rows = fetch_rows(
+        f"""
+        SELECT *
+        FROM cpar_instrument_fits_weekly
+        WHERE package_run_id = ?
+          AND UPPER(COALESCE(ric, '')) IN ({placeholders})
+        ORDER BY ric
+        """,
+        [str(package_run_id), *clean_rics],
+    )
+    return [_normalize_fit_row(row) for row in rows]
 
 
 def previous_successful_instrument_fit(

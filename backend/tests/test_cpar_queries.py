@@ -127,6 +127,19 @@ def test_active_package_instrument_fit_returns_decoded_payload_with_ric_disambig
     assert out["raw_loadings"] == {"SPY": 1.2}
 
 
+def test_package_instrument_fits_for_rics_returns_matching_rows() -> None:
+    conn = _seed_query_db()
+
+    rows = cpar_queries.package_instrument_fits_for_rics(
+        _fetch_rows_factory(conn),
+        package_run_id="run_new",
+        rics=["aapl.oq", "aapl.l", "missing"],
+    )
+
+    assert [row["ric"] for row in rows] == ["AAPL.L", "AAPL.OQ"]
+    assert rows[0]["warnings"] == ["ex_us_caution"]
+
+
 def test_previous_successful_instrument_fit_returns_prior_successful_package() -> None:
     conn = _seed_query_db()
 

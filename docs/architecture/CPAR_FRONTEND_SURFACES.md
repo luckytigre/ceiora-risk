@@ -4,7 +4,7 @@ Date: 2026-03-19
 Status: Active slice-6 frontend notes
 Owner: Codex
 
-This document describes the current cPAR frontend surfaces after the standalone hedge-page slice.
+This document describes the current cPAR frontend surfaces after the first narrow portfolio hedge slice.
 
 Related cPAR docs:
 - [CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md)
@@ -15,10 +15,10 @@ Related cPAR docs:
 This slice expands the read-only cPAR frontend without widening backend compute scope.
 
 It does not add:
-- portfolio or holdings overlays
 - cUSE4 vs cPAR comparison views
 - route-triggered build behavior
 - any shared cUSE4/cPAR truth layer
+- any cPAR what-if or mutation flow
 
 ## Page Structure
 
@@ -41,6 +41,14 @@ It does not add:
 - links back to `/cpar/explore` for raw and thresholded loadings review
 - uses the active package only
 
+`/cpar/portfolio`
+- first narrow account-level cPAR hedge workflow
+- owns holdings-account selection, account coverage summary, aggregate thresholded loadings, and one portfolio hedge preview
+- reuses holdings/account reads only as shared plumbing
+- does not reuse cUSE4 portfolio or what-if semantics
+- uses the active package only
+- treats `coverage_ratio` as covered gross over priced gross, not as a promise that every holdings row has a known market value
+
 ## Backend Contracts Used By The Frontend
 
 `GET /api/cpar/meta`
@@ -57,11 +65,18 @@ It does not add:
 - persisted hedge preview only
 - no request-time refit
 
+`GET /api/cpar/portfolio/hedge`
+- account-scoped portfolio hedge preview only
+- no request-time refit or build path
+- uses the active cPAR package, live holdings rows, and latest shared-source prices on or before the package date
+
 Page consistency rule:
 - the frontend must treat `meta`, `ticker detail`, and `hedge` as one package-scoped flow
+- the frontend must treat `meta` and the portfolio hedge payload as one package-scoped flow
 - if those responses do not share the same `package_run_id` / `package_date`, the page must fail closed instead of mixing surfaces from different active packages
 - `/cpar/explore` enforces this for banner plus detail
 - `/cpar/hedge` enforces this for banner, selected subject, and hedge preview
+- `/cpar/portfolio` enforces this for banner plus account hedge payload
 
 ## Status And Warning Rendering
 
@@ -82,6 +97,7 @@ Read failures:
 - a direct `/cpar/explore?ric=...` visit without `ticker=` must render an explanatory warning rather than silently failing or synthesizing a detail request
 - a direct `/cpar/hedge?ric=...` visit without `ticker=` must render the same explanatory warning because the current hedge route is also ticker-keyed
 - package-identity drift between active-package reads must render an explicit reload prompt rather than mixing banner/detail/hedge data from different packages
+- `/cpar/portfolio` must render explicit empty or unavailable account states instead of synthesizing a hedge from unpriced or uncovered holdings rows
 
 ## Hedge Workflow Split
 
@@ -95,11 +111,17 @@ Read failures:
 - reuses persisted detail only to identify the selected subject and package
 - owns hedge mode switching, hedge legs, and post-hedge interpretation
 
+`/cpar/portfolio`
+- remains a narrow account-level hedge workflow
+- owns account selection, coverage/exclusion explanation, aggregate loadings, and the resulting account hedge preview
+- does not own portfolio mutation, account editing, or hypothetical scenario authoring
+
 ## Smoke Coverage
 
 Current cPAR frontend smokes cover:
 - `/cpar` landing and `/cpar/explore` baseline flow
 - `/cpar/hedge` baseline flow
+- `/cpar/portfolio` baseline flow
 - `not_ready`
 - `unavailable`
 - package mismatch
@@ -107,9 +129,9 @@ Current cPAR frontend smokes cover:
 ## Deferred After This Slice
 
 - frontend operator surfaces
-- cPAR portfolio integration
 - cPAR what-if integration
 - any shared cUSE4/cPAR comparison UI
+- broader multi-account or portfolio-analytics cPAR views
 
 ## Shared App Chrome
 

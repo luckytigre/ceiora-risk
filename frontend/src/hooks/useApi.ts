@@ -10,6 +10,7 @@ import type {
   CparHedgeMode,
   CparHedgePreviewData,
   CparMetaData,
+  CparPortfolioHedgeData,
   CparSearchData,
   CparTickerDetailData,
   PortfolioData,
@@ -93,6 +94,16 @@ export function useCparHedge(
   const cleanRic = ric?.trim() || null;
   const key = enabled && cleanTicker ? apiPath.cparHedge(cleanTicker, mode, cleanRic) : null;
   return useSWR<CparHedgePreviewData>(key, apiFetch, SWR_OPTS);
+}
+
+export function useCparPortfolioHedge(
+  accountId: string | null,
+  mode: CparHedgeMode,
+  enabled = true,
+) {
+  const cleanAccountId = accountId?.trim() || null;
+  const key = enabled && cleanAccountId ? apiPath.cparPortfolioHedge(cleanAccountId, mode) : null;
+  return useSWR<CparPortfolioHedgeData>(key, apiFetch, SWR_OPTS);
 }
 
 export function useHoldingsModes() {

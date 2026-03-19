@@ -112,6 +112,50 @@ def load_price_rows_for_rics(
     )
 
 
+def load_latest_price_rows(
+    rics: Iterable[str],
+    *,
+    as_of_date: str,
+    data_db: Path | None = None,
+) -> list[dict[str, Any]]:
+    clean_rics = _normalize_tokens(rics)
+    if not clean_rics:
+        return []
+    placeholders, ric_params = _in_clause(clean_rics)
+    params = [str(as_of_date), *ric_params]
+    return _fetch_rows(
+        f"""
+        WITH ranked AS (
+            SELECT
+                p.ric,
+                p.date,
+                p.open,
+                p.high,
+                p.low,
+                p.close,
+                p.adj_close,
+                p.volume,
+                p.currency,
+                p.source,
+                p.updated_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY UPPER(COALESCE(p.ric, ''))
+                    ORDER BY p.date DESC, p.updated_at DESC
+                ) AS rn
+            FROM security_prices_eod p
+            WHERE p.date <= ?
+              AND UPPER(COALESCE(p.ric, '')) IN ({placeholders})
+        )
+        SELECT ric, date, open, high, low, close, adj_close, volume, currency, source, updated_at
+        FROM ranked
+        WHERE rn = 1
+        ORDER BY ric
+        """,
+        params,
+        data_db=data_db,
+    )
+
+
 def load_latest_classification_rows(
     rics: Iterable[str],
     *,
