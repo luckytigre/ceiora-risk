@@ -43,6 +43,9 @@ Integration code stays in the normal repo layers:
 - `backend/api/routes/*` owns thin cPAR transport surfaces
 - `frontend/*` owns cPAR page rendering and user-facing status/warning semantics
 
+Within `backend/services/*`, the shared account-scoped portfolio snapshot assembly now lives in `cpar_portfolio_snapshot_service.py`.
+That keeps `cpar_portfolio_hedge_service.py` and `cpar_portfolio_whatif_service.py` as separate application-facing flows without turning either one into a hidden utility owner.
+
 Current boundary rules:
 - `backend/cpar/*` does not import `backend.api`, `backend.services`, `backend.orchestration`, or `backend.data`
 - cPAR routes do not import `backend.data` or `backend.cpar`
