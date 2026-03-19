@@ -1,5 +1,6 @@
 """Central registry for FastAPI routers."""
 
+from backend.api.routes.cpar import router as cpar_router
 from backend.api.routes.data import router as data_router
 from backend.api.routes.exposures import router as exposures_router
 from backend.api.routes.health import router as health_router
@@ -19,5 +20,6 @@ API_ROUTERS = [
     holdings_router,
     operator_router,
     universe_router,
+    cpar_router,
     data_router,
 ]
