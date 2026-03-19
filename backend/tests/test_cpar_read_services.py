@@ -229,6 +229,8 @@ def test_cpar_meta_service_returns_active_package_and_factor_registry(
 
     assert payload["package_run_id"] == "run_curr"
     assert payload["package_date"] == "2026-03-14"
+    assert payload["started_at"] == "2026-03-14T00:00:00Z"
+    assert payload["completed_at"] == "2026-03-14T00:01:00Z"
     assert payload["factor_count"] == 17
     assert payload["factors"][0]["factor_id"] == "SPY"
 

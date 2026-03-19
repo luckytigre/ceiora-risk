@@ -26,6 +26,7 @@ function CparPortfolioPageInner() {
   const [mode, setMode] = useState<CparHedgeMode>("factor_neutral");
 
   const { data: meta, error: metaError, isLoading: metaLoading } = useCparMeta();
+  const metaState = metaError ? readCparError(metaError) : null;
   const { data: accountsData, error: accountsError, isLoading: accountsLoading } = useHoldingsAccounts();
 
   const defaultAccountId = useMemo(() => {
@@ -50,13 +51,12 @@ function CparPortfolioPageInner() {
     data: portfolio,
     error: portfolioError,
     isLoading: portfolioLoading,
-  } = useCparPortfolioHedge(selectedAccountId, mode, Boolean(selectedAccountId));
+  } = useCparPortfolioHedge(selectedAccountId, mode, Boolean(selectedAccountId) && Boolean(meta) && !metaState);
 
   if (metaLoading && !meta) {
     return <AnalyticsLoadingViz message="Loading cPAR portfolio hedge workflow..." />;
   }
 
-  const metaState = metaError ? readCparError(metaError) : null;
   const portfolioState = portfolioError ? readCparError(portfolioError) : null;
   const packageMismatch = Boolean(meta && portfolio && !sameCparPackageIdentity(meta, portfolio));
   const selectedAccount = (accountsData?.accounts || []).find((row) => row.account_id === selectedAccountId) || null;

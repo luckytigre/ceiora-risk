@@ -73,6 +73,8 @@ Read behavior:
 - child coverage is required for the requested surface
 - hedge preview requires complete covariance coverage
 - missing required coverage returns cPAR-specific `503 not_ready`
+- the package banner exposes package date/source-as-of freshness plus completion time so stale-but-readable packages remain visible to operators
+- frontend pages gate dependent detail/account reads on package metadata first; a package-level `not_ready` or `unavailable` state should not keep probing deeper cPAR routes on the same page load
 
 The current read surfaces do not:
 - reuse `serving_payload_current`
@@ -106,6 +108,22 @@ Current cPAR flows fail closed when:
 - a required cPAR relational surface is missing
 - active covariance coverage is partial for hedge preview
 - Neon authority reads are required and unavailable
+- package identity drifts between package metadata and a later detail/hedge/account payload
+
+## Runtime Troubleshooting
+
+If `/cpar*` shows `not_ready`:
+- confirm a successful `cpar-weekly` or explicit `cpar-package-date` build exists
+- confirm the active package has the required relational child coverage for the requested surface
+- do not expect the frontend to fall back to request-time fitting or route-triggered builds
+
+If `/cpar*` shows `unavailable`:
+- in `cloud-serve`, treat this as an authority/read-path outage until Neon-backed reads recover
+- in local development, confirm whether Neon is expected; SQLite-only fallback is local-only behavior, not cloud behavior
+
+If the shared banner shows an aging or stale package:
+- treat the current read surface as historical until a newer package is published
+- use the package completion timestamp and package date to distinguish an old-but-consistent package from a current publish failure
 
 ## Explicit Non-Goals
 

@@ -10,6 +10,7 @@ const PORT = 3103;
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
+const NEXT_BIN = path.resolve(FRONTEND_ROOT, "node_modules", ".bin", process.platform === "win32" ? "next.cmd" : "next");
 
 async function waitForServer(url, timeoutMs = 120000) {
   const startedAt = Date.now();
@@ -36,9 +37,11 @@ const serverStderr = [];
 let debugPage = null;
 let capturedPageError = null;
 let metaReady = false;
+let detailRequestCount = 0;
+let portfolioRequestCount = 0;
 const server = spawn(
-  "npx",
-  ["next", "dev", "-H", HOST, "-p", String(PORT)],
+  NEXT_BIN,
+  ["dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
@@ -229,6 +232,7 @@ try {
       }
 
       if (method === "GET" && pathName === "/api/cpar/portfolio/hedge") {
+        portfolioRequestCount += 1;
         return fulfillJson(
           {
             detail: {
@@ -243,6 +247,7 @@ try {
       }
 
       if (method === "GET" && pathName === "/api/cpar/ticker/AAPL") {
+        detailRequestCount += 1;
         if (!requestUrl.searchParams.get("ric")) {
           return fulfillJson({ detail: "Ambiguous cPAR instrument fit for ticker AAPL" }, 409);
         }
@@ -341,6 +346,8 @@ try {
     await page.getByTestId("cpar-portfolio-not-ready").waitFor();
     await page.getByText("cPAR Portfolio Not Ready").waitFor();
     await page.getByText("This workflow is package-based and read-only. Publish a durable cPAR package first, then reload.").waitFor();
+    assert.equal(detailRequestCount, 0);
+    assert.equal(portfolioRequestCount, 0);
 
     metaReady = true;
 

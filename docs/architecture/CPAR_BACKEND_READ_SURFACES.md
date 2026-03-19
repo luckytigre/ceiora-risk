@@ -26,6 +26,7 @@ It does not add:
 
 `GET /api/cpar/meta`
 - returns active-package metadata plus the fixed cPAR1 factor registry
+- includes package start/completion timestamps for read-surface freshness and operational context
 
 `GET /api/cpar/search?q=&limit=`
 - searches the active package’s persisted instrument-fit rows

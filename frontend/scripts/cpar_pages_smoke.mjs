@@ -10,6 +10,7 @@ const PORT = 3102;
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
+const NEXT_BIN = path.resolve(FRONTEND_ROOT, "node_modules", ".bin", process.platform === "win32" ? "next.cmd" : "next");
 
 function factorRegistry() {
   return [
@@ -66,8 +67,8 @@ const serverStderr = [];
 let debugPage = null;
 let capturedPageError = null;
 const server = spawn(
-  "npx",
-  ["next", "dev", "-H", HOST, "-p", String(PORT)],
+  NEXT_BIN,
+  ["dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
@@ -315,6 +316,7 @@ try {
     await gotoWithRetry(page, `${BASE_URL}/cpar`, { waitUntil: "domcontentloaded" });
     await page.getByRole("link", { name: "cPAR" }).waitFor();
     await page.getByTestId("cpar-package-banner").waitFor();
+    await page.getByTestId("cpar-package-freshness").waitFor();
     await page.getByTestId("cpar-factor-registry").waitFor();
     await page.getByRole("link", { name: "Open /cpar/portfolio" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);

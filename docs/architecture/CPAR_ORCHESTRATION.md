@@ -94,6 +94,10 @@ Failure means:
 - no runtime-state keys or operator surfaces are updated
 - the CLI exits non-zero for failed or blocked runs so shell automation can fail closed
 
+Read-surface implication:
+- the resulting active package date becomes the frontend freshness anchor
+- if no successful current package exists, the read surfaces fail closed instead of probing lower package-dependent routes repeatedly
+
 ## Explicit Non-Goals
 
 This slice does not include:

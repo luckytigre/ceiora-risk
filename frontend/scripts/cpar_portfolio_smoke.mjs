@@ -10,6 +10,7 @@ const PORT = 3108;
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
+const NEXT_BIN = path.resolve(FRONTEND_ROOT, "node_modules", ".bin", process.platform === "win32" ? "next.cmd" : "next");
 
 async function waitForServer(url, timeoutMs = 120000) {
   const startedAt = Date.now();
@@ -70,8 +71,8 @@ const serverStderr = [];
 let debugPage = null;
 let capturedPageError = null;
 const server = spawn(
-  "npx",
-  ["next", "dev", "-H", HOST, "-p", String(PORT)],
+  NEXT_BIN,
+  ["dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {

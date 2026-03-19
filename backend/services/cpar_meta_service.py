@@ -36,6 +36,8 @@ def package_meta_payload(package: dict[str, object]) -> dict[str, object]:
         "package_run_id": str(package["package_run_id"]),
         "package_date": str(package["package_date"]),
         "profile": str(package["profile"]),
+        "started_at": str(package["started_at"]) if package.get("started_at") is not None else None,
+        "completed_at": str(package["completed_at"]) if package.get("completed_at") is not None else None,
         "method_version": str(package["method_version"]),
         "factor_registry_version": str(package["factor_registry_version"]),
         "data_authority": str(package["data_authority"]),

@@ -19,6 +19,12 @@ interface CparApiErrorDetail {
   build_profile?: string;
 }
 
+interface CparPackageFreshnessInput {
+  package_date?: string | null;
+  source_prices_asof?: string | null;
+  completed_at?: string | null;
+}
+
 export interface CparBadgeDescriptor {
   label: string;
   tone: BadgeTone;
@@ -42,23 +48,42 @@ function cleanDate(value: string | null | undefined): string | null {
   return text || null;
 }
 
+function parseIsoDate(value: string | null | undefined): Date | null {
+  const isoDate = cleanDate(value);
+  if (!isoDate) return null;
+  const parts = isoDate.split("-");
+  if (parts.length !== 3) return null;
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
 export function formatCparPackageDate(value: string | null | undefined): string {
   const isoDate = cleanDate(value);
+  const parsed = parseIsoDate(value);
   if (!isoDate) return "—";
-  const parts = isoDate.split("-");
-  if (parts.length === 3) {
-    const year = Number(parts[0]);
-    const month = Number(parts[1]);
-    const day = Number(parts[2]);
-    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
-      return new Date(year, month - 1, day, 12, 0, 0).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-      });
-    }
-  }
-  return isoDate;
+  if (!parsed) return isoDate;
+  return parsed.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+export function formatCparTimestamp(value: string | null | undefined): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "—";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export function formatCparNumber(value: number | null | undefined, digits = 2): string {
@@ -163,6 +188,44 @@ export function summarizeFactorRegistry(factors: CparFactorSpec[]): Record<CparF
 
 export function canNavigateCparSearchResult(item: Pick<CparSearchItem, "ticker"> | null | undefined): boolean {
   return Boolean(item?.ticker && item.ticker.trim());
+}
+
+export function describeCparPackageFreshness(meta: CparPackageFreshnessInput): CparBadgeDescriptor {
+  const referenceDate = parseIsoDate(meta.source_prices_asof) || parseIsoDate(meta.package_date);
+  if (!referenceDate) {
+    return {
+      label: "Unknown",
+      tone: "neutral",
+      detail: "The cPAR package does not expose a usable package date for freshness checks.",
+    };
+  }
+
+  const today = new Date();
+  const noonToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0);
+  const ageDays = Math.round((noonToday.getTime() - referenceDate.getTime()) / (24 * 60 * 60 * 1000));
+  const asOf = formatCparPackageDate(meta.source_prices_asof || meta.package_date || null);
+  const builtAt = formatCparTimestamp(meta.completed_at);
+  const buildDetail = builtAt === "—" ? "Build timestamp unavailable." : `Built ${builtAt}.`;
+
+  if (ageDays <= 7) {
+    return {
+      label: "Current",
+      tone: "success",
+      detail: `Source/package as of ${asOf}. ${buildDetail}`,
+    };
+  }
+  if (ageDays <= 14) {
+    return {
+      label: "Aging",
+      tone: "warning",
+      detail: `Source/package as of ${asOf} (${ageDays} days old). ${buildDetail}`,
+    };
+  }
+  return {
+    label: "Stale",
+    tone: "error",
+    detail: `Source/package as of ${asOf} (${ageDays} days old). Publish a newer cPAR package before relying on this read surface. ${buildDetail}`,
+  };
 }
 
 export function sameCparPackageIdentity(

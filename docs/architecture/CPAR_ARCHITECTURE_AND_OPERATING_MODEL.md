@@ -93,6 +93,7 @@ Frontend consistency rule:
 - `/cpar/explore` must not mix package banners, detail rows, and hedge previews from different active packages
 - `/cpar/hedge` must not mix package banners, subject rows, and hedge previews from different active packages
 - if package identity drifts between independent reads, the page fails closed and prompts the user to reload
+- shared banner rendering exposes package freshness so stale active packages remain visible without implying any route-triggered rebuild path
 
 ## Active-Package Semantics
 
@@ -103,6 +104,8 @@ Current read behavior:
 - hedge preview additionally requires complete covariance coverage
 - account-level portfolio hedge additionally requires live holdings rows plus latest shared-source prices on or before the active package date
 - missing required relational coverage fails closed with cPAR-specific `503 not_ready`
+- the frontend uses package metadata as the first gate for dependent reads and does not intentionally keep querying detail/hedge/account payloads after a package-level `not_ready` or `unavailable` response
+- current package freshness is interpreted from the active package date/source-as-of date, not from any cUSE4 refresh/runtime-state surface
 
 Current runtime authority:
 - `local-ingest`: may build and persist packages

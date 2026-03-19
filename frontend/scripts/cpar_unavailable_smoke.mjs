@@ -10,6 +10,7 @@ const PORT = 3105;
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
+const NEXT_BIN = path.resolve(FRONTEND_ROOT, "node_modules", ".bin", process.platform === "win32" ? "next.cmd" : "next");
 
 async function waitForServer(url, timeoutMs = 120000) {
   const startedAt = Date.now();
@@ -54,10 +55,12 @@ const serverStderr = [];
 let debugPage = null;
 let capturedPageError = null;
 let scenario = "landing_unavailable";
+let detailRequestCount = 0;
+let portfolioRequestCount = 0;
 
 const server = spawn(
-  "npx",
-  ["next", "dev", "-H", HOST, "-p", String(PORT)],
+  NEXT_BIN,
+  ["dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
@@ -211,6 +214,7 @@ try {
       }
 
       if (method === "GET" && pathName === "/api/cpar/ticker/AAPL") {
+        detailRequestCount += 1;
         if (scenario === "hedge_unavailable") {
           return fulfillJson({
             package_run_id: "run_curr",
@@ -277,6 +281,7 @@ try {
       }
 
       if (method === "GET" && pathName === "/api/cpar/portfolio/hedge") {
+        portfolioRequestCount += 1;
         if (scenario === "portfolio_unavailable") {
           return fulfillJson(
             {
@@ -298,6 +303,16 @@ try {
     await gotoWithRetry(page, `${BASE_URL}/cpar`, { waitUntil: "domcontentloaded" });
     await page.getByText("cPAR Read Surface Unavailable").waitFor();
     await page.getByText("Neon cPAR read failed.").waitFor();
+
+    await gotoWithRetry(page, `${BASE_URL}/cpar/hedge?ticker=AAPL&ric=AAPL.OQ`, { waitUntil: "domcontentloaded" });
+    await page.getByTestId("cpar-hedge-not-ready").waitFor();
+    await page.getByText("cPAR Hedge Unavailable").waitFor();
+
+    await gotoWithRetry(page, `${BASE_URL}/cpar/portfolio?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await page.getByTestId("cpar-portfolio-not-ready").waitFor();
+    await page.getByText("cPAR Portfolio Unavailable").waitFor();
+    assert.equal(detailRequestCount, 0);
+    assert.equal(portfolioRequestCount, 0);
 
     scenario = "explore_unavailable";
     await gotoWithRetry(page, `${BASE_URL}/cpar/explore?ticker=AAPL&ric=AAPL.OQ`, { waitUntil: "domcontentloaded" });

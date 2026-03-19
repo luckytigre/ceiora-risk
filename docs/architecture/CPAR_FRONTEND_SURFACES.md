@@ -53,6 +53,7 @@ It does not add:
 
 `GET /api/cpar/meta`
 - package metadata plus ordered factor registry
+- includes the active package completion timestamp used for banner-level operational context
 
 `GET /api/cpar/search`
 - active-package search hits only
@@ -74,6 +75,7 @@ Page consistency rule:
 - the frontend must treat `meta`, `ticker detail`, and `hedge` as one package-scoped flow
 - the frontend must treat `meta` and the portfolio hedge payload as one package-scoped flow
 - if those responses do not share the same `package_run_id` / `package_date`, the page must fail closed instead of mixing surfaces from different active packages
+- the frontend now uses package metadata as the first gate for dependent reads, so package-level `not_ready` / `unavailable` states do not keep probing detail or portfolio endpoints on the same page load
 - `/cpar/explore` enforces this for banner plus detail
 - `/cpar/hedge` enforces this for banner, selected subject, and hedge preview
 - `/cpar/portfolio` enforces this for banner plus account hedge payload
@@ -92,6 +94,7 @@ Warnings:
 Read failures:
 - cPAR-specific `503 not_ready` is rendered as a package-not-ready state
 - cPAR-specific `503 unavailable` is rendered as an authority-unavailable state
+- package freshness is rendered from the active package date/source-as-of date on the shared banner so stale packages remain obvious even when reads succeed
 - ticker ambiguity is rendered as a UI instruction to choose a specific RIC from search results
 - search hits without a ticker render as non-navigable rows because the current detail route is ticker-keyed
 - a direct `/cpar/explore?ric=...` visit without `ticker=` must render an explanatory warning rather than silently failing or synthesizing a detail request
@@ -126,6 +129,7 @@ Current cPAR frontend smokes cover:
 - `unavailable`
 - package mismatch
 - `/cpar/portfolio` fail-closed branches for `not_ready`, `unavailable`, and package mismatch
+- meta-first gating for detail/account reads when package-level `not_ready` or `unavailable` blocks the page
 
 ## Deferred After This Slice
 

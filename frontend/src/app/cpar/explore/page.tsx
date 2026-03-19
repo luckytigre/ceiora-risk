@@ -34,17 +34,18 @@ function CparExplorePageInner() {
   const querySeed = ric || ticker || "";
 
   const { data: meta, error: metaError, isLoading: metaLoading } = useCparMeta();
+  const metaState = metaError ? readCparError(metaError) : null;
+  const metaReady = Boolean(meta) && !metaState;
   const {
     data: detail,
     error: detailError,
     isLoading: detailLoading,
-  } = useCparTicker(ticker, ric);
+  } = useCparTicker(metaReady ? ticker : null, ric);
 
   if (metaLoading && !meta) {
     return <AnalyticsLoadingViz message="Loading cPAR explore..." />;
   }
 
-  const metaState = metaError ? readCparError(metaError) : null;
   const detailState = detailError ? readCparError(detailError) : null;
   const detailPackageMismatch = Boolean(meta && detail && !sameCparPackageIdentity(meta, detail));
   const detailBlocked = detail?.fit_status === "insufficient_history" || detailPackageMismatch;

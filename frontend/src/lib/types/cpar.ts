@@ -10,6 +10,8 @@ export interface CparPackageMeta {
   package_run_id: string;
   package_date: string;
   profile: string;
+  started_at?: string | null;
+  completed_at?: string | null;
   method_version: string;
   factor_registry_version: string;
   data_authority: string;
