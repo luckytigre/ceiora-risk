@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useCparSearch } from "@/hooks/useApi";
+import { useCparSearch } from "@/hooks/useCparApi";
 import { canNavigateCparSearchResult, readCparError } from "@/lib/cparTruth";
-import type { CparSearchItem } from "@/lib/types";
+import type { CparSearchItem } from "@/lib/types/cpar";
 import CparWarningsBar from "./CparWarningsBar";
 
 function highlightMatch(text: string, query: string): ReactNode {

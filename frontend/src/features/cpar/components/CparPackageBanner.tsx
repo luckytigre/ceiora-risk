@@ -6,7 +6,7 @@ import {
   formatCparTimestamp,
   summarizeFactorRegistry,
 } from "@/lib/cparTruth";
-import type { CparFactorSpec, CparPackageMeta } from "@/lib/types";
+import type { CparFactorSpec, CparPackageMeta } from "@/lib/types/cpar";
 
 function metric(label: string, value: string, detail?: string, testId?: string) {
   return (

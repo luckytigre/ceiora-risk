@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { formatCparNumber } from "@/lib/cparTruth";
-import type { CparTickerDetailData } from "@/lib/types";
+import type { CparTickerDetailData } from "@/lib/types/cpar";
 import CparLoadingsTable from "./CparLoadingsTable";
 
 export default function CparExploreLoadingsSection({

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { formatCparNumber, formatCparPackageDate } from "@/lib/cparTruth";
-import type { CparTickerDetailData } from "@/lib/types";
+import type { CparTickerDetailData } from "@/lib/types/cpar";
 import CparExploreSourceContextCard from "./CparExploreSourceContextCard";
 import CparWarningsBar from "./CparWarningsBar";
 

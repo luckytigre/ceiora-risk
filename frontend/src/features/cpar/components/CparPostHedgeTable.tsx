@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCparNumber } from "@/lib/cparTruth";
-import type { CparPostHedgeExposure } from "@/lib/types";
+import type { CparPostHedgeExposure } from "@/lib/types/cpar";
 
 export default function CparPostHedgeTable({
   rows,

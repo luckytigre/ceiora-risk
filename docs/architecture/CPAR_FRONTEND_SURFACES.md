@@ -125,6 +125,13 @@ Current page owners:
 - `/cpar/hedge` stays owned by `frontend/src/app/cpar/hedge/page.tsx`
 - `/cpar/health` stays owned by `frontend/src/features/cpar/components/CparHealthWorkspace.tsx`
 
+Preferred cPAR frontend import surfaces now include:
+- `frontend/src/hooks/useCparApi.ts` for cPAR route hooks plus the shared holdings-account hook reused by `/cpar/risk`
+- `frontend/src/lib/cparApi.ts` for cPAR route-path helpers over the shared fetch transport
+- `frontend/src/lib/types/cpar.ts` for cPAR route contracts
+- `frontend/src/lib/types/holdings.ts` when cPAR intentionally reuses shared holdings/account types
+- `frontend/src/lib/cparTruth.ts` for cPAR-specific warning/status/package-truth helpers
+
 Allowed reuse direction:
 - neutral visual primitives from `frontend/src/components/*`
 - shared holdings/account widgets such as `InlineShareDraftEditor`
@@ -135,6 +142,7 @@ Disallowed reuse direction for this overhaul stage:
 - cUSE explore owners under `frontend/src/features/explore/*`
 - cUSE what-if owners under `frontend/src/features/whatif/*`
 - cUSE hooks or payload semantics through `@/hooks/useCuse4Api`, `@/lib/cuse4Api`, or `@/lib/types/cuse4`
+- transitional mixed-family barrels through `@/hooks/useApi`, `@/lib/api`, or `@/lib/types` from cPAR-owned frontend files
 
 If a richer cPAR page still needs multiple backend requests, it must preserve the same package-identity checks described above.
 If that becomes too brittle for one page, the next slice should move that page to a composite cPAR payload rather than mixing partially coherent reads in the browser.

@@ -7,9 +7,9 @@ import CparHedgePanel from "@/features/cpar/components/CparHedgePanel";
 import { CparInlineLoadingState, CparPageLoadingState } from "@/features/cpar/components/CparLoadingState";
 import CparInstrumentSummaryCard from "@/features/cpar/components/CparInstrumentSummaryCard";
 import CparSearchPanel from "@/features/cpar/components/CparSearchPanel";
-import { useCparMeta, useCparTicker } from "@/hooks/useApi";
+import { useCparMeta, useCparTicker } from "@/hooks/useCparApi";
 import { canNavigateCparSearchResult, readCparError, sameCparPackageIdentity } from "@/lib/cparTruth";
-import type { CparSearchItem } from "@/lib/types";
+import type { CparSearchItem } from "@/lib/types/cpar";
 
 function buildHedgeHref(item: CparSearchItem): string {
   const params = new URLSearchParams();

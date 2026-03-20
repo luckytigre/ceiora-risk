@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import TableRowToggle from "@/components/TableRowToggle";
 import { describeCparFitStatus, formatCparNumber, formatCparPercent } from "@/lib/cparTruth";
-import type { CparPortfolioPositionRow } from "@/lib/types";
+import type { CparPortfolioPositionRow } from "@/lib/types/cpar";
 import CparWarningsBar from "./CparWarningsBar";
 
 const COLLAPSED_ROWS = 8;

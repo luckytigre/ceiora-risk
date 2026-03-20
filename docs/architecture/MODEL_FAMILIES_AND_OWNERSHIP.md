@@ -130,8 +130,25 @@ Integration stays in the repo's normal layers, but with explicit cPAR naming:
 - `backend/orchestration/cpar_*`
 - `frontend/src/app/cpar/*`
 - `frontend/src/features/cpar/*`
+- `frontend/src/hooks/useCparApi.ts`
+- `frontend/src/lib/cparApi.ts`
 - `frontend/src/lib/cparTruth.ts`
 - `frontend/src/lib/types/cpar.ts`
+
+Preferred cPAR frontend import surfaces now include:
+
+- `frontend/src/hooks/useCparApi.ts`
+- `frontend/src/lib/cparApi.ts`
+- `frontend/src/lib/types/cpar.ts`
+- shared `frontend/src/lib/types/holdings.ts` only where cPAR intentionally reuses shared holdings/account plumbing
+
+The mixed-family compatibility barrels:
+
+- `frontend/src/hooks/useApi.ts`
+- `frontend/src/lib/api.ts`
+- `frontend/src/lib/types.ts`
+
+may remain for compatibility, but they should not be the default import path for cPAR-owned frontend code after the current cleanup slice.
 
 ## Why The Asymmetry Exists
 

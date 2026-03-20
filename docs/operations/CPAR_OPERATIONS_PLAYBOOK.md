@@ -110,6 +110,10 @@ That shared snapshot now also carries explicit `coverage_breakdown`, factor-only
 - coverage summary plus explicit exclusion buckets
 - one factor-only contribution profile
 - one positions contribution-mix table
+Current frontend ownership for those pages is now routed through cPAR-specific wrappers:
+- `frontend/src/hooks/useCparApi.ts`
+- `frontend/src/lib/cparApi.ts`
+That keeps cPAR pages off the transitional mixed-family frontend barrels while still allowing `/cpar/risk` to reuse the shared holdings-account hook intentionally.
 Upcoming cPAR risk/explore expansion should keep following the same ownership rule: extend current cPAR route/service owners by default, and only add a new cPAR-specific owner when the authority/read pattern is genuinely different.
 Until that authority decision is made explicitly, the operations baseline does not assume a new cPAR single-name history route or any reuse of cUSE universe/read surfaces. This slice still does not add a cUSE-style price-history panel to `/cpar/explore`.
 

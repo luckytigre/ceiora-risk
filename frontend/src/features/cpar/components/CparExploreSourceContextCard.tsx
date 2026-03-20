@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCparPackageDate } from "@/lib/cparTruth";
-import type { CparSourceContext, CparTickerDetailData } from "@/lib/types";
+import type { CparSourceContext, CparTickerDetailData } from "@/lib/types/cpar";
 
 function metric(label: string, value: string, detail?: string) {
   return (

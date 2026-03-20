@@ -1,7 +1,7 @@
 "use client";
 
 import { describeCparFitStatus, describeCparWarning } from "@/lib/cparTruth";
-import type { CparFitStatus, CparWarning } from "@/lib/types";
+import type { CparFitStatus, CparWarning } from "@/lib/types/cpar";
 
 export default function CparWarningsBar({
   fitStatus,

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CparHedgeMode, CparPortfolioHedgeData } from "@/lib/types";
+import type { CparHedgeMode, CparPortfolioHedgeData } from "@/lib/types/cpar";
 import { describeCparHedgeStatus, formatCparNumber, formatCparPercent } from "@/lib/cparTruth";
 import CparPostHedgeTable from "./CparPostHedgeTable";
 

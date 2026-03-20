@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCparNumber } from "@/lib/cparTruth";
-import type { CparLoading } from "@/lib/types";
+import type { CparLoading } from "@/lib/types/cpar";
 
 export default function CparLoadingsTable({
   title,

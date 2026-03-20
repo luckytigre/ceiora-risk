@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useCparHedge } from "@/hooks/useApi";
+import { useCparHedge } from "@/hooks/useCparApi";
 import {
   describeCparHedgeStatus,
   formatCparNumber,
@@ -9,7 +9,7 @@ import {
   readCparError,
   sameCparPackageIdentity,
 } from "@/lib/cparTruth";
-import type { CparFitStatus, CparHedgeMode } from "@/lib/types";
+import type { CparFitStatus, CparHedgeMode } from "@/lib/types/cpar";
 import { CparInlineLoadingState } from "./CparLoadingState";
 import CparPostHedgeTable from "./CparPostHedgeTable";
 

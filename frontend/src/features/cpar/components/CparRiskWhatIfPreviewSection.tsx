@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCparNumber } from "@/lib/cparTruth";
-import type { CparHedgeMode, CparPortfolioWhatIfData } from "@/lib/types";
+import type { CparHedgeMode, CparPortfolioWhatIfData } from "@/lib/types/cpar";
 import CparPortfolioHedgePanel from "./CparPortfolioHedgePanel";
 
 export default function CparRiskWhatIfPreviewSection({

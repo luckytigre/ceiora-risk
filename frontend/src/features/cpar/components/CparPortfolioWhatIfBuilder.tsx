@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import InlineShareDraftEditor from "@/features/holdings/components/InlineShareDraftEditor";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useCparSearch } from "@/hooks/useApi";
+import { useCparSearch } from "@/hooks/useCparApi";
 import {
   canNavigateCparSearchResult,
   describeCparFitStatus,
   readCparError,
 } from "@/lib/cparTruth";
-import type { CparSearchItem } from "@/lib/types";
+import type { CparSearchItem } from "@/lib/types/cpar";
 
 export interface CparDraftScenarioRow {
   key: string;

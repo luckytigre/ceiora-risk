@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCparNumber, formatCparPercent } from "@/lib/cparTruth";
-import type { CparPortfolioHedgeData, CparPortfolioStatus } from "@/lib/types";
+import type { CparPortfolioHedgeData, CparPortfolioStatus } from "@/lib/types/cpar";
 
 const STATUS_LABELS: Record<CparPortfolioStatus, { label: string; tone: "success" | "warning" | "error" }> = {
   ok: { label: "Coverage OK", tone: "success" },

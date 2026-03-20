@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { formatCparTimestamp, readCparDependencyErrorMessage } from "@/lib/cparTruth";
-import type { HoldingsAccount, HoldingsAccountsData } from "@/lib/types";
+import type { HoldingsAccount, HoldingsAccountsData } from "@/lib/types/holdings";
 
 export default function CparRiskAccountScopeCard({
   accountsLoading,

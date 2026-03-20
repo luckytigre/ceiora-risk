@@ -2,9 +2,9 @@
 
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCparMeta, useCparTicker } from "@/hooks/useApi";
+import { useCparMeta, useCparTicker } from "@/hooks/useCparApi";
 import { canNavigateCparSearchResult, readCparError, sameCparPackageIdentity } from "@/lib/cparTruth";
-import type { CparSearchItem } from "@/lib/types";
+import type { CparSearchItem } from "@/lib/types/cpar";
 import { CparInlineLoadingState, CparPageLoadingState } from "@/features/cpar/components/CparLoadingState";
 import CparExploreDetailModule from "@/features/cpar/components/CparExploreDetailModule";
 import CparExploreLoadingsSection from "@/features/cpar/components/CparExploreLoadingsSection";

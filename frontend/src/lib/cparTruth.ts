@@ -1,6 +1,6 @@
 "use client";
 
-import { ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/cparApi";
 import type {
   CparFactorGroup,
   CparFactorSpec,
@@ -8,7 +8,7 @@ import type {
   CparHedgeStatus,
   CparSearchItem,
   CparWarning,
-} from "@/lib/types";
+} from "@/lib/types/cpar";
 
 type BadgeTone = "success" | "warning" | "error" | "neutral";
 

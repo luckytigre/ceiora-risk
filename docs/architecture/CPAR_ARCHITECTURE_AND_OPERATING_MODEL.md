@@ -125,6 +125,10 @@ Current frontend boundary decision:
 - cPAR pages may reuse neutral shared components and shared holdings widgets
 - cPAR pages must not take ownership from `frontend/src/features/cuse4/*`, `frontend/src/features/explore/*`, or `frontend/src/features/whatif/*`
 - a visual match to cUSE is acceptable; inheriting cUSE hooks, payload contracts, or apply semantics is not
+- Slice 6 hardens the frontend import boundary as well:
+  - cPAR-owned frontend files now prefer `frontend/src/hooks/useCparApi.ts` and `frontend/src/lib/cparApi.ts`
+  - cPAR contracts now come from `frontend/src/lib/types/cpar.ts` plus shared `frontend/src/lib/types/holdings.ts` where account plumbing is intentionally reused
+  - mixed-family compatibility barrels remain in the repo, but they are no longer the preferred import path for cPAR-owned frontend files
 
 Current package-truth decision:
 - a richer cPAR page may continue to compose multiple requests only while it preserves one `package_run_id` / `package_date` across the full page

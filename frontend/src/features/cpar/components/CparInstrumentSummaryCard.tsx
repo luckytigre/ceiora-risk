@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { formatCparPackageDate } from "@/lib/cparTruth";
-import type { CparTickerDetailData } from "@/lib/types";
+import type { CparTickerDetailData } from "@/lib/types/cpar";
 import CparWarningsBar from "./CparWarningsBar";
 
 function metric(label: string, value: string, detail?: string) {

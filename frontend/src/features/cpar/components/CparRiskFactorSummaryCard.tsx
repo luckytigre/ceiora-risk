@@ -2,7 +2,7 @@
 
 import HelpLabel from "@/components/HelpLabel";
 import { formatCparNumber, formatCparPercent } from "@/lib/cparTruth";
-import type { CparPortfolioHedgeData } from "@/lib/types";
+import type { CparPortfolioHedgeData } from "@/lib/types/cpar";
 
 export default function CparRiskFactorSummaryCard({
   portfolio,

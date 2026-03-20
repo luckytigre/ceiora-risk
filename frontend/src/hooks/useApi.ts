@@ -2,7 +2,7 @@
 
 // Transitional mixed-family compatibility barrel.
 // New cUSE4-owned frontend code should import from `@/hooks/useCuse4Api`.
-// cPAR retains this surface temporarily while its in-flight pages/components settle.
+// New cPAR-owned frontend code should import from `@/hooks/useCparApi`.
 
 import useSWR from "swr";
 import { ApiError, apiFetch, apiPath } from "@/lib/api";

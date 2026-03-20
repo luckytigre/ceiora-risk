@@ -6,31 +6,25 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_SRC_DIR = REPO_ROOT / "frontend" / "src"
 
-ALLOWED_USE_API_PREFIXES = (
-    "app/cpar/",
-    "features/cpar/",
-)
+ALLOWED_USE_API_PREFIXES: tuple[str, ...] = ()
 ALLOWED_USE_API_EXACT = {
     "hooks/useApi.ts",
     "hooks/useCuse4Api.ts",
+    "hooks/useCparApi.ts",
 }
 
 ALLOWED_LIB_API_EXACT = {
     "hooks/useApi.ts",
     "lib/api.ts",
-    "lib/cparTruth.ts",
+    "lib/cparApi.ts",
     "lib/cuse4Api.ts",
     "lib/refresh.ts",
 }
 
-ALLOWED_LIB_TYPES_PREFIXES = (
-    "app/cpar/",
-    "features/cpar/",
-)
+ALLOWED_LIB_TYPES_PREFIXES: tuple[str, ...] = ()
 ALLOWED_LIB_TYPES_EXACT = {
     "hooks/useApi.ts",
     "lib/analyticsTruth.ts",
-    "lib/cparTruth.ts",
     "lib/refresh.ts",
     "lib/types.ts",
 }
@@ -40,6 +34,8 @@ CPAR_FRONTEND_PREFIXES = (
     "features/cpar/",
 )
 CPAR_FRONTEND_EXACT = {
+    "hooks/useCparApi.ts",
+    "lib/cparApi.ts",
     "lib/cparTruth.ts",
 }
 

@@ -10,12 +10,12 @@ import CparRiskCoverageSummaryCard from "@/features/cpar/components/CparRiskCove
 import CparRiskFactorSummaryCard from "@/features/cpar/components/CparRiskFactorSummaryCard";
 import CparRiskPositionsContributionTable from "@/features/cpar/components/CparRiskPositionsContributionTable";
 import CparRiskWhatIfPreviewSection from "@/features/cpar/components/CparRiskWhatIfPreviewSection";
-import { useCparMeta, useCparPortfolioHedge, useCparPortfolioWhatIf, useHoldingsAccounts } from "@/hooks/useApi";
+import { useCparMeta, useCparPortfolioHedge, useCparPortfolioWhatIf, useHoldingsAccounts } from "@/hooks/useCparApi";
 import {
   readCparError,
   sameCparPackageIdentity,
 } from "@/lib/cparTruth";
-import type { CparHedgeMode, CparSearchItem } from "@/lib/types";
+import type { CparHedgeMode, CparSearchItem } from "@/lib/types/cpar";
 
 function parseQuantityDelta(value: string): number | null {
   const parsed = Number(value);

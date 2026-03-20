@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCparMeta } from "@/hooks/useApi";
+import { useCparMeta } from "@/hooks/useCparApi";
 import { canNavigateCparSearchResult, formatCparPackageDate, readCparError, summarizeFactorRegistry } from "@/lib/cparTruth";
-import type { CparSearchItem } from "@/lib/types";
+import type { CparSearchItem } from "@/lib/types/cpar";
 import { CparPageLoadingState } from "@/features/cpar/components/CparLoadingState";
 import CparPackageBanner from "@/features/cpar/components/CparPackageBanner";
 import CparSearchPanel from "@/features/cpar/components/CparSearchPanel";

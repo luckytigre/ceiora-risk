@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useCparSearch } from "@/hooks/useApi";
+import { useCparSearch } from "@/hooks/useCparApi";
 import { canNavigateCparSearchResult, readCparError } from "@/lib/cparTruth";
-import type { CparSearchItem } from "@/lib/types";
+import type { CparSearchItem } from "@/lib/types/cpar";
 import CparWarningsBar from "./CparWarningsBar";
 
 export default function CparSearchPanel({
