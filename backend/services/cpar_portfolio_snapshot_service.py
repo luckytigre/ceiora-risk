@@ -123,6 +123,32 @@ def _coverage_reason(code: str) -> str | None:
     return None
 
 
+def _zero_coverage_bucket() -> dict[str, object]:
+    return {
+        "positions_count": 0,
+        "gross_market_value": 0.0,
+    }
+
+
+def _coverage_breakdown(rows: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+    breakdown = {
+        "covered": _zero_coverage_bucket(),
+        "missing_price": _zero_coverage_bucket(),
+        "missing_cpar_fit": _zero_coverage_bucket(),
+        "insufficient_history": _zero_coverage_bucket(),
+    }
+    for row in rows:
+        coverage = str(row.get("coverage") or "")
+        if coverage not in breakdown:
+            continue
+        bucket = breakdown[coverage]
+        bucket["positions_count"] = int(bucket["positions_count"]) + 1
+        market_value = row.get("market_value")
+        if market_value is not None:
+            bucket["gross_market_value"] = float(bucket["gross_market_value"]) + abs(float(market_value))
+    return breakdown
+
+
 def _build_position_rows(
     *,
     positions: list[dict[str, Any]],
@@ -180,6 +206,34 @@ def _build_position_rows(
     return rows
 
 
+def _attach_thresholded_contributions(
+    rows: list[dict[str, object]],
+    *,
+    fit_by_ric: dict[str, dict[str, Any]],
+) -> list[dict[str, object]]:
+    enriched: list[dict[str, object]] = []
+    for row in rows:
+        coverage = str(row.get("coverage") or "")
+        portfolio_weight = row.get("portfolio_weight")
+        if coverage != "covered" or portfolio_weight is None:
+            enriched.append({**row, "thresholded_contributions": []})
+            continue
+
+        fit = fit_by_ric.get(str(row.get("ric") or ""))
+        contributions = {
+            str(factor_id): float(portfolio_weight) * float(beta)
+            for factor_id, beta in dict((fit or {}).get("thresholded_loadings") or {}).items()
+            if abs(float(portfolio_weight) * float(beta)) > 1e-12
+        }
+        enriched.append(
+            {
+                **row,
+                "thresholded_contributions": _factor_rows(contributions),
+            }
+        )
+    return enriched
+
+
 def _aggregate_thresholded_loadings(
     rows: list[dict[str, object]],
     *,
@@ -204,6 +258,42 @@ def _aggregate_thresholded_loadings(
         gross_market_value,
         net_market_value,
     )
+
+
+def _factor_variance_contribution_rows(
+    loadings: dict[str, float],
+    *,
+    covariance_rows: list[dict[str, Any]],
+) -> list[dict[str, object]]:
+    if not loadings:
+        return []
+    ordered_rows = _factor_rows(loadings)
+    factor_ids = tuple(str(row["factor_id"]) for row in ordered_rows)
+    covariance = {
+        (str(row["factor_id"]), str(row["factor_id_2"])): float(row["covariance"])
+        for row in covariance_rows
+    }
+    covariance_matrix = hedge_engine.covariance_matrix_for_factors(factor_ids, covariance)
+    beta_vector = [float(loadings.get(factor_id, 0.0)) for factor_id in factor_ids]
+    sigma_beta = [
+        float(
+            sum(float(covariance_matrix[row_idx, col_idx]) * beta_vector[col_idx] for col_idx in range(len(factor_ids)))
+        )
+        for row_idx in range(len(factor_ids))
+    ]
+    total_variance = float(sum(beta_vector[idx] * sigma_beta[idx] for idx in range(len(factor_ids))))
+
+    rows: list[dict[str, object]] = []
+    for idx, factor_row in enumerate(ordered_rows):
+        contribution = float(beta_vector[idx] * sigma_beta[idx])
+        rows.append(
+            {
+                **factor_row,
+                "variance_contribution": contribution,
+                "variance_share": (None if total_variance <= 0 else float(contribution / total_variance)),
+            }
+        )
+    return rows
 
 
 def load_cpar_portfolio_account_context(
@@ -290,9 +380,11 @@ def build_cpar_portfolio_hedge_snapshot(
         "net_market_value": 0.0,
         "covered_gross_market_value": 0.0,
         "coverage_ratio": None,
+        "coverage_breakdown": _coverage_breakdown([]),
         "portfolio_status": "empty",
         "portfolio_reason": "No live holdings positions are loaded for this account.",
         "aggregate_thresholded_loadings": [],
+        "factor_variance_contributions": [],
         "hedge_status": None,
         "hedge_reason": None,
         "hedge_legs": [],
@@ -323,6 +415,7 @@ def build_cpar_portfolio_hedge_snapshot(
         price_by_ric=price_by_ric,
         covered_gross_market_value=covered_gross_market_value,
     )
+    position_rows = _attach_thresholded_contributions(position_rows, fit_by_ric=fit_by_ric)
 
     priced_gross_market_value = sum(
         abs(float(row["market_value"]))
@@ -344,6 +437,7 @@ def build_cpar_portfolio_hedge_snapshot(
         "net_market_value": float(net_market_value),
         "covered_gross_market_value": float(covered_gross_market_value),
         "coverage_ratio": coverage_ratio,
+        "coverage_breakdown": _coverage_breakdown(position_rows),
         "positions": position_rows,
     }
 
@@ -372,6 +466,10 @@ def build_cpar_portfolio_hedge_snapshot(
                 else None
             ),
             "aggregate_thresholded_loadings": _factor_rows(aggregate_loadings),
+            "factor_variance_contributions": _factor_variance_contribution_rows(
+                aggregate_loadings,
+                covariance_rows=covariance_rows,
+            ),
             "hedge_status": str(preview.status),
             "hedge_reason": preview.reason,
             "hedge_legs": _hedge_leg_rows(preview.hedge_legs),

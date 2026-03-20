@@ -52,6 +52,10 @@ It does not add:
 - values holdings rows at the latest shared-source price on or before the active package date
 - aggregates only covered persisted cPAR thresholded loadings into one hedge vector
 - reports `coverage_ratio` as covered gross market value divided by priced gross market value
+- now also returns:
+  - `coverage_breakdown` for `covered`, `missing_price`, `missing_cpar_fit`, and `insufficient_history`
+  - top-level `factor_variance_contributions` derived from the aggregate thresholded loadings plus active-package covariance
+  - per-position `thresholded_contributions` for covered rows only
 - supported `mode` values are `factor_neutral` and `market_neutral`
 
 `POST /api/cpar/portfolio/whatif`
@@ -61,6 +65,7 @@ It does not add:
 - stages signed share deltas only; it does not mutate holdings or apply trades
 - additions outside the current holdings set must come from active-package search hits and therefore must be present in the active persisted cPAR fits
 - response returns `scenario_rows`, `current`, `hypothetical`, and `_preview_only = true`
+- the nested `current` and `hypothetical` snapshots carry the same `coverage_breakdown`, `factor_variance_contributions`, and per-position `thresholded_contributions` contract as the baseline hedge route
 
 ## Read Authority
 
@@ -87,6 +92,10 @@ Account-scoped owners:
 - `GET /api/cpar/portfolio/hedge` remains owned by `backend/services/cpar_portfolio_hedge_service.py`
 - `POST /api/cpar/portfolio/whatif` remains owned by `backend/services/cpar_portfolio_whatif_service.py`
 - shared lower assembly for both stays in `backend/services/cpar_portfolio_snapshot_service.py`
+- Slice 4 extends that shared snapshot owner instead of adding a new `/api/cpar/portfolio/risk` route family:
+  - `coverage_breakdown` remains the explicit bucketed exclusion summary
+  - `factor_variance_contributions` remains a factor-only decomposition of the same aggregate thresholded exposure vector already used for hedge preview
+  - `positions[].thresholded_contributions` remains the per-position weighted contribution view derived from covered rows only
 - richer `/cpar/risk` analytics should extend those current owners, or add one clearly distinct cPAR-specific account-risk owner only if the new payload cannot be expressed cleanly through the current split
 
 Current non-goals for this expansion stage:
@@ -140,6 +149,8 @@ Portfolio-route limitations:
 - the what-if preview remains preview-only and does not create an apply/mutation path
 - staged additions must already exist in the active package; the route does not request-time fit new names
 - account-scoped cPAR flows require two authorities at once: an active cPAR package and shared holdings/account reads; SQLite-only local cPAR package fallback does not make those routes available when holdings authority is down
+- `coverage_breakdown.gross_market_value` is based only on positions that can be valued on or before the active package date, so `missing_price` rows correctly contribute `0.0`
+- `factor_variance_contributions` remain factor-only proxy math from the persisted aggregate thresholded loadings plus active-package covariance; this slice still does not introduce specific-risk, covariance-matrix display, or cUSE-style risk-share payloads
 
 ## Hedge Preview Behavior
 

@@ -338,8 +338,74 @@ def test_cpar_portfolio_whatif_route_returns_payload(monkeypatch) -> None:
             "mode": kwargs["mode"],
             "scenario_row_count": len(kwargs["scenario_rows"]),
             "changed_positions_count": len(kwargs["scenario_rows"]),
-            "current": {"package_run_id": "run_curr"},
-            "hypothetical": {"package_run_id": "run_curr"},
+            "current": {
+                "package_run_id": "run_curr",
+                "coverage_breakdown": {
+                    "covered": {"positions_count": 1, "gross_market_value": 1000.0},
+                    "missing_price": {"positions_count": 0, "gross_market_value": 0.0},
+                    "missing_cpar_fit": {"positions_count": 0, "gross_market_value": 0.0},
+                    "insufficient_history": {"positions_count": 0, "gross_market_value": 0.0},
+                },
+                "factor_variance_contributions": [
+                    {
+                        "factor_id": "SPY",
+                        "label": "Market",
+                        "group": "market",
+                        "display_order": 0,
+                        "beta": 1.0,
+                        "variance_contribution": 1.0,
+                        "variance_share": 1.0,
+                    }
+                ],
+                "positions": [
+                    {
+                        "ric": "AAPL.OQ",
+                        "thresholded_contributions": [
+                            {
+                                "factor_id": "SPY",
+                                "label": "Market",
+                                "group": "market",
+                                "display_order": 0,
+                                "beta": 1.0,
+                            }
+                        ],
+                    }
+                ],
+            },
+            "hypothetical": {
+                "package_run_id": "run_curr",
+                "coverage_breakdown": {
+                    "covered": {"positions_count": 2, "gross_market_value": 1500.0},
+                    "missing_price": {"positions_count": 0, "gross_market_value": 0.0},
+                    "missing_cpar_fit": {"positions_count": 0, "gross_market_value": 0.0},
+                    "insufficient_history": {"positions_count": 0, "gross_market_value": 0.0},
+                },
+                "factor_variance_contributions": [
+                    {
+                        "factor_id": "SPY",
+                        "label": "Market",
+                        "group": "market",
+                        "display_order": 0,
+                        "beta": 1.1,
+                        "variance_contribution": 1.2,
+                        "variance_share": 1.0,
+                    }
+                ],
+                "positions": [
+                    {
+                        "ric": "AAPL.OQ",
+                        "thresholded_contributions": [
+                            {
+                                "factor_id": "SPY",
+                                "label": "Market",
+                                "group": "market",
+                                "display_order": 0,
+                                "beta": 1.1,
+                            }
+                        ],
+                    }
+                ],
+            },
         },
     )
 
@@ -356,6 +422,9 @@ def test_cpar_portfolio_whatif_route_returns_payload(monkeypatch) -> None:
     assert res.status_code == 200
     assert res.json()["account_id"] == "acct_main"
     assert res.json()["scenario_row_count"] == 1
+    assert res.json()["current"]["coverage_breakdown"]["covered"]["positions_count"] == 1
+    assert res.json()["hypothetical"]["factor_variance_contributions"][0]["factor_id"] == "SPY"
+    assert res.json()["hypothetical"]["positions"][0]["thresholded_contributions"][0]["beta"] == 1.1
 
 
 def test_cpar_portfolio_whatif_route_maps_validation_errors_to_400(monkeypatch) -> None:
@@ -475,8 +544,38 @@ def test_cpar_portfolio_hedge_route_returns_payload(monkeypatch) -> None:
             "account_id": kwargs["account_id"],
             "mode": kwargs["mode"],
             "portfolio_status": "ok",
+            "coverage_breakdown": {
+                "covered": {"positions_count": 1, "gross_market_value": 1000.0},
+                "missing_price": {"positions_count": 0, "gross_market_value": 0.0},
+                "missing_cpar_fit": {"positions_count": 0, "gross_market_value": 0.0},
+                "insufficient_history": {"positions_count": 0, "gross_market_value": 0.0},
+            },
+            "factor_variance_contributions": [
+                {
+                    "factor_id": "SPY",
+                    "label": "Market",
+                    "group": "market",
+                    "display_order": 0,
+                    "beta": 1.0,
+                    "variance_contribution": 1.0,
+                    "variance_share": 1.0,
+                }
+            ],
             "hedge_status": "hedge_ok",
-            "positions": [],
+            "positions": [
+                {
+                    "ric": "AAPL.OQ",
+                    "thresholded_contributions": [
+                        {
+                            "factor_id": "SPY",
+                            "label": "Market",
+                            "group": "market",
+                            "display_order": 0,
+                            "beta": 1.0,
+                        }
+                    ],
+                }
+            ],
         },
     )
 
@@ -486,6 +585,9 @@ def test_cpar_portfolio_hedge_route_returns_payload(monkeypatch) -> None:
     assert res.status_code == 200
     assert res.json()["account_id"] == "acct_main"
     assert res.json()["mode"] == "factor_neutral"
+    assert res.json()["coverage_breakdown"]["covered"]["positions_count"] == 1
+    assert res.json()["factor_variance_contributions"][0]["variance_share"] == 1.0
+    assert res.json()["positions"][0]["thresholded_contributions"][0]["factor_id"] == "SPY"
 
 
 def test_cpar_portfolio_hedge_route_maps_not_ready_to_503(monkeypatch) -> None:

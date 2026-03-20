@@ -110,6 +110,11 @@ Current owner decisions:
 - richer single-name `/cpar/explore` work should extend the current ticker-detail owner by default instead of routing through cUSE universe/explore owners
 - richer account-level `/cpar/risk` work should extend the current account-scoped hedge/what-if owners by default instead of collapsing those flows into one generic model-family dashboard service
 - `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower assembly owner for account-scoped cPAR reads unless a later slice proves a clearer lower-layer split
+- Slice 4 extends that existing shared snapshot owner with:
+  - `coverage_breakdown`
+  - `factor_variance_contributions`
+  - `positions[].thresholded_contributions`
+- this is still not a new generic account-risk service or a new route family; it is the next contract layer on the current account-scoped hedge/preview-only what-if surface
 
 Current frontend boundary decision:
 - cPAR pages may reuse neutral shared components and shared holdings widgets
@@ -119,6 +124,9 @@ Current frontend boundary decision:
 Current package-truth decision:
 - a richer cPAR page may continue to compose multiple requests only while it preserves one `package_run_id` / `package_date` across the full page
 - if a richer page cannot do that cleanly, the next slice should introduce a composite cPAR payload rather than weaken fail-closed behavior
+- the new account-scoped contribution fields are package-scoped for the same reason:
+  - they are derived only from the active package, shared-source prices capped at the package date, and the current account snapshot
+  - they do not introduce a second account-risk truth source beside the existing hedge/what-if payloads
 
 ## Active-Package Semantics
 
@@ -128,6 +136,10 @@ Current read behavior:
 - metadata/search/detail use the active successful package
 - hedge preview additionally requires complete covariance coverage
 - account-level portfolio hedge additionally requires live holdings rows plus latest shared-source prices on or before the active package date
+- that same account-level hedge snapshot now also exposes:
+  - explicit coverage buckets
+  - factor-only variance decomposition from aggregate thresholded loadings plus active-package covariance
+  - per-position weighted thresholded contributions
 - account-level what-if additionally requires one account hedge baseline, one active package, and staged signed share deltas that reference either existing holdings rows or active-package search hits
 - missing required relational coverage fails closed with cPAR-specific `503 not_ready`
 - the account-level what-if envelope and its nested `current` / `hypothetical` snapshots are part of the same package-scoped flow as the shared banner and baseline portfolio hedge payload

@@ -143,8 +143,51 @@ def test_portfolio_hedge_service_returns_partial_account_payload(monkeypatch: py
     assert payload["portfolio_status"] == "partial"
     assert payload["covered_positions_count"] == 1
     assert payload["excluded_positions_count"] == 2
+    assert payload["coverage_breakdown"] == {
+        "covered": {"positions_count": 1, "gross_market_value": pytest.approx(2010.0)},
+        "missing_price": {"positions_count": 1, "gross_market_value": pytest.approx(0.0)},
+        "missing_cpar_fit": {"positions_count": 0, "gross_market_value": pytest.approx(0.0)},
+        "insufficient_history": {"positions_count": 1, "gross_market_value": pytest.approx(505.0)},
+    }
     assert payload["hedge_status"] == "hedge_ok"
     assert payload["aggregate_thresholded_loadings"][0]["factor_id"] == "SPY"
+    assert [row["factor_id"] for row in payload["factor_variance_contributions"]] == ["SPY", "XLK"]
+    assert payload["factor_variance_contributions"][0] == {
+        "factor_id": "SPY",
+        "label": "Market",
+        "group": "market",
+        "display_order": 0,
+        "beta": pytest.approx(1.1),
+        "variance_contribution": pytest.approx(1.276),
+        "variance_share": pytest.approx(1.276 / 1.432),
+    }
+    assert payload["factor_variance_contributions"][1]["label"] == "Technology"
+    assert payload["factor_variance_contributions"][1]["group"] == "sector"
+    assert payload["factor_variance_contributions"][1]["display_order"] > 0
+    assert payload["factor_variance_contributions"][1]["beta"] == pytest.approx(0.3)
+    assert payload["factor_variance_contributions"][1]["variance_contribution"] == pytest.approx(0.156)
+    assert payload["factor_variance_contributions"][1]["variance_share"] == pytest.approx(0.156 / 1.432)
+    covered_row = next(row for row in payload["positions"] if row["ric"] == "AAPL.OQ")
+    assert covered_row["thresholded_contributions"][0] == {
+        "factor_id": "SPY",
+        "label": "Market",
+        "group": "market",
+        "display_order": 0,
+        "beta": pytest.approx(1.1),
+    }
+    assert covered_row["thresholded_contributions"][1]["factor_id"] == "XLK"
+    assert covered_row["thresholded_contributions"][1]["label"] == "Technology"
+    assert covered_row["thresholded_contributions"][1]["group"] == "sector"
+    assert covered_row["thresholded_contributions"][1]["display_order"] > 0
+    assert covered_row["thresholded_contributions"][1]["beta"] == pytest.approx(0.3)
+    excluded_rows = [row for row in payload["positions"] if row["ric"] != "AAPL.OQ"]
+    assert all(row["thresholded_contributions"] == [] for row in excluded_rows)
+    reconciled = {}
+    for row in payload["positions"]:
+        for contribution in row["thresholded_contributions"]:
+            factor_id = contribution["factor_id"]
+            reconciled[factor_id] = float(reconciled.get(factor_id, 0.0) + float(contribution["beta"]))
+    assert reconciled == {"SPY": pytest.approx(1.1), "XLK": pytest.approx(0.3)}
     assert {row["coverage"] for row in payload["positions"]} == {"covered", "insufficient_history", "missing_price"}
 
 
@@ -170,6 +213,13 @@ def test_portfolio_hedge_service_returns_empty_payload_for_account_without_posit
 
     assert payload["portfolio_status"] == "empty"
     assert payload["hedge_status"] is None
+    assert payload["coverage_breakdown"] == {
+        "covered": {"positions_count": 0, "gross_market_value": 0.0},
+        "missing_price": {"positions_count": 0, "gross_market_value": 0.0},
+        "missing_cpar_fit": {"positions_count": 0, "gross_market_value": 0.0},
+        "insufficient_history": {"positions_count": 0, "gross_market_value": 0.0},
+    }
+    assert payload["factor_variance_contributions"] == []
     assert payload["positions"] == []
 
 
@@ -217,7 +267,15 @@ def test_portfolio_hedge_service_returns_unavailable_payload_when_no_rows_are_co
     )
     assert payload["hedge_status"] is None
     assert payload["aggregate_thresholded_loadings"] == []
+    assert payload["factor_variance_contributions"] == []
+    assert payload["coverage_breakdown"] == {
+        "covered": {"positions_count": 0, "gross_market_value": pytest.approx(0.0)},
+        "missing_price": {"positions_count": 1, "gross_market_value": pytest.approx(0.0)},
+        "missing_cpar_fit": {"positions_count": 0, "gross_market_value": pytest.approx(0.0)},
+        "insufficient_history": {"positions_count": 1, "gross_market_value": pytest.approx(2010.0)},
+    }
     assert {row["coverage"] for row in payload["positions"]} == {"insufficient_history", "missing_price"}
+    assert all(row["thresholded_contributions"] == [] for row in payload["positions"])
 
 
 def test_portfolio_hedge_service_raises_when_account_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:

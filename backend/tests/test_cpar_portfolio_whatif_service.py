@@ -123,6 +123,10 @@ def test_portfolio_whatif_service_supports_new_active_package_rows(
     assert payload["current"]["package_date"] == "2026-03-14"
     assert payload["hypothetical"]["package_run_id"] == "run_curr"
     assert payload["hypothetical"]["package_date"] == "2026-03-14"
+    assert payload["current"]["coverage_breakdown"]["covered"]["positions_count"] == 2
+    assert payload["hypothetical"]["coverage_breakdown"]["covered"]["positions_count"] == 3
+    assert len(payload["current"]["factor_variance_contributions"]) == 2
+    assert len(payload["hypothetical"]["factor_variance_contributions"]) == 2
     assert payload["current"]["positions_count"] == 2
     assert payload["hypothetical"]["positions_count"] == 3
     assert payload["scenario_rows"][0]["ric"] == "NVDA.OQ"
@@ -130,6 +134,34 @@ def test_portfolio_whatif_service_supports_new_active_package_rows(
     assert payload["scenario_rows"][0]["hypothetical_quantity"] == 6.0
     assert payload["scenario_rows"][0]["market_value_delta"] == 900.0
     assert payload["scenario_rows"][0]["coverage"] == "covered"
+    nvda_row = next(row for row in payload["hypothetical"]["positions"] if row["ric"] == "NVDA.OQ")
+    assert nvda_row["thresholded_contributions"][0] == {
+        "factor_id": "SPY",
+        "label": "Market",
+        "group": "market",
+        "display_order": 0,
+        "beta": pytest.approx(0.34411764705882353),
+    }
+    assert nvda_row["thresholded_contributions"][1]["factor_id"] == "XLK"
+    assert nvda_row["thresholded_contributions"][1]["label"] == "Technology"
+    assert nvda_row["thresholded_contributions"][1]["group"] == "sector"
+    assert nvda_row["thresholded_contributions"][1]["display_order"] > 0
+    assert nvda_row["thresholded_contributions"][1]["beta"] == pytest.approx(0.11911764705882352)
+    assert payload["hypothetical"]["factor_variance_contributions"][0]["factor_id"] == "SPY"
+    assert payload["hypothetical"]["factor_variance_contributions"][0]["variance_share"] == pytest.approx(
+        payload["hypothetical"]["factor_variance_contributions"][0]["variance_contribution"]
+        / payload["hypothetical"]["pre_hedge_factor_variance_proxy"]
+    )
+    reconciled = {}
+    for row in payload["hypothetical"]["positions"]:
+        for contribution in row["thresholded_contributions"]:
+            factor_id = contribution["factor_id"]
+            reconciled[factor_id] = float(reconciled.get(factor_id, 0.0) + float(contribution["beta"]))
+    aggregate = {
+        row["factor_id"]: float(row["beta"])
+        for row in payload["hypothetical"]["aggregate_thresholded_loadings"]
+    }
+    assert reconciled == {factor_id: pytest.approx(beta) for factor_id, beta in aggregate.items()}
 
 
 def test_portfolio_whatif_service_supports_position_removals(
@@ -153,6 +185,8 @@ def test_portfolio_whatif_service_supports_position_removals(
     )
 
     assert payload["hypothetical"]["positions_count"] == 1
+    assert payload["hypothetical"]["coverage_breakdown"]["covered"]["positions_count"] == 1
+    assert len(payload["hypothetical"]["factor_variance_contributions"]) == 2
     assert payload["scenario_rows"][0]["hypothetical_quantity"] == 0.0
     assert "removed" in str(payload["scenario_rows"][0]["coverage_reason"]).lower()
 
