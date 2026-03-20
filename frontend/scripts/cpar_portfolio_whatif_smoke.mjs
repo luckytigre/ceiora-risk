@@ -101,6 +101,12 @@ function portfolioSnapshot({ mode, grossMarketValue, coveredGrossMarketValue, cu
     net_market_value: grossMarketValue,
     covered_gross_market_value: coveredGrossMarketValue,
     coverage_ratio: 1,
+    coverage_breakdown: {
+      covered: { positions_count: current ? 2 : 3, gross_market_value: coveredGrossMarketValue },
+      missing_price: { positions_count: 0, gross_market_value: 0 },
+      missing_cpar_fit: { positions_count: 0, gross_market_value: 0 },
+      insufficient_history: { positions_count: 0, gross_market_value: 0 },
+    },
     portfolio_status: "ok",
     portfolio_reason: null,
     aggregate_thresholded_loadings: current
@@ -111,6 +117,47 @@ function portfolioSnapshot({ mode, grossMarketValue, coveredGrossMarketValue, cu
       : [
           { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 1.16 },
           { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.36 },
+        ],
+    factor_variance_contributions: current
+      ? [
+          {
+            factor_id: "SPY",
+            label: "Market",
+            group: "market",
+            display_order: 0,
+            beta: 1.04,
+            variance_contribution: 0.142,
+            variance_share: 0.7474,
+          },
+          {
+            factor_id: "XLK",
+            label: "Technology",
+            group: "sector",
+            display_order: 15,
+            beta: 0.28,
+            variance_contribution: 0.048,
+            variance_share: 0.2526,
+          },
+        ]
+      : [
+          {
+            factor_id: "SPY",
+            label: "Market",
+            group: "market",
+            display_order: 0,
+            beta: 1.16,
+            variance_contribution: 0.197,
+            variance_share: 0.7296,
+          },
+          {
+            factor_id: "XLK",
+            label: "Technology",
+            group: "sector",
+            display_order: 15,
+            beta: 0.36,
+            variance_contribution: 0.073,
+            variance_share: 0.2704,
+          },
         ],
     hedge_status: "hedge_ok",
     hedge_reason: mode === "market_neutral"
@@ -131,7 +178,116 @@ function portfolioSnapshot({ mode, grossMarketValue, coveredGrossMarketValue, cu
     gross_hedge_notional: mode === "market_neutral" ? (current ? 1.04 : 1.16) : (current ? 1.32 : 1.52),
     net_hedge_notional: -(current ? 1.04 : 1.16),
     non_market_reduction_ratio: mode === "market_neutral" ? 0.0 : (current ? 0.81 : 0.84),
-    positions: [],
+    positions: current
+      ? [
+          {
+            account_id: "acct_main",
+            ric: "AAPL.OQ",
+            ticker: "AAPL",
+            display_name: "Apple Inc.",
+            quantity: 10,
+            price: 201,
+            price_date: "2026-03-14",
+            price_field_used: "adj_close",
+            market_value: 2010,
+            portfolio_weight: 0.8323,
+            fit_status: "ok",
+            warnings: [],
+            beta_spy_trade: 1.12,
+            coverage: "covered",
+            coverage_reason: null,
+            thresholded_contributions: [
+              { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 0.93 },
+              { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.24 },
+            ],
+          },
+          {
+            account_id: "acct_main",
+            ric: "MSFT.OQ",
+            ticker: "MSFT",
+            display_name: "Microsoft Corp",
+            quantity: 4,
+            price: 101.25,
+            price_date: "2026-03-14",
+            price_field_used: "adj_close",
+            market_value: 405,
+            portfolio_weight: 0.1677,
+            fit_status: "limited_history",
+            warnings: ["continuity_gap"],
+            beta_spy_trade: 0.92,
+            coverage: "covered",
+            coverage_reason: null,
+            thresholded_contributions: [
+              { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 0.11 },
+              { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.04 },
+            ],
+          },
+        ]
+      : [
+          {
+            account_id: "acct_main",
+            ric: "AAPL.OQ",
+            ticker: "AAPL",
+            display_name: "Apple Inc.",
+            quantity: 10,
+            price: 201,
+            price_date: "2026-03-14",
+            price_field_used: "adj_close",
+            market_value: 2010,
+            portfolio_weight: 0.6052,
+            fit_status: "ok",
+            warnings: [],
+            beta_spy_trade: 1.12,
+            coverage: "covered",
+            coverage_reason: null,
+            thresholded_contributions: [
+              { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 0.7 },
+              { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.18 },
+            ],
+          },
+          {
+            account_id: "acct_main",
+            ric: "MSFT.OQ",
+            ticker: "MSFT",
+            display_name: "Microsoft Corp",
+            quantity: 4,
+            price: 101.25,
+            price_date: "2026-03-14",
+            price_field_used: "adj_close",
+            market_value: 405,
+            portfolio_weight: 0.1220,
+            fit_status: "limited_history",
+            warnings: ["continuity_gap"],
+            beta_spy_trade: 0.92,
+            coverage: "covered",
+            coverage_reason: null,
+            thresholded_contributions: [
+              { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 0.12 },
+              { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.04 },
+            ],
+          },
+          {
+            account_id: "acct_main",
+            ric: "NVDA.OQ",
+            ticker: "NVDA",
+            display_name: "NVIDIA Corp",
+            quantity: 6,
+            price: 151,
+            price_date: "2026-03-14",
+            price_field_used: "adj_close",
+            market_value: 906,
+            portfolio_weight: 0.2728,
+            fit_status: "ok",
+            warnings: [],
+            beta_spy_trade: 1.24,
+            coverage: "covered",
+            coverage_reason: null,
+            thresholded_contributions: [
+              { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 0.34 },
+              { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.14 },
+            ],
+          },
+        ],
   };
 }
 
@@ -337,6 +493,8 @@ try {
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-whatif-builder").waitFor();
+    await page.getByTestId("cpar-risk-factor-summary").waitFor();
+    await page.getByTestId("cpar-risk-positions").waitFor();
     await page.getByTestId("cpar-search-input").fill("SHELL");
     await page.getByRole("button", { name: /Shell ADR/i }).waitFor();
     assert.equal(await page.getByRole("button", { name: /Shell ADR/i }).isDisabled(), true);
@@ -349,6 +507,7 @@ try {
     await page.getByTestId("cpar-portfolio-whatif-scenarios").waitFor();
     await page.getByTestId("cpar-portfolio-current-hedge-panel").waitFor();
     await page.getByTestId("cpar-portfolio-hypothetical-hedge-panel").waitFor();
+    await page.getByTestId("cpar-risk-factor-summary").locator("tbody").getByText("SPY").waitFor();
     await page.getByRole("heading", { name: "Hypothetical Account Hedge" }).waitFor();
     await page.getByTestId("cpar-portfolio-whatif-scenarios").getByText("NVIDIA Corp").waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);

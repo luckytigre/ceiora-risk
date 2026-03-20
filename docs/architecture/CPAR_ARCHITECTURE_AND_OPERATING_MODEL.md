@@ -115,6 +115,11 @@ Current owner decisions:
   - `factor_variance_contributions`
   - `positions[].thresholded_contributions`
 - this is still not a new generic account-risk service or a new route family; it is the next contract layer on the current account-scoped hedge/preview-only what-if surface
+- Slice 5 then rebuilds `/cpar/risk` purely on the frontend against that same contract:
+  - account scope stays explicit
+  - factor-only contribution summary stays derived from the active-package snapshot
+  - per-position contribution mix stays derived from covered rows only
+  - the page still does not introduce covariance heatmaps, specific-risk payloads, or cUSE-owned analytics modules
 
 Current frontend boundary decision:
 - cPAR pages may reuse neutral shared components and shared holdings widgets

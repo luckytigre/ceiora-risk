@@ -4345,9 +4345,124 @@ main {
   font-size: 18px;
 }
 
+.cpar-risk-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cpar-risk-breakdown-card {
+  padding: 12px 13px;
+  border: 1px solid rgba(154, 171, 214, 0.12);
+  border-radius: 4px;
+  background: rgba(12, 16, 26, 0.34);
+}
+
+.cpar-risk-breakdown-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cpar-risk-breakdown-value {
+  margin-top: 6px;
+  color: rgba(232, 237, 249, 0.94);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cpar-risk-breakdown-detail {
+  margin-top: 6px;
+  color: rgba(188, 200, 228, 0.68);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.cpar-risk-share-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0 18px;
+}
+
+.cpar-risk-share-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cpar-risk-share-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cpar-risk-share-label {
+  color: rgba(232, 237, 249, 0.92);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.cpar-risk-share-value {
+  color: rgba(188, 200, 228, 0.74);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cpar-risk-share-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(154, 171, 214, 0.12);
+}
+
+.cpar-risk-share-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(88, 176, 220, 0.78), rgba(155, 200, 229, 0.56));
+}
+
+.cpar-risk-mix-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cpar-risk-mix-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border: 1px solid rgba(154, 171, 214, 0.10);
+  border-radius: 4px;
+  background: rgba(12, 16, 26, 0.26);
+}
+
+.cpar-risk-mix-factor {
+  color: rgba(232, 237, 249, 0.88);
+  font-size: 11px;
+}
+
+.cpar-risk-mix-value {
+  color: rgba(188, 200, 228, 0.76);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 1100px) {
   .cpar-two-column {
     grid-template-columns: 1fr;
+  }
+
+  .cpar-risk-breakdown-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -4361,6 +4476,16 @@ main {
 
   .cpar-search-input {
     border-radius: 4px;
+  }
+
+  .cpar-risk-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cpar-risk-share-header,
+  .cpar-risk-mix-item {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

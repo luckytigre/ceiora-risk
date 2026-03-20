@@ -106,6 +106,10 @@ The first portfolio workflow is account-scoped and read-only: it reuses the shar
 The first what-if workflow is embedded in `/cpar/risk` and remains preview-only: it stages signed share deltas against the same active package and account hedge baseline, but it does not apply trades or mutate holdings.
 The shared account-scoped snapshot assembly for both flows lives in `backend/services/cpar_portfolio_snapshot_service.py`; that shared owner is cPAR-specific and does not imply any reuse of cUSE4 what-if services.
 That shared snapshot now also carries explicit `coverage_breakdown`, factor-only `factor_variance_contributions`, and per-position `thresholded_contributions`; those fields are still derived read surfaces from the same package-scoped snapshot, not a second risk engine.
+`/cpar/risk` now renders those fields directly as:
+- coverage summary plus explicit exclusion buckets
+- one factor-only contribution profile
+- one positions contribution-mix table
 Upcoming cPAR risk/explore expansion should keep following the same ownership rule: extend current cPAR route/service owners by default, and only add a new cPAR-specific owner when the authority/read pattern is genuinely different.
 Until that authority decision is made explicitly, the operations baseline does not assume a new cPAR single-name history route or any reuse of cUSE universe/read surfaces. This slice still does not add a cUSE-style price-history panel to `/cpar/explore`.
 
@@ -156,6 +160,9 @@ If `/cpar/risk` shows unexpected exclusions or coverage drift:
   - no package-date price
   - no active-package fit row
   - `insufficient_history`
+- inspect the positions contribution-mix table next:
+  - covered rows should show the largest weighted thresholded factor contributions
+  - excluded rows should show no contribution mix and should still surface the exclusion reason inline
 - `thresholded_contributions` are intentionally populated only for covered rows; excluded rows contribute nothing to the aggregate account vector or factor-only variance decomposition
 
 If the shared banner shows an aging or stale package:

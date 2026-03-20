@@ -24,7 +24,12 @@ It does not add:
 
 `/cpar/risk`
 - current account-level cPAR risk workspace
-- owns holdings-account selection, coverage summary, aggregate thresholded loadings, one account hedge preview, and one narrow read-only what-if preview
+- now owns a cPAR-native account risk composition:
+  - account scope / selected-account context
+  - coverage summary plus explicit exclusion buckets
+  - factor-only contribution profile from the active package covariance surface
+  - positions contribution mix table derived from per-row thresholded contributions
+  - one account hedge preview and one narrow read-only what-if preview
 - now has a stable backend contract for the next rebuild stage:
   - `coverage_breakdown` for explicit exclusion buckets
   - `factor_variance_contributions` for factor-only decomposition of the aggregate thresholded portfolio vector
@@ -177,10 +182,13 @@ Read failures:
 
 `/cpar/risk`
 - remains a narrow account-level hedge workflow
-- owns account selection, coverage/exclusion explanation, aggregate loadings, staged scenario rows, and current vs hypothetical account hedge preview
-- Slice 4 deliberately stops at contract expansion:
-  - the page does not yet render a full cUSE-style decomposition workspace
-  - the new backend fields exist so Slice 5 can rebuild `/cpar/risk` without re-deriving portfolio contributions in the browser
+- owns account selection, coverage/exclusion explanation, factor-only contribution summary, positions contribution mix, staged scenario rows, and current vs hypothetical account hedge preview
+- now intentionally borrows the cUSE risk-page layout rhythm without importing cUSE feature owners or cUSE payload semantics
+- still stops short of a full cUSE-style analytics workspace:
+  - no covariance heatmap
+  - no specific-risk decomposition
+  - no cPAR-vs-cUSE comparison layer
+  - no apply/mutation semantics
 - any richer risk charts or decomposition views must stay subordinate to that same account-scoped hedge + preview-only what-if workflow
 - does not own portfolio mutation, account editing, trade application, or broad scenario analytics
 
@@ -198,14 +206,13 @@ Current cPAR frontend smokes cover:
 - `/cpar/hedge` baseline flow
 - `/cpar/risk` baseline flow
 - `/cpar/risk` narrow what-if preview flow
+- `/cpar/risk` coverage buckets, factor-only contribution summary, and positions contribution mix
 - `not_ready`
 - `unavailable`
 - package mismatch
 - `/cpar/risk` fail-closed branches for `not_ready`, `unavailable`, and package mismatch
 - meta-first gating for detail/account reads when package-level `not_ready` or `unavailable` blocks the page
 - family-route redirects for `/exposures`, `/explore`, `/health`, `/cpar`, and `/cpar/portfolio`
-
-This slice does not add new `/cpar/risk` frontend smoke cases because the new contract fields are not yet rendered directly; they are pinned by backend tests and frontend type ownership instead.
 
 ## Deferred After This Slice
 

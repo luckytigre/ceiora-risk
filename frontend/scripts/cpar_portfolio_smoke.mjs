@@ -225,9 +225,16 @@ try {
             net_market_value: 0,
             covered_gross_market_value: 0,
             coverage_ratio: null,
+            coverage_breakdown: {
+              covered: { positions_count: 0, gross_market_value: 0 },
+              missing_price: { positions_count: 0, gross_market_value: 0 },
+              missing_cpar_fit: { positions_count: 0, gross_market_value: 0 },
+              insufficient_history: { positions_count: 0, gross_market_value: 0 },
+            },
             portfolio_status: "empty",
             portfolio_reason: "No live holdings positions are loaded for this account.",
             aggregate_thresholded_loadings: [],
+            factor_variance_contributions: [],
             hedge_status: null,
             hedge_reason: null,
             hedge_legs: [],
@@ -267,9 +274,16 @@ try {
             net_market_value: 2010,
             covered_gross_market_value: 0,
             coverage_ratio: 0,
+            coverage_breakdown: {
+              covered: { positions_count: 0, gross_market_value: 0 },
+              missing_price: { positions_count: 1, gross_market_value: 0 },
+              missing_cpar_fit: { positions_count: 0, gross_market_value: 0 },
+              insufficient_history: { positions_count: 1, gross_market_value: 2010 },
+            },
             portfolio_status: "unavailable",
             portfolio_reason: "No holdings rows in this account have both price coverage and a usable persisted cPAR fit in the active package.",
             aggregate_thresholded_loadings: [],
+            factor_variance_contributions: [],
             hedge_status: null,
             hedge_reason: null,
             hedge_legs: [],
@@ -296,6 +310,7 @@ try {
                 beta_spy_trade: 1.12,
                 coverage: "insufficient_history",
                 coverage_reason: "The persisted cPAR fit status is `insufficient_history`, so this position is excluded from hedge aggregation.",
+                thresholded_contributions: [],
               },
               {
                 account_id: "acct_unavailable",
@@ -313,6 +328,7 @@ try {
                 beta_spy_trade: null,
                 coverage: "missing_price",
                 coverage_reason: "No latest price on or before the active cPAR package date.",
+                thresholded_contributions: [],
               },
             ],
           });
@@ -343,11 +359,37 @@ try {
           net_market_value: 2415.0,
           covered_gross_market_value: 2415.0,
           coverage_ratio: 0.96,
+          coverage_breakdown: {
+            covered: { positions_count: 2, gross_market_value: 2415.0 },
+            missing_price: { positions_count: 1, gross_market_value: 0 },
+            missing_cpar_fit: { positions_count: 0, gross_market_value: 0 },
+            insufficient_history: { positions_count: 0, gross_market_value: 0 },
+          },
           portfolio_status: "partial",
           portfolio_reason: "Some holdings rows were excluded because they lack price coverage or a usable persisted cPAR fit.",
           aggregate_thresholded_loadings: [
             { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 1.04 },
             { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.28 },
+          ],
+          factor_variance_contributions: [
+            {
+              factor_id: "SPY",
+              label: "Market",
+              group: "market",
+              display_order: 0,
+              beta: 1.04,
+              variance_contribution: 0.142,
+              variance_share: 0.7474,
+            },
+            {
+              factor_id: "XLK",
+              label: "Technology",
+              group: "sector",
+              display_order: 15,
+              beta: 0.28,
+              variance_contribution: 0.048,
+              variance_share: 0.2526,
+            },
           ],
           hedge_status: "hedge_ok",
           hedge_reason: mode === "market_neutral" ? "SPY-only hedge" : "Thresholded raw ETF hedge",
@@ -383,6 +425,10 @@ try {
               beta_spy_trade: 1.12,
               coverage: "covered",
               coverage_reason: null,
+              thresholded_contributions: [
+                { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 0.93 },
+                { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.24 },
+              ],
             },
             {
               account_id: "acct_main",
@@ -400,6 +446,10 @@ try {
               beta_spy_trade: 0.92,
               coverage: "covered",
               coverage_reason: null,
+              thresholded_contributions: [
+                { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 0.11 },
+                { factor_id: "XLK", label: "Technology", group: "sector", display_order: 15, beta: 0.04 },
+              ],
             },
             {
               account_id: "acct_main",
@@ -417,6 +467,7 @@ try {
               beta_spy_trade: null,
               coverage: "missing_price",
               coverage_reason: "No latest price on or before the active cPAR package date.",
+              thresholded_contributions: [],
             },
           ],
         });
@@ -428,10 +479,13 @@ try {
     await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-account-panel").waitFor();
     await page.getByTestId("cpar-portfolio-overview").waitFor();
+    await page.getByTestId("cpar-risk-factor-summary").waitFor();
     await page.getByTestId("cpar-portfolio-hedge-panel").waitFor();
-    await page.getByTestId("cpar-portfolio-coverage").waitFor();
+    await page.getByTestId("cpar-risk-positions").waitFor();
+    await page.getByTestId("cpar-risk-coverage-breakdown").waitFor();
     await page.getByText("Partial Coverage").waitFor();
-    await page.getByText("Aggregate Thresholded Loadings").waitFor();
+    await page.getByRole("heading", { name: "Factor Contribution Profile" }).waitFor();
+    await page.getByRole("heading", { name: "Positions (Contribution Mix)" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "RECALC" }).count(), 0);
 
@@ -441,11 +495,13 @@ try {
     await page.selectOption('[data-testid="cpar-portfolio-account-select"]', "acct_empty");
     await page.getByTestId("cpar-portfolio-overview").getByText("Empty Account").waitFor();
     await page.getByText("No live holdings positions are loaded for this account.").waitFor();
+    await page.getByText("Risk Summary Deferred").waitFor();
     assert.equal(await page.getByTestId("cpar-portfolio-hedge-panel").count(), 0);
 
     await page.selectOption('[data-testid="cpar-portfolio-account-select"]', "acct_unavailable");
     await page.getByTestId("cpar-portfolio-overview").getByText("Coverage Unavailable").waitFor();
     await page.getByText("No holdings rows in this account have both price coverage and a usable persisted cPAR fit in the active package.").waitFor();
+    await page.getByTestId("cpar-risk-positions").waitFor();
     assert.equal(await page.getByTestId("cpar-portfolio-hedge-panel").count(), 0);
 
     if (capturedPageError) {

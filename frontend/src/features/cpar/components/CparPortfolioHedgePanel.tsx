@@ -73,12 +73,11 @@ export default function CparPortfolioHedgePanel({
           {data.excluded_positions_count > 0 ? <span className="cpar-detail-chip">{data.excluded_positions_count} excluded</span> : null}
         </div>
         <div className="cpar-package-grid compact">
-          {stat("Gross MV", formatCparNumber(data.gross_market_value, 2))}
-          {stat("Net MV", formatCparNumber(data.net_market_value, 2))}
-          {stat("Priced Coverage", formatCparPercent(data.coverage_ratio, 1))}
           {stat("Pre Var", formatCparNumber(data.pre_hedge_factor_variance_proxy, 3))}
           {stat("Post Var", formatCparNumber(data.post_hedge_factor_variance_proxy, 3))}
           {stat("Reduction", formatCparPercent(data.non_market_reduction_ratio, 1))}
+          {stat("Gross Hedge", formatCparNumber(data.gross_hedge_notional, 3))}
+          {stat("Net Hedge", formatCparNumber(data.net_hedge_notional, 3))}
         </div>
         <div className="dash-table">
           <table>
