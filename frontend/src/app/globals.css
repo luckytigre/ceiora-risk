@@ -144,6 +144,12 @@ main {
   -webkit-backdrop-filter: none;
 }
 
+.dash-tabs-positions {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .dash-tabs-brand {
   color: #eef2fa;
   font-size: 22px;

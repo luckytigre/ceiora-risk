@@ -133,11 +133,15 @@ try {
 
     await gotoWithRetry(page, `${BASE_URL}/cuse/exposures`);
     const cuseTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();
-    assert.deepEqual(cuseTabs, ["Risk", "Explore", "Health", "Positions"]);
+    assert.deepEqual(cuseTabs, ["Risk", "Explore", "Health"]);
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/risk`);
     const cparTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();
-    assert.deepEqual(cparTabs, ["Risk", "Explore", "Health", "Hedge", "Positions"]);
+    assert.deepEqual(cparTabs, ["Risk", "Explore", "Hedge", "Health"]);
+
+    await gotoWithRetry(page, `${BASE_URL}/positions`);
+    const positionsTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();
+    assert.deepEqual(positionsTabs, ["Positions"]);
   } finally {
     await browser.close();
   }

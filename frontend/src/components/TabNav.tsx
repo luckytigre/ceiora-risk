@@ -20,6 +20,8 @@ const CPAR_TABS = [
   { href: "/cpar/health", label: "Health", matchPrefix: "/cpar/health" },
 ];
 
+const POSITIONS_TABS = [{ href: "/positions", label: "Positions", matchPrefix: "/positions" }];
+
 const BG_OPTIONS: { value: BgMode; label: string }[] = [
   { value: "topo", label: "Topographic" },
   { value: "flow", label: "Flow" },
@@ -52,6 +54,7 @@ function formatAgeFromIso(iso: string | null | undefined, nowMs: number): string
 export default function TabNav() {
   const pathname = usePathname();
   const activePath = pathname || "";
+  const isPositionsPage = activePath === "/positions";
   const activeFamily = activePath.startsWith("/cpar") ? "cpar" : activePath.startsWith("/cuse") ? "cuse" : null;
   const [transitionFamily, setTransitionFamily] = useState<"cuse" | "cpar" | null>(null);
   const prevFamilyRef = useRef<string | null>(null);
@@ -120,13 +123,18 @@ export default function TabNav() {
     };
   }, []);
 
-  const isLanding = !activeFamily && !transitionFamily;
+  const isLanding = activePath === "/" && !transitionFamily;
 
   useEffect(() => {
     if (!navRef.current) return;
     if (isLanding) {
       navRef.current.style.backgroundColor = "";
       navRef.current.style.boxShadow = "";
+      return;
+    }
+    if (isPositionsPage) {
+      navRef.current.style.backgroundColor = "rgba(0, 0, 0, 0.94)";
+      navRef.current.style.boxShadow = "0 10px 28px rgba(0, 0, 0, 0.38)";
       return;
     }
     const onScroll = () => {
@@ -141,7 +149,7 @@ export default function TabNav() {
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [isLanding]);
+  }, [isLanding, isPositionsPage]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -270,8 +278,9 @@ export default function TabNav() {
     ? "Publish latest holdings edits into the served analytics snapshot"
     : "Run serve-refresh";
   const tabs = useMemo(() => {
+    if (activePath === "/positions") return POSITIONS_TABS;
     if (activePath.startsWith("/cpar")) return CPAR_TABS;
-    if (activePath.startsWith("/cuse") || activePath === "/positions" || activePath === "/data") return CUSE_TABS;
+    if (activePath.startsWith("/cuse") || activePath === "/data") return CUSE_TABS;
     return [];
   }, [activePath]);
   const effectiveFamily = activeFamily ?? transitionFamily;
@@ -308,7 +317,10 @@ export default function TabNav() {
   }, [activePath, tabs, syncIndicator]);
 
   return (
-    <nav ref={navRef} className={`dash-tabs${isLanding ? " dash-tabs-landing" : ""}`}>
+    <nav
+      ref={navRef}
+      className={`dash-tabs${isLanding ? " dash-tabs-landing" : ""}${isPositionsPage ? " dash-tabs-positions" : ""}`}
+    >
       <div className="dash-tabs-brand-cluster">
         <Link href="/" className="dash-tabs-brand">
           Ceiora

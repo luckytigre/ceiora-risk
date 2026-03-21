@@ -11,6 +11,7 @@ import {
   usePortfolio,
   useRisk,
 } from "@/hooks/useCuse4Api";
+import { useCparRisk } from "@/hooks/useCparApi";
 import type { HoldingsImportMode } from "@/lib/types/cuse4";
 import HoldingsImportPanel from "@/features/holdings/components/HoldingsImportPanel";
 import HoldingsLedgerSection from "@/features/holdings/components/HoldingsLedgerSection";
@@ -49,6 +50,7 @@ function fmtQty(n: number): string {
 
 export default function PositionsPage() {
   const { data: portfolio, isLoading: pLoading, error: pError } = usePortfolio();
+  const { data: cparRiskData } = useCparRisk();
   const { data: riskData, isLoading: riskLoading, error: riskError } = useRisk();
   const { data: modesData } = useHoldingsModes();
   const { data: accountsData, error: accountError } = useHoldingsAccounts();
@@ -62,7 +64,6 @@ export default function PositionsPage() {
   const [editTicker, setEditTicker] = useState("");
   const [editQty, setEditQty] = useState("");
   const [editSource, setEditSource] = useState("ui_edit");
-  const [holdingsManagerExpanded, setHoldingsManagerExpanded] = useState(true);
 
   useEffect(() => {
     if (!modesData?.default) return;
@@ -227,19 +228,9 @@ export default function PositionsPage() {
       <div className="chart-card mb-4">
         <div className="holdings-section-header">
           <h3>Holdings Manager</h3>
-          <button
-            type="button"
-            className="holdings-panel-toggle"
-            aria-expanded={holdingsManagerExpanded}
-            onClick={() => setHoldingsManagerExpanded((prev) => !prev)}
-          >
-            {holdingsManagerExpanded ? "Collapse" : "Expand"}
-            <span className={`kpi-toggle-glyph ${holdingsManagerExpanded ? "open" : ""}`}>+</span>
-          </button>
         </div>
 
-        {holdingsManagerExpanded && (
-          <>
+        <>
             <div className="holdings-manager-grid">
               <ManualPositionEditor
                 selectedAccount={selectedAccount}
@@ -311,13 +302,13 @@ export default function PositionsPage() {
               draftCount={draftCount}
               draftDeleteCount={draftDeleteCount}
             />
-          </>
-        )}
+        </>
       </div>
 
       <HoldingsLedgerSection
         holdingsRows={holdingsRows}
         modeledPositions={modeledPositions}
+        cparModeledPositions={cparRiskData?.positions ?? []}
         holdingsError={holdingsError}
         busy={busy}
         getDraftQuantityText={getLedgerDraftQuantityText}

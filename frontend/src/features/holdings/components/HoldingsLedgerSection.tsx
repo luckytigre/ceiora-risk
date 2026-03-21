@@ -4,12 +4,15 @@ import { useMemo, useState } from "react";
 import ApiErrorState from "@/features/cuse4/components/ApiErrorState";
 import TableRowToggle from "@/components/TableRowToggle";
 import type { HoldingsPosition, Position } from "@/lib/types/cuse4";
+import type { CparPortfolioPositionRow } from "@/lib/types/cpar";
 import { exposureMethodDisplayLabel, exposureMethodRank } from "@/lib/exposureOrigin";
+import { describeCparFitStatus } from "@/lib/cparTruth";
 import InlineShareDraftEditor from "./InlineShareDraftEditor";
 
 interface HoldingsLedgerSectionProps {
   holdingsRows: HoldingsPosition[];
   modeledPositions: Position[];
+  cparModeledPositions: CparPortfolioPositionRow[];
   holdingsError?: unknown;
   busy: boolean;
   getDraftQuantityText: (row: HoldingsPosition) => string;
@@ -21,7 +24,8 @@ interface HoldingsLedgerSectionProps {
 
 type SortKey =
   | "ticker"
-  | "method"
+  | "cuse_method"
+  | "cpar_method"
   | "quantity"
   | "price"
   | "market_value"
@@ -34,6 +38,23 @@ const COLLAPSED_ROWS = 18;
 
 function normalizeTicker(value: string | null | undefined): string {
   return String(value || "").trim().toUpperCase();
+}
+
+function normalizeAccountId(value: string | null | undefined): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function rowIdentity(accountId: string | null | undefined, ticker: string | null | undefined, ric: string | null | undefined): string {
+  return `${normalizeAccountId(accountId)}:${normalizeTicker(ticker || ric)}`;
+}
+
+function cparMethodLabel(row: CparPortfolioPositionRow | null | undefined): string {
+  if (!row) return "—";
+  if (row.coverage === "missing_price") return "Missing Price";
+  if (row.coverage === "missing_cpar_fit") return "Missing cPAR Fit";
+  if (row.coverage === "insufficient_history") return "Insufficient History";
+  if (!row.fit_status) return "Package Fit";
+  return describeCparFitStatus(row.fit_status).label;
 }
 
 function fmtQty(n: number): string {
@@ -64,6 +85,7 @@ function marketValueTone(n: number | null): string {
 export default function HoldingsLedgerSection({
   holdingsRows,
   modeledPositions,
+  cparModeledPositions,
   holdingsError,
   busy,
   getDraftQuantityText,
@@ -85,17 +107,27 @@ export default function HoldingsLedgerSection({
     return out;
   }, [modeledPositions]);
 
+  const cparModeledMap = useMemo(() => {
+    const out = new Map<string, CparPortfolioPositionRow>();
+    for (const pos of cparModeledPositions) {
+      out.set(rowIdentity(pos.account_id, pos.ticker, pos.ric), pos);
+    }
+    return out;
+  }, [cparModeledPositions]);
+
   const enrichedRows = useMemo(() => {
     return holdingsRows.map((row) => {
       const modeled = modeledMap.get(normalizeTicker(row.ticker));
+      const cparModeled = cparModeledMap.get(rowIdentity(row.account_id, row.ticker, row.ric));
       return {
         row,
         modeled,
+        cparModeled,
         price: modeled?.price ?? null,
         marketValue: modeled?.price != null ? Number(row.quantity || 0) * Number(modeled.price || 0) : (modeled?.market_value ?? null),
       };
     });
-  }, [holdingsRows, modeledMap]);
+  }, [cparModeledMap, holdingsRows, modeledMap]);
 
   const sortedRows = useMemo(() => {
     const rows = [...enrichedRows];
@@ -104,8 +136,10 @@ export default function HoldingsLedgerSection({
         switch (sortKey) {
           case "ticker":
             return item.row.ticker || item.row.ric;
-          case "method":
+          case "cuse_method":
             return exposureMethodDisplayLabel(item.modeled?.exposure_origin, item.modeled?.model_status);
+          case "cpar_method":
+            return cparMethodLabel(item.cparModeled);
           case "quantity":
             return Number(item.row.quantity || 0);
           case "price":
@@ -122,7 +156,7 @@ export default function HoldingsLedgerSection({
       };
       const av = valueFor(a);
       const bv = valueFor(b);
-      if (sortKey === "method") {
+      if (sortKey === "cuse_method") {
         const rankA = exposureMethodRank(a.modeled?.exposure_origin, a.modeled?.model_status);
         const rankB = exposureMethodRank(b.modeled?.exposure_origin, b.modeled?.model_status);
         if (rankA !== rankB) return sortAsc ? rankA - rankB : rankB - rankA;
@@ -200,7 +234,8 @@ export default function HoldingsLedgerSection({
           <thead>
             <tr>
               <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
-              <th onClick={() => handleSort("method")}>Method{arrow("method")}</th>
+              <th onClick={() => handleSort("cuse_method")}>cUSE Method{arrow("cuse_method")}</th>
+              <th onClick={() => handleSort("cpar_method")}>cPAR Method{arrow("cpar_method")}</th>
               <th className="text-right" onClick={() => handleSort("quantity")}>Quantity{arrow("quantity")}</th>
               <th className="text-right" onClick={() => handleSort("price")}>Price{arrow("price")}</th>
               <th className="text-right" onClick={() => handleSort("market_value")}>Mkt Val{arrow("market_value")}</th>
@@ -209,10 +244,11 @@ export default function HoldingsLedgerSection({
             </tr>
           </thead>
           <tbody>
-            {visibleRows.map(({ row, modeled, price, marketValue }) => (
+            {visibleRows.map(({ row, modeled, cparModeled, price, marketValue }) => (
               <tr key={`${row.account_id}:${row.ric || row.ticker}`}>
                 <td>{row.ticker || "—"}</td>
                 <td>{exposureMethodDisplayLabel(modeled?.exposure_origin, modeled?.model_status)}</td>
+                <td>{cparMethodLabel(cparModeled)}</td>
                 <td className="text-right">
                   <InlineShareDraftEditor
                     quantityText={getDraftQuantityText(row)}
@@ -232,7 +268,7 @@ export default function HoldingsLedgerSection({
             ))}
             {visibleRows.length === 0 && (
               <tr>
-                <td colSpan={7} className="holdings-empty-row">
+                <td colSpan={8} className="holdings-empty-row">
                   No holdings are loaded yet.
                 </td>
               </tr>
