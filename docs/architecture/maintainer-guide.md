@@ -100,13 +100,33 @@ Practical rule:
 ### Refresh / rebuild
 
 Use:
-- `refresh_manager` for process-local refresh lifecycle
+- `refresh_manager` for process-local refresh lifecycle inside the control-plane surface
+- `refresh_status_service` for read-only persisted refresh-status reads from serve-facing/operator-facing surfaces that do not own the worker
+- `refresh_dispatcher` for runtime-aware “request serve-refresh” behavior when a mutation flow may or may not be allowed to start refresh locally
 - `run_model_pipeline` and `backend/orchestration/*` for staged rebuild workflows
 
 Do not:
 - mutate module globals to retarget one run
 - hide stage behavior in unrelated helper modules
 - let serving-only paths synthesize or advance core artifacts when the stable core package is stale or missing
+- let a serve-only process reconcile shared refresh state as though it owned the control-plane worker
+
+### App surfaces
+
+Current approved entrypoints:
+
+- `backend.main:app`
+  - full local/all-in-one compatibility surface
+- `backend.serve_main:app`
+  - stateless serving surface
+- `backend.control_main:app`
+  - operator/control surface
+
+Frontend split-origin proxy ownership lives in:
+- `frontend/src/app/api/_backend.ts`
+- the operator/control App Router proxy handlers under `frontend/src/app/api/*`
+
+Pages/components should not choose backend origins directly.
 
 ### Serving
 

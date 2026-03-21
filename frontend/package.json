@@ -8,6 +8,7 @@
     "start": "next start",
     "typegen": "node -e \"require('fs').mkdirSync('.next/types',{recursive:true})\" && next typegen",
     "typecheck": "npm run typegen && tsc --noEmit --incremental false",
+    "test:control-plane-proxies": "node scripts/control_plane_proxy_contract_check.mjs",
     "test:smoke-seq": "npm run test:family-routes && npm run test:cpar-pages && npm run test:cpar-hedge && npm run test:cpar-portfolio && npm run test:cpar-portfolio-whatif && npm run test:explore-whatif && npm run test:explore-whatif-busy",
     "test:family-routes": "node scripts/family_routes_smoke.mjs",
     "test:cpar-pages": "node scripts/cpar_pages_smoke.mjs",

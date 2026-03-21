@@ -18,6 +18,7 @@ This document is the canonical description of the operating model and active arc
 
 Use the following docs for more specific views instead of repeating that detail here:
 - `../operations/OPERATIONS_PLAYBOOK.md` for named refresh lanes, operational commands, and retention rules
+- `../operations/CLOUD_NATIVE_RUNBOOK.md` for the serve-app vs control-app process split and split-origin frontend proxy contract
 - `CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md` for the current cPAR system surfaces
 - `../operations/CPAR_OPERATIONS_PLAYBOOK.md` for current cPAR runtime-role and authority behavior
 - `../reference/protocols/UNIVERSE_ADD_RUNBOOK.md` for the approved universe-add workflow
@@ -66,6 +67,10 @@ Integration-layer ownership remains in the repo's normal layers and is documente
 - Neon is the authoritative operating database for the standalone tool once source sync has published the retained working set.
 - `NEON_AUTHORITATIVE_REBUILDS` now defaults on when Neon is the active data backend and a Neon DSN is configured; set it to `false` only to force a rollback to local-SQLite rebuild authority.
 - In `cloud-serve`, a fresh machine should be able to serve cUSE/cPAR runtime surfaces from Neon without a preexisting large local `data.db`; local SQLite remains only for ingest, archive, explicit local diagnostics, and scratch/workspace files.
+- Cloud-native prep now assumes two app surfaces:
+  - a stateless serve app for public/editor-facing reads and holdings mutations
+  - a control app for refresh execution and operator/control diagnostics
+- In that split model, the serve app must not own refresh execution or reconcile process-local refresh-worker state.
 - The active cUSE model-history window is defined by retained `barra_raw_cross_section_history`, not by the deepest source archive.
 - `security_master` is the only universe authority.
 - The committed universe artifact is `data/reference/security_master_seed.csv`.

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { backendOrigin, operatorHeaders } from "@/app/api/_backend";
+import { controlBackendOrigin, operatorHeaders } from "@/app/api/_backend";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const upstream = `${backendOrigin()}/api/refresh/status`;
+  const upstream = `${controlBackendOrigin()}/api/refresh/status`;
   const res = await fetch(upstream, {
     method: "GET",
     headers: operatorHeaders(),

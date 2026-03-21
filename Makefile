@@ -1,4 +1,4 @@
-.PHONY: dev backend backend-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status
+.PHONY: dev backend backend-prod backend-serve backend-control backend-serve-prod backend-control-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status
 
 setup:
 	python3 -m venv backend/.venv || true
@@ -11,6 +11,18 @@ backend:
 
 backend-prod:
 	uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers $${BACKEND_WORKERS:-1}
+
+backend-serve:
+	uvicorn backend.serve_main:app --reload --port 8000
+
+backend-control:
+	uvicorn backend.control_main:app --reload --port 8001
+
+backend-serve-prod:
+	uvicorn backend.serve_main:app --host 0.0.0.0 --port 8000 --workers $${BACKEND_WORKERS:-1}
+
+backend-control-prod:
+	uvicorn backend.control_main:app --host 0.0.0.0 --port 8001 --workers 1
 
 frontend:
 	cd frontend && npm run dev -- --port 3000

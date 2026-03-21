@@ -44,6 +44,10 @@
 - Production backend command:
   - `BACKEND_WORKERS=1 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 1`
   - or `make backend-prod`
+- Cloud-native prep entrypoints are now available but not required for the hobby profile:
+  - serve app: `make backend-serve-prod`
+  - control app: `make backend-control-prod`
+  - process split details live in [CLOUD_NATIVE_RUNBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/operations/CLOUD_NATIVE_RUNBOOK.md)
 
 ## Fresh Machine Cloud-Serve Bootstrap
 - A fresh `cloud-serve` machine should not require a preexisting large local `backend/runtime/data.db` to serve the app.
@@ -56,6 +60,9 @@
   - runtime/operator state should read from Neon and not fall back to local SQLite
   - holdings should read from Neon and fail closed if Neon is unavailable
   - cPAR package reads should use the Neon authority store and fail closed if no package exists there
+  - the public/editor-facing serve app should not expose refresh execution routes
+  - operator/control routes should be served from the separate control app surface
+  - the frontend may target a separate control origin through `BACKEND_CONTROL_ORIGIN`; when unset it falls back to `BACKEND_API_ORIGIN`
 - Small local scratch/cache/workspace files may still appear, but they are not the historical source warehouse and are not the serving authority.
 - Local SQLite remains required only for:
   - direct LSEG ingest
@@ -124,6 +131,7 @@ Runtime-role rule:
 - `cloud-serve`: only `serve-refresh` is allowed.
 - In `cloud-serve`, a bare `POST /api/refresh` now defaults safely to `serve-refresh`.
 - Explicit deeper lanes remain blocked in `cloud-serve` even if requested by old mode-based callers.
+- In the split app model, `/api/refresh` and `/api/refresh/status` belong to the control app, not the serve app.
 
 Parallel cPAR note:
 - cPAR has its own dedicated operating assumptions and does not share the cUSE4 refresh API/operator flow.
@@ -151,6 +159,9 @@ Parallel cPAR note:
 - Verify backend/frontend/proxy health: `make app-check`
 - Show tracked PIDs, URLs, and log paths: `make app-status`
 - Canonical launcher scripts live under `scripts/local_app/` and write runtime state under `backend/runtime/local_app/`.
+- Additional local split entrypoints are available for cloud-native prep validation:
+  - `make backend-serve`
+  - `make backend-control`
 
 ## Key Commands
 - Orchestrated refresh via API:
@@ -159,6 +170,8 @@ Parallel cPAR note:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=serve-refresh"`
 - Cloud-mode authenticated serve-refresh:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=serve-refresh" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
+- Split-control authenticated serve-refresh:
+  - `curl -X POST "http://localhost:8001/api/refresh?profile=serve-refresh" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
 - API refresh explicit source-daily profile:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=source-daily"`
 - API refresh explicit weekly core recompute:

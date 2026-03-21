@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend import config
-from backend.data import runtime_state
 from backend.data.sqlite import cache_get, cache_set
 from backend.orchestration.profiles import (
     PROFILE_CONFIG,
@@ -23,10 +22,15 @@ from backend.orchestration.run_model_pipeline import (
 )
 from backend.services.holdings_runtime_state import mark_refresh_started
 from backend.services.holdings_runtime_state import mark_refresh_finished
+from backend.services.refresh_profile_policy import assert_refresh_profile_allowed
+from backend.services.refresh_profile_policy import default_refresh_profile
+from backend.services.refresh_profile_policy import runtime_allowed_profiles
+from backend.services.refresh_status_service import default_refresh_status_state
+from backend.services.refresh_status_service import load_persisted_refresh_status
+from backend.services.refresh_status_service import persist_refresh_status
 
 logger = logging.getLogger(__name__)
 
-_STATUS_CACHE_KEY = "refresh_status"
 _RUN_LOCK = threading.Lock()
 _STATE_LOCK = threading.Lock()
 _ACTIVE_WORKER: threading.Thread | None = None
@@ -38,79 +42,27 @@ def _now_iso() -> str:
 
 
 def _default_state() -> dict[str, Any]:
-    return {
-        "status": "idle",
-        "job_id": None,
-        "pipeline_run_id": None,
-        "profile": None,
-        "requested_profile": None,
-        "mode": None,
-        "as_of_date": None,
-        "resume_run_id": None,
-        "from_stage": None,
-        "to_stage": None,
-        "refresh_scope": None,
-        "force_core": False,
-        "force_risk_recompute": False,
-        "current_stage": None,
-        "current_stage_substage": None,
-        "current_stage_substage_status": None,
-        "current_stage_diagnostics_section": None,
-        "stage_index": None,
-        "stage_count": None,
-        "stage_started_at": None,
-        "current_stage_message": None,
-        "current_stage_progress_pct": None,
-        "current_stage_items_processed": None,
-        "current_stage_items_total": None,
-        "current_stage_unit": None,
-        "current_stage_heartbeat_at": None,
-        "serving_publish_completed_at": None,
-        "serving_publish_snapshot_id": None,
-        "serving_publish_run_id": None,
-        "serving_publish_payload_count": None,
-        "requested_at": None,
-        "started_at": None,
-        "finished_at": None,
-        "result": None,
-        "error": None,
-    }
-
-
-def _load_persisted_state() -> dict[str, Any] | None:
-    cached = runtime_state.load_runtime_state(
-        _STATUS_CACHE_KEY,
-        fallback_loader=cache_get,
-    )
-    return cached if isinstance(cached, dict) else None
+    return default_refresh_status_state()
 
 
 def _persist_state(state: dict[str, Any]) -> dict[str, Any]:
-    return runtime_state.persist_runtime_state(
-        _STATUS_CACHE_KEY,
-        state,
-        fallback_writer=cache_set,
-    )
+    return persist_refresh_status(state, fallback_writer=cache_set)
 
 
 def _load_initial_state() -> dict[str, Any]:
-    cached = _load_persisted_state()
-    if isinstance(cached, dict):
-        base = _default_state()
-        base.update(cached)
-        if base.get("status") == "running":
-            # After process restart, a previously running task cannot be resumed.
-            base["status"] = "unknown"
-            base["error"] = {
-                "type": "process_restart",
-                "message": "Refresh state was running before process restart.",
-            }
-            base["finished_at"] = _now_iso()
-        return base
-    return _default_state()
+    base = load_persisted_refresh_status(fallback_loader=cache_get)
+    if base.get("status") == "running":
+        # After process restart, a previously running task cannot be resumed.
+        base["status"] = "unknown"
+        base["error"] = {
+            "type": "process_restart",
+            "message": "Refresh state was running before process restart.",
+        }
+        base["finished_at"] = _now_iso()
+    return base
 
 
-_STATE = _default_state()
+_STATE = default_refresh_status_state()
 
 
 def _ensure_state_loaded() -> None:
@@ -150,7 +102,7 @@ def _set_state(**updates: Any) -> dict[str, Any]:
         _STATE.update(updates)
         snap = dict(_STATE)
     try:
-        _persist_state(snap)
+        persist_refresh_status(snap, fallback_writer=cache_set)
     except Exception:
         if not suppress_persist_errors:
             raise
@@ -210,7 +162,7 @@ def get_refresh_status() -> dict[str, Any]:
 
 
 def _default_profile() -> str:
-    return "serve-refresh" if config.cloud_mode() else "source-daily-plus-core-if-due"
+    return default_refresh_profile()
 
 
 def _resolve_profile(profile: str | None) -> str:
@@ -226,19 +178,11 @@ def _resolve_profile(profile: str | None) -> str:
 
 
 def _runtime_allowed_profiles() -> set[str]:
-    if config.cloud_mode():
-        return {"serve-refresh"}
-    return set(PROFILE_CONFIG.keys())
+    return runtime_allowed_profiles()
 
 
 def _assert_profile_allowed(profile: str) -> None:
-    allowed = _runtime_allowed_profiles()
-    if profile in allowed:
-        return
-    raise ValueError(
-        f"Profile '{profile}' is not allowed when APP_RUNTIME_ROLE={config.APP_RUNTIME_ROLE}. "
-        f"Allowed profiles: {', '.join(sorted(allowed))}"
-    )
+    assert_refresh_profile_allowed(profile)
 
 
 def _normalize_stage(name: str | None) -> str | None:

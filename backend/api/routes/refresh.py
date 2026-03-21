@@ -11,9 +11,20 @@ from fastapi.responses import JSONResponse
 
 from backend import config
 from backend.api.auth import require_role
-from backend.services.refresh_manager import get_refresh_status, start_refresh
 
 router = APIRouter()
+
+
+def start_refresh(**kwargs):
+    from backend.services.refresh_manager import start_refresh as _start_refresh
+
+    return _start_refresh(**kwargs)
+
+
+def get_refresh_status():
+    from backend.services.refresh_manager import get_refresh_status as _get_refresh_status
+
+    return _get_refresh_status()
 
 
 def _refresh_authorized(x_refresh_token: str | None, authorization: str | None) -> bool:

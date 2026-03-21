@@ -4,6 +4,13 @@ export function backendOrigin(): string {
   return (process.env.BACKEND_API_ORIGIN || "http://127.0.0.1:8000").replace(/\/+$/, "");
 }
 
+export function controlBackendOrigin(): string {
+  return (process.env.BACKEND_CONTROL_ORIGIN || process.env.BACKEND_API_ORIGIN || "http://127.0.0.1:8000").replace(
+    /\/+$/,
+    "",
+  );
+}
+
 export function operatorHeaders(extra: Record<string, string> = {}): HeadersInit {
   const token = (process.env.OPERATOR_API_TOKEN || process.env.REFRESH_API_TOKEN || "").trim();
   if (!token) return extra;

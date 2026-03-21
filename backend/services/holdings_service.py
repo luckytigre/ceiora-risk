@@ -22,7 +22,7 @@ from backend.services.neon_holdings import (
     parse_holdings_rows,
     remove_single_position,
 )
-from backend.services.refresh_manager import start_refresh
+from backend.services.refresh_dispatcher import request_serve_refresh
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +30,7 @@ logger = logging.getLogger(__name__)
 def trigger_light_refresh_if_requested(trigger: bool) -> dict[str, Any] | None:
     if not bool(trigger):
         return None
-    started, state = start_refresh(
-        profile="serve-refresh",
-        force_risk_recompute=False,
-        refresh_scope="holdings_only",
-    )
-    return {
-        "started": bool(started),
-        "state": state,
-    }
+    return request_serve_refresh(refresh_scope="holdings_only")
 
 
 def record_holdings_dirty(

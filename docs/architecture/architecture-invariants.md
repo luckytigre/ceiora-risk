@@ -51,6 +51,10 @@ These are the non-negotiable structural rules for this repository.
    cPAR integration still belongs in the normal repo layers.
    Current cPAR slices must not reuse cUSE4 serving-payload or runtime-state surfaces by implication.
 
+13. Cloud serve surfaces stay stateless and do not own refresh execution.
+   `backend/services/refresh_manager.py` is the reviewed control-plane execution owner for process-local refresh lifecycle.
+   Serve-facing readers must use the persisted refresh-status surface and must not reconcile worker ownership as though they own the control process.
+
 ## Existing Guardrails
 
 The repository already enforces several of these with lightweight tests in [test_architecture_boundaries.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/tests/test_architecture_boundaries.py):
@@ -67,6 +71,7 @@ The repository already enforces several of these with lightweight tests in [test
 - serving-only refreshes silently advancing the stable core package
 - serving-time price logic contaminating canonical model-estimation history
 - user-facing and developer-facing semantics drifting back to vague compatibility fields
+- serve-only processes mutating shared refresh state as though they owned the control-plane worker
 
 ## Low-Overhead Maintenance Rule
 

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { backendOrigin, operatorHeaders } from "@/app/api/_backend";
+import { controlBackendOrigin, operatorHeaders } from "@/app/api/_backend";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const upstream = `${backendOrigin()}/api/refresh${req.nextUrl.search}`;
+  const upstream = `${controlBackendOrigin()}/api/refresh${req.nextUrl.search}`;
   const res = await fetch(upstream, {
     method: "POST",
     headers: operatorHeaders(),

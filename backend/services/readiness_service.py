@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.services.refresh_manager import get_refresh_status
+from backend.data.sqlite import cache_get
+from backend.services.refresh_status_service import load_persisted_refresh_status
 
 
 def cache_not_ready_payload(
@@ -23,7 +24,7 @@ def cache_not_ready_payload(
             "endpoint": f"/api/refresh?profile={refresh_profile}",
         },
     }
-    refresh = get_refresh_status()
+    refresh = load_persisted_refresh_status(fallback_loader=cache_get)
     if isinstance(refresh, dict):
         payload["refresh"] = refresh
     return payload
