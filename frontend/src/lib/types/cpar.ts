@@ -3,8 +3,10 @@ export type CparFitStatus = "ok" | "limited_history" | "insufficient_history";
 export type CparWarning = "continuity_gap" | "ex_us_caution";
 export type CparHedgeStatus = "hedge_ok" | "hedge_degraded" | "hedge_unavailable";
 export type CparHedgeMode = "factor_neutral" | "market_neutral";
+export type CparRiskExposureMode = "raw" | "sensitivity" | "risk_contribution";
 export type CparPortfolioStatus = "ok" | "partial" | "empty" | "unavailable";
 export type CparPortfolioCoverage = "covered" | "missing_price" | "missing_cpar_fit" | "insufficient_history";
+export type CparRiskScope = "all_accounts";
 export type CparSourceContextStatus = "ok" | "partial" | "missing" | "unavailable";
 export type CparSourceContextReason = "missing_rows" | "shared_source_unavailable" | "mixed";
 
@@ -186,6 +188,7 @@ export interface CparPortfolioPositionRow {
   ric: string;
   ticker: string | null;
   display_name: string | null;
+  trbc_industry_group: string | null;
   quantity: number;
   price: number | null;
   price_date: string | null;
@@ -212,6 +215,10 @@ export interface CparFactorDrilldownRow {
   coverage_reason: string | null;
   factor_beta: number | null;
   contribution_beta: number;
+  vol_scaled_loading: number;
+  vol_scaled_contribution: number;
+  covariance_adjusted_loading: number;
+  risk_contribution_pct: number;
 }
 
 export interface CparFactorChartRow {
@@ -221,11 +228,55 @@ export interface CparFactorChartRow {
   display_order: number;
   beta: number;
   aggregate_beta: number;
+  factor_volatility: number;
+  covariance_adjustment: number;
+  sensitivity_beta: number;
+  risk_contribution_pct: number;
   positive_contribution_beta: number;
   negative_contribution_beta: number;
   variance_contribution: number | null;
   variance_share: number | null;
   drilldown: CparFactorDrilldownRow[];
+}
+
+export interface CparCovMatrix {
+  factors: string[];
+  correlation: number[][];
+}
+
+export interface CparFactorHistoryPoint {
+  date: string;
+  factor_return: number;
+  cum_return: number;
+}
+
+export interface CparFactorHistoryData {
+  factor_id: string;
+  factor_name: string;
+  years: number;
+  points: CparFactorHistoryPoint[];
+  _cached: boolean;
+}
+
+export interface CparRiskData extends CparPackageMeta {
+  scope: CparRiskScope;
+  accounts_count: number;
+  portfolio_status: CparPortfolioStatus;
+  portfolio_reason: string | null;
+  positions_count: number;
+  covered_positions_count: number;
+  excluded_positions_count: number;
+  gross_market_value: number;
+  net_market_value: number;
+  covered_gross_market_value: number;
+  coverage_ratio: number | null;
+  coverage_breakdown: CparCoverageBreakdown;
+  aggregate_thresholded_loadings: CparLoading[];
+  factor_variance_contributions: CparFactorVarianceContribution[];
+  factor_chart: CparFactorChartRow[];
+  cov_matrix: CparCovMatrix;
+  pre_hedge_factor_variance_proxy?: number | null;
+  positions: CparPortfolioPositionRow[];
 }
 
 export interface CparPortfolioHedgeData extends CparPackageMeta {
@@ -245,6 +296,7 @@ export interface CparPortfolioHedgeData extends CparPackageMeta {
   aggregate_thresholded_loadings: CparLoading[];
   factor_variance_contributions: CparFactorVarianceContribution[];
   factor_chart: CparFactorChartRow[];
+  cov_matrix: CparCovMatrix;
   hedge_status: CparHedgeStatus | null;
   hedge_reason: string | null;
   hedge_legs: CparHedgeLeg[];

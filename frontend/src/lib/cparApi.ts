@@ -8,7 +8,9 @@ export { ApiError, apiFetch };
 export const cparApiPath = {
   cparMeta: legacyApiPath.cparMeta,
   cparSearch: legacyApiPath.cparSearch,
+  cparRisk: legacyApiPath.cparRisk,
   cparTicker: legacyApiPath.cparTicker,
+  cparFactorHistory: legacyApiPath.cparFactorHistory,
   cparHedge: legacyApiPath.cparHedge,
   cparPortfolioHedge: legacyApiPath.cparPortfolioHedge,
   cparPortfolioWhatIf: legacyApiPath.cparPortfolioWhatIf,

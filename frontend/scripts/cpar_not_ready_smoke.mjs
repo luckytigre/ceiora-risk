@@ -38,7 +38,7 @@ let debugPage = null;
 let capturedPageError = null;
 let metaReady = false;
 let detailRequestCount = 0;
-let portfolioRequestCount = 0;
+let riskRequestCount = 0;
 const server = spawn(
   NEXT_BIN,
   ["dev", "-H", HOST, "-p", String(PORT)],
@@ -224,23 +224,8 @@ try {
         });
       }
 
-      if (method === "GET" && pathName === "/api/holdings/accounts") {
-        return fulfillJson({
-          accounts: [
-            {
-              account_id: "acct_main",
-              account_name: "Main Account",
-              is_active: true,
-              positions_count: 3,
-              gross_quantity: 17,
-              last_position_updated_at: "2026-03-18T15:00:00Z",
-            },
-          ],
-        });
-      }
-
-      if (method === "GET" && pathName === "/api/cpar/portfolio/hedge") {
-        portfolioRequestCount += 1;
+      if (method === "GET" && pathName === "/api/cpar/risk") {
+        riskRequestCount += 1;
         return fulfillJson(
           {
             detail: {
@@ -350,19 +335,19 @@ try {
     await page.getByText("cPAR Hedge Not Ready").waitFor();
     await page.getByText("Publish a durable cPAR package first, then reload.").waitFor();
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-not-ready").waitFor();
     await page.getByText("cPAR Risk Not Ready").waitFor();
-    await page.getByText("This workflow is package-based and read-only. Publish a durable cPAR package first, then reload.").waitFor();
+    await page.getByText("This page is package-based and read-only. Publish a durable cPAR package first, then reload.").waitFor();
     assert.equal(detailRequestCount, 0);
-    assert.equal(portfolioRequestCount, 0);
+    assert.equal(riskRequestCount, 0);
 
     metaReady = true;
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/explore?ticker=AAPL`, { waitUntil: "domcontentloaded" });
     const detailPanel = page.getByTestId("cpar-detail-panel");
     await detailPanel.getByText("Ticker is ambiguous.").waitFor();
-    await detailPanel.getByText("Choose a specific RIC from the search results on the left.").waitFor();
+    await detailPanel.getByText("Choose a specific RIC from the search results below.").waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "RECALC" }).count(), 0);
 

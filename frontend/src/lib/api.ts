@@ -27,10 +27,13 @@ export const apiPath = {
   cparMeta: () => "/api/cpar/meta",
   cparSearch: (query: string, limit: number) =>
     `/api/cpar/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+  cparRisk: () => "/api/cpar/risk",
   cparTicker: (ticker: string, ric?: string | null) =>
     ric && ric.trim().length > 0
       ? `/api/cpar/ticker/${encodeURIComponent(ticker.trim().toUpperCase())}?ric=${encodeURIComponent(ric.trim())}`
       : `/api/cpar/ticker/${encodeURIComponent(ticker.trim().toUpperCase())}`,
+  cparFactorHistory: (factorId: string, years: number) =>
+    `/api/cpar/factors/history?factor_id=${encodeURIComponent(factorId)}&years=${years}`,
   cparHedge: (ticker: string, mode: string, ric?: string | null) => {
     const params = new URLSearchParams();
     params.set("mode", mode);

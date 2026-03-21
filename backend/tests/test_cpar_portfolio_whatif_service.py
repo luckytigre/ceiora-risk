@@ -89,6 +89,16 @@ def _covariance_rows() -> list[dict[str, object]]:
     ]
 
 
+def _classification_by_ric() -> dict[str, dict[str, object]]:
+    return {
+        "AAPL.OQ": {"ric": "AAPL.OQ", "trbc_industry_group": "Computers"},
+        "MSFT.OQ": {"ric": "MSFT.OQ", "trbc_industry_group": "Software"},
+        "NVDA.OQ": {"ric": "NVDA.OQ", "trbc_industry_group": "Semiconductors"},
+        "LONG.OQ": {"ric": "LONG.OQ", "trbc_industry_group": "Testing"},
+        "SHRT.OQ": {"ric": "SHRT.OQ", "trbc_industry_group": "Testing"},
+    }
+
+
 def test_portfolio_whatif_service_supports_new_active_package_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -101,7 +111,7 @@ def test_portfolio_whatif_service_supports_new_active_package_rows(
 
     def _support_rows(*, rics, **kwargs):
         observed_rics.extend(sorted(rics))
-        return _fit_by_ric(), _price_by_ric(), _covariance_rows()
+        return _fit_by_ric(), _price_by_ric(), _classification_by_ric(), _covariance_rows()
 
     monkeypatch.setattr(
         cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
@@ -156,6 +166,8 @@ def test_portfolio_whatif_service_supports_new_active_package_rows(
     )
     assert payload["hypothetical"]["factor_chart"][0]["factor_id"] == "SPY"
     assert payload["hypothetical"]["factor_chart"][0]["drilldown"][0]["ric"] == "AAPL.OQ"
+    assert payload["hypothetical"]["factor_chart"][0]["drilldown"][0]["vol_scaled_loading"] > 0
+    assert payload["hypothetical"]["factor_chart"][0]["drilldown"][0]["risk_contribution_pct"] > 0
     reconciled = {}
     for row in payload["hypothetical"]["positions"]:
         for contribution in row["thresholded_contributions"]:
@@ -179,7 +191,7 @@ def test_portfolio_whatif_service_supports_position_removals(
     monkeypatch.setattr(
         cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
         "load_cpar_portfolio_support_rows",
-        lambda **kwargs: (_fit_by_ric(), _price_by_ric(), _covariance_rows()),
+        lambda **kwargs: (_fit_by_ric(), _price_by_ric(), _classification_by_ric(), _covariance_rows()),
     )
 
     payload = cpar_portfolio_whatif_service.load_cpar_portfolio_whatif_payload(
@@ -235,6 +247,7 @@ def test_portfolio_whatif_service_keeps_zero_net_factor_chart_rows_in_hypothetic
                 "LONG.OQ": {"ric": "LONG.OQ", "date": "2026-03-14", "adj_close": 100.0, "close": 100.0},
                 "SHRT.OQ": {"ric": "SHRT.OQ", "date": "2026-03-14", "adj_close": 100.0, "close": 100.0},
             },
+            _classification_by_ric(),
             _covariance_rows(),
         ),
     )
@@ -298,7 +311,7 @@ def test_portfolio_whatif_service_rejects_new_rows_outside_active_package(
     monkeypatch.setattr(
         cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
         "load_cpar_portfolio_support_rows",
-        lambda **kwargs: (_fit_by_ric(), _price_by_ric(), _covariance_rows()),
+        lambda **kwargs: (_fit_by_ric(), _price_by_ric(), _classification_by_ric(), _covariance_rows()),
     )
 
     with pytest.raises(ValueError, match="active cPAR package"):

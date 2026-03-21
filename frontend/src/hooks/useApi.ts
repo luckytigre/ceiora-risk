@@ -7,9 +7,12 @@
 import useSWR from "swr";
 import { ApiError, apiFetch, apiPath } from "@/lib/api";
 import type {
+  FactorHistoryData,
   CparHedgeMode,
+  CparFactorHistoryData,
   CparHedgePreviewData,
   CparMetaData,
+  CparRiskData,
   CparPortfolioHedgeData,
   CparPortfolioWhatIfData,
   CparSearchData,
@@ -26,7 +29,6 @@ import type {
   HoldingsPositionEditResponse,
   ExposuresData,
   RiskData,
-  FactorHistoryData,
   UniverseTickerData,
   UniverseTickerHistoryData,
   UniverseSearchData,
@@ -78,6 +80,10 @@ export function useCparSearch(query: string, limit = 10) {
   return useSWR<CparSearchData>(key, apiFetch, SWR_OPTS);
 }
 
+export function useCparRisk(enabled = true) {
+  return useSWR<CparRiskData>(enabled ? apiPath.cparRisk() : null, apiFetch, SWR_OPTS);
+}
+
 export function useCparTicker(ticker: string | null, ric?: string | null) {
   const cleanTicker = ticker?.trim().toUpperCase() || null;
   const cleanRic = ric?.trim() || null;
@@ -95,6 +101,12 @@ export function useCparHedge(
   const cleanRic = ric?.trim() || null;
   const key = enabled && cleanTicker ? apiPath.cparHedge(cleanTicker, mode, cleanRic) : null;
   return useSWR<CparHedgePreviewData>(key, apiFetch, SWR_OPTS);
+}
+
+export function useCparFactorHistory(factorId: string | null, years = 5, enabled = true) {
+  const cleanFactorId = factorId?.trim().toUpperCase() || null;
+  const key = enabled && cleanFactorId ? apiPath.cparFactorHistory(cleanFactorId, years) : null;
+  return useSWR<CparFactorHistoryData>(key, apiFetch, SWR_OPTS);
 }
 
 export function useCparPortfolioHedge(

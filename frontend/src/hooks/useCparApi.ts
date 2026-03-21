@@ -5,8 +5,10 @@
 
 export {
   ApiError,
+  useCparFactorHistory,
   useCparHedge,
   useCparMeta,
+  useCparRisk,
   useCparPortfolioHedge,
   useCparPortfolioWhatIf,
   useCparSearch,

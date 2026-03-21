@@ -1,6 +1,6 @@
 # cPAR Backend Read Surfaces
 
-Date: 2026-03-19
+Date: 2026-03-20
 Status: Active cPAR backend read and preview implementation notes
 Owner: Codex
 
@@ -33,6 +33,17 @@ It does not add:
 - returns ticker, ric, display name, fit status, warnings, and country code
 - may legitimately return rows with `ticker = NULL`
 
+`GET /api/cpar/risk`
+- returns the aggregate cPAR risk payload across all loaded holdings accounts
+- reuses `backend/data/holdings_reads.py` for one all-accounts holdings read and values those rows at the latest shared-source price on or before the active package date
+- returns:
+  - `coverage_breakdown`
+  - `factor_variance_contributions`
+  - `factor_chart`
+  - `cov_matrix`
+  - `positions[].thresholded_contributions`
+- is read-only and package-pinned
+
 `GET /api/cpar/ticker/{ticker}?ric=`
 - returns one active-package ticker detail payload
 - keeps the persisted fit row as the primary identity/loadings owner
@@ -45,6 +56,11 @@ It does not add:
 `GET /api/cpar/ticker/{ticker}/hedge?mode=&ric=`
 - returns a read-only hedge preview derived from persisted thresholded loadings and persisted covariance
 - supported `mode` values are `factor_neutral` and `market_neutral`
+
+`GET /api/cpar/factors/history?factor_id=&years=`
+- returns supplemental cPAR factor-return history for drilldown use
+- reads durable package-backed weekly proxy returns from `cpar_proxy_returns_weekly`
+- returns cumulative points only; it does not create a cUSE history dependency or a request-time compute path
 
 `GET /api/cpar/portfolio/hedge?account_id=&mode=`
 - returns a read-only account-scoped cPAR hedge workflow payload
@@ -86,23 +102,32 @@ The current cPAR overhaul should extend existing cPAR owners by default instead 
 Single-name owners:
 - `GET /api/cpar/ticker/{ticker}` remains owned by `backend/services/cpar_ticker_service.py`
 - `GET /api/cpar/ticker/{ticker}/hedge` remains owned by `backend/services/cpar_hedge_service.py`
+- `GET /api/cpar/factors/history` is now owned by `backend/services/cpar_factor_history_service.py`
 - richer `/cpar/explore` detail should extend the current ticker-detail owner unless a later slice proves that the new data requires a genuinely different authority/read pattern
+
+Aggregate risk owner:
+- `GET /api/cpar/risk` is now owned by `backend/services/cpar_risk_service.py`
+- this is the justified exception to the earlier account-scoped `/cpar/risk` freeze:
+  - the user-facing page is now the aggregate all-accounts cPAR risk surface
+  - the route still reuses `backend/services/cpar_portfolio_snapshot_service.py` as shared lower assembly instead of inventing a second truth source
+  - it does not collapse account-scoped hedge or what-if flows into the same payload
 
 Account-scoped owners:
 - `GET /api/cpar/portfolio/hedge` remains owned by `backend/services/cpar_portfolio_hedge_service.py`
 - `POST /api/cpar/portfolio/whatif` remains owned by `backend/services/cpar_portfolio_whatif_service.py`
 - shared lower assembly for both stays in `backend/services/cpar_portfolio_snapshot_service.py`
-- Slice 4 extends that shared snapshot owner instead of adding a new `/api/cpar/portfolio/risk` route family:
+- the shared snapshot owner now supports both:
+  - account-scoped hedge/what-if assembly
+  - aggregate risk assembly for `/api/cpar/risk`
+- shared contract fields include:
   - `coverage_breakdown` remains the explicit bucketed exclusion summary
-  - `factor_variance_contributions` remains a factor-only decomposition of the same aggregate thresholded exposure vector already used for hedge preview
+  - `factor_variance_contributions` remains a factor-only decomposition of the aggregate thresholded exposure vector
   - `factor_chart[]` now packages the signed positive/negative contribution arms plus per-factor drilldown rows used by `/cpar/risk`
   - `positions[].thresholded_contributions` remains the per-position weighted contribution view derived from covered rows only
-- richer `/cpar/risk` analytics should extend those current owners, or add one clearly distinct cPAR-specific account-risk owner only if the new payload cannot be expressed cleanly through the current split
 
 Current non-goals for this expansion stage:
 - no reuse of cUSE4 dashboard, universe, or what-if service surfaces
 - no generic `cpar_dashboard_*` or `cpar_risk_*` god service introduced only for symmetry
-- no new single-name history/context route until authority semantics are explicitly documented
 - no cUSE-style price-history surface in the ticker route during this slice
 
 ## Active-Package Semantics
@@ -140,7 +165,7 @@ Single-name source-context behavior:
 - shared-source augmentation is fail-soft for the ticker-detail route:
   - persisted cPAR fit detail still returns when those shared-source reads are degraded
   - the nested `source_context.status` / `reason` fields distinguish missing rows from shared-source unavailability
-- this slice does not add a 5Y history payload or a separate single-name history route
+- this slice still does not add a 5Y price-history payload or a separate single-name history route
 
 Portfolio-route limitations:
 - the first portfolio workflow is account-scoped, not multi-account
@@ -151,7 +176,15 @@ Portfolio-route limitations:
 - staged additions must already exist in the active package; the route does not request-time fit new names
 - account-scoped cPAR flows require two authorities at once: an active cPAR package and shared holdings/account reads; SQLite-only local cPAR package fallback does not make those routes available when holdings authority is down
 - `coverage_breakdown.gross_market_value` is based only on positions that can be valued on or before the active package date, so `missing_price` rows correctly contribute `0.0`
-- `factor_variance_contributions` remain factor-only proxy math from the persisted aggregate thresholded loadings plus active-package covariance; this slice still does not introduce specific-risk, covariance-matrix display, or cUSE-style risk-share payloads
+- `factor_variance_contributions` remain factor-only proxy math from the persisted aggregate thresholded loadings plus active-package covariance; this slice still does not introduce specific-risk or cUSE-style risk-share payloads
+
+Aggregate-risk limitations:
+- `/api/cpar/risk` is all-accounts and read-only
+- it is not an apply/mutation surface
+- it does not embed account-scoped hedge preview or what-if comparison payloads
+- it still depends on both authorities at once:
+  - an active cPAR package
+  - shared holdings/account and source-price reads
 
 ## Hedge Preview Behavior
 

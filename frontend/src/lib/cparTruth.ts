@@ -3,6 +3,8 @@
 import { ApiError } from "@/lib/cparApi";
 import type {
   CparCoverageBreakdown,
+  CparCovMatrix,
+  CparRiskData,
   CparFactorChartRow,
   CparFactorDrilldownRow,
   CparFactorGroup,
@@ -292,6 +294,20 @@ function normalizeCparLoadings(value: unknown): CparLoading[] {
   return Array.isArray(value) ? value as CparLoading[] : [];
 }
 
+function normalizeCparCovMatrix(value: unknown): CparCovMatrix {
+  const matrix = value && typeof value === "object" ? value as Partial<CparCovMatrix> : null;
+  return {
+    factors: Array.isArray(matrix?.factors) ? matrix.factors.map((factor) => String(factor)) : [],
+    correlation: Array.isArray(matrix?.correlation)
+      ? matrix.correlation.map((row) => (
+          Array.isArray(row)
+            ? row.map((cell) => (typeof cell === "number" && Number.isFinite(cell) ? cell : 0))
+            : []
+        ))
+      : [],
+  };
+}
+
 function normalizeCparVarianceContributions(value: unknown): CparFactorVarianceContribution[] {
   return Array.isArray(value) ? value as CparFactorVarianceContribution[] : [];
 }
@@ -303,10 +319,18 @@ function normalizeCparFactorChartRows(value: unknown): CparFactorChartRow[] {
       ? (row as CparFactorChartRow).drilldown.map((item) => ({
           ...item,
           warnings: Array.isArray(item.warnings) ? item.warnings : [],
+          vol_scaled_loading: typeof item.vol_scaled_loading === "number" ? item.vol_scaled_loading : 0,
+          vol_scaled_contribution: typeof item.vol_scaled_contribution === "number" ? item.vol_scaled_contribution : 0,
+          covariance_adjusted_loading: typeof item.covariance_adjusted_loading === "number" ? item.covariance_adjusted_loading : 0,
+          risk_contribution_pct: typeof item.risk_contribution_pct === "number" ? item.risk_contribution_pct : 0,
         }))
       : [];
     return {
       ...(row as CparFactorChartRow),
+      factor_volatility: typeof (row as CparFactorChartRow).factor_volatility === "number" ? (row as CparFactorChartRow).factor_volatility : 0,
+      covariance_adjustment: typeof (row as CparFactorChartRow).covariance_adjustment === "number" ? (row as CparFactorChartRow).covariance_adjustment : 0,
+      sensitivity_beta: typeof (row as CparFactorChartRow).sensitivity_beta === "number" ? (row as CparFactorChartRow).sensitivity_beta : 0,
+      risk_contribution_pct: typeof (row as CparFactorChartRow).risk_contribution_pct === "number" ? (row as CparFactorChartRow).risk_contribution_pct : 0,
       drilldown,
     };
   });
@@ -365,6 +389,10 @@ function deriveCparFactorChartRows(
             coverage_reason: row.coverage_reason,
             factor_beta: factorBeta,
             contribution_beta: contribution.beta,
+            vol_scaled_loading: 0,
+            vol_scaled_contribution: 0,
+            covariance_adjusted_loading: 0,
+            risk_contribution_pct: 0,
           } satisfies CparFactorDrilldownRow;
         })
         .filter((row): row is CparFactorDrilldownRow => row !== null)
@@ -375,6 +403,10 @@ function deriveCparFactorChartRows(
         ...meta,
         beta: aggregate?.beta ?? 0,
         aggregate_beta: aggregate?.beta ?? 0,
+        factor_volatility: 0,
+        covariance_adjustment: 0,
+        sensitivity_beta: 0,
+        risk_contribution_pct: (variance?.variance_share ?? 0) * 100,
         positive_contribution_beta: drilldown.reduce(
           (sum, row) => sum + Math.max(row.contribution_beta, 0),
           0,
@@ -397,21 +429,28 @@ function normalizeCparPortfolioPositionRow(row: CparPortfolioPositionRow): CparP
   };
 }
 
-export function normalizeCparPortfolioHedgeData(
-  portfolio: CparPortfolioHedgeData | null | undefined,
-): CparPortfolioHedgeData | null {
-  if (!portfolio) return null;
-  const positions = Array.isArray(portfolio.positions)
-    ? portfolio.positions.map(normalizeCparPortfolioPositionRow)
+type CparRiskLikePayload = {
+  aggregate_thresholded_loadings: CparLoading[];
+  coverage_breakdown: CparCoverageBreakdown;
+  cov_matrix: CparCovMatrix;
+  factor_variance_contributions: CparFactorVarianceContribution[];
+  factor_chart?: CparFactorChartRow[];
+  positions: CparPortfolioPositionRow[];
+};
+
+function normalizeCparRiskLikeData<T extends CparRiskLikePayload>(payload: T): T {
+  const positions = Array.isArray(payload.positions)
+    ? payload.positions.map(normalizeCparPortfolioPositionRow)
     : [];
-  const aggregateThresholdedLoadings = normalizeCparLoadings(portfolio.aggregate_thresholded_loadings);
-  const factorVarianceContributions = normalizeCparVarianceContributions(portfolio.factor_variance_contributions);
-  const hasFactorChartField = Object.prototype.hasOwnProperty.call(portfolio, "factor_chart");
-  const factorChart = normalizeCparFactorChartRows(portfolio.factor_chart);
+  const aggregateThresholdedLoadings = normalizeCparLoadings(payload.aggregate_thresholded_loadings);
+  const factorVarianceContributions = normalizeCparVarianceContributions(payload.factor_variance_contributions);
+  const hasFactorChartField = Object.prototype.hasOwnProperty.call(payload, "factor_chart");
+  const factorChart = normalizeCparFactorChartRows(payload.factor_chart);
   return {
-    ...portfolio,
+    ...payload,
     aggregate_thresholded_loadings: aggregateThresholdedLoadings,
-    coverage_breakdown: normalizeCparCoverageBreakdown(portfolio.coverage_breakdown || EMPTY_CPAR_COVERAGE_BREAKDOWN),
+    coverage_breakdown: normalizeCparCoverageBreakdown(payload.coverage_breakdown || EMPTY_CPAR_COVERAGE_BREAKDOWN),
+    cov_matrix: normalizeCparCovMatrix(payload.cov_matrix),
     factor_variance_contributions: factorVarianceContributions,
     factor_chart: hasFactorChartField
       ? factorChart
@@ -422,6 +461,20 @@ export function normalizeCparPortfolioHedgeData(
         }),
     positions,
   };
+}
+
+export function normalizeCparPortfolioHedgeData(
+  portfolio: CparPortfolioHedgeData | null | undefined,
+): CparPortfolioHedgeData | null {
+  if (!portfolio) return null;
+  return normalizeCparRiskLikeData(portfolio);
+}
+
+export function normalizeCparRiskData(
+  risk: CparRiskData | null | undefined,
+): CparRiskData | null {
+  if (!risk) return null;
+  return normalizeCparRiskLikeData(risk);
 }
 
 export function normalizeCparPortfolioWhatIfData(

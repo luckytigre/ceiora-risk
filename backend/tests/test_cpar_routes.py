@@ -18,7 +18,9 @@ def _test_app() -> FastAPI:
 EXPECTED_CPAR_ROUTE_SET = {
     ("GET", "/api/cpar/meta"),
     ("GET", "/api/cpar/search"),
+    ("GET", "/api/cpar/risk"),
     ("GET", "/api/cpar/ticker/{ticker}"),
+    ("GET", "/api/cpar/factors/history"),
     ("GET", "/api/cpar/ticker/{ticker}/hedge"),
     ("GET", "/api/cpar/portfolio/hedge"),
     ("POST", "/api/cpar/portfolio/whatif"),
@@ -242,6 +244,123 @@ def test_cpar_ticker_route_preserves_nested_source_context_contract(monkeypatch)
     assert res.json()["source_context"]["status"] == "partial"
     assert res.json()["source_context"]["latest_common_name"]["value"] == "Apple Incorporated"
     assert res.json()["source_context"]["latest_price_context"]["price_field_used"] == "adj_close"
+
+
+def test_cpar_risk_route_returns_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_risk_service,
+        "load_cpar_risk_payload",
+        lambda: {
+            "package_run_id": "run_curr",
+            "package_date": "2026-03-14",
+            "scope": "all_accounts",
+            "accounts_count": 3,
+            "portfolio_status": "ok",
+            "coverage_breakdown": {
+                "covered": {"positions_count": 2, "gross_market_value": 1500.0},
+                "missing_price": {"positions_count": 0, "gross_market_value": 0.0},
+                "missing_cpar_fit": {"positions_count": 0, "gross_market_value": 0.0},
+                "insufficient_history": {"positions_count": 0, "gross_market_value": 0.0},
+            },
+            "factor_variance_contributions": [],
+            "factor_chart": [],
+            "cov_matrix": {"factors": ["SPY"], "correlation": [[1.0]]},
+            "positions": [],
+        },
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/risk")
+
+    assert res.status_code == 200
+    assert res.json()["scope"] == "all_accounts"
+    assert res.json()["accounts_count"] == 3
+
+
+def test_cpar_risk_route_maps_not_ready_to_503(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_risk_service,
+        "load_cpar_risk_payload",
+        lambda: (_ for _ in ()).throw(cpar_routes.cpar_meta_service.CparReadNotReady("No successful cPAR package")),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/risk")
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["status"] == "not_ready"
+
+
+def test_cpar_factor_history_route_returns_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_factor_history_service,
+        "load_cpar_factor_history_payload",
+        lambda **kwargs: {
+            "factor_id": kwargs["factor_id"],
+            "factor_name": "Market",
+            "years": kwargs["years"],
+            "points": [
+                {"date": "2025-03-14", "factor_return": 0.01, "cum_return": 0.01},
+                {"date": "2025-03-21", "factor_return": -0.02, "cum_return": -0.0102},
+            ],
+            "_cached": True,
+        },
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/factors/history?factor_id=SPY&years=5")
+
+    assert res.status_code == 200
+    assert res.json()["factor_id"] == "SPY"
+    assert len(res.json()["points"]) == 2
+
+
+def test_cpar_factor_history_route_maps_missing_factor_to_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_factor_history_service,
+        "load_cpar_factor_history_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_routes.cpar_factor_history_service.CparFactorNotFound("Unknown cPAR factor_id 'BAD'.")
+        ),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/factors/history?factor_id=BAD&years=5")
+
+    assert res.status_code == 404
+    assert "Unknown cPAR factor_id" in res.json()["detail"]
+
+
+def test_cpar_factor_history_route_maps_not_ready_to_503(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_factor_history_service,
+        "load_cpar_factor_history_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_routes.cpar_meta_service.CparReadNotReady("Historical cPAR factor returns are not available yet.")
+        ),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/factors/history?factor_id=SPY&years=5")
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["status"] == "not_ready"
+
+
+def test_cpar_factor_history_route_maps_unavailable_to_503(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_factor_history_service,
+        "load_cpar_factor_history_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            cpar_routes.cpar_meta_service.CparReadUnavailable("Neon cPAR read failed")
+        ),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/factors/history?factor_id=SPY&years=5")
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["status"] == "unavailable"
 
 
 def test_cpar_hedge_route_returns_payload(monkeypatch) -> None:

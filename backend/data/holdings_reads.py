@@ -24,6 +24,22 @@ def _normalize_ticker(value: str | None) -> str | None:
     return clean or None
 
 
+def _shape_position_rows(rows: list[tuple[object, object, object, object, object, object]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for raw_account_id, ric, ticker, quantity, source, updated_at in rows:
+        out.append(
+            {
+                "account_id": str(raw_account_id),
+                "ric": _normalize_ric(ric),
+                "ticker": _normalize_ticker(ticker),
+                "quantity": float(quantity or 0.0),
+                "source": str(source or ""),
+                "updated_at": str(updated_at) if updated_at is not None else None,
+            }
+        )
+    return out
+
+
 def load_holdings_accounts() -> list[dict[str, Any]]:
     conn = None
     try:
@@ -101,16 +117,36 @@ def load_holdings_positions(*, account_id: str) -> list[dict[str, Any]]:
         if conn is not None:
             conn.close()
 
-    out: list[dict[str, Any]] = []
-    for raw_account_id, ric, ticker, quantity, source, updated_at in rows:
-        out.append(
-            {
-                "account_id": str(raw_account_id),
-                "ric": _normalize_ric(ric),
-                "ticker": _normalize_ticker(ticker),
-                "quantity": float(quantity or 0.0),
-                "source": str(source or ""),
-                "updated_at": str(updated_at) if updated_at is not None else None,
-            }
-        )
-    return out
+    return _shape_position_rows(rows)
+
+
+def load_all_holdings_positions() -> list[dict[str, Any]]:
+    conn = None
+    try:
+        conn = connect(dsn=resolve_dsn(None), autocommit=True)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    p.account_id,
+                    p.ric,
+                    COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker,
+                    p.quantity,
+                    p.source,
+                    p.updated_at
+                FROM holdings_positions_current p
+                LEFT JOIN security_master sm
+                  ON sm.ric = p.ric
+                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
+                """
+            )
+            rows = cur.fetchall()
+    except Exception as exc:
+        raise HoldingsReadError(
+            f"Shared holdings position read failed for all accounts: {type(exc).__name__}: {exc}"
+        ) from exc
+    finally:
+        if conn is not None:
+            conn.close()
+
+    return _shape_position_rows(rows)

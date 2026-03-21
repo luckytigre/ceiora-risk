@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from backend.cpar import hedge_engine
@@ -35,6 +36,28 @@ def _factor_rows(loadings: dict[str, float]) -> list[dict[str, object]]:
             }
         )
     return rows
+
+
+def _cov_matrix_payload(
+    *,
+    covariance_rows: list[dict[str, Any]],
+) -> dict[str, object]:
+    factor_ids = [str(spec.factor_id) for spec in build_cpar1_factor_registry()]
+    correlation_lookup = {
+        (str(row.get("factor_id") or ""), str(row.get("factor_id_2") or "")): float(row.get("correlation") or 0.0)
+        for row in covariance_rows
+    }
+    correlation = [
+        [
+            float(correlation_lookup.get((left, right), 1.0 if left == right else 0.0))
+            for right in factor_ids
+        ]
+        for left in factor_ids
+    ]
+    return {
+        "factors": factor_ids,
+        "correlation": correlation,
+    }
 
 
 def _hedge_leg_rows(hedge_legs: tuple[Any, ...]) -> list[dict[str, object]]:
@@ -156,6 +179,7 @@ def _build_position_rows(
     positions: list[dict[str, Any]],
     fit_by_ric: dict[str, dict[str, Any]],
     price_by_ric: dict[str, dict[str, Any]],
+    classification_by_ric: dict[str, dict[str, Any]],
     covered_gross_market_value: float,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
@@ -163,6 +187,7 @@ def _build_position_rows(
         ric = str(position.get("ric") or "")
         fit = fit_by_ric.get(ric)
         price_row = price_by_ric.get(ric)
+        classification_row = classification_by_ric.get(ric)
         price_value, price_field_used, price_date = _select_price(price_row)
         quantity = float(position.get("quantity") or 0.0)
         market_value = None if price_value is None else quantity * price_value
@@ -181,6 +206,7 @@ def _build_position_rows(
                 "ric": ric,
                 "ticker": position.get("ticker") or (fit.get("ticker") if fit else None),
                 "display_name": fit.get("display_name") if fit else None,
+                "trbc_industry_group": classification_row.get("trbc_industry_group") if classification_row else None,
                 "quantity": quantity,
                 "price": price_value,
                 "price_date": price_date,
@@ -236,6 +262,63 @@ def _attach_thresholded_contributions(
     return enriched
 
 
+def _aggregate_positions_across_accounts(
+    positions: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, object]]]:
+    aggregated_by_ric: dict[str, dict[str, Any]] = {}
+    account_index: dict[str, dict[str, object]] = {}
+
+    for position in positions:
+        account_id = str(position.get("account_id") or "")
+        normalized_account_id = _normalize_account_id(account_id)
+        if normalized_account_id and normalized_account_id not in account_index:
+            account_index[normalized_account_id] = {
+                "account_id": account_id,
+                "account_name": account_id,
+            }
+
+        ric = str(position.get("ric") or "").strip().upper()
+        if not ric:
+            continue
+        aggregate = aggregated_by_ric.setdefault(
+            ric,
+            {
+                "account_id": "all_accounts",
+                "ric": ric,
+                "ticker": position.get("ticker"),
+                "quantity": 0.0,
+                "source": "aggregate",
+                "updated_at": position.get("updated_at"),
+            },
+        )
+        aggregate["quantity"] = float(aggregate.get("quantity") or 0.0) + float(position.get("quantity") or 0.0)
+        if not aggregate.get("ticker") and position.get("ticker"):
+            aggregate["ticker"] = position.get("ticker")
+        current_updated = str(aggregate.get("updated_at") or "")
+        next_updated = str(position.get("updated_at") or "")
+        if next_updated and next_updated > current_updated:
+            aggregate["updated_at"] = next_updated
+
+    aggregated_positions = [
+        row
+        for row in aggregated_by_ric.values()
+        if abs(float(row.get("quantity") or 0.0)) > _EPSILON
+    ]
+    aggregated_positions.sort(
+        key=lambda row: (
+            str(row.get("ticker") or row.get("ric") or ""),
+            str(row.get("ric") or ""),
+        )
+    )
+    accounts = sorted(
+        account_index.values(),
+        key=lambda row: (
+            str(row.get("account_id") or ""),
+        ),
+    )
+    return aggregated_positions, accounts
+
+
 def _aggregate_thresholded_loadings(
     rows: list[dict[str, object]],
     *,
@@ -260,6 +343,30 @@ def _aggregate_thresholded_loadings(
         gross_market_value,
         net_market_value,
     )
+
+
+def _factor_analytics_payload(
+    *,
+    aggregate_loadings: dict[str, float],
+    position_rows: list[dict[str, object]],
+    fit_by_ric: dict[str, dict[str, Any]],
+    covariance_rows: list[dict[str, Any]],
+) -> dict[str, object]:
+    factor_variance_rows = _factor_variance_contribution_rows(
+        aggregate_loadings,
+        covariance_rows=covariance_rows,
+    )
+    return {
+        "aggregate_thresholded_loadings": _factor_rows(aggregate_loadings),
+        "factor_variance_contributions": factor_variance_rows,
+        "factor_chart": _factor_chart_rows(
+            loadings=aggregate_loadings,
+            variance_rows=factor_variance_rows,
+            position_rows=position_rows,
+            fit_by_ric=fit_by_ric,
+            covariance_rows=covariance_rows,
+        ),
+    }
 
 
 def _factor_variance_contribution_rows(
@@ -298,18 +405,56 @@ def _factor_variance_contribution_rows(
     return rows
 
 
+def _factor_risk_metrics(
+    loadings: dict[str, float],
+    *,
+    covariance_rows: list[dict[str, Any]],
+) -> dict[str, dict[str, float]]:
+    if not loadings:
+        return {}
+    ordered_rows = _factor_rows(loadings)
+    factor_ids = tuple(str(row["factor_id"]) for row in ordered_rows)
+    covariance = {
+        (str(row["factor_id"]), str(row["factor_id_2"])): float(row["covariance"])
+        for row in covariance_rows
+    }
+    covariance_matrix = hedge_engine.covariance_matrix_for_factors(factor_ids, covariance)
+    beta_vector = [float(loadings.get(factor_id, 0.0)) for factor_id in factor_ids]
+    sigma_beta = [
+        float(
+            sum(float(covariance_matrix[row_idx, col_idx]) * beta_vector[col_idx] for col_idx in range(len(factor_ids)))
+        )
+        for row_idx in range(len(factor_ids))
+    ]
+    total_variance = float(sum(beta_vector[idx] * sigma_beta[idx] for idx in range(len(factor_ids))))
+
+    metrics: dict[str, dict[str, float]] = {}
+    for idx, factor_id in enumerate(factor_ids):
+        variance_contribution = float(beta_vector[idx] * sigma_beta[idx])
+        metrics[factor_id] = {
+            "factor_volatility": float(math.sqrt(max(float(covariance_matrix[idx, idx]), 0.0))),
+            "covariance_adjustment": float(sigma_beta[idx]),
+            "variance_contribution": variance_contribution,
+            "variance_share": 0.0 if total_variance <= 0 else float(variance_contribution / total_variance),
+            "total_variance": float(total_variance),
+        }
+    return metrics
+
+
 def _factor_chart_rows(
     *,
     loadings: dict[str, float],
     variance_rows: list[dict[str, object]],
     position_rows: list[dict[str, object]],
     fit_by_ric: dict[str, dict[str, Any]],
+    covariance_rows: list[dict[str, Any]],
 ) -> list[dict[str, object]]:
     variance_by_factor = {
         str(row["factor_id"]): dict(row)
         for row in variance_rows
         if str(row.get("factor_id") or "")
     }
+    risk_metrics_by_factor = _factor_risk_metrics(loadings, covariance_rows=covariance_rows)
     factor_specs = list(build_cpar1_factor_registry())
     factor_ids: set[str] = {str(factor_id) for factor_id in loadings.keys()}
     for row in position_rows:
@@ -335,6 +480,19 @@ def _factor_chart_rows(
         positive_contribution_beta = 0.0
         negative_contribution_beta = 0.0
         drilldown_rows: list[dict[str, object]] = []
+        factor_risk = risk_metrics_by_factor.get(
+            factor_id,
+            {
+                "factor_volatility": 0.0,
+                "covariance_adjustment": 0.0,
+                "variance_contribution": 0.0,
+                "variance_share": 0.0,
+                "total_variance": 0.0,
+            },
+        )
+        factor_volatility = float(factor_risk["factor_volatility"])
+        covariance_adjustment = float(factor_risk["covariance_adjustment"])
+        total_variance = float(factor_risk["total_variance"])
         for row in position_rows:
             if str(row.get("coverage") or "") != "covered":
                 continue
@@ -351,6 +509,14 @@ def _factor_chart_rows(
                 positive_contribution_beta += contribution_beta
             elif contribution_beta < -_EPSILON:
                 negative_contribution_beta += contribution_beta
+            vol_scaled_loading = float(factor_beta * factor_volatility)
+            vol_scaled_contribution = float(contribution_beta * factor_volatility)
+            covariance_adjusted_loading = float(factor_beta * covariance_adjustment)
+            risk_contribution_pct = (
+                0.0
+                if total_variance <= _EPSILON
+                else float((contribution_beta * covariance_adjustment) / total_variance * 100.0)
+            )
             drilldown_rows.append(
                 {
                     "ric": str(row.get("ric") or ""),
@@ -364,6 +530,10 @@ def _factor_chart_rows(
                     "coverage_reason": row.get("coverage_reason"),
                     "factor_beta": factor_beta,
                     "contribution_beta": contribution_beta,
+                    "vol_scaled_loading": vol_scaled_loading,
+                    "vol_scaled_contribution": vol_scaled_contribution,
+                    "covariance_adjusted_loading": covariance_adjusted_loading,
+                    "risk_contribution_pct": risk_contribution_pct,
                 }
             )
         drilldown_rows.sort(
@@ -382,6 +552,10 @@ def _factor_chart_rows(
                 "display_order": int(spec.display_order),
                 "beta": float(loadings.get(factor_id, 0.0)),
                 "aggregate_beta": float(loadings.get(factor_id, 0.0)),
+                "factor_volatility": factor_volatility,
+                "covariance_adjustment": covariance_adjustment,
+                "sensitivity_beta": float(loadings.get(factor_id, 0.0) * factor_volatility),
+                "risk_contribution_pct": float(variance_row.get("variance_share") or 0.0) * 100.0,
                 "positive_contribution_beta": float(positive_contribution_beta),
                 "negative_contribution_beta": float(negative_contribution_beta),
                 "variance_contribution": (
@@ -424,13 +598,45 @@ def load_cpar_portfolio_account_context(
     return package, account, positions
 
 
+def load_cpar_portfolio_aggregate_context(
+    *,
+    data_db=None,
+) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, Any]]]:
+    package = cpar_meta_service.require_active_package(data_db=data_db)
+
+    try:
+        accounts = holdings_reads.load_holdings_accounts()
+        live_positions = holdings_reads.load_all_holdings_positions()
+    except holdings_reads.HoldingsReadError as exc:
+        raise cpar_meta_service.CparReadUnavailable(f"Holdings read failed: {exc}") from exc
+
+    aggregated_positions, contributing_accounts = _aggregate_positions_across_accounts(live_positions)
+    account_names = {
+        _normalize_account_id(str(row.get("account_id") or "")): str(
+            row.get("account_name") or row.get("account_id") or ""
+        )
+        for row in accounts
+        if _normalize_account_id(str(row.get("account_id") or ""))
+    }
+    for row in contributing_accounts:
+        normalized_account_id = _normalize_account_id(str(row.get("account_id") or ""))
+        row["account_name"] = account_names.get(normalized_account_id, str(row.get("account_id") or ""))
+
+    return package, contributing_accounts, aggregated_positions
+
+
 def load_cpar_portfolio_support_rows(
     *,
     rics: list[str],
     package_run_id: str,
     package_date: str,
     data_db=None,
-) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    list[dict[str, Any]],
+]:
     try:
         fit_rows = cpar_outputs.load_package_instrument_fits_for_rics(
             rics,
@@ -455,9 +661,19 @@ def load_cpar_portfolio_support_rows(
     except cpar_source_reads.CparSourceReadError as exc:
         raise cpar_meta_service.CparReadUnavailable(f"Shared-source read failed: {exc}") from exc
 
+    try:
+        classification_rows = cpar_source_reads.load_latest_classification_rows(
+            rics,
+            as_of_date=str(package_date),
+            data_db=data_db,
+        )
+    except cpar_source_reads.CparSourceReadError:
+        classification_rows = []
+
     fit_by_ric = {str(row["ric"]): row for row in fit_rows}
     price_by_ric = {str(row["ric"]): row for row in price_rows}
-    return fit_by_ric, price_by_ric, covariance_rows
+    classification_by_ric = {str(row["ric"]): row for row in classification_rows}
+    return fit_by_ric, price_by_ric, classification_by_ric, covariance_rows
 
 
 def build_cpar_portfolio_hedge_snapshot(
@@ -468,6 +684,7 @@ def build_cpar_portfolio_hedge_snapshot(
     mode: str,
     fit_by_ric: dict[str, dict[str, Any]],
     price_by_ric: dict[str, dict[str, Any]],
+    classification_by_ric: dict[str, dict[str, Any]],
     covariance_rows: list[dict[str, Any]],
 ) -> dict[str, object]:
     position_count = int(len(positions))
@@ -490,6 +707,7 @@ def build_cpar_portfolio_hedge_snapshot(
         "aggregate_thresholded_loadings": [],
         "factor_variance_contributions": [],
         "factor_chart": [],
+        "cov_matrix": _cov_matrix_payload(covariance_rows=covariance_rows),
         "hedge_status": None,
         "hedge_reason": None,
         "hedge_legs": [],
@@ -508,6 +726,7 @@ def build_cpar_portfolio_hedge_snapshot(
         positions=positions,
         fit_by_ric=fit_by_ric,
         price_by_ric=price_by_ric,
+        classification_by_ric=classification_by_ric,
         covered_gross_market_value=0.0,
     )
     aggregate_loadings, covered_gross_market_value, net_market_value = _aggregate_thresholded_loadings(
@@ -518,6 +737,7 @@ def build_cpar_portfolio_hedge_snapshot(
         positions=positions,
         fit_by_ric=fit_by_ric,
         price_by_ric=price_by_ric,
+        classification_by_ric=classification_by_ric,
         covered_gross_market_value=covered_gross_market_value,
     )
     position_rows = _attach_thresholded_contributions(position_rows, fit_by_ric=fit_by_ric)
@@ -553,10 +773,6 @@ def build_cpar_portfolio_hedge_snapshot(
         )
         return payload
 
-    factor_variance_rows = _factor_variance_contribution_rows(
-        aggregate_loadings,
-        covariance_rows=covariance_rows,
-    )
     preview = hedge_engine.build_hedge_preview(
         mode=mode,
         thresholded_loadings=aggregate_loadings,
@@ -574,13 +790,11 @@ def build_cpar_portfolio_hedge_snapshot(
                 if excluded_positions_count > 0
                 else None
             ),
-            "aggregate_thresholded_loadings": _factor_rows(aggregate_loadings),
-            "factor_variance_contributions": factor_variance_rows,
-            "factor_chart": _factor_chart_rows(
-                loadings=aggregate_loadings,
-                variance_rows=factor_variance_rows,
+            **_factor_analytics_payload(
+                aggregate_loadings=aggregate_loadings,
                 position_rows=position_rows,
                 fit_by_ric=fit_by_ric,
+                covariance_rows=covariance_rows,
             ),
             "hedge_status": str(preview.status),
             "hedge_reason": preview.reason,
@@ -595,6 +809,113 @@ def build_cpar_portfolio_hedge_snapshot(
             "gross_hedge_notional": float(preview.gross_hedge_notional),
             "net_hedge_notional": float(preview.net_hedge_notional),
             "non_market_reduction_ratio": preview.non_market_reduction_ratio,
+        }
+    )
+    return payload
+
+
+def build_cpar_risk_snapshot(
+    *,
+    package: dict[str, object],
+    accounts: list[dict[str, object]],
+    positions: list[dict[str, Any]],
+    fit_by_ric: dict[str, dict[str, Any]],
+    price_by_ric: dict[str, dict[str, Any]],
+    classification_by_ric: dict[str, dict[str, Any]],
+    covariance_rows: list[dict[str, Any]],
+) -> dict[str, object]:
+    position_count = int(len(positions))
+
+    base_payload: dict[str, object] = {
+        **cpar_meta_service.package_meta_payload(package),
+        "scope": "all_accounts",
+        "accounts_count": int(len(accounts)),
+        "portfolio_status": "empty",
+        "portfolio_reason": "No live holdings positions are loaded across any account.",
+        "positions_count": position_count,
+        "covered_positions_count": 0,
+        "excluded_positions_count": 0,
+        "gross_market_value": 0.0,
+        "net_market_value": 0.0,
+        "covered_gross_market_value": 0.0,
+        "coverage_ratio": None,
+        "coverage_breakdown": _coverage_breakdown([]),
+        "aggregate_thresholded_loadings": [],
+        "factor_variance_contributions": [],
+        "factor_chart": [],
+        "cov_matrix": _cov_matrix_payload(covariance_rows=covariance_rows),
+        "positions": [],
+    }
+    if not positions:
+        return base_payload
+
+    provisional_rows = _build_position_rows(
+        positions=positions,
+        fit_by_ric=fit_by_ric,
+        price_by_ric=price_by_ric,
+        classification_by_ric=classification_by_ric,
+        covered_gross_market_value=0.0,
+    )
+    aggregate_loadings, covered_gross_market_value, net_market_value = _aggregate_thresholded_loadings(
+        provisional_rows,
+        fit_by_ric=fit_by_ric,
+    )
+    position_rows = _build_position_rows(
+        positions=positions,
+        fit_by_ric=fit_by_ric,
+        price_by_ric=price_by_ric,
+        classification_by_ric=classification_by_ric,
+        covered_gross_market_value=covered_gross_market_value,
+    )
+    position_rows = _attach_thresholded_contributions(position_rows, fit_by_ric=fit_by_ric)
+
+    priced_gross_market_value = sum(
+        abs(float(row["market_value"]))
+        for row in position_rows
+        if row.get("market_value") is not None
+    )
+    covered_positions_count = sum(1 for row in position_rows if str(row["coverage"]) == "covered")
+    excluded_positions_count = len(position_rows) - covered_positions_count
+    coverage_ratio = None
+    if priced_gross_market_value > 0:
+        coverage_ratio = covered_gross_market_value / priced_gross_market_value
+
+    payload = {
+        **base_payload,
+        "positions_count": int(len(position_rows)),
+        "covered_positions_count": int(covered_positions_count),
+        "excluded_positions_count": int(excluded_positions_count),
+        "gross_market_value": float(priced_gross_market_value),
+        "net_market_value": float(net_market_value),
+        "covered_gross_market_value": float(covered_gross_market_value),
+        "coverage_ratio": coverage_ratio,
+        "coverage_breakdown": _coverage_breakdown(position_rows),
+        "positions": position_rows,
+    }
+
+    if covered_positions_count <= 0 or covered_gross_market_value <= 0:
+        payload["portfolio_status"] = "unavailable"
+        payload["portfolio_reason"] = (
+            "No aggregated holdings rows across all accounts have both price coverage and a usable persisted cPAR fit "
+            "in the active package."
+        )
+        return payload
+
+    payload.update(
+        {
+            "portfolio_status": "partial" if excluded_positions_count > 0 else "ok",
+            "portfolio_reason": (
+                "Some aggregated holdings rows were excluded because they lack price coverage or a usable persisted "
+                "cPAR fit."
+                if excluded_positions_count > 0
+                else None
+            ),
+            **_factor_analytics_payload(
+                aggregate_loadings=aggregate_loadings,
+                position_rows=position_rows,
+                fit_by_ric=fit_by_ric,
+                covariance_rows=covariance_rows,
+            ),
         }
     )
     return payload
@@ -618,10 +939,11 @@ def load_cpar_portfolio_hedge_payload(
             mode=mode,
             fit_by_ric={},
             price_by_ric={},
+            classification_by_ric={},
             covariance_rows=[],
         )
     rics = [str(row.get("ric") or "") for row in positions if str(row.get("ric") or "").strip()]
-    fit_by_ric, price_by_ric, covariance_rows = load_cpar_portfolio_support_rows(
+    fit_by_ric, price_by_ric, classification_by_ric, covariance_rows = load_cpar_portfolio_support_rows(
         rics=rics,
         package_run_id=str(package["package_run_id"]),
         package_date=str(package["package_date"]),
@@ -634,5 +956,6 @@ def load_cpar_portfolio_hedge_payload(
         mode=mode,
         fit_by_ric=fit_by_ric,
         price_by_ric=price_by_ric,
+        classification_by_ric=classification_by_ric,
         covariance_rows=covariance_rows,
     )

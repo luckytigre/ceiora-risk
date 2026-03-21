@@ -134,6 +134,53 @@ def test_load_holdings_positions_normalizes_request_and_shapes_rows(
     assert conn.closed is True
 
 
+def test_load_all_holdings_positions_shapes_rows_without_account_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    cursor = _FakeCursor(
+        rows=[
+            ("acct_alpha", "aapl.oq", " aapl ", 10.5, "seed", None),
+            ("acct_beta", "msft.oq", None, 5, None, "2026-03-15T11:00:00Z"),
+        ],
+        capture=captured,
+    )
+    conn = _FakeConn(cursor)
+
+    monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
+    monkeypatch.setattr(
+        holdings_reads,
+        "connect",
+        lambda *, dsn, autocommit: conn,
+    )
+
+    rows = holdings_reads.load_all_holdings_positions()
+
+    assert captured["params"] is None
+    assert "FROM holdings_positions_current p" in str(captured["sql"])
+    assert "WHERE p.account_id = %s" not in str(captured["sql"])
+    assert "ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric" in str(captured["sql"])
+    assert rows == [
+        {
+            "account_id": "acct_alpha",
+            "ric": "AAPL.OQ",
+            "ticker": "AAPL",
+            "quantity": 10.5,
+            "source": "seed",
+            "updated_at": None,
+        },
+        {
+            "account_id": "acct_beta",
+            "ric": "MSFT.OQ",
+            "ticker": None,
+            "quantity": 5.0,
+            "source": "",
+            "updated_at": "2026-03-15T11:00:00Z",
+        },
+    ]
+    assert conn.closed is True
+
+
 def test_load_holdings_accounts_wraps_connect_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
     monkeypatch.setattr(
@@ -164,5 +211,27 @@ def test_load_holdings_positions_wraps_query_failures_and_closes_connection(
         match="Shared holdings position read failed for account_id=acct_main: RuntimeError: query boom",
     ):
         holdings_reads.load_holdings_positions(account_id="ACCT_MAIN")
+
+    assert conn.closed is True
+
+
+def test_load_all_holdings_positions_wraps_query_failures_and_closes_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cursor = _FakeCursor(execute_error=RuntimeError("query boom"))
+    conn = _FakeConn(cursor)
+
+    monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
+    monkeypatch.setattr(
+        holdings_reads,
+        "connect",
+        lambda *, dsn, autocommit: conn,
+    )
+
+    with pytest.raises(
+        holdings_reads.HoldingsReadError,
+        match="Shared holdings position read failed for all accounts: RuntimeError: query boom",
+    ):
+        holdings_reads.load_all_holdings_positions()
 
     assert conn.closed is True

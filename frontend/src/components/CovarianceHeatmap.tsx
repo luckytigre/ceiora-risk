@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useEffect, useState, useMemo, useCallback } from "react";
-import type { CovMatrix, FactorCatalogEntry } from "@/lib/types/cuse4";
+import type { CovMatrix, FactorCatalogEntry } from "@/lib/types/analytics";
 import { factorDisplayName, factorFamily, shortFactorLabel } from "@/lib/factorLabels";
 
 interface CovarianceHeatmapProps {
   data: CovMatrix;
   factorCatalog?: FactorCatalogEntry[];
+  factorScope?: "style" | "all";
 }
 
 const STYLE_ORDER: string[] = [
@@ -35,19 +36,38 @@ function corrColorStr(v: number): string {
   }
 }
 
-function filterStyleFactors(
+const FAMILY_ORDER: Record<string, number> = {
+  market: 0,
+  industry: 1,
+  style: 2,
+};
+
+function selectFactors(
   data: CovMatrix,
   factorCatalog?: FactorCatalogEntry[],
+  factorScope: "style" | "all" = "style",
 ): { factors: string[]; correlation: number[][] } {
   const factors = data.factors ?? [];
   const correlation = data.correlation ?? data.matrix ?? [];
   const idxMap = new Map<string, number>();
   factors.forEach((f, i) => idxMap.set(f, i));
 
-  const styleFactors = factors.filter((factor) => factorFamily(factor, factorCatalog) === "style");
-  const ordered = [...styleFactors].sort((a, b) => {
+  const visibleFactors = factors.filter((factor) => (
+    factorScope === "all"
+      ? Boolean(factorFamily(factor, factorCatalog))
+      : factorFamily(factor, factorCatalog) === "style"
+  ));
+  const ordered = [...visibleFactors].sort((a, b) => {
+    const familyDelta = FAMILY_ORDER[factorFamily(a, factorCatalog)] - FAMILY_ORDER[factorFamily(b, factorCatalog)];
+    if (familyDelta !== 0) return familyDelta;
     const aName = factorDisplayName(a, factorCatalog);
     const bName = factorDisplayName(b, factorCatalog);
+    if (factorScope === "all") {
+      const aOrder = factorCatalog?.find((entry) => entry.factor_id === a)?.display_order ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = factorCatalog?.find((entry) => entry.factor_id === b)?.display_order ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return aName.localeCompare(bName);
+    }
     const aIdx = STYLE_ORDER.indexOf(aName);
     const bIdx = STYLE_ORDER.indexOf(bName);
     if (aIdx >= 0 && bIdx >= 0) return aIdx - bIdx;
@@ -183,14 +203,17 @@ function drawHeatmap(
   }
 }
 
-export default function CovarianceHeatmap({ data, factorCatalog }: CovarianceHeatmapProps) {
+export default function CovarianceHeatmap({ data, factorCatalog, factorScope = "style" }: CovarianceHeatmapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const geoRef = useRef<Geometry | null>(null);
   const [hover, setHover] = useState<{ i: number; j: number } | null>(null);
   const [containerW, setContainerW] = useState(0);
 
-  const filtered = useMemo(() => filterStyleFactors(data, factorCatalog), [data, factorCatalog]);
+  const filtered = useMemo(
+    () => selectFactors(data, factorCatalog, factorScope),
+    [data, factorCatalog, factorScope],
+  );
 
   // Track container width
   useEffect(() => {

@@ -169,11 +169,19 @@ def test_portfolio_hedge_service_returns_partial_account_payload(monkeypatch: py
     assert payload["factor_variance_contributions"][1]["variance_share"] == pytest.approx(0.156 / 1.432)
     assert [row["factor_id"] for row in payload["factor_chart"]] == ["SPY", "XLK"]
     assert payload["factor_chart"][0]["aggregate_beta"] == pytest.approx(1.1)
+    assert payload["factor_chart"][0]["factor_volatility"] == pytest.approx(1.0)
+    assert payload["factor_chart"][0]["covariance_adjustment"] == pytest.approx(1.16)
+    assert payload["factor_chart"][0]["sensitivity_beta"] == pytest.approx(1.1)
+    assert payload["factor_chart"][0]["risk_contribution_pct"] == pytest.approx((1.276 / 1.432) * 100.0)
     assert payload["factor_chart"][0]["positive_contribution_beta"] == pytest.approx(1.1)
     assert payload["factor_chart"][0]["negative_contribution_beta"] == pytest.approx(0.0)
     assert payload["factor_chart"][0]["variance_share"] == pytest.approx(1.276 / 1.432)
     assert payload["factor_chart"][0]["drilldown"][0]["factor_beta"] == pytest.approx(1.1)
     assert payload["factor_chart"][0]["drilldown"][0]["contribution_beta"] == pytest.approx(1.1)
+    assert payload["factor_chart"][0]["drilldown"][0]["vol_scaled_loading"] == pytest.approx(1.1)
+    assert payload["factor_chart"][0]["drilldown"][0]["vol_scaled_contribution"] == pytest.approx(1.1)
+    assert payload["factor_chart"][0]["drilldown"][0]["covariance_adjusted_loading"] == pytest.approx(1.276)
+    assert payload["factor_chart"][0]["drilldown"][0]["risk_contribution_pct"] == pytest.approx((1.276 / 1.432) * 100.0)
     covered_row = next(row for row in payload["positions"] if row["ric"] == "AAPL.OQ")
     assert covered_row["thresholded_contributions"][0] == {
         "factor_id": "SPY",

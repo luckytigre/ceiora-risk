@@ -64,7 +64,7 @@ let debugPage = null;
 let capturedPageError = null;
 let scenario = "landing_unavailable";
 let detailRequestCount = 0;
-let portfolioRequestCount = 0;
+let riskRequestCount = 0;
 
 const server = spawn(
   NEXT_BIN,
@@ -288,9 +288,9 @@ try {
         return fulfillJson({ error: "unexpected hedge request" }, 500);
       }
 
-      if (method === "GET" && pathName === "/api/cpar/portfolio/hedge") {
-        portfolioRequestCount += 1;
-        if (scenario === "portfolio_unavailable") {
+      if (method === "GET" && pathName === "/api/cpar/risk") {
+        riskRequestCount += 1;
+        if (scenario === "risk_unavailable") {
           return fulfillJson(
             {
               detail: {
@@ -316,11 +316,11 @@ try {
     await page.getByTestId("cpar-hedge-not-ready").waitFor();
     await page.getByText("cPAR Hedge Unavailable").waitFor();
 
-    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-not-ready").waitFor();
     await page.getByText("cPAR Risk Unavailable").waitFor();
     assert.equal(detailRequestCount, 0);
-    assert.equal(portfolioRequestCount, 0);
+    assert.equal(riskRequestCount, 0);
 
     scenario = "explore_unavailable";
     await gotoWithRetry(page, `${BASE_URL}/cpar/explore?ticker=AAPL&ric=AAPL.OQ`, { waitUntil: "domcontentloaded" });
@@ -337,10 +337,10 @@ try {
     await page.getByText("Neon cPAR read failed.").waitFor();
     assert.equal(await page.getByTestId("cpar-post-hedge-table").count(), 0);
 
-    scenario = "portfolio_unavailable";
-    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    scenario = "risk_unavailable";
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-error").waitFor();
-    await page.getByText("Risk preview unavailable.").waitFor();
+    await page.getByText("Risk surface unavailable.").waitFor();
     await page.getByText("Shared holdings/source read failed.").waitFor();
 
     if (capturedPageError) {

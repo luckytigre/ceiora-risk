@@ -8,7 +8,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVICE_FILES = [
     REPO_ROOT / "backend" / "services" / "cpar_meta_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_search_service.py",
+    REPO_ROOT / "backend" / "services" / "cpar_risk_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_ticker_service.py",
+    REPO_ROOT / "backend" / "services" / "cpar_factor_history_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_hedge_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_portfolio_snapshot_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_portfolio_hedge_service.py",
@@ -136,7 +138,9 @@ def test_cpar_route_module_uses_current_explicit_service_owners() -> None:
     expected_tokens = {
         "cpar_meta_service",
         "cpar_search_service",
+        "cpar_risk_service",
         "cpar_ticker_service",
+        "cpar_factor_history_service",
         "cpar_hedge_service",
         "cpar_portfolio_hedge_service",
         "cpar_portfolio_whatif_service",

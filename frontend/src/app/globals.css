@@ -4494,11 +4494,41 @@ main {
   margin: 16px 0 18px;
 }
 
+.cpar-risk-factor-chart-canvas {
+  margin-top: 8px;
+}
+
 .cpar-factor-chart-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.cpar-factor-chart-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cpar-factor-chart-pill {
+  border: 1px solid rgba(154, 171, 214, 0.12);
+  background: rgba(12, 16, 26, 0.28);
+  color: rgba(188, 200, 228, 0.82);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.cpar-factor-chart-pill:hover,
+.cpar-factor-chart-pill.selected {
+  border-color: rgba(154, 171, 214, 0.22);
+  background: rgba(154, 171, 214, 0.1);
+  color: rgba(232, 237, 249, 0.94);
 }
 
 .cpar-factor-chart-grid {

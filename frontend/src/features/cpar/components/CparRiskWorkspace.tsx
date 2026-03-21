@@ -1,174 +1,32 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useMemo } from "react";
 import { CparInlineLoadingState, CparPageLoadingState } from "@/features/cpar/components/CparLoadingState";
-import CparPortfolioHedgePanel from "@/features/cpar/components/CparPortfolioHedgePanel";
-import CparPortfolioWhatIfBuilder, { type CparDraftScenarioRow } from "@/features/cpar/components/CparPortfolioWhatIfBuilder";
-import CparRiskAccountScopeCard from "@/features/cpar/components/CparRiskAccountScopeCard";
-import CparRiskCoverageSummaryCard from "@/features/cpar/components/CparRiskCoverageSummaryCard";
+import CparRiskCovarianceSection from "@/features/cpar/components/CparRiskCovarianceSection";
 import CparRiskFactorSummaryCard from "@/features/cpar/components/CparRiskFactorSummaryCard";
 import CparRiskPositionsContributionTable from "@/features/cpar/components/CparRiskPositionsContributionTable";
-import CparRiskWhatIfPreviewSection from "@/features/cpar/components/CparRiskWhatIfPreviewSection";
-import { useCparMeta, useCparPortfolioHedge, useCparPortfolioWhatIf, useHoldingsAccounts } from "@/hooks/useCparApi";
+import { useCparMeta, useCparRisk } from "@/hooks/useCparApi";
 import {
-  normalizeCparPortfolioHedgeData,
-  normalizeCparPortfolioWhatIfData,
+  normalizeCparRiskData,
+  readCparDependencyErrorMessage,
   readCparError,
   sameCparPackageIdentity,
 } from "@/lib/cparTruth";
-import type { CparHedgeMode, CparSearchItem } from "@/lib/types/cpar";
-
-function parseQuantityDelta(value: string): number | null {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || Math.abs(parsed) <= 1e-12) return null;
-  return parsed;
-}
-
-function formatScenarioQuantity(value: number): string {
-  if (!Number.isFinite(value)) return "";
-  return String(Number(value.toFixed(4)));
-}
-
-function hasCparRiskContext(data: {
-  factor_chart: Array<unknown>;
-  hedge_legs: Array<unknown>;
-  post_hedge_exposures: Array<unknown>;
-} | null | undefined): boolean {
-  if (!data) return false;
-  return data.factor_chart.length > 0 || data.hedge_legs.length > 0 || data.post_hedge_exposures.length > 0;
-}
 
 function CparRiskWorkspaceInner() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const selectedAccountParam = searchParams?.get("account_id")?.trim() || null;
-  const [mode, setMode] = useState<CparHedgeMode>("factor_neutral");
-  const [scenarioRows, setScenarioRows] = useState<CparDraftScenarioRow[]>([]);
-
   const { data: meta, error: metaError, isLoading: metaLoading } = useCparMeta();
   const metaState = metaError ? readCparError(metaError) : null;
-  const { data: accountsData, error: accountsError, isLoading: accountsLoading } = useHoldingsAccounts();
-
-  const defaultAccountId = useMemo(() => {
-    const accounts = accountsData?.accounts ?? [];
-    return (
-      accounts.find((row) => row.is_active && row.positions_count > 0)?.account_id
-      || accounts.find((row) => row.positions_count > 0)?.account_id
-      || accounts[0]?.account_id
-      || null
-    );
-  }, [accountsData?.accounts]);
-
-  useEffect(() => {
-    if (selectedAccountParam || !defaultAccountId) return;
-    const params = new URLSearchParams(searchParams?.toString() || "");
-    params.set("account_id", defaultAccountId);
-    router.replace(`/cpar/risk?${params.toString()}`);
-  }, [defaultAccountId, router, searchParams, selectedAccountParam]);
-
-  const selectedAccountId = selectedAccountParam || defaultAccountId;
-
-  useEffect(() => {
-    setScenarioRows([]);
-  }, [selectedAccountId, meta?.package_run_id]);
-
   const {
-    data: portfolio,
-    error: portfolioError,
-    isLoading: portfolioLoading,
-  } = useCparPortfolioHedge(selectedAccountId, mode, Boolean(selectedAccountId) && Boolean(meta) && !metaState);
-  const normalizedPortfolio = useMemo(() => normalizeCparPortfolioHedgeData(portfolio), [portfolio]);
-  const portfolioState = portfolioError ? readCparError(portfolioError) : null;
-  const packageMismatch = Boolean(meta && normalizedPortfolio && !sameCparPackageIdentity(meta, normalizedPortfolio));
-  const parsedScenarioRows = useMemo(() => {
-    const rows = scenarioRows.map((row) => {
-      const quantityDelta = parseQuantityDelta(row.quantity_text);
-      if (quantityDelta == null) return null;
-      return {
-        ric: row.ric,
-        ticker: row.ticker,
-        quantity_delta: quantityDelta,
-      };
-    });
-    return rows.every((row) => row !== null)
-      ? rows as Array<{ ric: string; ticker: string | null; quantity_delta: number }>
-      : null;
-  }, [scenarioRows]);
-  const hasInvalidScenarioRows = scenarioRows.length > 0 && parsedScenarioRows === null;
-  const {
-    data: whatIf,
-    error: whatIfError,
-    isLoading: whatIfLoading,
-  } = useCparPortfolioWhatIf(
-    selectedAccountId,
-    mode,
-    parsedScenarioRows ?? [],
-    Boolean(selectedAccountId)
-      && Boolean(meta)
-      && !metaState
-      && Boolean(normalizedPortfolio)
-      && !portfolioState
-      && !packageMismatch
-      && Boolean(parsedScenarioRows?.length),
-  );
-  const normalizedWhatIf = useMemo(() => normalizeCparPortfolioWhatIfData(whatIf), [whatIf]);
+    data: risk,
+    error: riskError,
+    isLoading: riskLoading,
+  } = useCparRisk(Boolean(meta) && !metaState);
+  const normalizedRisk = useMemo(() => normalizeCparRiskData(risk), [risk]);
+  const riskState = riskError ? readCparError(riskError) : null;
+  const packageMismatch = Boolean(meta && normalizedRisk && !sameCparPackageIdentity(meta, normalizedRisk));
 
   if (metaLoading && !meta) {
-    return <CparPageLoadingState message="Loading cPAR portfolio hedge workflow..." />;
-  }
-
-  const whatIfState = whatIfError ? readCparError(whatIfError) : null;
-  const whatIfPackageMismatch = Boolean(
-    (meta && normalizedWhatIf && !sameCparPackageIdentity(meta, normalizedWhatIf))
-    || (normalizedWhatIf && !sameCparPackageIdentity(normalizedWhatIf, normalizedWhatIf.current))
-    || (normalizedWhatIf && !sameCparPackageIdentity(normalizedWhatIf, normalizedWhatIf.hypothetical)),
-  );
-  const baselineHedgeData = !whatIfPackageMismatch && normalizedWhatIf ? normalizedWhatIf.current : normalizedPortfolio;
-  const comparisonHedgeData = !whatIfPackageMismatch && normalizedWhatIf ? normalizedWhatIf.hypothetical : null;
-  const displayPortfolio = baselineHedgeData || normalizedPortfolio;
-  const selectedAccount = (accountsData?.accounts || []).find((row) => row.account_id === selectedAccountId) || null;
-
-  function stageScenarioRow(item: CparSearchItem, quantityDelta: number): string | null {
-    if (scenarioRows.some((row) => row.ric === item.ric)) {
-      return `RIC ${item.ric} is already staged.`;
-    }
-    setScenarioRows((current) => [
-      ...current,
-      {
-        key: item.ric,
-        ric: item.ric,
-        ticker: item.ticker,
-        display_name: item.display_name,
-        fit_status: item.fit_status,
-        hq_country_code: item.hq_country_code || null,
-        quantity_text: formatScenarioQuantity(quantityDelta),
-      },
-    ]);
-    return null;
-  }
-
-  function updateScenarioRow(ric: string, quantityText: string) {
-    setScenarioRows((current) => current.map((row) => (
-      row.ric === ric
-        ? { ...row, quantity_text: quantityText }
-        : row
-    )));
-  }
-
-  function adjustScenarioRow(ric: string, delta: number) {
-    setScenarioRows((current) => current.map((row) => {
-      if (row.ric !== ric) return row;
-      const currentQuantity = parseQuantityDelta(row.quantity_text) ?? 0;
-      return {
-        ...row,
-        quantity_text: formatScenarioQuantity(currentQuantity + delta),
-      };
-    }));
-  }
-
-  function removeScenarioRow(ric: string) {
-    setScenarioRows((current) => current.filter((row) => row.ric !== ric));
+    return <CparPageLoadingState message="Loading cPAR risk..." />;
   }
 
   return (
@@ -178,196 +36,46 @@ function CparRiskWorkspaceInner() {
           <h3>{metaState.kind === "not_ready" ? "cPAR Risk Not Ready" : "cPAR Risk Unavailable"}</h3>
           <div className="section-subtitle">{metaState.message}</div>
           <div className="detail-history-empty compact">
-            This workflow is package-based and read-only. Publish a durable cPAR package first, then reload.
+            This page is package-based and read-only. Publish a durable cPAR package first, then reload.
           </div>
         </section>
       ) : null}
 
-      {!selectedAccountId && !accountsLoading ? (
-        <>
-          <div className="cpar-two-column">
-            <CparRiskAccountScopeCard
-              accountsLoading={accountsLoading}
-              accountsData={accountsData}
-              accountsError={accountsError}
-              selectedAccountId={selectedAccountId}
-              selectedAccount={selectedAccount}
-              onSelectAccount={(nextAccountId) => {
-                const params = new URLSearchParams(searchParams?.toString() || "");
-                params.set("account_id", nextAccountId);
-                router.push(`/cpar/risk?${params.toString()}`);
-              }}
-            />
-            <section className="chart-card" data-testid="cpar-portfolio-summary">
-              <h3>Workflow Scope</h3>
-              <div className="section-subtitle">
-                The account workflow prices current holdings at the latest shared-source price on or before the active package date, then aggregates only covered persisted cPAR loadings into one hedge vector.
-              </div>
-              <div className="cpar-inline-message neutral">
-                <strong>Narrow by design.</strong>
-                <span>This is a narrow cPAR what-if preview, not a portfolio mutation tool, not a broad analytics engine, and not a cPAR-vs-cUSE4 comparison layer.</span>
-              </div>
-            </section>
-          </div>
-          <section className="chart-card">
-            <h3>Account Hedge Preview</h3>
-            <div className="detail-history-empty compact">Choose a holdings account to open the read-only cPAR portfolio hedge workflow.</div>
-          </section>
-        </>
-      ) : metaState || accountsError ? null : portfolioLoading && !portfolio ? (
+      {metaState ? (
+        null
+      ) : riskLoading && !risk ? (
         <section className="chart-card" data-testid="cpar-portfolio-loading">
-          <h3>Account Hedge Preview</h3>
-          <CparInlineLoadingState message={`Loading cPAR portfolio hedge for ${selectedAccountId}...`} />
+          <h3>Risk Surface</h3>
+          <CparInlineLoadingState message="Loading aggregate cPAR risk..." />
         </section>
-      ) : portfolioState ? (
+      ) : riskState ? (
         <section className="chart-card" data-testid="cpar-portfolio-error">
-          <h3>Account Hedge Preview</h3>
-          <div className={`cpar-inline-message ${portfolioState.kind === "missing" ? "warning" : "error"}`}>
+          <h3>Risk Surface</h3>
+          <div className={`cpar-inline-message ${riskState.kind === "missing" ? "warning" : "error"}`}>
             <strong>
-              {portfolioState.kind === "missing"
-                ? "Account not found."
-                : portfolioState.kind === "not_ready"
+              {riskState.kind === "missing"
+                ? "Aggregate risk surface missing."
+                : riskState.kind === "not_ready"
                   ? "Risk package not ready."
-                  : "Risk preview unavailable."}
+                  : "Risk surface unavailable."}
             </strong>
-            <span>{portfolioState.message}</span>
+            <span>{readCparDependencyErrorMessage(riskError)}</span>
           </div>
         </section>
       ) : packageMismatch ? (
         <section className="chart-card" data-testid="cpar-portfolio-package-mismatch">
-          <h3>Account Hedge Preview</h3>
+          <h3>Risk Surface</h3>
           <div className="cpar-inline-message error">
             <strong>Active package changed during read.</strong>
             <span>The risk workflow no longer matches the active package metadata.</span>
-            <span>Reload the page to pin one cPAR package before using the account hedge preview.</span>
+            <span>Reload the page to pin one cPAR package before reading the aggregate risk surface.</span>
           </div>
         </section>
-      ) : normalizedPortfolio ? (
+      ) : normalizedRisk ? (
         <>
-          {displayPortfolio && displayPortfolio.factor_chart.length > 0 ? (
-            <CparRiskFactorSummaryCard portfolio={displayPortfolio} />
-          ) : null}
-
-          <div className="cpar-two-column">
-            <CparRiskAccountScopeCard
-              accountsLoading={accountsLoading}
-              accountsData={accountsData}
-              accountsError={accountsError}
-              selectedAccountId={selectedAccountId}
-              selectedAccount={selectedAccount}
-              onSelectAccount={(nextAccountId) => {
-                const params = new URLSearchParams(searchParams?.toString() || "");
-                params.set("account_id", nextAccountId);
-                router.push(`/cpar/risk?${params.toString()}`);
-              }}
-            />
-            <CparRiskCoverageSummaryCard portfolio={displayPortfolio || normalizedPortfolio} />
-          </div>
-
-          {hasCparRiskContext(baselineHedgeData) ? (
-            comparisonHedgeData ? (
-              <div className="cpar-two-column">
-                <CparPortfolioHedgePanel
-                  data={baselineHedgeData!}
-                  mode={mode}
-                  onModeChange={setMode}
-                  title="Current Account Hedge"
-                  subtitle="This is the live covered account vector under the active cPAR package before any staged share deltas are applied."
-                  testId="cpar-portfolio-current-hedge-panel"
-                />
-                <CparPortfolioHedgePanel
-                  data={comparisonHedgeData}
-                  mode={mode}
-                  onModeChange={setMode}
-                  title="Hypothetical Account Hedge"
-                  subtitle="This is the same account after applying the staged cPAR what-if deltas under the same active package and persisted covariance surface."
-                  testId="cpar-portfolio-hypothetical-hedge-panel"
-                />
-              </div>
-            ) : (
-              <CparPortfolioHedgePanel
-                data={baselineHedgeData!}
-                mode={mode}
-                onModeChange={setMode}
-                title="Current Account Hedge"
-                subtitle={
-                  scenarioRows.length > 0
-                    ? "This incumbent hedge baseline stays visible while staged scenario rows are validated or while the hypothetical preview recomputes."
-                    : "The workflow aggregates covered holdings rows into one active-package cPAR exposure vector, then applies the persisted covariance surface without any request-time fitting."
-                }
-                testId={scenarioRows.length > 0 ? "cpar-portfolio-current-hedge-panel" : "cpar-portfolio-hedge-panel"}
-              />
-            )
-          ) : null}
-
-          <CparRiskPositionsContributionTable rows={(displayPortfolio || normalizedPortfolio).positions} />
-
-          <CparPortfolioWhatIfBuilder
-            resetKey={`${selectedAccountId || "none"}:${meta?.package_run_id || "none"}`}
-            scenarioRows={scenarioRows}
-            hasInvalidScenarioRows={hasInvalidScenarioRows}
-            onStageRow={stageScenarioRow}
-            onUpdateScenarioRow={updateScenarioRow}
-            onAdjustScenarioRow={adjustScenarioRow}
-            onRemoveScenarioRow={removeScenarioRow}
-            onClearScenarioRows={() => setScenarioRows([])}
-          />
-
-          {scenarioRows.length > 0 ? (
-            hasInvalidScenarioRows ? (
-              <section className="chart-card" data-testid="cpar-portfolio-whatif-invalid">
-                <h3>What-If Preview</h3>
-                <div className="cpar-inline-message warning">
-                  <strong>Draft rows need attention.</strong>
-                  <span>At least one staged row has an invalid or zero share delta.</span>
-                  <span>Update the staged queue above before the hypothetical preview can recompute.</span>
-                </div>
-              </section>
-            ) : whatIfLoading && !normalizedWhatIf ? (
-              <section className="chart-card" data-testid="cpar-portfolio-whatif-loading">
-                <h3>What-If Preview</h3>
-                <CparInlineLoadingState message={`Loading cPAR what-if preview for ${selectedAccountId}...`} />
-              </section>
-            ) : whatIfState ? (
-              <section className="chart-card" data-testid="cpar-portfolio-whatif-error">
-                <h3>What-If Preview</h3>
-                <div className={`cpar-inline-message ${whatIfState.kind === "missing" ? "warning" : "error"}`}>
-                  <strong>
-                    {whatIfState.kind === "missing"
-                      ? "Account not found."
-                      : whatIfState.kind === "not_ready"
-                        ? "What-if package not ready."
-                        : "What-if preview unavailable."}
-                  </strong>
-                  <span>{whatIfState.message}</span>
-                </div>
-              </section>
-            ) : whatIfPackageMismatch ? (
-              <section className="chart-card" data-testid="cpar-portfolio-whatif-package-mismatch">
-                <h3>What-If Preview</h3>
-                <div className="cpar-inline-message error">
-                  <strong>Active package changed during what-if read.</strong>
-                  <span>The what-if preview no longer matches the active package metadata.</span>
-                  <span>Reload the page to pin one cPAR package before comparing current and hypothetical hedges.</span>
-                </div>
-              </section>
-            ) : normalizedWhatIf ? (
-              <CparRiskWhatIfPreviewSection whatIf={normalizedWhatIf} />
-            ) : null
-          ) : null}
-
-          {!hasCparRiskContext(displayPortfolio || normalizedPortfolio) ? (
-            <section className="chart-card">
-              <h3>Risk Summary Deferred</h3>
-              <div className="section-subtitle">
-                No chart-ready cPAR risk surface was available for this account, so the factor-only summary stays withheld until the account has priced and package-covered rows.
-              </div>
-              <div className="cpar-inline-message neutral">
-                <strong>Still explicit.</strong>
-                <span>Use the contribution mix table above to inspect excluded rows and the reason they were withheld from the cPAR risk vector.</span>
-              </div>
-            </section>
-          ) : null}
+          <CparRiskFactorSummaryCard portfolio={normalizedRisk} />
+          <CparRiskPositionsContributionTable rows={normalizedRisk.positions} />
+          <CparRiskCovarianceSection covMatrix={normalizedRisk.cov_matrix} factors={meta?.factors ?? []} />
         </>
       ) : null}
     </div>
@@ -376,7 +84,7 @@ function CparRiskWorkspaceInner() {
 
 export default function CparRiskWorkspace() {
   return (
-    <Suspense fallback={<CparPageLoadingState message="Loading cPAR portfolio hedge workflow..." />}>
+    <Suspense fallback={<CparPageLoadingState message="Loading cPAR risk..." />}>
       <CparRiskWorkspaceInner />
     </Suspense>
   );

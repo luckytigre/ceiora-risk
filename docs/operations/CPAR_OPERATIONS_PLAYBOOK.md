@@ -1,6 +1,6 @@
 # cPAR Operations Playbook
 
-Date: 2026-03-19
+Date: 2026-03-20
 Status: Active cPAR operations baseline
 Owner: Codex
 
@@ -93,7 +93,9 @@ Current frontend-backed read surfaces:
 - legacy redirects from `/cpar` and `/cpar/portfolio` into `/cpar/risk`
 - `GET /api/cpar/meta`
 - `GET /api/cpar/search`
+- `GET /api/cpar/risk`
 - `GET /api/cpar/ticker/{ticker}`
+- `GET /api/cpar/factors/history`
 - `GET /api/cpar/ticker/{ticker}/hedge`
 - `GET /api/cpar/portfolio/hedge`
 - `POST /api/cpar/portfolio/whatif`
@@ -102,20 +104,24 @@ The current detail route is ticker-keyed.
 Persisted search rows with `ticker = NULL` remain visible in search but are intentionally non-navigable in v1.
 `GET /api/cpar/ticker/{ticker}` may now include a supplemental nested `source_context` block for `/cpar/explore`, but that block is still keyed by the resolved persisted fit `ric` plus active `package_date`; it does not change the persisted fit identity, loadings, or hedge truth.
 The standalone hedge page reuses that same ticker-keyed selection rule and must fail closed when package identity drifts between the selected subject and the hedge preview.
-The first portfolio workflow is account-scoped and read-only: it reuses the shared Neon-backed adapter in `backend/data/holdings_reads.py` plus latest shared-source prices, but it does not reuse cUSE4 portfolio or what-if payload semantics.
-The first what-if workflow is embedded in `/cpar/risk` and remains preview-only: it stages signed share deltas against the same active package and account hedge baseline, but it does not apply trades or mutate holdings.
-The shared account-scoped snapshot assembly for both flows lives in `backend/services/cpar_portfolio_snapshot_service.py`; that shared owner is cPAR-specific and does not imply any reuse of cUSE4 what-if services.
-That shared snapshot now also carries explicit `coverage_breakdown`, factor-only `factor_variance_contributions`, one chart-ready `factor_chart` drilldown surface, and per-position `thresholded_contributions`; those fields are still derived read surfaces from the same package-scoped snapshot, not a second risk engine.
+`/cpar/risk` is now aggregate and read-only: it reuses the shared Neon-backed adapter in `backend/data/holdings_reads.py` plus latest shared-source prices, but it does not reuse cUSE4 risk or what-if payload semantics.
+The shared snapshot assembly in `backend/services/cpar_portfolio_snapshot_service.py` still underpins both:
+- aggregate `/api/cpar/risk`
+- account-scoped `/api/cpar/portfolio/hedge` and `/api/cpar/portfolio/whatif`
+That shared snapshot now carries explicit `coverage_breakdown`, factor-only `factor_variance_contributions`, one chart-ready `factor_chart` drilldown surface, per-position `thresholded_contributions`, and the package-pinned `cov_matrix`; those fields are still derived read surfaces from the same package-scoped snapshot, not a second risk engine.
 `/cpar/risk` now renders those fields directly as:
 - coverage summary plus explicit exclusion buckets
 - one signed factor-loadings chart with per-factor drilldown
-- one persistent incumbent hedge panel, with current vs hypothetical comparison only when the what-if envelope is coherent
+- one supplemental 5Y factor-return history block per factor drilldown
 - one positions contribution-mix table
+- one full market/industry/style factor correlation heatmap
+The account-scoped preview-only what-if route still exists on the backend, but it is no longer the owner of `/cpar/risk`.
 `/cpar/explore` now keeps the selected-instrument hero first, uses one thresholded-loadings chart as the primary interpretation surface, keeps raw ETF loadings as secondary detail, demotes persisted facts and package-date source context below that chart, and folds the `/cpar/hedge` handoff into the same support block rather than a separate card.
 Current frontend ownership for those pages is now routed through cPAR-specific wrappers:
 - `frontend/src/hooks/useCparApi.ts`
 - `frontend/src/lib/cparApi.ts`
-Those wrappers are still thin cPAR-owned facades over the shared transport layer today; they keep cPAR feature owners off direct mixed-family imports while still allowing `/cpar/risk` to reuse the shared holdings-account hook intentionally.
+Those wrappers are still thin cPAR-owned facades over the shared transport layer today; they keep cPAR feature owners off direct mixed-family imports while still allowing account-scoped cPAR flows to reuse shared holdings types intentionally.
+`/cpar/risk` no longer reuses the shared holdings-account hook because it is no longer an account selector page.
 Upcoming cPAR risk/explore expansion should keep following the same ownership rule: extend current cPAR route/service owners by default, and only add a new cPAR-specific owner when the authority/read pattern is genuinely different.
 Until that authority decision is made explicitly, the operations baseline does not assume a new cPAR single-name history route or any reuse of cUSE universe/read surfaces. This slice still does not add a cUSE-style price-history panel to `/cpar/explore`.
 
@@ -128,7 +134,8 @@ Current cPAR flows fail closed when:
 - active covariance coverage is partial for hedge preview
 - Neon authority reads are required and unavailable
 - package identity drifts between package metadata and a later detail/hedge/account payload
-- package identity drifts between the shared banner and the portfolio what-if envelope or its nested `current` / `hypothetical` payloads
+- package identity drifts between the shared banner and the aggregate risk payload
+- package identity drifts between the shared banner and any portfolio what-if envelope or its nested `current` / `hypothetical` payloads
 - a staged what-if addition is not present in the active persisted cPAR package
 
 Explore-only source-context degradation does not fail the ticker-detail route closed:
@@ -146,7 +153,7 @@ If `/cpar*` shows `not_ready`:
 If `/cpar*` shows `unavailable`:
 - in `cloud-serve`, treat this as an authority/read-path outage until Neon-backed reads recover
 - in local development, confirm whether Neon is expected; SQLite-only fallback is local-only behavior, not cloud behavior
-- for `/cpar/risk*`, remember that cPAR package availability is not enough on its own; those account-scoped flows also require the shared holdings/account adapter to be healthy
+- for `/cpar/risk*`, remember that cPAR package availability is not enough on its own; the aggregate risk flow also requires the shared holdings/account adapter to be healthy
 
 If `/cpar/risk` rejects a staged addition:
 - confirm the name was staged from an active-package cPAR search hit
@@ -158,8 +165,8 @@ If `/cpar/explore` shows source-context degradation while the persisted detail s
 - if `source_context.status = missing` or `partial`, confirm whether the source tables actually contain common-name/classification/price rows on or before the active package date for that `ric`
 
 If `/cpar/risk` shows `empty` instead of `unavailable`:
-- `empty` means the selected account has no live holdings rows at all
-- `unavailable` means the selected account has live rows, but none are both priced and backed by a usable persisted cPAR fit in the active package
+- `empty` means no live holdings rows are loaded across any account
+- `unavailable` means live rows exist across the active book, but none are both priced and backed by a usable persisted cPAR fit in the active package
 
 If `/cpar/risk` shows unexpected exclusions or coverage drift:
 - inspect `coverage_breakdown` first to see whether excluded rows are coming from:
@@ -169,7 +176,12 @@ If `/cpar/risk` shows unexpected exclusions or coverage drift:
 - inspect the positions contribution-mix table next:
   - covered rows should show the largest weighted thresholded factor contributions
   - excluded rows should show no contribution mix and should still surface the exclusion reason inline
-- `thresholded_contributions` are intentionally populated only for covered rows; excluded rows contribute nothing to the aggregate account vector or factor-only variance decomposition
+- `thresholded_contributions` are intentionally populated only for covered rows; excluded rows contribute nothing to the aggregate book vector or factor-only variance decomposition
+
+If `/cpar/risk` drilldown history degrades while the rest of the page renders:
+- treat that as supplemental history degradation, not as an aggregate risk outage
+- confirm `GET /api/cpar/factors/history` is readable for the selected factor
+- the page should keep rendering the aggregate risk payload and covariance heatmap even when the 5Y history block shows a degraded message
 
 If the shared banner shows an aging or stale package:
 - treat the current read surface as historical until a newer package is published
@@ -184,4 +196,4 @@ This operations baseline still does not include:
 - request-time cPAR fitting
 - cPAR apply or mutation flows
 - cUSE4/cPAR comparison flows
-- broader portfolio analytics beyond the first account-level hedge and preview-only what-if workflow
+- broader portfolio analytics beyond the aggregate risk surface plus the preview-only account-level hedge/what-if workflows

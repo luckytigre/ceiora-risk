@@ -1,10 +1,10 @@
 # cPAR Frontend Surfaces
 
-Date: 2026-03-19
+Date: 2026-03-20
 Status: Active cPAR frontend notes
 Owner: Codex
 
-This document describes the current cPAR frontend surfaces after the namespaced-family routing slice, with the existing account-scoped risk workflow still kept intentionally narrow.
+This document describes the current cPAR frontend surfaces after the namespaced-family routing slice, with `/cpar/risk` now promoted to the aggregate all-accounts cPAR risk surface.
 
 Related cPAR docs:
 - [CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md)
@@ -23,20 +23,18 @@ It does not add:
 ## Page Structure
 
 `/cpar/risk`
-- current account-level cPAR risk workspace
-- now owns a cPAR-native account risk composition:
-  - account scope / selected-account context
+- current aggregate-book cPAR risk workspace across all loaded holdings accounts
+- now owns a cPAR-native aggregate risk composition:
   - coverage summary plus explicit exclusion buckets
-  - one signed factor-loadings chart with per-factor drilldown, reconciled from the same account snapshot
+  - one signed factor-loadings chart with per-factor drilldown, reconciled from one aggregate book snapshot
+  - one 5Y factor-return history block inside each factor drilldown
   - positions contribution mix table derived from per-row thresholded contributions
-  - one account hedge preview and one narrow read-only what-if preview
-- now has a stable backend contract for the next rebuild stage:
+  - one full market/industry/style factor correlation heatmap from the package-pinned covariance surface
+- now has a stable backend contract:
   - `coverage_breakdown` for explicit exclusion buckets
   - `factor_variance_contributions` for factor-only decomposition of the aggregate thresholded portfolio vector
   - `factor_chart` for chart-ready factor rows plus drilldown
   - `positions[].thresholded_contributions` for per-position weighted contributions
-- keeps the staged what-if builder cPAR-owned even when it visually conforms to the cUSE builder grammar
-- preserves the same active-package search semantics as the other cPAR pages, including disabled `Ticker required` rows when a search hit cannot open or stage directly
 - is the canonical route for that workflow now
 
 `/cpar/explore`
@@ -83,6 +81,11 @@ Shared shell behavior:
 `GET /api/cpar/search`
 - active-package search hits only
 
+`GET /api/cpar/risk`
+- aggregate all-accounts cPAR risk payload
+- package-pinned and read-only
+- does not reuse the account-scoped hedge payload as its frontend owner
+
 `GET /api/cpar/ticker/{ticker}`
 - one active-package persisted fit row
 - may include a nested `source_context` block with supplemental shared-source context pinned to the active package date
@@ -91,6 +94,11 @@ Shared shell behavior:
 `GET /api/cpar/ticker/{ticker}/hedge`
 - persisted hedge preview only
 - no request-time refit
+
+`GET /api/cpar/factors/history`
+- supplemental 5Y factor-return history for cPAR drilldown
+- cPAR-owned route/hook path, even though the charting primitive is shared
+- fail-soft at the page level: `/cpar/risk` keeps rendering the aggregate risk payload when this history read is degraded
 
 `GET /api/cpar/portfolio/hedge`
 - account-scoped portfolio hedge preview only
@@ -107,14 +115,16 @@ Shared shell behavior:
 
 Page consistency rule:
 - the frontend must treat `meta`, `ticker detail`, and `hedge` as one package-scoped flow
-- the frontend must treat `meta` and the account-level hedge payload as one package-scoped flow
-- the frontend must also treat the account-level what-if envelope plus its nested `current` and `hypothetical` payloads as part of that same package-scoped flow
+- the frontend must treat `meta` and the aggregate `/api/cpar/risk` payload as one package-scoped flow
+- the frontend must treat the account-level hedge payload as a separate account-scoped flow
+- the frontend must also treat any account-level what-if envelope plus its nested `current` and `hypothetical` payloads as one package-scoped account flow
 - if those responses do not share the same `package_run_id` / `package_date`, the page must fail closed instead of mixing surfaces from different active packages
 - the frontend now uses package metadata as the first gate for dependent reads, so package-level `not_ready` / `unavailable` states do not keep probing detail or account-risk endpoints on the same page load
 - `/cpar/explore` enforces this for banner plus detail
 - `/cpar/explore` must treat `source_context` as supplemental to the same ticker-detail payload, not as an independent truth source
 - `/cpar/hedge` enforces this for banner, selected subject, and hedge preview
-- `/cpar/risk` enforces this for banner, the baseline account hedge payload, and the what-if envelope/current/hypothetical payloads
+- `/cpar/risk` enforces this for banner plus the aggregate risk payload
+- drilldown factor history is supplemental to that page and may degrade without suppressing the aggregate risk payload
 
 ## Current Frontend Owner Freeze
 
@@ -127,7 +137,7 @@ Current page owners:
 - `/cpar/health` stays owned by `frontend/src/features/cpar/components/CparHealthWorkspace.tsx`
 
 Preferred cPAR frontend import surfaces now include:
-- `frontend/src/hooks/useCparApi.ts` as the current cPAR-owned facade for route hooks plus the shared holdings-account hook reused by `/cpar/risk`
+- `frontend/src/hooks/useCparApi.ts` as the current cPAR-owned facade for route hooks
 - `frontend/src/lib/cparApi.ts` as the current cPAR-owned facade for route-path helpers over the shared fetch transport
 - `frontend/src/lib/types/cpar.ts` for cPAR route contracts
 - `frontend/src/lib/types/holdings.ts` when cPAR intentionally reuses shared holdings/account types
@@ -174,9 +184,9 @@ Read failures:
 - explore-level shared-source context degradation is non-blocking:
   - the page keeps rendering the persisted cPAR fit row
   - the nested `source_context.status` / `reason` fields explain whether shared-source context is complete, partial, missing, or temporarily unavailable
-- `/cpar/risk` must render explicit empty or unavailable account states instead of synthesizing a hedge from unpriced or uncovered holdings rows
-- `empty` means the selected account has no live holdings rows
-- `unavailable` means the selected account has live holdings rows, but none are both priced and backed by a usable persisted cPAR fit in the active package
+- `/cpar/risk` must render explicit empty or unavailable aggregate-book states instead of synthesizing a risk surface from unpriced or uncovered holdings rows
+- `empty` means no live holdings rows are loaded across any account
+- `unavailable` means live holdings rows exist across the active book, but none are both priced and backed by a usable persisted cPAR fit in the active package
 
 ## Workflow Split
 
@@ -196,17 +206,16 @@ Read failures:
 - owns hedge mode switching, hedge legs, and post-hedge interpretation
 
 `/cpar/risk`
-- remains a narrow account-level hedge workflow
-- owns account selection, coverage/exclusion explanation, one signed factor-loadings chart with per-factor drilldown, positions contribution mix, staged scenario rows, and current vs hypothetical account hedge preview
+- is now the aggregate cPAR risk analytics surface across all loaded holdings accounts
+- owns one signed factor-loadings chart with per-factor drilldown, 5Y factor-return history, positions contribution mix, and the full factor correlation heatmap
 - now intentionally borrows the cUSE risk-page layout rhythm without importing cUSE feature owners or cUSE payload semantics
-- now keeps the incumbent account hedge visible even while staged rows are invalid, loading, or fail closed; hypothetical comparison only appears when the what-if envelope is coherent
 - now avoids a duplicate factor-summary table under the chart, leaving the signed chart plus drilldown as the primary factor read
 - still stops short of a full cUSE-style analytics workspace:
-  - no covariance heatmap
+  - no variance-attribution table
   - no specific-risk decomposition
   - no cPAR-vs-cUSE comparison layer
   - no apply/mutation semantics
-- any richer risk charts or decomposition views must stay subordinate to that same account-scoped hedge + preview-only what-if workflow
+- any richer risk charts or decomposition views must stay subordinate to that same aggregate-book analytics workflow
 - does not own portfolio mutation, account editing, trade application, or broad scenario analytics
 
 `/cpar/health`
@@ -222,12 +231,11 @@ Current cPAR frontend smokes cover:
 - `/cpar/explore` rendering the rebuilt persisted-loadings module after a successful detail selection
 - `/cpar/hedge` baseline flow
 - `/cpar/risk` baseline flow
-- `/cpar/risk` narrow what-if preview flow
-- `/cpar/risk` coverage buckets, signed factor-loadings chart plus drilldown, and positions contribution mix
+- `/cpar/risk` signed factor-loadings chart plus drilldown, 5Y factor history, positions contribution mix, and full-factor correlation heatmap
 - `not_ready`
 - `unavailable`
 - package mismatch
-- `/cpar/risk` fail-closed branches for `not_ready`, `unavailable`, and package mismatch
+- `/cpar/risk` fail-closed branches for `not_ready`, `unavailable`, and package mismatch on the aggregate risk payload
 - meta-first gating for detail/account reads when package-level `not_ready` or `unavailable` blocks the page
 - family-route redirects for `/exposures`, `/explore`, `/health`, `/cpar`, and `/cpar/portfolio`
 
@@ -236,8 +244,8 @@ Current cPAR frontend smokes cover:
 - frontend operator surfaces
 - any shared cUSE4/cPAR comparison UI
 - cPAR apply/mutation flows
-- broader multi-account or portfolio-analytics cPAR views
-- broader cPAR what-if expansion beyond the current narrow account-scoped preview
+- broader portfolio-analytics cPAR views beyond the current aggregate risk surface
+- broader cPAR what-if expansion beyond the current narrow account-scoped preview route
 
 ## Shared App Chrome
 

@@ -72,6 +72,54 @@ def test_account_context_matches_accounts_after_normalization(
     assert positions[0]["ric"] == "AAPL.OQ"
 
 
+def test_aggregate_context_aggregates_positions_across_accounts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_holdings_accounts",
+        lambda: [
+            {"account_id": "acct_a", "account_name": "Account A", "positions_count": 2},
+            {"account_id": "acct_b", "account_name": "Account B", "positions_count": 2},
+        ],
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_all_holdings_positions",
+        lambda: [
+            {"account_id": "acct_a", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "updated_at": "2026-03-14T10:00:00Z"},
+            {"account_id": "acct_b", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": -4.0, "updated_at": "2026-03-14T11:00:00Z"},
+            {"account_id": "acct_b", "ric": "MSFT.OQ", "ticker": "MSFT", "quantity": 5.0, "updated_at": "2026-03-14T09:00:00Z"},
+            {"account_id": "acct_a", "ric": "FLAT.OQ", "ticker": "FLAT", "quantity": 1.0, "updated_at": None},
+            {"account_id": "acct_b", "ric": "FLAT.OQ", "ticker": "FLAT", "quantity": -1.0, "updated_at": None},
+        ],
+    )
+
+    package, accounts, positions = cpar_portfolio_snapshot_service.load_cpar_portfolio_aggregate_context()
+
+    assert package["package_run_id"] == "run_curr"
+    assert [row["account_id"] for row in accounts] == ["acct_a", "acct_b"]
+    assert positions == [
+        {
+            "account_id": "all_accounts",
+            "ric": "AAPL.OQ",
+            "ticker": "AAPL",
+            "quantity": 6.0,
+            "source": "aggregate",
+            "updated_at": "2026-03-14T11:00:00Z",
+        },
+        {
+            "account_id": "all_accounts",
+            "ric": "MSFT.OQ",
+            "ticker": "MSFT",
+            "quantity": 5.0,
+            "source": "aggregate",
+            "updated_at": "2026-03-14T09:00:00Z",
+        },
+    ]
+
+
 def test_support_rows_map_typed_package_authority_failures_to_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

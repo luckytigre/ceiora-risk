@@ -14,13 +14,18 @@ import {
   type ScriptableContext,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
-import type { FactorHistoryPoint } from "@/lib/types/cuse4";
+
+interface FactorHistoryPointLike {
+  date: string;
+  factor_return: number;
+  cum_return: number;
+}
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip);
 
 interface FactorHistoryChartProps {
   factor: string;
-  points: FactorHistoryPoint[];
+  points: FactorHistoryPointLike[];
   factorVol?: number;
 }
 

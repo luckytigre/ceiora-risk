@@ -206,7 +206,7 @@ def load_cpar_portfolio_whatif_payload(
         }
     )
     rics = [ric for ric in rics if ric]
-    fit_by_ric, price_by_ric, covariance_rows = cpar_portfolio_snapshot_service.load_cpar_portfolio_support_rows(
+    fit_by_ric, price_by_ric, classification_by_ric, covariance_rows = cpar_portfolio_snapshot_service.load_cpar_portfolio_support_rows(
         rics=rics,
         package_run_id=str(package["package_run_id"]),
         package_date=str(package["package_date"]),
@@ -225,6 +225,7 @@ def load_cpar_portfolio_whatif_payload(
         mode=mode,
         fit_by_ric=fit_by_ric,
         price_by_ric=price_by_ric,
+        classification_by_ric=classification_by_ric,
         covariance_rows=covariance_rows,
     )
     hypothetical_payload = cpar_portfolio_snapshot_service.build_cpar_portfolio_hedge_snapshot(
@@ -234,6 +235,7 @@ def load_cpar_portfolio_whatif_payload(
         mode=mode,
         fit_by_ric=fit_by_ric,
         price_by_ric=price_by_ric,
+        classification_by_ric=classification_by_ric,
         covariance_rows=covariance_rows,
     )
     return {

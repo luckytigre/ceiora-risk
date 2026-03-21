@@ -80,7 +80,9 @@ Durable relational tables:
 Read-only backend routes:
 - `GET /api/cpar/meta`
 - `GET /api/cpar/search?q=&limit=`
+- `GET /api/cpar/risk`
 - `GET /api/cpar/ticker/{ticker}?ric=`
+- `GET /api/cpar/factors/history?factor_id=&years=`
 - `GET /api/cpar/ticker/{ticker}/hedge?mode=&ric=`
 - `GET /api/cpar/portfolio/hedge?account_id=&mode=`
 - `POST /api/cpar/portfolio/whatif`
@@ -98,9 +100,10 @@ API payloads are assembled from authoritative relational `cpar_*` tables.
 Frontend consistency rule:
 - `/cpar/explore` must not mix package banners, detail rows, and hedge previews from different active packages
 - `/cpar/hedge` must not mix package banners, subject rows, and hedge previews from different active packages
-- `/cpar/risk` must not mix package banners, baseline account hedge payloads, and what-if envelope/current/hypothetical payloads from different active packages
+- `/cpar/risk` must not mix package banners and aggregate risk payloads from different active packages
 - if package identity drifts between independent reads, the page fails closed and prompts the user to reload
 - shared banner rendering exposes package freshness so stale active packages remain visible without implying any route-triggered rebuild path
+- factor-history drilldown data is supplemental; if that read degrades, `/cpar/risk` still renders the aggregate package-pinned risk payload
 
 ## Risk And Explore Expansion Guardrails
 
@@ -108,19 +111,21 @@ The next cPAR frontend overhaul should remain cPAR-native even when it adopts cU
 
 Current owner decisions:
 - richer single-name `/cpar/explore` work should extend the current ticker-detail owner by default instead of routing through cUSE universe/explore owners
-- richer account-level `/cpar/risk` work should extend the current account-scoped hedge/what-if owners by default instead of collapsing those flows into one generic model-family dashboard service
+- `/cpar/risk` is now the explicit aggregate all-accounts cPAR risk owner:
+  - route: `GET /api/cpar/risk`
+  - service: `backend/services/cpar_risk_service.py`
+  - shared lower assembly: `backend/services/cpar_portfolio_snapshot_service.py`
 - `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower assembly owner for account-scoped cPAR reads unless a later slice proves a clearer lower-layer split
-- Slice 4 extends that existing shared snapshot owner with:
+- the aggregate risk owner exposes:
   - `coverage_breakdown`
   - `factor_variance_contributions`
   - `factor_chart`
   - `positions[].thresholded_contributions`
-- this is still not a new generic account-risk service or a new route family; it is the next contract layer on the current account-scoped hedge/preview-only what-if surface
-- Slice 5 then rebuilds `/cpar/risk` purely on the frontend against that same contract:
-  - account scope stays explicit
-  - factor chart and drilldown stay derived from the active-package snapshot
-  - per-position contribution mix stays derived from covered rows only
-  - the page still does not introduce covariance heatmaps, specific-risk payloads, or cUSE-owned analytics modules
+  - `cov_matrix`
+- account-scoped hedge and what-if owners remain separate:
+  - `GET /api/cpar/portfolio/hedge`
+  - `POST /api/cpar/portfolio/whatif`
+- this does not create a generic model-family dashboard service; it is one explicit cPAR aggregate-risk owner for the user-facing `/cpar/risk` page
 
 Current frontend boundary decision:
 - cPAR pages may reuse neutral shared components and shared holdings widgets
@@ -134,9 +139,9 @@ Current frontend boundary decision:
 Current package-truth decision:
 - a richer cPAR page may continue to compose multiple requests only while it preserves one `package_run_id` / `package_date` across the full page
 - if a richer page cannot do that cleanly, the next slice should introduce a composite cPAR payload rather than weaken fail-closed behavior
-- the new account-scoped contribution fields are package-scoped for the same reason:
-  - they are derived only from the active package, shared-source prices capped at the package date, and the current account snapshot
-  - they do not introduce a second account-risk truth source beside the existing hedge/what-if payloads
+- the risk fields remain package-scoped for the same reason:
+  - they are derived only from the active package, shared-source prices capped at the package date, and the aggregate live holdings snapshot
+  - they do not introduce a second risk truth source beside the account-scoped hedge/what-if payloads
 
 ## Active-Package Semantics
 
@@ -144,13 +149,19 @@ The active package is the latest successful `cpar_package_runs` row that has the
 
 Current read behavior:
 - metadata/search/detail use the active successful package
+- aggregate risk additionally requires live holdings rows across all accounts plus latest shared-source prices on or before the active package date
 - hedge preview additionally requires complete covariance coverage
 - account-level portfolio hedge additionally requires live holdings rows plus latest shared-source prices on or before the active package date
-- that same account-level hedge snapshot now also exposes:
+- the shared snapshot assembly now also exposes:
   - explicit coverage buckets
   - factor-only variance decomposition from aggregate thresholded loadings plus active-package covariance
   - factor-chart rows with signed contribution arms and per-factor drilldown
   - per-position weighted thresholded contributions
+- `/api/cpar/risk` additionally exposes the full package-pinned covariance matrix for the frontend heatmap
+- factor drilldown history now has a cPAR-owned supplemental route:
+  - `GET /api/cpar/factors/history`
+  - backed by durable weekly proxy returns
+  - degradeable without suppressing the primary aggregate risk payload
 - account-level what-if additionally requires one account hedge baseline, one active package, and staged signed share deltas that reference either existing holdings rows or active-package search hits
 - missing required relational coverage fails closed with cPAR-specific `503 not_ready`
 - the account-level what-if envelope and its nested `current` / `hypothetical` snapshots are part of the same package-scoped flow as the shared banner and baseline portfolio hedge payload
@@ -196,7 +207,7 @@ The current cPAR implementation intentionally defers:
 - route-triggered cPAR builds
 - request-time cPAR fitting
 - any reuse of cUSE4 serving payload surfaces
-- broader portfolio analytics beyond the first narrow account-level hedge and what-if workflow
+- broader portfolio analytics beyond the current aggregate risk surface plus the narrow account-level hedge and what-if workflows
 - any cPAR apply or mutation flow
 - any broader multi-account or strategy-style cPAR what-if expansion
 

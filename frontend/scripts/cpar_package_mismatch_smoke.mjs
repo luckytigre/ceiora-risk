@@ -279,22 +279,7 @@ try {
         });
       }
 
-      if (method === "GET" && pathName === "/api/holdings/accounts") {
-        return fulfillJson({
-          accounts: [
-            {
-              account_id: "acct_main",
-              account_name: "Main Account",
-              is_active: true,
-              positions_count: 3,
-              gross_quantity: 17,
-              last_position_updated_at: "2026-03-18T15:00:00Z",
-            },
-          ],
-        });
-      }
-
-      if (method === "GET" && pathName === "/api/cpar/portfolio/hedge") {
+      if (method === "GET" && pathName === "/api/cpar/risk") {
         return fulfillJson({
           package_run_id: scenario === "portfolio_mismatch" ? "run_port_old" : "run_curr",
           package_date: scenario === "portfolio_mismatch" ? "2026-03-07" : "2026-03-14",
@@ -311,9 +296,8 @@ try {
           fit_ok_count: 90,
           fit_limited_count: 8,
           fit_insufficient_count: 2,
-          account_id: "acct_main",
-          account_name: "Main Account",
-          mode: "factor_neutral",
+          scope: "all_accounts",
+          accounts_count: 3,
           positions_count: 1,
           covered_positions_count: 1,
           excluded_positions_count: 0,
@@ -326,15 +310,9 @@ try {
           aggregate_thresholded_loadings: [
             { factor_id: "SPY", label: "Market", group: "market", display_order: 0, beta: 1.12 },
           ],
-          hedge_status: "hedge_ok",
-          hedge_reason: "Thresholded raw ETF hedge",
-          hedge_legs: [{ factor_id: "SPY", label: "Market", group: "market", display_order: 0, weight: -1.12 }],
-          post_hedge_exposures: [{ factor_id: "SPY", label: "Market", group: "market", display_order: 0, pre_beta: 1.12, hedge_leg: -1.12, post_beta: 0 }],
-          pre_hedge_factor_variance_proxy: 0.24,
-          post_hedge_factor_variance_proxy: 0.02,
-          gross_hedge_notional: 1.12,
-          net_hedge_notional: -1.12,
-          non_market_reduction_ratio: 0.86,
+          factor_variance_contributions: [],
+          factor_chart: [],
+          cov_matrix: { factors: ["SPY"], correlation: [[1.0]] },
           positions: [],
         });
       }
@@ -353,7 +331,7 @@ try {
     assert.equal(await page.getByTestId("cpar-post-hedge-table").count(), 0);
 
     scenario = "portfolio_mismatch";
-    await gotoWithRetry(page, `${BASE_URL}/cpar/risk?account_id=acct_main`, { waitUntil: "domcontentloaded" });
+    await gotoWithRetry(page, `${BASE_URL}/cpar/risk`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("cpar-portfolio-package-mismatch").waitFor();
     await page.getByText("Active package changed during read.").waitFor();
     assert.equal(await page.getByTestId("cpar-portfolio-hedge-panel").count(), 0);

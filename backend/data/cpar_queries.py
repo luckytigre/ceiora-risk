@@ -151,6 +151,49 @@ def active_package_covariance_rows(fetch_rows: FetchRowsFn, *, package_run_id: s
     return package_covariance_rows(fetch_rows, package_run_id=package_run_id)
 
 
+def successful_package_factor_return_rows(
+    fetch_rows: FetchRowsFn,
+    *,
+    factor_id: str,
+) -> list[dict[str, Any]]:
+    clean_factor_id = str(factor_id or "").strip().upper()
+    if not clean_factor_id:
+        return []
+    rows = fetch_rows(
+        f"""
+        SELECT
+            r.factor_id,
+            r.week_end,
+            r.return_value,
+            p.package_date,
+            p.updated_at,
+            p.package_run_id
+        FROM cpar_proxy_returns_weekly r
+        JOIN cpar_package_runs p
+          ON p.package_run_id = r.package_run_id
+        WHERE p.status = ?
+          AND UPPER(COALESCE(r.factor_id, '')) = ?
+        ORDER BY
+            r.week_end DESC,
+            p.package_date DESC,
+            p.updated_at DESC,
+            p.package_run_id DESC
+        """,
+        ["ok", clean_factor_id],
+    )
+    return [
+        {
+            "factor_id": str(row.get("factor_id") or ""),
+            "week_end": str(row.get("week_end") or ""),
+            "return_value": float(row.get("return_value") or 0.0),
+            "package_date": str(row.get("package_date") or ""),
+            "updated_at": str(row.get("updated_at") or ""),
+            "package_run_id": str(row.get("package_run_id") or ""),
+        }
+        for row in rows
+    ]
+
+
 def package_covariance_rows(fetch_rows: FetchRowsFn, *, package_run_id: str) -> list[dict[str, Any]]:
     rows = fetch_rows(
         """

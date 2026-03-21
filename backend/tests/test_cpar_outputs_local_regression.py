@@ -239,6 +239,92 @@ def test_same_date_failed_rerun_does_not_clobber_prior_successful_package(
     assert spy_row["covariance"] == 1.0
 
 
+def test_load_factor_return_history_dedupes_by_latest_successful_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_db = tmp_path / "cpar.db"
+    monkeypatch.setattr(cpar_outputs.config, "APP_RUNTIME_ROLE", "local-ingest")
+    monkeypatch.setattr(cpar_outputs.config, "DATA_BACKEND", "sqlite")
+    monkeypatch.setattr(cpar_outputs.config, "neon_dsn", lambda: "")
+
+    cpar_outputs.persist_cpar_package(
+        data_db=data_db,
+        package_run=_package_run("run_1", "2026-03-14"),
+        proxy_returns=[
+            {
+                "package_date": "2026-03-14",
+                "week_end": "2026-03-07",
+                "factor_id": "SPY",
+                "factor_group": "market",
+                "proxy_ric": "SPY.P",
+                "proxy_ticker": "SPY",
+                "return_value": 0.01,
+                "weight_value": 1.0,
+                "price_field_used": "adj_close",
+                "package_run_id": "run_1",
+            },
+            {
+                "package_date": "2026-03-14",
+                "week_end": "2026-03-14",
+                "factor_id": "SPY",
+                "factor_group": "market",
+                "proxy_ric": "SPY.P",
+                "proxy_ticker": "SPY",
+                "return_value": -0.02,
+                "weight_value": 1.0,
+                "price_field_used": "adj_close",
+                "package_run_id": "run_1",
+            },
+        ],
+        proxy_transforms=_proxy_transforms("run_1", "2026-03-14"),
+        covariance_rows=_covariance_rows("run_1", "2026-03-14", covariance=1.0),
+        instrument_fits=_instrument_fits("run_1", "2026-03-14", spy_beta=1.1),
+    )
+    cpar_outputs.persist_cpar_package(
+        data_db=data_db,
+        package_run=_package_run("run_2", "2026-03-21"),
+        proxy_returns=[
+            {
+                "package_date": "2026-03-21",
+                "week_end": "2026-03-14",
+                "factor_id": "SPY",
+                "factor_group": "market",
+                "proxy_ric": "SPY.P",
+                "proxy_ticker": "SPY",
+                "return_value": -0.03,
+                "weight_value": 1.0,
+                "price_field_used": "adj_close",
+                "package_run_id": "run_2",
+            },
+            {
+                "package_date": "2026-03-21",
+                "week_end": "2026-03-21",
+                "factor_id": "SPY",
+                "factor_group": "market",
+                "proxy_ric": "SPY.P",
+                "proxy_ticker": "SPY",
+                "return_value": 0.04,
+                "weight_value": 1.0,
+                "price_field_used": "adj_close",
+                "package_run_id": "run_2",
+            },
+        ],
+        proxy_transforms=_proxy_transforms("run_2", "2026-03-21"),
+        covariance_rows=_covariance_rows("run_2", "2026-03-21", covariance=1.0),
+        instrument_fits=_instrument_fits("run_2", "2026-03-21", spy_beta=1.1),
+    )
+
+    latest, rows = cpar_outputs.load_factor_return_history("SPY", years=5, data_db=data_db)
+
+    assert latest == "2026-03-21"
+    assert rows == [
+        ("2026-03-07", 0.01),
+        ("2026-03-14", -0.03),
+        ("2026-03-21", 0.04),
+    ]
+
+
 def test_child_rows_are_forced_to_parent_package_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

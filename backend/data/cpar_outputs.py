@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -481,3 +481,54 @@ def load_active_package_covariance_rows(*, data_db: Path | None = None) -> list[
         require_complete=True,
         context_label="Active cPAR package",
     )
+
+
+def load_factor_return_history(
+    factor_id: str,
+    *,
+    years: int,
+    data_db: Path | None = None,
+) -> tuple[str | None, list[tuple[str, float]]]:
+    clean_factor_id = str(factor_id or "").strip().upper()
+    if not clean_factor_id:
+        return None, []
+
+    if _use_neon_reads():
+        rows = cpar_queries.successful_package_factor_return_rows(
+            lambda sql, params=None: _neon_fetch(sql, params),
+            factor_id=clean_factor_id,
+        )
+        if rows or config.cloud_mode():
+            return _dedupe_factor_return_rows(rows, years=years)
+    rows = cpar_queries.successful_package_factor_return_rows(
+        lambda sql, params=None: _sqlite_fetch_rows(sql, params, data_db=data_db),
+        factor_id=clean_factor_id,
+    )
+    return _dedupe_factor_return_rows(rows, years=years)
+
+
+def _dedupe_factor_return_rows(
+    rows: list[dict[str, Any]],
+    *,
+    years: int,
+) -> tuple[str | None, list[tuple[str, float]]]:
+    if not rows:
+        return None, []
+    latest_week_end = str(rows[0].get("week_end") or "").strip()
+    if not latest_week_end:
+        return None, []
+    latest_dt = date.fromisoformat(latest_week_end)
+    start_dt = latest_dt - timedelta(days=366 * max(1, int(years)))
+    seen_week_ends: set[str] = set()
+    points_desc: list[tuple[str, float]] = []
+    for row in rows:
+        week_end = str(row.get("week_end") or "").strip()
+        if not week_end or week_end in seen_week_ends:
+            continue
+        current_dt = date.fromisoformat(week_end)
+        if current_dt < start_dt:
+            break
+        seen_week_ends.add(week_end)
+        points_desc.append((week_end, float(row.get("return_value") or 0.0)))
+    points_desc.reverse()
+    return latest_week_end, points_desc

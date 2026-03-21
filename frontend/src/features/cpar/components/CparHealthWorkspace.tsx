@@ -60,8 +60,8 @@ export default function CparLandingPage() {
           <div className="cpar-inline-message neutral">
             <strong>Package-first routing.</strong>
             <span>
-              `/cpar/health` stays the package diagnostics surface, `/cpar/risk` stays the account-scoped hedge and
-              what-if workspace, and `/cpar/explore` plus `/cpar/hedge` stay instrument-scoped.
+              `/cpar/health` stays the package diagnostics surface, `/cpar/risk` now reads aggregate book risk across
+              all holdings accounts, and `/cpar/explore` plus `/cpar/hedge` stay instrument-scoped.
             </span>
           </div>
         </section>

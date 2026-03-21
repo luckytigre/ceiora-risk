@@ -95,6 +95,10 @@ ALLOWED_ROOT_CUSE4_COMPONENT_PREFIXES = (
     "components/",
     "features/cuse4/components/",
 )
+ALLOWED_ROOT_CUSE4_COMPONENT_EXACT = {
+    "features/cpar/components/CparCovarianceHeatmap.tsx",
+    "features/cpar/components/CparFactorHistoryChart.tsx",
+}
 
 
 def _ts_files() -> list[Path]:
@@ -196,7 +200,7 @@ def test_root_cuse4_component_imports_are_limited_to_components_and_cuse4_wrappe
     offenders: list[str] = []
     for path in _ts_files():
         relative_path = _rel(path)
-        if _allowed(relative_path, prefixes=ALLOWED_ROOT_CUSE4_COMPONENT_PREFIXES, exact=set()):
+        if _allowed(relative_path, prefixes=ALLOWED_ROOT_CUSE4_COMPONENT_PREFIXES, exact=ALLOWED_ROOT_CUSE4_COMPONENT_EXACT):
             continue
         text = path.read_text(encoding="utf-8")
         if any(token in text for token in ROOT_CUSE4_COMPONENT_IMPORTS):

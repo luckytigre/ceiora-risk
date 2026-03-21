@@ -8,10 +8,12 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, FiniteFloat
 
 from backend.services import (
+    cpar_factor_history_service,
     cpar_hedge_service,
     cpar_meta_service,
     cpar_portfolio_hedge_service,
     cpar_portfolio_whatif_service,
+    cpar_risk_service,
     cpar_search_service,
     cpar_ticker_service,
 )
@@ -78,6 +80,16 @@ async def search_cpar(
         _raise_cpar_unavailable(str(exc))
 
 
+@router.get("/cpar/risk")
+async def get_cpar_risk():
+    try:
+        return cpar_risk_service.load_cpar_risk_payload()
+    except cpar_meta_service.CparReadNotReady as exc:
+        _raise_cpar_not_ready(str(exc))
+    except cpar_meta_service.CparReadUnavailable as exc:
+        _raise_cpar_unavailable(str(exc))
+
+
 @router.get("/cpar/ticker/{ticker}")
 async def get_cpar_ticker(
     ticker: str,
@@ -92,6 +104,24 @@ async def get_cpar_ticker(
     except cpar_meta_service.CparTickerAmbiguous as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except cpar_meta_service.CparTickerNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/cpar/factors/history")
+async def get_cpar_factor_history(
+    factor_id: str = Query(..., min_length=1),
+    years: int = Query(5, ge=1, le=10),
+):
+    try:
+        return cpar_factor_history_service.load_cpar_factor_history_payload(
+            factor_id=factor_id,
+            years=int(years),
+        )
+    except cpar_meta_service.CparReadNotReady as exc:
+        _raise_cpar_not_ready(str(exc))
+    except cpar_meta_service.CparReadUnavailable as exc:
+        _raise_cpar_unavailable(str(exc))
+    except cpar_factor_history_service.CparFactorNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
