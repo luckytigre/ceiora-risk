@@ -181,6 +181,93 @@ def test_load_all_holdings_positions_shapes_rows_without_account_filter(
     assert conn.closed is True
 
 
+def test_load_contributing_holdings_accounts_shapes_rows_and_orders_by_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    cursor = _FakeCursor(
+        rows=[
+            ("acct_alpha", None),
+            ("acct_beta", "Beta Account"),
+        ],
+        capture=captured,
+    )
+    conn = _FakeConn(cursor)
+
+    monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
+    monkeypatch.setattr(
+        holdings_reads,
+        "connect",
+        lambda *, dsn, autocommit: conn,
+    )
+
+    rows = holdings_reads.load_contributing_holdings_accounts()
+
+    assert captured["params"] is None
+    assert "FROM holdings_positions_current p" in str(captured["sql"])
+    assert "LEFT JOIN holdings_accounts a" in str(captured["sql"])
+    assert "ORDER BY p.account_id ASC" in str(captured["sql"])
+    assert rows == [
+        {
+            "account_id": "acct_alpha",
+            "account_name": "acct_alpha",
+        },
+        {
+            "account_id": "acct_beta",
+            "account_name": "Beta Account",
+        },
+    ]
+    assert conn.closed is True
+
+
+def test_load_aggregate_holdings_positions_nets_quantities_and_uses_expected_sql(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    cursor = _FakeCursor(
+        rows=[
+            ("all_accounts", "aapl.oq", " aapl ", 6.0, "aggregate", "2026-03-15T11:00:00Z"),
+            ("all_accounts", "msft.oq", None, 5.0, "aggregate", "2026-03-15T09:00:00Z"),
+        ],
+        capture=captured,
+    )
+    conn = _FakeConn(cursor)
+
+    monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
+    monkeypatch.setattr(
+        holdings_reads,
+        "connect",
+        lambda *, dsn, autocommit: conn,
+    )
+
+    rows = holdings_reads.load_aggregate_holdings_positions()
+
+    assert captured["params"] == (1e-12,)
+    assert "ARRAY_AGG(" in str(captured["sql"])
+    assert "SUM(CAST(p.quantity AS DOUBLE PRECISION)) AS quantity" in str(captured["sql"])
+    assert "HAVING ABS(SUM(CAST(p.quantity AS DOUBLE PRECISION))) > %s" in str(captured["sql"])
+    assert "ORDER BY COALESCE(agg.ticker, agg.ric), agg.ric" in str(captured["sql"])
+    assert rows == [
+        {
+            "account_id": "all_accounts",
+            "ric": "AAPL.OQ",
+            "ticker": "AAPL",
+            "quantity": 6.0,
+            "source": "aggregate",
+            "updated_at": "2026-03-15T11:00:00Z",
+        },
+        {
+            "account_id": "all_accounts",
+            "ric": "MSFT.OQ",
+            "ticker": None,
+            "quantity": 5.0,
+            "source": "aggregate",
+            "updated_at": "2026-03-15T09:00:00Z",
+        },
+    ]
+    assert conn.closed is True
+
+
 def test_load_holdings_accounts_wraps_connect_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
     monkeypatch.setattr(
@@ -233,5 +320,49 @@ def test_load_all_holdings_positions_wraps_query_failures_and_closes_connection(
         match="Shared holdings position read failed for all accounts: RuntimeError: query boom",
     ):
         holdings_reads.load_all_holdings_positions()
+
+    assert conn.closed is True
+
+
+def test_load_contributing_holdings_accounts_wraps_query_failures_and_closes_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cursor = _FakeCursor(execute_error=RuntimeError("query boom"))
+    conn = _FakeConn(cursor)
+
+    monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
+    monkeypatch.setattr(
+        holdings_reads,
+        "connect",
+        lambda *, dsn, autocommit: conn,
+    )
+
+    with pytest.raises(
+        holdings_reads.HoldingsReadError,
+        match="Shared holdings contributing-account read failed: RuntimeError: query boom",
+    ):
+        holdings_reads.load_contributing_holdings_accounts()
+
+    assert conn.closed is True
+
+
+def test_load_aggregate_holdings_positions_wraps_query_failures_and_closes_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cursor = _FakeCursor(execute_error=RuntimeError("query boom"))
+    conn = _FakeConn(cursor)
+
+    monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
+    monkeypatch.setattr(
+        holdings_reads,
+        "connect",
+        lambda *, dsn, autocommit: conn,
+    )
+
+    with pytest.raises(
+        holdings_reads.HoldingsReadError,
+        match="Shared holdings aggregate-position read failed: RuntimeError: query boom",
+    ):
+        holdings_reads.load_aggregate_holdings_positions()
 
     assert conn.closed is True

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import math
 from typing import Any
 
@@ -651,20 +652,15 @@ def load_cpar_portfolio_aggregate_context(
     *,
     data_db=None,
 ) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, Any]]]:
-    package, accounts, live_positions = load_cpar_portfolio_holdings_context(data_db=data_db)
-    aggregated_positions, contributing_accounts = aggregate_cpar_positions_across_accounts(live_positions)
-    account_names = {
-        _normalize_account_id(str(row.get("account_id") or "")): str(
-            row.get("account_name") or row.get("account_id") or ""
-        )
-        for row in accounts
-        if _normalize_account_id(str(row.get("account_id") or ""))
-    }
-    for row in contributing_accounts:
-        normalized_account_id = _normalize_account_id(str(row.get("account_id") or ""))
-        row["account_name"] = account_names.get(normalized_account_id, str(row.get("account_id") or ""))
+    package = cpar_meta_service.require_active_package(data_db=data_db)
 
-    return package, contributing_accounts, aggregated_positions
+    try:
+        accounts = holdings_reads.load_contributing_holdings_accounts()
+        live_positions = holdings_reads.load_aggregate_holdings_positions()
+    except holdings_reads.HoldingsReadError as exc:
+        raise cpar_meta_service.CparReadUnavailable(f"Holdings read failed: {exc}") from exc
+
+    return package, accounts, live_positions
 
 
 def load_cpar_portfolio_support_rows(
@@ -679,38 +675,48 @@ def load_cpar_portfolio_support_rows(
     dict[str, dict[str, Any]],
     list[dict[str, Any]],
 ]:
-    try:
-        fit_rows = cpar_outputs.load_package_instrument_fits_for_rics(
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        fit_future = executor.submit(
+            cpar_outputs.load_package_instrument_fits_for_rics,
             rics,
             package_run_id=str(package_run_id),
             data_db=data_db,
         )
-        covariance_rows = cpar_outputs.load_package_covariance_rows(
+        covariance_future = executor.submit(
+            cpar_outputs.load_package_covariance_rows,
             str(package_run_id),
             data_db=data_db,
             require_complete=True,
             context_label="Active cPAR package",
         )
-        price_rows = cpar_source_reads.load_latest_price_rows(
+        price_future = executor.submit(
+            cpar_source_reads.load_latest_price_rows,
             rics,
             as_of_date=str(package_date),
             data_db=data_db,
         )
-    except cpar_outputs.CparPackageNotReady as exc:
-        raise cpar_meta_service.CparReadNotReady(str(exc)) from exc
-    except cpar_outputs.CparAuthorityReadError as exc:
-        raise cpar_meta_service.CparReadUnavailable(str(exc)) from exc
-    except cpar_source_reads.CparSourceReadError as exc:
-        raise cpar_meta_service.CparReadUnavailable(f"Shared-source read failed: {exc}") from exc
+        classification_future = executor.submit(
+            cpar_source_reads.load_latest_classification_rows,
+            rics,
+            as_of_date=str(package_date),
+            data_db=data_db,
+        )
 
-    try:
-        classification_rows = cpar_source_reads.load_latest_classification_rows(
-            rics,
-            as_of_date=str(package_date),
-            data_db=data_db,
-        )
-    except cpar_source_reads.CparSourceReadError:
-        classification_rows = []
+        try:
+            fit_rows = fit_future.result()
+            covariance_rows = covariance_future.result()
+            price_rows = price_future.result()
+        except cpar_outputs.CparPackageNotReady as exc:
+            raise cpar_meta_service.CparReadNotReady(str(exc)) from exc
+        except cpar_outputs.CparAuthorityReadError as exc:
+            raise cpar_meta_service.CparReadUnavailable(str(exc)) from exc
+        except cpar_source_reads.CparSourceReadError as exc:
+            raise cpar_meta_service.CparReadUnavailable(f"Shared-source read failed: {exc}") from exc
+
+        try:
+            classification_rows = classification_future.result()
+        except cpar_source_reads.CparSourceReadError:
+            classification_rows = []
 
     fit_by_ric = {str(row["ric"]): row for row in fit_rows}
     price_by_ric = {str(row["ric"]): row for row in price_rows}

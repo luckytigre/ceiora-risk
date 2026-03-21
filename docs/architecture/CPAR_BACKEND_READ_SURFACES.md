@@ -45,7 +45,10 @@ It does not add:
 
 `GET /api/cpar/risk`
 - returns the aggregate cPAR risk payload across all loaded holdings accounts
-- reuses `backend/data/holdings_reads.py` for one all-accounts holdings read and values those rows at the latest shared-source price on or before the active package date
+- reuses `backend/data/holdings_reads.py` for dedicated aggregate all-accounts holdings reads:
+  - contributing accounts with live rows
+  - netted aggregate positions across all accounts
+- values those rows at the latest shared-source price on or before the active package date
 - returns:
   - `aggregate_display_loadings`
   - `coverage_breakdown`
@@ -209,6 +212,10 @@ Aggregate-risk limitations:
   - it stays package-pinned
   - it uses raw `SPY` returns and residualized non-market factor returns
   - it does not replace the persisted raw ETF `cov_matrix`, which remains the hedge-space covariance surface
+- the current latency optimization keeps the route contract unchanged but changes the read path:
+  - aggregate holdings rows are now netted in the shared holdings adapter instead of being aggregated in Python from all raw positions
+  - display covariance and package/source support reads are fanned out concurrently on the request path
+  - classification reads remain fail-soft while package, price, and covariance dependencies remain fail-closed
 
 ## Hedge Preview Behavior
 

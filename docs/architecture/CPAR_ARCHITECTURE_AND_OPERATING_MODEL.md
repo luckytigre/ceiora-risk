@@ -111,6 +111,7 @@ Current owner decisions:
   - route: `GET /api/cpar/risk`
   - service: `backend/services/cpar_risk_service.py`
   - shared lower assembly: `backend/services/cpar_portfolio_snapshot_service.py`
+  - shared lower data adapters: `backend/data/holdings_reads.py` for aggregate holdings rows and `backend/data/cpar_outputs.py` / `backend/data/cpar_source_reads.py` for package/source support reads
 - `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower assembly owner for account-scoped cPAR reads unless a later slice proves a clearer lower-layer split
 - the aggregate risk owner exposes:
   - `coverage_breakdown`
@@ -155,6 +156,9 @@ Current read behavior:
   - hedge-basis factor-chart rows plus additive display-basis factor-chart rows
   - per-position weighted thresholded contributions plus additive display contributions
 - `/api/cpar/risk` additionally exposes the full package-pinned covariance matrix for the frontend heatmap
+- the current implementation keeps the frontend meta-first gate intact, but shortens the backend risk path by:
+  - reading pre-aggregated all-account holdings rows from the shared holdings adapter
+  - fanning out independent package/source/display-covariance reads concurrently after the aggregate book is known
 - factor drilldown history now has a cPAR-owned supplemental route:
   - `GET /api/cpar/factors/history`
   - backed by daily proxy-price history for the cPAR factor instrument itself

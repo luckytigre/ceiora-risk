@@ -85,3 +85,53 @@ def test_load_cpar_risk_payload_maps_display_covariance_not_ready(monkeypatch) -
 
     with pytest.raises(cpar_meta_service.CparReadNotReady, match="display not ready"):
         cpar_risk_service.load_cpar_risk_payload()
+
+
+def test_load_cpar_risk_payload_maps_display_covariance_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_risk_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_aggregate_context",
+        lambda **kwargs: (
+            {"package_run_id": "run_curr", "package_date": "2026-03-14"},
+            [],
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        cpar_risk_service.cpar_display_covariance,
+        "load_package_display_covariance_rows",
+        lambda **kwargs: (_ for _ in ()).throw(cpar_risk_service.cpar_outputs.CparAuthorityReadError("display unavailable")),
+    )
+    monkeypatch.setattr(
+        cpar_risk_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_support_rows",
+        lambda **kwargs: ({}, {}, {}, []),
+    )
+
+    with pytest.raises(cpar_meta_service.CparReadUnavailable, match="display unavailable"):
+        cpar_risk_service.load_cpar_risk_payload()
+
+
+def test_load_cpar_risk_payload_propagates_support_row_fail_closed_state(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_risk_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_aggregate_context",
+        lambda **kwargs: (
+            {"package_run_id": "run_curr", "package_date": "2026-03-14"},
+            [],
+            [{"ric": "AAPL.OQ"}],
+        ),
+    )
+    monkeypatch.setattr(
+        cpar_risk_service.cpar_display_covariance,
+        "load_package_display_covariance_rows",
+        lambda **kwargs: [{"factor_id": "SPY", "factor_id_2": "SPY", "covariance": 1.0, "correlation": 1.0}],
+    )
+    monkeypatch.setattr(
+        cpar_risk_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_support_rows",
+        lambda **kwargs: (_ for _ in ()).throw(cpar_meta_service.CparReadUnavailable("support unavailable")),
+    )
+
+    with pytest.raises(cpar_meta_service.CparReadUnavailable, match="support unavailable"):
+        cpar_risk_service.load_cpar_risk_payload()

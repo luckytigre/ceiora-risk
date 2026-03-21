@@ -129,6 +129,7 @@ Page consistency rule:
 - if those responses do not share the same `package_run_id` / `package_date`, the page must fail closed instead of mixing surfaces from different active packages
 - the frontend now uses package metadata as the first gate for dependent reads, so package-level `not_ready` / `unavailable` states do not keep probing detail or account-risk endpoints on the same page load
 - `/cpar/risk` enforces this for banner plus the aggregate risk payload
+- the current risk-page latency work does not change that runtime rule; it optimizes the backend path behind `/api/cpar/risk` while keeping the same meta-first frontend contract and full-page loading behavior
 - drilldown factor history is supplemental to that page and may degrade without suppressing the aggregate risk payload
 
 ## Current Frontend Owner Freeze

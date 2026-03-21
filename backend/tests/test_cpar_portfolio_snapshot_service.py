@@ -80,27 +80,55 @@ def test_account_context_matches_accounts_after_normalization(
     assert positions[0]["ric"] == "AAPL.OQ"
 
 
-def test_aggregate_context_aggregates_positions_across_accounts(
+def test_holdings_context_preserves_raw_live_position_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [
-            {"account_id": "acct_a", "account_name": "Account A", "positions_count": 2},
-            {"account_id": "acct_b", "account_name": "Account B", "positions_count": 2},
-        ],
+        lambda: [{"account_id": "acct_a", "account_name": "Account A", "positions_count": 1}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_all_holdings_positions",
+        lambda: [{"account_id": "acct_a", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": "2026-03-14T10:00:00Z"}],
+    )
+
+    package, accounts, live_positions = cpar_portfolio_snapshot_service.load_cpar_portfolio_holdings_context()
+
+    assert package["package_run_id"] == "run_curr"
+    assert accounts[0]["account_id"] == "acct_a"
+    assert live_positions == [
+        {
+            "account_id": "acct_a",
+            "ric": "AAPL.OQ",
+            "ticker": "AAPL",
+            "quantity": 10.0,
+            "source": "seed",
+            "updated_at": "2026-03-14T10:00:00Z",
+        }
+    ]
+
+
+def test_aggregate_context_aggregates_positions_across_accounts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_contributing_holdings_accounts",
         lambda: [
-            {"account_id": "acct_a", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "updated_at": "2026-03-14T10:00:00Z"},
-            {"account_id": "acct_b", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": -4.0, "updated_at": "2026-03-14T11:00:00Z"},
-            {"account_id": "acct_b", "ric": "MSFT.OQ", "ticker": "MSFT", "quantity": 5.0, "updated_at": "2026-03-14T09:00:00Z"},
-            {"account_id": "acct_a", "ric": "FLAT.OQ", "ticker": "FLAT", "quantity": 1.0, "updated_at": None},
-            {"account_id": "acct_b", "ric": "FLAT.OQ", "ticker": "FLAT", "quantity": -1.0, "updated_at": None},
+            {"account_id": "acct_a", "account_name": "Account A"},
+            {"account_id": "acct_b", "account_name": "Account B"},
+        ],
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_aggregate_holdings_positions",
+        lambda: [
+            {"account_id": "all_accounts", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 6.0, "source": "aggregate", "updated_at": "2026-03-14T11:00:00Z"},
+            {"account_id": "all_accounts", "ric": "MSFT.OQ", "ticker": "MSFT", "quantity": 5.0, "source": "aggregate", "updated_at": "2026-03-14T09:00:00Z"},
         ],
     )
 
@@ -126,6 +154,20 @@ def test_aggregate_context_aggregates_positions_across_accounts(
             "updated_at": "2026-03-14T09:00:00Z",
         },
     ]
+
+
+def test_aggregate_context_maps_typed_holdings_failures_to_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_contributing_holdings_accounts",
+        lambda: (_ for _ in ()).throw(cpar_portfolio_snapshot_service.holdings_reads.HoldingsReadError("neon unavailable")),
+    )
+
+    with pytest.raises(cpar_meta_service.CparReadUnavailable, match="Holdings read failed"):
+        cpar_portfolio_snapshot_service.load_cpar_portfolio_aggregate_context()
 
 
 def test_support_rows_map_typed_package_authority_failures_to_unavailable(
@@ -170,6 +212,42 @@ def test_support_rows_map_typed_source_failures_to_unavailable(
             package_run_id="run_curr",
             package_date="2026-03-14",
         )
+
+
+def test_support_rows_treats_classification_failures_as_degraded_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_package_instrument_fits_for_rics",
+        lambda *args, **kwargs: [{"ric": "AAPL.OQ", "fit_status": "ok", "thresholded_loadings": {"SPY": 1.0}}],
+    )
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_package_covariance_rows",
+        lambda *args, **kwargs: [{"factor_id": "SPY", "factor_id_2": "SPY", "covariance": 1.0, "correlation": 1.0}],
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda *args, **kwargs: [{"ric": "AAPL.OQ", "adj_close": 100.0, "date": "2026-03-14"}],
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.cpar_source_reads,
+        "load_latest_classification_rows",
+        lambda *args, **kwargs: (_ for _ in ()).throw(cpar_source_reads.CparSourceReadError("classifications unavailable")),
+    )
+
+    fit_by_ric, price_by_ric, classification_by_ric, covariance_rows = cpar_portfolio_snapshot_service.load_cpar_portfolio_support_rows(
+        rics=["AAPL.OQ"],
+        package_run_id="run_curr",
+        package_date="2026-03-14",
+    )
+
+    assert fit_by_ric["AAPL.OQ"]["fit_status"] == "ok"
+    assert price_by_ric["AAPL.OQ"]["adj_close"] == 100.0
+    assert classification_by_ric == {}
+    assert covariance_rows[0]["factor_id"] == "SPY"
 
 
 def test_support_rows_does_not_swallow_unexpected_output_decode_bugs(

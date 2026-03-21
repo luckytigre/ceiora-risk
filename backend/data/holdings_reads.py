@@ -150,3 +150,89 @@ def load_all_holdings_positions() -> list[dict[str, Any]]:
             conn.close()
 
     return _shape_position_rows(rows)
+
+
+def load_contributing_holdings_accounts() -> list[dict[str, Any]]:
+    conn = None
+    try:
+        conn = connect(dsn=resolve_dsn(None), autocommit=True)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    p.account_id,
+                    COALESCE(a.account_name, p.account_id) AS account_name
+                FROM holdings_positions_current p
+                LEFT JOIN holdings_accounts a
+                  ON a.account_id = p.account_id
+                GROUP BY p.account_id, a.account_name
+                ORDER BY p.account_id ASC
+                """
+            )
+            rows = cur.fetchall()
+    except Exception as exc:
+        raise HoldingsReadError(
+            f"Shared holdings contributing-account read failed: {type(exc).__name__}: {exc}"
+        ) from exc
+    finally:
+        if conn is not None:
+            conn.close()
+
+    out: list[dict[str, Any]] = []
+    for account_id, account_name in rows:
+        out.append(
+            {
+                "account_id": str(account_id),
+                "account_name": str(account_name or account_id),
+            }
+        )
+    return out
+
+
+def load_aggregate_holdings_positions() -> list[dict[str, Any]]:
+    conn = None
+    try:
+        conn = connect(dsn=resolve_dsn(None), autocommit=True)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    agg.account_id,
+                    agg.ric,
+                    agg.ticker,
+                    agg.quantity,
+                    agg.source,
+                    agg.updated_at
+                FROM (
+                    SELECT
+                        'all_accounts' AS account_id,
+                        p.ric,
+                        (
+                            ARRAY_AGG(
+                                COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker)
+                                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
+                            )
+                        )[1] AS ticker,
+                        SUM(CAST(p.quantity AS DOUBLE PRECISION)) AS quantity,
+                        'aggregate' AS source,
+                        MAX(p.updated_at) AS updated_at
+                    FROM holdings_positions_current p
+                    LEFT JOIN security_master sm
+                      ON sm.ric = p.ric
+                    GROUP BY p.ric
+                    HAVING ABS(SUM(CAST(p.quantity AS DOUBLE PRECISION))) > %s
+                ) agg
+                ORDER BY COALESCE(agg.ticker, agg.ric), agg.ric
+                """,
+                (1e-12,),
+            )
+            rows = cur.fetchall()
+    except Exception as exc:
+        raise HoldingsReadError(
+            f"Shared holdings aggregate-position read failed: {type(exc).__name__}: {exc}"
+        ) from exc
+    finally:
+        if conn is not None:
+            conn.close()
+
+    return _shape_position_rows(rows)
