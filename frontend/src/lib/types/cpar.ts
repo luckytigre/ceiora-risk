@@ -200,6 +200,34 @@ export interface CparPortfolioPositionRow {
   thresholded_contributions: CparLoading[];
 }
 
+export interface CparFactorDrilldownRow {
+  ric: string;
+  ticker: string | null;
+  display_name: string | null;
+  market_value: number | null;
+  portfolio_weight: number | null;
+  fit_status: CparFitStatus | null;
+  warnings: CparWarning[];
+  coverage: CparPortfolioCoverage;
+  coverage_reason: string | null;
+  factor_beta: number | null;
+  contribution_beta: number;
+}
+
+export interface CparFactorChartRow {
+  factor_id: string;
+  label: string;
+  group: CparFactorGroup;
+  display_order: number;
+  beta: number;
+  aggregate_beta: number;
+  positive_contribution_beta: number;
+  negative_contribution_beta: number;
+  variance_contribution: number | null;
+  variance_share: number | null;
+  drilldown: CparFactorDrilldownRow[];
+}
+
 export interface CparPortfolioHedgeData extends CparPackageMeta {
   account_id: string;
   account_name: string | null;
@@ -216,6 +244,7 @@ export interface CparPortfolioHedgeData extends CparPackageMeta {
   coverage_breakdown: CparCoverageBreakdown;
   aggregate_thresholded_loadings: CparLoading[];
   factor_variance_contributions: CparFactorVarianceContribution[];
+  factor_chart: CparFactorChartRow[];
   hedge_status: CparHedgeStatus | null;
   hedge_reason: string | null;
   hedge_legs: CparHedgeLeg[];

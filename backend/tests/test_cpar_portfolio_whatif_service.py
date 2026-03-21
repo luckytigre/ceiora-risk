@@ -127,6 +127,8 @@ def test_portfolio_whatif_service_supports_new_active_package_rows(
     assert payload["hypothetical"]["coverage_breakdown"]["covered"]["positions_count"] == 3
     assert len(payload["current"]["factor_variance_contributions"]) == 2
     assert len(payload["hypothetical"]["factor_variance_contributions"]) == 2
+    assert len(payload["current"]["factor_chart"]) == 2
+    assert len(payload["hypothetical"]["factor_chart"]) == 2
     assert payload["current"]["positions_count"] == 2
     assert payload["hypothetical"]["positions_count"] == 3
     assert payload["scenario_rows"][0]["ric"] == "NVDA.OQ"
@@ -152,6 +154,8 @@ def test_portfolio_whatif_service_supports_new_active_package_rows(
         payload["hypothetical"]["factor_variance_contributions"][0]["variance_contribution"]
         / payload["hypothetical"]["pre_hedge_factor_variance_proxy"]
     )
+    assert payload["hypothetical"]["factor_chart"][0]["factor_id"] == "SPY"
+    assert payload["hypothetical"]["factor_chart"][0]["drilldown"][0]["ric"] == "AAPL.OQ"
     reconciled = {}
     for row in payload["hypothetical"]["positions"]:
         for contribution in row["thresholded_contributions"]:
@@ -189,6 +193,64 @@ def test_portfolio_whatif_service_supports_position_removals(
     assert len(payload["hypothetical"]["factor_variance_contributions"]) == 2
     assert payload["scenario_rows"][0]["hypothetical_quantity"] == 0.0
     assert "removed" in str(payload["scenario_rows"][0]["coverage_reason"]).lower()
+
+
+def test_portfolio_whatif_service_keeps_zero_net_factor_chart_rows_in_hypothetical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_account_context",
+        lambda **kwargs: (
+            _package(),
+            {"account_id": "acct_flat", "account_name": "Flat Account", "positions_count": 1},
+            [{"account_id": "acct_flat", "ric": "LONG.OQ", "ticker": "LONG", "quantity": 10.0, "source": "seed", "updated_at": None}],
+        ),
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_whatif_service.cpar_portfolio_snapshot_service,
+        "load_cpar_portfolio_support_rows",
+        lambda **kwargs: (
+            {
+                "LONG.OQ": {
+                    "ric": "LONG.OQ",
+                    "ticker": "LONG",
+                    "display_name": "Long Corp.",
+                    "fit_status": "ok",
+                    "warnings": [],
+                    "spy_trade_beta_raw": 1.0,
+                    "thresholded_loadings": {"SPY": 1.0},
+                },
+                "SHRT.OQ": {
+                    "ric": "SHRT.OQ",
+                    "ticker": "SHRT",
+                    "display_name": "Short Corp.",
+                    "fit_status": "ok",
+                    "warnings": [],
+                    "spy_trade_beta_raw": 1.0,
+                    "thresholded_loadings": {"SPY": 1.0},
+                },
+            },
+            {
+                "LONG.OQ": {"ric": "LONG.OQ", "date": "2026-03-14", "adj_close": 100.0, "close": 100.0},
+                "SHRT.OQ": {"ric": "SHRT.OQ", "date": "2026-03-14", "adj_close": 100.0, "close": 100.0},
+            },
+            _covariance_rows(),
+        ),
+    )
+
+    payload = cpar_portfolio_whatif_service.load_cpar_portfolio_whatif_payload(
+        account_id="acct_flat",
+        mode="factor_neutral",
+        scenario_rows=[{"ric": "SHRT.OQ", "ticker": "SHRT", "quantity_delta": -10.0}],
+    )
+
+    assert payload["hypothetical"]["portfolio_status"] == "ok"
+    assert payload["hypothetical"]["aggregate_thresholded_loadings"] == []
+    assert payload["hypothetical"]["factor_chart"][0]["factor_id"] == "SPY"
+    assert payload["hypothetical"]["factor_chart"][0]["aggregate_beta"] == pytest.approx(0.0)
+    assert payload["hypothetical"]["factor_chart"][0]["positive_contribution_beta"] == pytest.approx(0.5)
+    assert payload["hypothetical"]["factor_chart"][0]["negative_contribution_beta"] == pytest.approx(-0.5)
 
 
 def test_portfolio_whatif_service_rejects_zero_only_scenarios(

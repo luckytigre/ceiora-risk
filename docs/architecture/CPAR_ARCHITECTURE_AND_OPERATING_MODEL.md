@@ -113,11 +113,12 @@ Current owner decisions:
 - Slice 4 extends that existing shared snapshot owner with:
   - `coverage_breakdown`
   - `factor_variance_contributions`
+  - `factor_chart`
   - `positions[].thresholded_contributions`
 - this is still not a new generic account-risk service or a new route family; it is the next contract layer on the current account-scoped hedge/preview-only what-if surface
 - Slice 5 then rebuilds `/cpar/risk` purely on the frontend against that same contract:
   - account scope stays explicit
-  - factor-only contribution summary stays derived from the active-package snapshot
+  - factor chart and drilldown stay derived from the active-package snapshot
   - per-position contribution mix stays derived from covered rows only
   - the page still does not introduce covariance heatmaps, specific-risk payloads, or cUSE-owned analytics modules
 
@@ -148,6 +149,7 @@ Current read behavior:
 - that same account-level hedge snapshot now also exposes:
   - explicit coverage buckets
   - factor-only variance decomposition from aggregate thresholded loadings plus active-package covariance
+  - factor-chart rows with signed contribution arms and per-factor drilldown
   - per-position weighted thresholded contributions
 - account-level what-if additionally requires one account hedge baseline, one active package, and staged signed share deltas that reference either existing holdings rows or active-package search hits
 - missing required relational coverage fails closed with cPAR-specific `503 not_ready`

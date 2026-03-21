@@ -27,12 +27,13 @@ It does not add:
 - now owns a cPAR-native account risk composition:
   - account scope / selected-account context
   - coverage summary plus explicit exclusion buckets
-  - factor-only contribution profile from the active package covariance surface
+  - one signed factor-loadings chart with per-factor drilldown, reconciled from the same account snapshot
   - positions contribution mix table derived from per-row thresholded contributions
   - one account hedge preview and one narrow read-only what-if preview
 - now has a stable backend contract for the next rebuild stage:
   - `coverage_breakdown` for explicit exclusion buckets
   - `factor_variance_contributions` for factor-only decomposition of the aggregate thresholded portfolio vector
+  - `factor_chart` for chart-ready factor rows plus drilldown
   - `positions[].thresholded_contributions` for per-position weighted contributions
 - keeps the staged what-if builder cPAR-owned even when it visually conforms to the cUSE builder grammar
 - preserves the same active-package search semantics as the other cPAR pages, including disabled `Ticker required` rows when a search hit cannot open or stage directly
@@ -126,8 +127,8 @@ Current page owners:
 - `/cpar/health` stays owned by `frontend/src/features/cpar/components/CparHealthWorkspace.tsx`
 
 Preferred cPAR frontend import surfaces now include:
-- `frontend/src/hooks/useCparApi.ts` for cPAR route hooks plus the shared holdings-account hook reused by `/cpar/risk`
-- `frontend/src/lib/cparApi.ts` for cPAR route-path helpers over the shared fetch transport
+- `frontend/src/hooks/useCparApi.ts` as the current cPAR-owned facade for route hooks plus the shared holdings-account hook reused by `/cpar/risk`
+- `frontend/src/lib/cparApi.ts` as the current cPAR-owned facade for route-path helpers over the shared fetch transport
 - `frontend/src/lib/types/cpar.ts` for cPAR route contracts
 - `frontend/src/lib/types/holdings.ts` when cPAR intentionally reuses shared holdings/account types
 - `frontend/src/lib/cparTruth.ts` for cPAR-specific warning/status/package-truth helpers
@@ -137,12 +138,15 @@ Allowed reuse direction:
 - shared holdings/account widgets such as `InlineShareDraftEditor`
 - shared layout rhythm, spacing, and interaction grammar already proven on cUSE pages
 
-Disallowed reuse direction for this overhaul stage:
+Disallowed direct reuse direction for this overhaul stage:
 - cUSE feature owners under `frontend/src/features/cuse4/*`
 - cUSE explore owners under `frontend/src/features/explore/*`
 - cUSE what-if owners under `frontend/src/features/whatif/*`
 - cUSE hooks or payload semantics through `@/hooks/useCuse4Api`, `@/lib/cuse4Api`, or `@/lib/types/cuse4`
-- transitional mixed-family barrels through `@/hooks/useApi`, `@/lib/api`, or `@/lib/types` from cPAR-owned frontend files
+- transitional mixed-family barrels through `@/hooks/useApi`, `@/lib/api`, or `@/lib/types` from cPAR feature owners or page components
+
+Current limitation:
+- the thin cPAR facades still forward into shared transport barrels under the hood; that is an implementation compromise, not the intended long-term ownership boundary
 
 If a richer cPAR page still needs multiple backend requests, it must preserve the same package-identity checks described above.
 If that becomes too brittle for one page, the next slice should move that page to a composite cPAR payload rather than mixing partially coherent reads in the browser.
@@ -190,7 +194,7 @@ Read failures:
 
 `/cpar/risk`
 - remains a narrow account-level hedge workflow
-- owns account selection, coverage/exclusion explanation, factor-only contribution summary, positions contribution mix, staged scenario rows, and current vs hypothetical account hedge preview
+- owns account selection, coverage/exclusion explanation, one signed factor-loadings chart with per-factor drilldown, positions contribution mix, staged scenario rows, and current vs hypothetical account hedge preview
 - now intentionally borrows the cUSE risk-page layout rhythm without importing cUSE feature owners or cUSE payload semantics
 - still stops short of a full cUSE-style analytics workspace:
   - no covariance heatmap
@@ -214,7 +218,7 @@ Current cPAR frontend smokes cover:
 - `/cpar/hedge` baseline flow
 - `/cpar/risk` baseline flow
 - `/cpar/risk` narrow what-if preview flow
-- `/cpar/risk` coverage buckets, factor-only contribution summary, and positions contribution mix
+- `/cpar/risk` coverage buckets, signed factor-loadings chart plus drilldown, and positions contribution mix
 - `not_ready`
 - `unavailable`
 - package mismatch

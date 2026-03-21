@@ -9,6 +9,8 @@ from backend.cpar.factor_registry import build_cpar1_factor_registry
 from backend.data import cpar_outputs, cpar_source_reads, holdings_reads
 from backend.services import cpar_meta_service
 
+_EPSILON = 1e-12
+
 
 class CparPortfolioAccountNotFound(LookupError):
     """Raised when the requested holdings account does not exist."""
@@ -296,6 +298,108 @@ def _factor_variance_contribution_rows(
     return rows
 
 
+def _factor_chart_rows(
+    *,
+    loadings: dict[str, float],
+    variance_rows: list[dict[str, object]],
+    position_rows: list[dict[str, object]],
+    fit_by_ric: dict[str, dict[str, Any]],
+) -> list[dict[str, object]]:
+    variance_by_factor = {
+        str(row["factor_id"]): dict(row)
+        for row in variance_rows
+        if str(row.get("factor_id") or "")
+    }
+    factor_specs = list(build_cpar1_factor_registry())
+    factor_ids: set[str] = {str(factor_id) for factor_id in loadings.keys()}
+    for row in position_rows:
+        if str(row.get("coverage") or "") != "covered":
+            continue
+        portfolio_weight = row.get("portfolio_weight")
+        if portfolio_weight is None:
+            continue
+        fit = fit_by_ric.get(str(row.get("ric") or ""))
+        for factor_id, beta in dict((fit or {}).get("thresholded_loadings") or {}).items():
+            contribution_beta = float(portfolio_weight) * float(beta)
+            if abs(float(beta)) <= _EPSILON and abs(contribution_beta) <= _EPSILON:
+                continue
+            factor_ids.add(str(factor_id))
+    if not factor_ids:
+        return []
+
+    chart_rows: list[dict[str, object]] = []
+    for spec in factor_specs:
+        factor_id = str(spec.factor_id)
+        if factor_id not in factor_ids:
+            continue
+        positive_contribution_beta = 0.0
+        negative_contribution_beta = 0.0
+        drilldown_rows: list[dict[str, object]] = []
+        for row in position_rows:
+            if str(row.get("coverage") or "") != "covered":
+                continue
+            portfolio_weight = row.get("portfolio_weight")
+            if portfolio_weight is None:
+                continue
+            fit = fit_by_ric.get(str(row.get("ric") or ""))
+            thresholded_loadings = dict((fit or {}).get("thresholded_loadings") or {})
+            factor_beta = float(thresholded_loadings.get(factor_id, 0.0))
+            contribution_beta = float(portfolio_weight) * factor_beta
+            if abs(factor_beta) <= _EPSILON and abs(contribution_beta) <= _EPSILON:
+                continue
+            if contribution_beta > _EPSILON:
+                positive_contribution_beta += contribution_beta
+            elif contribution_beta < -_EPSILON:
+                negative_contribution_beta += contribution_beta
+            drilldown_rows.append(
+                {
+                    "ric": str(row.get("ric") or ""),
+                    "ticker": row.get("ticker"),
+                    "display_name": row.get("display_name"),
+                    "market_value": row.get("market_value"),
+                    "portfolio_weight": row.get("portfolio_weight"),
+                    "fit_status": row.get("fit_status"),
+                    "warnings": list(row.get("warnings") or []),
+                    "coverage": row.get("coverage"),
+                    "coverage_reason": row.get("coverage_reason"),
+                    "factor_beta": factor_beta,
+                    "contribution_beta": contribution_beta,
+                }
+            )
+        drilldown_rows.sort(
+            key=lambda row: (
+                -abs(float(row.get("contribution_beta") or 0.0)),
+                str(row.get("ticker") or row.get("ric") or ""),
+                str(row.get("ric") or ""),
+            )
+        )
+        variance_row = variance_by_factor.get(factor_id, {})
+        chart_rows.append(
+            {
+                "factor_id": factor_id,
+                "label": spec.label,
+                "group": spec.group,
+                "display_order": int(spec.display_order),
+                "beta": float(loadings.get(factor_id, 0.0)),
+                "aggregate_beta": float(loadings.get(factor_id, 0.0)),
+                "positive_contribution_beta": float(positive_contribution_beta),
+                "negative_contribution_beta": float(negative_contribution_beta),
+                "variance_contribution": (
+                    0.0
+                    if variance_row.get("variance_contribution") is None
+                    else float(variance_row["variance_contribution"])
+                ),
+                "variance_share": (
+                    0.0
+                    if variance_row.get("variance_share") is None
+                    else float(variance_row["variance_share"])
+                ),
+                "drilldown": drilldown_rows,
+            }
+        )
+    return chart_rows
+
+
 def load_cpar_portfolio_account_context(
     *,
     account_id: str,
@@ -385,6 +489,7 @@ def build_cpar_portfolio_hedge_snapshot(
         "portfolio_reason": "No live holdings positions are loaded for this account.",
         "aggregate_thresholded_loadings": [],
         "factor_variance_contributions": [],
+        "factor_chart": [],
         "hedge_status": None,
         "hedge_reason": None,
         "hedge_legs": [],
@@ -441,13 +546,17 @@ def build_cpar_portfolio_hedge_snapshot(
         "positions": position_rows,
     }
 
-    if covered_positions_count <= 0 or covered_gross_market_value <= 0 or not aggregate_loadings:
+    if covered_positions_count <= 0 or covered_gross_market_value <= 0:
         payload["portfolio_status"] = "unavailable"
         payload["portfolio_reason"] = (
             "No holdings rows in this account have both price coverage and a usable persisted cPAR fit in the active package."
         )
         return payload
 
+    factor_variance_rows = _factor_variance_contribution_rows(
+        aggregate_loadings,
+        covariance_rows=covariance_rows,
+    )
     preview = hedge_engine.build_hedge_preview(
         mode=mode,
         thresholded_loadings=aggregate_loadings,
@@ -466,9 +575,12 @@ def build_cpar_portfolio_hedge_snapshot(
                 else None
             ),
             "aggregate_thresholded_loadings": _factor_rows(aggregate_loadings),
-            "factor_variance_contributions": _factor_variance_contribution_rows(
-                aggregate_loadings,
-                covariance_rows=covariance_rows,
+            "factor_variance_contributions": factor_variance_rows,
+            "factor_chart": _factor_chart_rows(
+                loadings=aggregate_loadings,
+                variance_rows=factor_variance_rows,
+                position_rows=position_rows,
+                fit_by_ric=fit_by_ric,
             ),
             "hedge_status": str(preview.status),
             "hedge_reason": preview.reason,

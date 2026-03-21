@@ -2,10 +2,18 @@
 
 import { ApiError } from "@/lib/cparApi";
 import type {
+  CparCoverageBreakdown,
+  CparFactorChartRow,
+  CparFactorDrilldownRow,
   CparFactorGroup,
+  CparFactorVarianceContribution,
   CparFactorSpec,
   CparFitStatus,
   CparHedgeStatus,
+  CparLoading,
+  CparPortfolioHedgeData,
+  CparPortfolioPositionRow,
+  CparPortfolioWhatIfData,
   CparSearchItem,
   CparWarning,
 } from "@/lib/types/cpar";
@@ -42,6 +50,13 @@ interface CparPackageIdentity {
   package_run_id?: string | null;
   package_date?: string | null;
 }
+
+const EMPTY_CPAR_COVERAGE_BREAKDOWN: CparCoverageBreakdown = {
+  covered: { positions_count: 0, gross_market_value: 0 },
+  missing_price: { positions_count: 0, gross_market_value: 0 },
+  missing_cpar_fit: { positions_count: 0, gross_market_value: 0 },
+  insufficient_history: { positions_count: 0, gross_market_value: 0 },
+};
 
 function cleanDate(value: string | null | undefined): string | null {
   const text = String(value || "").trim();
@@ -245,6 +260,159 @@ export function sameCparPackageIdentity(
   }
 
   return true;
+}
+
+function normalizeCparNumeric(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function normalizeCparCoverageBreakdown(value: unknown): CparCoverageBreakdown {
+  const breakdown = value && typeof value === "object" ? value as Partial<CparCoverageBreakdown> : null;
+  return {
+    covered: {
+      positions_count: normalizeCparNumeric(breakdown?.covered?.positions_count),
+      gross_market_value: normalizeCparNumeric(breakdown?.covered?.gross_market_value),
+    },
+    missing_price: {
+      positions_count: normalizeCparNumeric(breakdown?.missing_price?.positions_count),
+      gross_market_value: normalizeCparNumeric(breakdown?.missing_price?.gross_market_value),
+    },
+    missing_cpar_fit: {
+      positions_count: normalizeCparNumeric(breakdown?.missing_cpar_fit?.positions_count),
+      gross_market_value: normalizeCparNumeric(breakdown?.missing_cpar_fit?.gross_market_value),
+    },
+    insufficient_history: {
+      positions_count: normalizeCparNumeric(breakdown?.insufficient_history?.positions_count),
+      gross_market_value: normalizeCparNumeric(breakdown?.insufficient_history?.gross_market_value),
+    },
+  };
+}
+
+function normalizeCparLoadings(value: unknown): CparLoading[] {
+  return Array.isArray(value) ? value as CparLoading[] : [];
+}
+
+function normalizeCparVarianceContributions(value: unknown): CparFactorVarianceContribution[] {
+  return Array.isArray(value) ? value as CparFactorVarianceContribution[] : [];
+}
+
+function deriveCparFactorChartRows(
+  portfolio: Pick<CparPortfolioHedgeData, "aggregate_thresholded_loadings" | "factor_variance_contributions" | "positions">,
+): CparFactorChartRow[] {
+  const loadings = normalizeCparLoadings(portfolio.aggregate_thresholded_loadings);
+  const varianceRows = normalizeCparVarianceContributions(portfolio.factor_variance_contributions);
+  const positions = Array.isArray(portfolio.positions) ? portfolio.positions : [];
+  const metaByFactor = new Map<string, Pick<CparFactorChartRow, "factor_id" | "label" | "group" | "display_order">>();
+  const aggregateByFactor = new Map(loadings.map((row) => [row.factor_id, row]));
+  const varianceByFactor = new Map(varianceRows.map((row) => [row.factor_id, row]));
+
+  loadings.forEach((row) => {
+    metaByFactor.set(row.factor_id, row);
+  });
+  varianceRows.forEach((row) => {
+    if (!metaByFactor.has(row.factor_id)) metaByFactor.set(row.factor_id, row);
+  });
+  positions.forEach((row) => {
+    if (row.coverage !== "covered") return;
+    normalizeCparLoadings(row.thresholded_contributions).forEach((contribution) => {
+      if (Math.abs(contribution.beta) <= 1e-12) return;
+      if (!metaByFactor.has(contribution.factor_id)) metaByFactor.set(contribution.factor_id, contribution);
+    });
+  });
+
+  return [...metaByFactor.values()]
+    .sort((left, right) => (
+      left.display_order - right.display_order
+      || left.factor_id.localeCompare(right.factor_id)
+    ))
+    .map((meta) => {
+      const drilldown = positions
+        .filter((row) => row.coverage === "covered")
+        .map((row) => {
+          const contribution = normalizeCparLoadings(row.thresholded_contributions).find(
+            (item) => item.factor_id === meta.factor_id,
+          );
+          if (!contribution || Math.abs(contribution.beta) <= 1e-12) return null;
+          const weight = row.portfolio_weight;
+          const factorBeta = typeof weight === "number" && Math.abs(weight) > 1e-12
+            ? contribution.beta / weight
+            : null;
+          return {
+            ric: row.ric,
+            ticker: row.ticker,
+            display_name: row.display_name,
+            market_value: row.market_value,
+            portfolio_weight: row.portfolio_weight,
+            fit_status: row.fit_status,
+            warnings: row.warnings,
+            coverage: row.coverage,
+            coverage_reason: row.coverage_reason,
+            factor_beta: factorBeta,
+            contribution_beta: contribution.beta,
+          } satisfies CparFactorDrilldownRow;
+        })
+        .filter((row): row is CparFactorDrilldownRow => row !== null)
+        .sort((left, right) => Math.abs(right.contribution_beta) - Math.abs(left.contribution_beta));
+      const aggregate = aggregateByFactor.get(meta.factor_id);
+      const variance = varianceByFactor.get(meta.factor_id);
+      return {
+        ...meta,
+        beta: aggregate?.beta ?? 0,
+        aggregate_beta: aggregate?.beta ?? 0,
+        positive_contribution_beta: drilldown.reduce(
+          (sum, row) => sum + Math.max(row.contribution_beta, 0),
+          0,
+        ),
+        negative_contribution_beta: drilldown.reduce(
+          (sum, row) => sum + Math.min(row.contribution_beta, 0),
+          0,
+        ),
+        variance_contribution: variance?.variance_contribution ?? 0,
+        variance_share: variance?.variance_share ?? 0,
+        drilldown,
+      } satisfies CparFactorChartRow;
+    });
+}
+
+function normalizeCparPortfolioPositionRow(row: CparPortfolioPositionRow): CparPortfolioPositionRow {
+  return {
+    ...row,
+    thresholded_contributions: normalizeCparLoadings(row.thresholded_contributions),
+  };
+}
+
+export function normalizeCparPortfolioHedgeData(
+  portfolio: CparPortfolioHedgeData | null | undefined,
+): CparPortfolioHedgeData | null {
+  if (!portfolio) return null;
+  const positions = Array.isArray(portfolio.positions)
+    ? portfolio.positions.map(normalizeCparPortfolioPositionRow)
+    : [];
+  const aggregateThresholdedLoadings = normalizeCparLoadings(portfolio.aggregate_thresholded_loadings);
+  const factorVarianceContributions = normalizeCparVarianceContributions(portfolio.factor_variance_contributions);
+  return {
+    ...portfolio,
+    aggregate_thresholded_loadings: aggregateThresholdedLoadings,
+    coverage_breakdown: normalizeCparCoverageBreakdown(portfolio.coverage_breakdown || EMPTY_CPAR_COVERAGE_BREAKDOWN),
+    factor_variance_contributions: factorVarianceContributions,
+    factor_chart: deriveCparFactorChartRows({
+      aggregate_thresholded_loadings: aggregateThresholdedLoadings,
+      factor_variance_contributions: factorVarianceContributions,
+      positions,
+    }),
+    positions,
+  };
+}
+
+export function normalizeCparPortfolioWhatIfData(
+  whatIf: CparPortfolioWhatIfData | null | undefined,
+): CparPortfolioWhatIfData | null {
+  if (!whatIf) return null;
+  return {
+    ...whatIf,
+    current: normalizeCparPortfolioHedgeData(whatIf.current) as CparPortfolioHedgeData,
+    hypothetical: normalizeCparPortfolioHedgeData(whatIf.hypothetical) as CparPortfolioHedgeData,
+  };
 }
 
 export function readCparError(error: unknown): CparErrorSummary {

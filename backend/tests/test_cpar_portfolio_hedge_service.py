@@ -167,6 +167,13 @@ def test_portfolio_hedge_service_returns_partial_account_payload(monkeypatch: py
     assert payload["factor_variance_contributions"][1]["beta"] == pytest.approx(0.3)
     assert payload["factor_variance_contributions"][1]["variance_contribution"] == pytest.approx(0.156)
     assert payload["factor_variance_contributions"][1]["variance_share"] == pytest.approx(0.156 / 1.432)
+    assert [row["factor_id"] for row in payload["factor_chart"]] == ["SPY", "XLK"]
+    assert payload["factor_chart"][0]["aggregate_beta"] == pytest.approx(1.1)
+    assert payload["factor_chart"][0]["positive_contribution_beta"] == pytest.approx(1.1)
+    assert payload["factor_chart"][0]["negative_contribution_beta"] == pytest.approx(0.0)
+    assert payload["factor_chart"][0]["variance_share"] == pytest.approx(1.276 / 1.432)
+    assert payload["factor_chart"][0]["drilldown"][0]["factor_beta"] == pytest.approx(1.1)
+    assert payload["factor_chart"][0]["drilldown"][0]["contribution_beta"] == pytest.approx(1.1)
     covered_row = next(row for row in payload["positions"] if row["ric"] == "AAPL.OQ")
     assert covered_row["thresholded_contributions"][0] == {
         "factor_id": "SPY",
@@ -189,6 +196,107 @@ def test_portfolio_hedge_service_returns_partial_account_payload(monkeypatch: py
             reconciled[factor_id] = float(reconciled.get(factor_id, 0.0) + float(contribution["beta"]))
     assert reconciled == {"SPY": pytest.approx(1.1), "XLK": pytest.approx(0.3)}
     assert {row["coverage"] for row in payload["positions"]} == {"covered", "insufficient_history", "missing_price"}
+
+
+def test_portfolio_hedge_service_factor_chart_preserves_positive_and_negative_contribution_legs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_holdings_accounts",
+        lambda: [{"account_id": "acct_long_short", "account_name": "Long Short", "positions_count": 2}],
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_holdings_positions",
+        lambda *, account_id: [
+            {"account_id": "acct_long_short", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": None},
+            {"account_id": "acct_long_short", "ric": "SHRT.OQ", "ticker": "SHRT", "quantity": -5.0, "source": "seed", "updated_at": None},
+        ],
+    )
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_package_instrument_fits_for_rics",
+        lambda rics, **kwargs: [
+            _fit_row(ric="AAPL.OQ", ticker="AAPL", thresholded_loadings={"SPY": 1.0}),
+            _fit_row(ric="SHRT.OQ", ticker="SHRT", thresholded_loadings={"SPY": 0.8}),
+        ],
+    )
+    monkeypatch.setattr(cpar_outputs, "load_package_covariance_rows", lambda *args, **kwargs: _covariance_rows())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda rics, **kwargs: [
+            {"ric": "AAPL.OQ", "date": "2026-03-14", "close": 100.0, "adj_close": 100.0},
+            {"ric": "SHRT.OQ", "date": "2026-03-14", "close": 100.0, "adj_close": 100.0},
+        ],
+    )
+
+    payload = cpar_portfolio_hedge_service.load_cpar_portfolio_hedge_payload(
+        account_id="acct_long_short",
+        mode="factor_neutral",
+    )
+
+    factor_row = payload["factor_chart"][0]
+    assert factor_row["factor_id"] == "SPY"
+    assert factor_row["aggregate_beta"] == pytest.approx(0.4)
+    assert factor_row["positive_contribution_beta"] == pytest.approx(10.0 / 15.0)
+    assert factor_row["negative_contribution_beta"] == pytest.approx(-4.0 / 15.0)
+    assert [row["ric"] for row in factor_row["drilldown"]] == ["AAPL.OQ", "SHRT.OQ"]
+    assert factor_row["drilldown"][0]["contribution_beta"] == pytest.approx(10.0 / 15.0)
+    assert factor_row["drilldown"][1]["contribution_beta"] == pytest.approx(-4.0 / 15.0)
+
+
+def test_portfolio_hedge_service_keeps_zero_net_factor_rows_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_holdings_accounts",
+        lambda: [{"account_id": "acct_flat", "account_name": "Flat", "positions_count": 2}],
+    )
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.holdings_reads,
+        "load_holdings_positions",
+        lambda *, account_id: [
+            {"account_id": "acct_flat", "ric": "LONG.OQ", "ticker": "LONG", "quantity": 10.0, "source": "seed", "updated_at": None},
+            {"account_id": "acct_flat", "ric": "SHRT.OQ", "ticker": "SHRT", "quantity": -10.0, "source": "seed", "updated_at": None},
+        ],
+    )
+    monkeypatch.setattr(
+        cpar_outputs,
+        "load_package_instrument_fits_for_rics",
+        lambda rics, **kwargs: [
+            _fit_row(ric="LONG.OQ", ticker="LONG", thresholded_loadings={"SPY": 1.0}),
+            _fit_row(ric="SHRT.OQ", ticker="SHRT", thresholded_loadings={"SPY": 1.0}),
+        ],
+    )
+    monkeypatch.setattr(cpar_outputs, "load_package_covariance_rows", lambda *args, **kwargs: _covariance_rows())
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda rics, **kwargs: [
+            {"ric": "LONG.OQ", "date": "2026-03-14", "close": 100.0, "adj_close": 100.0},
+            {"ric": "SHRT.OQ", "date": "2026-03-14", "close": 100.0, "adj_close": 100.0},
+        ],
+    )
+
+    payload = cpar_portfolio_hedge_service.load_cpar_portfolio_hedge_payload(
+        account_id="acct_flat",
+        mode="factor_neutral",
+    )
+
+    assert payload["portfolio_status"] == "ok"
+    assert payload["aggregate_thresholded_loadings"] == []
+    assert payload["hedge_status"] == "hedge_ok"
+    assert payload["hedge_reason"] == "no_material_factor_exposures"
+    assert payload["factor_chart"][0]["factor_id"] == "SPY"
+    assert payload["factor_chart"][0]["aggregate_beta"] == pytest.approx(0.0)
+    assert payload["factor_chart"][0]["positive_contribution_beta"] == pytest.approx(0.5)
+    assert payload["factor_chart"][0]["negative_contribution_beta"] == pytest.approx(-0.5)
+    assert payload["factor_chart"][0]["variance_share"] == pytest.approx(0.0)
 
 
 def test_portfolio_hedge_service_returns_empty_payload_for_account_without_positions(

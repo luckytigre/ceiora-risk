@@ -4428,6 +4428,126 @@ main {
   background: linear-gradient(90deg, rgba(88, 176, 220, 0.78), rgba(155, 200, 229, 0.56));
 }
 
+.cpar-factor-chart-shell {
+  margin: 16px 0 18px;
+}
+
+.cpar-factor-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.cpar-factor-chart-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cpar-factor-chart-group-label {
+  margin: 8px 0 6px;
+  color: rgba(188, 200, 228, 0.62);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cpar-factor-chart-row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(154, 171, 214, 0.10);
+  border-radius: 6px;
+  background: rgba(12, 16, 26, 0.26);
+  color: inherit;
+  text-align: left;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.cpar-factor-chart-row:hover,
+.cpar-factor-chart-row.selected {
+  border-color: rgba(105, 177, 222, 0.34);
+  background: rgba(14, 20, 32, 0.40);
+}
+
+.cpar-factor-chart-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cpar-factor-chart-label {
+  color: rgba(232, 237, 249, 0.94);
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.cpar-factor-chart-values {
+  display: flex;
+  gap: 12px;
+  color: rgba(188, 200, 228, 0.72);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cpar-factor-chart-track {
+  position: relative;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(224, 87, 127, 0.08) 0%, rgba(224, 87, 127, 0.02) 50%, transparent 50%),
+    linear-gradient(90deg, transparent 50%, rgba(88, 176, 220, 0.02) 50%, rgba(88, 176, 220, 0.08) 100%),
+    rgba(154, 171, 214, 0.08);
+}
+
+.cpar-factor-chart-axis {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: rgba(188, 200, 228, 0.18);
+}
+
+.cpar-factor-chart-bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 999px;
+}
+
+.cpar-factor-chart-bar.negative {
+  background: linear-gradient(90deg, rgba(224, 87, 127, 0.40), rgba(224, 87, 127, 0.82));
+}
+
+.cpar-factor-chart-bar.positive {
+  background: linear-gradient(90deg, rgba(88, 176, 220, 0.82), rgba(155, 200, 229, 0.58));
+}
+
+.cpar-factor-chart-marker {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 999px;
+  background: rgba(245, 247, 252, 0.94);
+  box-shadow: 0 0 0 1px rgba(8, 12, 18, 0.40);
+}
+
+.cpar-factor-drilldown-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0;
+}
+
 .cpar-risk-mix-list {
   display: flex;
   flex-direction: column;
@@ -4483,9 +4603,15 @@ main {
   }
 
   .cpar-risk-share-header,
-  .cpar-risk-mix-item {
+  .cpar-risk-mix-item,
+  .cpar-factor-chart-meta,
+  .cpar-factor-drilldown-toolbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .cpar-factor-chart-values {
+    flex-wrap: wrap;
   }
 }
 

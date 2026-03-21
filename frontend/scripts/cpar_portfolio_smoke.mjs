@@ -235,6 +235,7 @@ try {
             portfolio_reason: "No live holdings positions are loaded for this account.",
             aggregate_thresholded_loadings: [],
             factor_variance_contributions: [],
+            factor_chart: [],
             hedge_status: null,
             hedge_reason: null,
             hedge_legs: [],
@@ -284,6 +285,7 @@ try {
             portfolio_reason: "No holdings rows in this account have both price coverage and a usable persisted cPAR fit in the active package.",
             aggregate_thresholded_loadings: [],
             factor_variance_contributions: [],
+            factor_chart: [],
             hedge_status: null,
             hedge_reason: null,
             hedge_legs: [],
@@ -359,12 +361,6 @@ try {
           net_market_value: 2415.0,
           covered_gross_market_value: 2415.0,
           coverage_ratio: 0.96,
-          coverage_breakdown: {
-            covered: { positions_count: 2, gross_market_value: 2415.0 },
-            missing_price: { positions_count: 1, gross_market_value: 0 },
-            missing_cpar_fit: { positions_count: 0, gross_market_value: 0 },
-            insufficient_history: { positions_count: 0, gross_market_value: 0 },
-          },
           portfolio_status: "partial",
           portfolio_reason: "Some holdings rows were excluded because they lack price coverage or a usable persisted cPAR fit.",
           aggregate_thresholded_loadings: [
@@ -389,6 +385,88 @@ try {
               beta: 0.28,
               variance_contribution: 0.048,
               variance_share: 0.2526,
+            },
+          ],
+          factor_chart: [
+            {
+              factor_id: "SPY",
+              label: "Market",
+              group: "market",
+              display_order: 0,
+              beta: 1.04,
+              aggregate_beta: 1.04,
+              positive_contribution_beta: 1.04,
+              negative_contribution_beta: 0,
+              variance_contribution: 0.142,
+              variance_share: 0.7474,
+              drilldown: [
+                {
+                  ric: "AAPL.OQ",
+                  ticker: "AAPL",
+                  display_name: "Apple Inc.",
+                  market_value: 2010,
+                  portfolio_weight: 0.8323,
+                  fit_status: "ok",
+                  warnings: [],
+                  coverage: "covered",
+                  coverage_reason: null,
+                  factor_beta: 1.12,
+                  contribution_beta: 0.93,
+                },
+                {
+                  ric: "MSFT.OQ",
+                  ticker: "MSFT",
+                  display_name: "Microsoft Corp",
+                  market_value: 405,
+                  portfolio_weight: 0.1677,
+                  fit_status: "limited_history",
+                  warnings: ["continuity_gap"],
+                  coverage: "covered",
+                  coverage_reason: null,
+                  factor_beta: 0.655932021466904,
+                  contribution_beta: 0.11,
+                },
+              ],
+            },
+            {
+              factor_id: "XLK",
+              label: "Technology",
+              group: "sector",
+              display_order: 15,
+              beta: 0.28,
+              aggregate_beta: 0.28,
+              positive_contribution_beta: 0.28,
+              negative_contribution_beta: 0,
+              variance_contribution: 0.048,
+              variance_share: 0.2526,
+              drilldown: [
+                {
+                  ric: "AAPL.OQ",
+                  ticker: "AAPL",
+                  display_name: "Apple Inc.",
+                  market_value: 2010,
+                  portfolio_weight: 0.8323,
+                  fit_status: "ok",
+                  warnings: [],
+                  coverage: "covered",
+                  coverage_reason: null,
+                  factor_beta: 0.28835756337858705,
+                  contribution_beta: 0.24,
+                },
+                {
+                  ric: "MSFT.OQ",
+                  ticker: "MSFT",
+                  display_name: "Microsoft Corp",
+                  market_value: 405,
+                  portfolio_weight: 0.1677,
+                  fit_status: "limited_history",
+                  warnings: ["continuity_gap"],
+                  coverage: "covered",
+                  coverage_reason: null,
+                  factor_beta: 0.238520,
+                  contribution_beta: 0.04,
+                },
+              ],
             },
           ],
           hedge_status: "hedge_ok",
@@ -484,7 +562,11 @@ try {
     await page.getByTestId("cpar-risk-positions").waitFor();
     await page.getByTestId("cpar-risk-coverage-breakdown").waitFor();
     await page.getByText("Partial Coverage").waitFor();
-    await page.getByRole("heading", { name: "Factor Contribution Profile" }).waitFor();
+    await page.getByRole("heading", { name: "Factor Loadings Profile" }).waitFor();
+    await page.getByTestId("cpar-risk-factor-chart").waitFor();
+    await page.getByTestId("cpar-risk-factor-drilldown").waitFor();
+    await page.getByRole("button", { name: /Technology/i }).click();
+    await page.getByRole("heading", { name: "Technology Drilldown" }).waitFor();
     await page.getByRole("heading", { name: "Positions (Contribution Mix)" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "RECALC" }).count(), 0);

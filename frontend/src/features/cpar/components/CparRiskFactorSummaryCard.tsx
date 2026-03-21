@@ -1,29 +1,46 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import HelpLabel from "@/components/HelpLabel";
 import { formatCparNumber, formatCparPercent } from "@/lib/cparTruth";
 import type { CparPortfolioHedgeData } from "@/lib/types/cpar";
+import CparRiskFactorDrilldown from "./CparRiskFactorDrilldown";
+import CparRiskFactorLoadingsChart from "./CparRiskFactorLoadingsChart";
 
 export default function CparRiskFactorSummaryCard({
   portfolio,
 }: {
   portfolio: CparPortfolioHedgeData;
 }) {
-  const factorRows = [...portfolio.factor_variance_contributions].sort(
-    (left, right) => Math.abs(right.variance_share || 0) - Math.abs(left.variance_share || 0),
-  );
+  const factorRows = useMemo(() => (
+    [...portfolio.factor_chart].sort((left, right) => (
+      left.display_order - right.display_order
+      || Math.abs(right.aggregate_beta) - Math.abs(left.aggregate_beta)
+      || left.factor_id.localeCompare(right.factor_id)
+    ))
+  ), [portfolio.factor_chart]);
+  const [selectedFactorId, setSelectedFactorId] = useState<string | null>(factorRows[0]?.factor_id || null);
+
+  useEffect(() => {
+    setSelectedFactorId((current) => (
+      current && factorRows.some((row) => row.factor_id === current)
+        ? current
+        : factorRows[0]?.factor_id || null
+    ));
+  }, [factorRows]);
+
+  const selectedFactor = factorRows.find((row) => row.factor_id === selectedFactorId) || factorRows[0] || null;
 
   return (
     <section className="chart-card" data-testid="cpar-risk-factor-summary">
-      <h3>Factor Contribution Profile</h3>
+      <h3>Factor Loadings Profile</h3>
       <div className="section-subtitle">
-        This summary stays factor-only. It uses the aggregate thresholded portfolio vector from covered rows plus
-        the active-package covariance surface. It still does not introduce cUSE-style risk shares, specific risk,
-        or covariance heatmaps.
+        This stays cPAR-native. The chart decomposes each factor into negative and positive covered-row contributions,
+        keeps the net aggregate beta explicit, and uses the same package-scoped snapshot that drives the hedge preview.
       </div>
 
       <div className="cpar-badge-row compact">
-        <span className="cpar-detail-chip">{portfolio.aggregate_thresholded_loadings.length} active factors</span>
+        <span className="cpar-detail-chip">{factorRows.length} active factors</span>
         <span className="cpar-detail-chip">
           Pre Var {formatCparNumber(portfolio.pre_hedge_factor_variance_proxy, 3)}
         </span>
@@ -35,22 +52,13 @@ export default function CparRiskFactorSummaryCard({
         </div>
       ) : (
         <>
-          <div className="cpar-risk-share-stack" aria-hidden="true">
-            {factorRows.map((row) => (
-              <div key={row.factor_id} className="cpar-risk-share-row">
-                <div className="cpar-risk-share-header">
-                  <span className="cpar-risk-share-label">{row.label}</span>
-                  <span className="cpar-risk-share-value">{formatCparPercent(row.variance_share, 1)}</span>
-                </div>
-                <div className="cpar-risk-share-bar">
-                  <span
-                    className="cpar-risk-share-fill"
-                    style={{ width: `${Math.max(4, Math.min(100, Math.abs((row.variance_share || 0) * 100)))}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+          <CparRiskFactorLoadingsChart
+            rows={factorRows}
+            selectedFactorId={selectedFactor?.factor_id || null}
+            onSelectFactor={setSelectedFactorId}
+          />
+
+          {selectedFactor ? <CparRiskFactorDrilldown factor={selectedFactor} /> : null}
 
           <div className="dash-table">
             <table>
@@ -94,7 +102,7 @@ export default function CparRiskFactorSummaryCard({
                       <span className="cpar-table-sub">{row.factor_id}</span>
                     </td>
                     <td>{row.group}</td>
-                    <td className="text-right cpar-number-cell">{formatCparNumber(row.beta, 3)}</td>
+                    <td className="text-right cpar-number-cell">{formatCparNumber(row.aggregate_beta, 3)}</td>
                     <td className="text-right cpar-number-cell">{formatCparPercent(row.variance_share, 1)}</td>
                   </tr>
                 ))}

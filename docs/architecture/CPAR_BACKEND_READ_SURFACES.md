@@ -65,7 +65,7 @@ It does not add:
 - stages signed share deltas only; it does not mutate holdings or apply trades
 - additions outside the current holdings set must come from active-package search hits and therefore must be present in the active persisted cPAR fits
 - response returns `scenario_rows`, `current`, `hypothetical`, and `_preview_only = true`
-- the nested `current` and `hypothetical` snapshots carry the same `coverage_breakdown`, `factor_variance_contributions`, and per-position `thresholded_contributions` contract as the baseline hedge route
+- the nested `current` and `hypothetical` snapshots carry the same `coverage_breakdown`, `factor_variance_contributions`, `factor_chart`, and per-position `thresholded_contributions` contract as the baseline hedge route
 
 ## Read Authority
 
@@ -95,6 +95,7 @@ Account-scoped owners:
 - Slice 4 extends that shared snapshot owner instead of adding a new `/api/cpar/portfolio/risk` route family:
   - `coverage_breakdown` remains the explicit bucketed exclusion summary
   - `factor_variance_contributions` remains a factor-only decomposition of the same aggregate thresholded exposure vector already used for hedge preview
+  - `factor_chart[]` now packages the signed positive/negative contribution arms plus per-factor drilldown rows used by `/cpar/risk`
   - `positions[].thresholded_contributions` remains the per-position weighted contribution view derived from covered rows only
 - richer `/cpar/risk` analytics should extend those current owners, or add one clearly distinct cPAR-specific account-risk owner only if the new payload cannot be expressed cleanly through the current split
 
