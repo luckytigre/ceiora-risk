@@ -6,6 +6,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVICE_FILES = [
+    REPO_ROOT / "backend" / "services" / "cpar_explore_whatif_service.py",
+    REPO_ROOT / "backend" / "services" / "cpar_ticker_history_service.py",
+    REPO_ROOT / "backend" / "services" / "cpar_ticker_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_meta_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_search_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_risk_service.py",
@@ -134,9 +137,12 @@ def test_cpar_routes_do_not_import_data_layers() -> None:
 def test_cpar_route_module_uses_current_explicit_service_owners() -> None:
     path = ROUTE_FILES[0]
     expected_tokens = {
+        "cpar_explore_whatif_service",
         "cpar_meta_service",
         "cpar_search_service",
         "cpar_risk_service",
+        "cpar_ticker_history_service",
+        "cpar_ticker_service",
         "cpar_factor_history_service",
         "cpar_portfolio_hedge_service",
         "cpar_portfolio_whatif_service",

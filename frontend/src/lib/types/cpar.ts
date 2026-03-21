@@ -258,6 +258,19 @@ export interface CparFactorHistoryData {
   _cached: boolean;
 }
 
+export interface CparTickerHistoryPoint {
+  date: string;
+  close: number;
+}
+
+export interface CparTickerHistoryData {
+  ticker: string;
+  ric: string;
+  years: number;
+  points: CparTickerHistoryPoint[];
+  _cached: boolean;
+}
+
 export interface CparRiskData extends CparPackageMeta {
   scope: CparRiskScope;
   accounts_count: number;
@@ -335,5 +348,99 @@ export interface CparPortfolioWhatIfData extends CparPackageMeta {
   scenario_rows: CparPortfolioWhatIfScenarioRow[];
   current: CparPortfolioHedgeData;
   hypothetical: CparPortfolioHedgeData;
+  _preview_only: boolean;
+}
+
+export interface CparExploreScenarioRow {
+  account_id: string;
+  ticker: string | null;
+  ric: string;
+  quantity: number;
+  source?: string | null;
+}
+
+export interface CparExploreHoldingDelta {
+  account_id: string;
+  ticker: string | null;
+  ric: string;
+  current_quantity: number;
+  hypothetical_quantity: number;
+  delta_quantity: number;
+}
+
+export interface CparExploreRiskShares {
+  market: number;
+  industry: number;
+  style: number;
+  idio: number;
+}
+
+export interface CparExploreExposureDrilldownRow {
+  ric: string | null;
+  ticker: string | null;
+  display_name: string | null;
+  weight: number;
+  exposure: number;
+  sensitivity: number;
+  contribution: number;
+  fit_status: CparFitStatus | null;
+  coverage: CparPortfolioCoverage | null;
+}
+
+export interface CparExploreExposureRow {
+  factor_id: string;
+  label: string | null;
+  group: CparFactorGroup | null;
+  display_order: number;
+  value: number;
+  factor_volatility: number;
+  drilldown: CparExploreExposureDrilldownRow[];
+}
+
+export interface CparExplorePreviewSide {
+  scope: CparRiskScope;
+  positions: CparPortfolioPositionRow[];
+  total_value: number;
+  position_count: number;
+  risk_shares: CparExploreRiskShares;
+  exposure_modes: {
+    raw: CparExploreExposureRow[];
+    sensitivity: CparExploreExposureRow[];
+    risk_contribution: CparExploreExposureRow[];
+  };
+  factor_catalog: CparFactorSpec[];
+  portfolio_status: CparPortfolioStatus;
+  portfolio_reason: string | null;
+}
+
+export interface CparExploreFactorDeltaRow {
+  factor_id: string;
+  current: number;
+  hypothetical: number;
+  delta: number;
+}
+
+export interface CparExploreWhatIfData extends CparPackageMeta {
+  scenario_rows: CparExploreScenarioRow[];
+  holding_deltas: CparExploreHoldingDelta[];
+  current: CparExplorePreviewSide;
+  hypothetical: CparExplorePreviewSide;
+  diff: {
+    total_value: number;
+    position_count: number;
+    risk_shares: CparExploreRiskShares;
+    factor_deltas: {
+      raw: CparExploreFactorDeltaRow[];
+      sensitivity: CparExploreFactorDeltaRow[];
+      risk_contribution: CparExploreFactorDeltaRow[];
+    };
+  };
+  source_dates?: {
+    prices_asof?: string | null;
+    classification_asof?: string | null;
+    exposures_asof?: string | null;
+    exposures_served_asof?: string | null;
+  };
+  truth_surface?: string | null;
   _preview_only: boolean;
 }

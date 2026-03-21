@@ -5,11 +5,16 @@
 
 export {
   ApiError,
+  applyPortfolioWhatIf,
+  previewCparExploreWhatIf,
   useCparFactorHistory,
   useCparMeta,
+  useCparTicker,
+  useCparTickerHistory,
   useCparRisk,
   useCparPortfolioHedge,
   useCparPortfolioWhatIf,
   useCparSearch,
   useHoldingsAccounts,
+  useHoldingsPositions,
 } from "@/hooks/useApi";

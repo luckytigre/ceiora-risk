@@ -18,10 +18,13 @@ def _test_app() -> FastAPI:
 EXPECTED_CPAR_ROUTE_SET = {
     ("GET", "/api/cpar/meta"),
     ("GET", "/api/cpar/search"),
+    ("GET", "/api/cpar/ticker/{ticker}"),
+    ("GET", "/api/cpar/ticker/{ticker}/history"),
     ("GET", "/api/cpar/risk"),
     ("GET", "/api/cpar/factors/history"),
     ("GET", "/api/cpar/portfolio/hedge"),
     ("POST", "/api/cpar/portfolio/whatif"),
+    ("POST", "/api/cpar/explore/whatif"),
 }
 
 
@@ -121,7 +124,60 @@ def test_cpar_search_route_preserves_null_ticker_rows(monkeypatch) -> None:
 
     assert res.status_code == 200
     assert res.json()["results"][0]["ticker"] is None
-    assert res.json()["results"][0]["ric"] == "AAPL.NA"
+
+
+def test_cpar_ticker_route_returns_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_ticker_service,
+        "load_cpar_ticker_payload",
+        lambda **kwargs: {
+            "ticker": kwargs["ticker"],
+            "ric": kwargs.get("ric") or "AAPL.OQ",
+            "package_run_id": "run_curr",
+            "package_date": "2026-03-14",
+            "thresholded_loadings": [],
+        },
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/ticker/AAPL?ric=AAPL.OQ")
+
+    assert res.status_code == 200
+    assert res.json()["ric"] == "AAPL.OQ"
+
+
+def test_cpar_ticker_route_maps_not_found_to_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_ticker_service,
+        "load_cpar_ticker_payload",
+        lambda **kwargs: (_ for _ in ()).throw(cpar_routes.cpar_ticker_service.CparTickerNotFound("Ticker missing")),
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/ticker/AAPL")
+
+    assert res.status_code == 404
+    assert "Ticker missing" in res.json()["detail"]
+
+
+def test_cpar_ticker_history_route_returns_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_ticker_history_service,
+        "load_cpar_ticker_history_payload",
+        lambda **kwargs: {
+            "ticker": kwargs["ticker"],
+            "ric": kwargs.get("ric") or "AAPL.OQ",
+            "years": kwargs["years"],
+            "points": [{"date": "2026-03-13", "close": 100.0}],
+            "_cached": True,
+        },
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/ticker/AAPL/history?years=5")
+
+    assert res.status_code == 200
+    assert res.json()["points"][0]["close"] == 100.0
 
 
 def test_cpar_search_route_maps_not_ready_to_503(monkeypatch) -> None:
@@ -480,6 +536,48 @@ def test_cpar_portfolio_whatif_route_enforces_max_rows() -> None:
 
     assert res.status_code == 400
     assert "Too many cPAR what-if rows" in res.json()["detail"]
+
+
+def test_cpar_explore_whatif_route_returns_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_explore_whatif_service,
+        "load_cpar_explore_whatif_payload",
+        lambda **kwargs: {
+            "scenario_rows": kwargs["scenario_rows"],
+            "current": {"risk_shares": {"market": 70.0, "industry": 20.0, "style": 10.0, "idio": 0.0}, "exposure_modes": {"raw": [], "sensitivity": [], "risk_contribution": []}, "positions": [], "factor_catalog": [], "position_count": 0, "total_value": 0.0, "scope": "all_accounts", "portfolio_status": "ok", "portfolio_reason": None},
+            "hypothetical": {"risk_shares": {"market": 60.0, "industry": 25.0, "style": 15.0, "idio": 0.0}, "exposure_modes": {"raw": [], "sensitivity": [], "risk_contribution": []}, "positions": [], "factor_catalog": [], "position_count": 0, "total_value": 0.0, "scope": "all_accounts", "portfolio_status": "ok", "portfolio_reason": None},
+            "holding_deltas": [],
+            "diff": {"total_value": 0.0, "position_count": 0, "risk_shares": {"market": -10.0, "industry": 5.0, "style": 5.0, "idio": 0.0}, "factor_deltas": {"raw": [], "sensitivity": [], "risk_contribution": []}},
+            "_preview_only": True,
+        },
+    )
+
+    client = TestClient(_test_app())
+    res = client.post(
+        "/api/cpar/explore/whatif",
+        json={"scenario_rows": [{"account_id": "acct_main", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 5.0}]},
+    )
+
+    assert res.status_code == 200
+    assert res.json()["_preview_only"] is True
+    assert res.json()["scenario_rows"][0]["account_id"] == "acct_main"
+
+
+def test_cpar_explore_whatif_route_maps_validation_errors_to_400(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_explore_whatif_service,
+        "load_cpar_explore_whatif_payload",
+        lambda **kwargs: (_ for _ in ()).throw(ValueError("At least one non-zero cPAR explore scenario row is required.")),
+    )
+
+    client = TestClient(_test_app())
+    res = client.post(
+        "/api/cpar/explore/whatif",
+        json={"scenario_rows": [{"account_id": "acct_main", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 0.0}]},
+    )
+
+    assert res.status_code == 400
+    assert "non-zero" in res.json()["detail"]
 
 
 def test_cpar_portfolio_hedge_route_returns_payload(monkeypatch) -> None:

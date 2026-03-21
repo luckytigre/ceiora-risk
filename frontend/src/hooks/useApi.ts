@@ -12,6 +12,9 @@ import type {
   CparFactorHistoryData,
   CparMetaData,
   CparRiskData,
+  CparTickerDetailData,
+  CparTickerHistoryData,
+  CparExploreWhatIfData,
   CparPortfolioHedgeData,
   CparPortfolioWhatIfData,
   CparSearchData,
@@ -78,6 +81,20 @@ export function useCparSearch(query: string, limit = 10) {
   return useSWR<CparSearchData>(key, apiFetch, SWR_OPTS);
 }
 
+export function useCparTicker(ticker: string | null, ric?: string | null) {
+  const cleanTicker = ticker?.trim().toUpperCase() || null;
+  const cleanRic = ric?.trim().toUpperCase() || null;
+  const key = cleanTicker ? apiPath.cparTicker(cleanTicker, cleanRic) : null;
+  return useSWR<{ item: CparTickerDetailData }>(key, apiFetch, SWR_OPTS);
+}
+
+export function useCparTickerHistory(ticker: string | null, years = 5, ric?: string | null) {
+  const cleanTicker = ticker?.trim().toUpperCase() || null;
+  const cleanRic = ric?.trim().toUpperCase() || null;
+  const key = cleanTicker ? apiPath.cparTickerHistory(cleanTicker, years, cleanRic) : null;
+  return useSWR<CparTickerHistoryData>(key, apiFetch, SWR_OPTS);
+}
+
 export function useCparRisk(enabled = true) {
   return useSWR<CparRiskData>(enabled ? apiPath.cparRisk() : null, apiFetch, SWR_OPTS);
 }
@@ -127,6 +144,22 @@ export function useCparPortfolioWhatIf(
     }),
     SWR_OPTS,
   );
+}
+
+export async function previewCparExploreWhatIf(payload: {
+  scenario_rows: Array<{
+    account_id: string;
+    ticker?: string | null;
+    ric: string;
+    quantity: number;
+    source?: string | null;
+  }>;
+}): Promise<CparExploreWhatIfData> {
+  return apiFetch<CparExploreWhatIfData>(apiPath.cparExploreWhatIf(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function useHoldingsModes() {

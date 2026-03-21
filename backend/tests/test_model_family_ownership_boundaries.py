@@ -98,6 +98,8 @@ ALLOWED_ROOT_CUSE4_COMPONENT_PREFIXES = (
 ALLOWED_ROOT_CUSE4_COMPONENT_EXACT = {
     "features/cpar/components/CparCovarianceHeatmap.tsx",
     "features/cpar/components/CparFactorHistoryChart.tsx",
+    "features/cpar/components/CparExposureBarChart.tsx",
+    "features/cpar/components/CparTickerPriceChart.tsx",
 }
 
 

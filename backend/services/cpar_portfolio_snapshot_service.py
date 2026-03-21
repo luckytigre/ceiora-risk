@@ -598,7 +598,7 @@ def load_cpar_portfolio_account_context(
     return package, account, positions
 
 
-def load_cpar_portfolio_aggregate_context(
+def load_cpar_portfolio_holdings_context(
     *,
     data_db=None,
 ) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, Any]]]:
@@ -610,7 +610,21 @@ def load_cpar_portfolio_aggregate_context(
     except holdings_reads.HoldingsReadError as exc:
         raise cpar_meta_service.CparReadUnavailable(f"Holdings read failed: {exc}") from exc
 
-    aggregated_positions, contributing_accounts = _aggregate_positions_across_accounts(live_positions)
+    return package, accounts, live_positions
+
+
+def aggregate_cpar_positions_across_accounts(
+    positions: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, object]]]:
+    return _aggregate_positions_across_accounts(positions)
+
+
+def load_cpar_portfolio_aggregate_context(
+    *,
+    data_db=None,
+) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, Any]]]:
+    package, accounts, live_positions = load_cpar_portfolio_holdings_context(data_db=data_db)
+    aggregated_positions, contributing_accounts = aggregate_cpar_positions_across_accounts(live_positions)
     account_names = {
         _normalize_account_id(str(row.get("account_id") or "")): str(
             row.get("account_name") or row.get("account_id") or ""

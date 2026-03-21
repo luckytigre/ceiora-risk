@@ -64,18 +64,19 @@ async function cleanup() {
   ]);
 }
 
-async function assertPlaceholder(pathname, title, testId) {
+async function assertPage(pathname, patterns) {
   const response = await fetch(`${BASE_URL}${pathname}`);
   assert.equal(response.status, 200, `${pathname} should resolve`);
   const html = await response.text();
-  assert.match(html, new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(html, new RegExp(testId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const pattern of patterns) {
+    assert.match(html, new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 }
 
 try {
   await waitForServer(`${BASE_URL}/cpar/explore`);
-  await assertPlaceholder("/cpar/explore", "cPAR Explore Reset", "cpar-explore-reset");
-  await assertPlaceholder("/cpar/health", "cPAR Health Reset", "cpar-health-reset");
+  await assertPage("/cpar/explore", ["cpar-explore-page", "Position What-If"]);
+  await assertPage("/cpar/health", ["cPAR Health Reset", "cpar-health-reset"]);
   await cleanup();
 } catch (error) {
   console.error("STDOUT tail:\n", tail(serverStdout));
