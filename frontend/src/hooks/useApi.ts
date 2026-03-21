@@ -85,7 +85,7 @@ export function useCparTicker(ticker: string | null, ric?: string | null) {
   const cleanTicker = ticker?.trim().toUpperCase() || null;
   const cleanRic = ric?.trim().toUpperCase() || null;
   const key = cleanTicker ? apiPath.cparTicker(cleanTicker, cleanRic) : null;
-  return useSWR<{ item: CparTickerDetailData }>(key, apiFetch, SWR_OPTS);
+  return useSWR<CparTickerDetailData>(key, apiFetch, SWR_OPTS);
 }
 
 export function useCparTickerHistory(ticker: string | null, years = 5, ric?: string | null) {

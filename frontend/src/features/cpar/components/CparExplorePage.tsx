@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import CparTickerQuoteCard from "@/features/cpar/components/CparTickerQuoteCard";
 import CparExploreWhatIfSection from "@/features/cpar/components/CparExploreWhatIfSection";
 import { useCparRisk, useCparSearch, useCparTicker, useCparTickerHistory } from "@/hooks/useCparApi";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { readCparError } from "@/lib/cparTruth";
 import type { CparSearchItem } from "@/lib/types/cpar";
 import { normalizeTicker, type CparExplorePositionSummary } from "@/features/cpar/components/cparExploreUtils";
@@ -14,8 +12,7 @@ export default function CparExplorePage() {
   const [query, setQuery] = useState("");
   const [selectedInstrument, setSelectedInstrument] = useState<CparSearchItem | null>(null);
 
-  const debouncedQuery = useDebouncedValue(query, 220);
-  const { data: searchData, error: searchError } = useCparSearch(debouncedQuery, 10);
+  const { data: searchData, error: searchError, isLoading: searchLoading, isValidating: searchValidating } = useCparSearch(query, 10);
   const { data: riskData, error: riskError } = useCparRisk();
   const { data: tickerData, isLoading, error: tickerError } = useCparTicker(
     selectedInstrument?.ticker || null,
@@ -31,7 +28,7 @@ export default function CparExplorePage() {
     selectedInstrument?.ric || null,
   );
 
-  const item = tickerData?.item;
+  const item = tickerData;
   const results = searchData?.results ?? [];
 
   const positionMap = useMemo(() => {
@@ -106,7 +103,9 @@ export default function CparExplorePage() {
       )}
 
       {isLoading && selectedInstrument && (
-        <AnalyticsLoadingViz message={`Loading ${selectedInstrument.ticker || selectedInstrument.ric}...`} />
+        <div className="cpar-explore-loading-chip" role="status" aria-live="polite">
+          Loading {selectedInstrument.ticker || selectedInstrument.ric}...
+        </div>
       )}
 
       {item && !isLoading && (
@@ -123,6 +122,7 @@ export default function CparExplorePage() {
         priceMap={priceMap}
         selectedInstrument={selectedInstrument}
         searchQuery={query}
+        searchLoading={searchLoading || searchValidating}
         onSearchQueryChange={handleSearchQueryChange}
         searchResults={results}
         onSelectInstrument={selectInstrument}

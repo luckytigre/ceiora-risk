@@ -10,6 +10,7 @@ export default function CparExploreWhatIfSection({
   priceMap,
   selectedInstrument,
   searchQuery,
+  searchLoading,
   onSearchQueryChange,
   searchResults,
   onSelectInstrument,
@@ -18,6 +19,7 @@ export default function CparExploreWhatIfSection({
   priceMap: Map<string, number>;
   selectedInstrument: CparSearchItem | null;
   searchQuery: string;
+  searchLoading: boolean;
   onSearchQueryChange: (query: string) => void;
   searchResults: CparSearchItem[];
   onSelectInstrument: (item: CparSearchItem) => void;
@@ -66,6 +68,7 @@ export default function CparExploreWhatIfSection({
         resultMessage={scenario.resultMessage}
         scenarioRows={scenario.scenarioRows}
         searchQuery={searchQuery}
+        searchLoading={searchLoading}
         searchResults={searchResults}
         stageReady={scenario.stageReady}
         updateScenarioRow={scenario.updateScenarioRow}

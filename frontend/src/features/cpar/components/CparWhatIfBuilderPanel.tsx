@@ -59,6 +59,7 @@ interface CparWhatIfBuilderPanelProps {
   resultMessage: string;
   scenarioRows: CparExploreScenarioDraftRow[];
   searchQuery: string;
+  searchLoading: boolean;
   searchResults: CparSearchItem[];
   stageReady: boolean;
   updateScenarioRow: (key: string, value: string) => void;
@@ -99,6 +100,7 @@ export default function CparWhatIfBuilderPanel({
   resultMessage,
   scenarioRows,
   searchQuery,
+  searchLoading,
   searchResults,
   stageReady,
   updateScenarioRow,
@@ -135,9 +137,9 @@ export default function CparWhatIfBuilderPanel({
             autoComplete="off"
             title="Search for an active-package cPAR instrument"
           />
-          {dropdownOpen && searchResults.length > 0 && (
+          {dropdownOpen && searchQuery.trim().length > 0 && (
             <div className="explore-typeahead whatif-typeahead">
-              {searchResults.map((row, index) => {
+              {searchResults.length > 0 ? searchResults.map((row, index) => {
                 const pos = row.ticker ? positionMap.get(normalizeTicker(row.ticker)) : undefined;
                 const fit = describeCparFitStatus(row.fit_status);
                 const disabled = !canNavigateCparSearchResult(row);
@@ -166,7 +168,11 @@ export default function CparWhatIfBuilderPanel({
                     <span className="risk">{row.ric}</span>
                   </button>
                 );
-              })}
+              }) : (
+                <div className="explore-typeahead-item disabled" aria-live="polite">
+                  {searchLoading ? "Searching active cPAR package…" : "No active-package matches yet."}
+                </div>
+              )}
             </div>
           )}
         </div>
