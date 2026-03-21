@@ -12,6 +12,8 @@ import CparRiskPositionsContributionTable from "@/features/cpar/components/CparR
 import CparRiskWhatIfPreviewSection from "@/features/cpar/components/CparRiskWhatIfPreviewSection";
 import { useCparMeta, useCparPortfolioHedge, useCparPortfolioWhatIf, useHoldingsAccounts } from "@/hooks/useCparApi";
 import {
+  normalizeCparPortfolioHedgeData,
+  normalizeCparPortfolioWhatIfData,
   readCparError,
   sameCparPackageIdentity,
 } from "@/lib/cparTruth";
@@ -67,8 +69,9 @@ function CparRiskWorkspaceInner() {
     error: portfolioError,
     isLoading: portfolioLoading,
   } = useCparPortfolioHedge(selectedAccountId, mode, Boolean(selectedAccountId) && Boolean(meta) && !metaState);
+  const normalizedPortfolio = useMemo(() => normalizeCparPortfolioHedgeData(portfolio), [portfolio]);
   const portfolioState = portfolioError ? readCparError(portfolioError) : null;
-  const packageMismatch = Boolean(meta && portfolio && !sameCparPackageIdentity(meta, portfolio));
+  const packageMismatch = Boolean(meta && normalizedPortfolio && !sameCparPackageIdentity(meta, normalizedPortfolio));
   const parsedScenarioRows = useMemo(() => {
     const rows = scenarioRows.map((row) => {
       const quantityDelta = parseQuantityDelta(row.quantity_text);
@@ -95,11 +98,12 @@ function CparRiskWorkspaceInner() {
     Boolean(selectedAccountId)
       && Boolean(meta)
       && !metaState
-      && Boolean(portfolio)
+      && Boolean(normalizedPortfolio)
       && !portfolioState
       && !packageMismatch
       && Boolean(parsedScenarioRows?.length),
   );
+  const normalizedWhatIf = useMemo(() => normalizeCparPortfolioWhatIfData(whatIf), [whatIf]);
 
   if (metaLoading && !meta) {
     return <CparPageLoadingState message="Loading cPAR portfolio hedge workflow..." />;
@@ -107,9 +111,9 @@ function CparRiskWorkspaceInner() {
 
   const whatIfState = whatIfError ? readCparError(whatIfError) : null;
   const whatIfPackageMismatch = Boolean(
-    (meta && whatIf && !sameCparPackageIdentity(meta, whatIf))
-    || (whatIf && !sameCparPackageIdentity(whatIf, whatIf.current))
-    || (whatIf && !sameCparPackageIdentity(whatIf, whatIf.hypothetical)),
+    (meta && normalizedWhatIf && !sameCparPackageIdentity(meta, normalizedWhatIf))
+    || (normalizedWhatIf && !sameCparPackageIdentity(normalizedWhatIf, normalizedWhatIf.current))
+    || (normalizedWhatIf && !sameCparPackageIdentity(normalizedWhatIf, normalizedWhatIf.hypothetical)),
   );
   const selectedAccount = (accountsData?.accounts || []).find((row) => row.account_id === selectedAccountId) || null;
 
@@ -167,40 +171,37 @@ function CparRiskWorkspaceInner() {
         </section>
       ) : null}
 
-      <div className="cpar-two-column">
-        <CparRiskAccountScopeCard
-          accountsLoading={accountsLoading}
-          accountsData={accountsData}
-          accountsError={accountsError}
-          selectedAccountId={selectedAccountId}
-          selectedAccount={selectedAccount}
-          onSelectAccount={(nextAccountId) => {
-            const params = new URLSearchParams(searchParams?.toString() || "");
-            params.set("account_id", nextAccountId);
-            router.push(`/cpar/risk?${params.toString()}`);
-          }}
-        />
-        {portfolio && !portfolioState && !packageMismatch ? (
-          <CparRiskCoverageSummaryCard portfolio={portfolio} />
-        ) : (
-          <section className="chart-card" data-testid="cpar-portfolio-summary">
-            <h3>Workflow Scope</h3>
-            <div className="section-subtitle">
-              The account workflow prices current holdings at the latest shared-source price on or before the active package date, then aggregates only covered persisted cPAR loadings into one hedge vector.
-            </div>
-            <div className="cpar-inline-message neutral">
-              <strong>Narrow by design.</strong>
-              <span>This is a narrow cPAR what-if preview, not a portfolio mutation tool, not a broad analytics engine, and not a cPAR-vs-cUSE4 comparison layer.</span>
-            </div>
-          </section>
-        )}
-      </div>
-
       {!selectedAccountId && !accountsLoading ? (
-        <section className="chart-card">
-          <h3>Account Hedge Preview</h3>
-          <div className="detail-history-empty compact">Choose a holdings account to open the read-only cPAR portfolio hedge workflow.</div>
-        </section>
+        <>
+          <div className="cpar-two-column">
+            <CparRiskAccountScopeCard
+              accountsLoading={accountsLoading}
+              accountsData={accountsData}
+              accountsError={accountsError}
+              selectedAccountId={selectedAccountId}
+              selectedAccount={selectedAccount}
+              onSelectAccount={(nextAccountId) => {
+                const params = new URLSearchParams(searchParams?.toString() || "");
+                params.set("account_id", nextAccountId);
+                router.push(`/cpar/risk?${params.toString()}`);
+              }}
+            />
+            <section className="chart-card" data-testid="cpar-portfolio-summary">
+              <h3>Workflow Scope</h3>
+              <div className="section-subtitle">
+                The account workflow prices current holdings at the latest shared-source price on or before the active package date, then aggregates only covered persisted cPAR loadings into one hedge vector.
+              </div>
+              <div className="cpar-inline-message neutral">
+                <strong>Narrow by design.</strong>
+                <span>This is a narrow cPAR what-if preview, not a portfolio mutation tool, not a broad analytics engine, and not a cPAR-vs-cUSE4 comparison layer.</span>
+              </div>
+            </section>
+          </div>
+          <section className="chart-card">
+            <h3>Account Hedge Preview</h3>
+            <div className="detail-history-empty compact">Choose a holdings account to open the read-only cPAR portfolio hedge workflow.</div>
+          </section>
+        </>
       ) : metaState || accountsError ? null : portfolioLoading && !portfolio ? (
         <section className="chart-card" data-testid="cpar-portfolio-loading">
           <h3>Account Hedge Preview</h3>
@@ -229,24 +230,37 @@ function CparRiskWorkspaceInner() {
             <span>Reload the page to pin one cPAR package before using the account hedge preview.</span>
           </div>
         </section>
-      ) : portfolio ? (
+      ) : normalizedPortfolio ? (
         <>
-          {portfolio.aggregate_thresholded_loadings.length > 0 ? (
-            scenarioRows.length === 0 ? (
-              <div className="cpar-two-column">
-                <CparRiskFactorSummaryCard portfolio={portfolio} />
-                <CparPortfolioHedgePanel
-                  data={portfolio}
-                  mode={mode}
-                  onModeChange={setMode}
-                />
-              </div>
-            ) : (
-              <CparRiskFactorSummaryCard portfolio={portfolio} />
-            )
+          {normalizedPortfolio.aggregate_thresholded_loadings.length > 0 ? (
+            <CparRiskFactorSummaryCard portfolio={normalizedPortfolio} />
           ) : null}
 
-          <CparRiskPositionsContributionTable rows={portfolio.positions} />
+          <div className="cpar-two-column">
+            <CparRiskAccountScopeCard
+              accountsLoading={accountsLoading}
+              accountsData={accountsData}
+              accountsError={accountsError}
+              selectedAccountId={selectedAccountId}
+              selectedAccount={selectedAccount}
+              onSelectAccount={(nextAccountId) => {
+                const params = new URLSearchParams(searchParams?.toString() || "");
+                params.set("account_id", nextAccountId);
+                router.push(`/cpar/risk?${params.toString()}`);
+              }}
+            />
+            <CparRiskCoverageSummaryCard portfolio={normalizedPortfolio} />
+          </div>
+
+          {normalizedPortfolio.aggregate_thresholded_loadings.length > 0 && scenarioRows.length === 0 ? (
+            <CparPortfolioHedgePanel
+              data={normalizedPortfolio}
+              mode={mode}
+              onModeChange={setMode}
+            />
+          ) : null}
+
+          <CparRiskPositionsContributionTable rows={normalizedPortfolio.positions} />
 
           <CparPortfolioWhatIfBuilder
             resetKey={`${selectedAccountId || "none"}:${meta?.package_run_id || "none"}`}
@@ -269,7 +283,7 @@ function CparRiskWorkspaceInner() {
                   <span>Update the staged queue above before the hypothetical preview can recompute.</span>
                 </div>
               </section>
-            ) : whatIfLoading && !whatIf ? (
+            ) : whatIfLoading && !normalizedWhatIf ? (
               <section className="chart-card" data-testid="cpar-portfolio-whatif-loading">
                 <h3>What-If Preview</h3>
                 <CparInlineLoadingState message={`Loading cPAR what-if preview for ${selectedAccountId}...`} />
@@ -297,16 +311,16 @@ function CparRiskWorkspaceInner() {
                   <span>Reload the page to pin one cPAR package before comparing current and hypothetical hedges.</span>
                 </div>
               </section>
-            ) : whatIf ? (
+            ) : normalizedWhatIf ? (
               <CparRiskWhatIfPreviewSection
-                whatIf={whatIf}
+                whatIf={normalizedWhatIf}
                 mode={mode}
                 onModeChange={setMode}
               />
             ) : null
           ) : null}
 
-          {portfolio.aggregate_thresholded_loadings.length === 0 ? (
+          {normalizedPortfolio.aggregate_thresholded_loadings.length === 0 ? (
             <section className="chart-card">
               <h3>Risk Summary Deferred</h3>
               <div className="section-subtitle">

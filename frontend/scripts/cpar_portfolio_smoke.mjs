@@ -568,6 +568,13 @@ try {
     await page.getByRole("button", { name: /Technology/i }).click();
     await page.getByRole("heading", { name: "Technology Drilldown" }).waitFor();
     await page.getByRole("heading", { name: "Positions (Contribution Mix)" }).waitFor();
+    const riskSummaryBeforeAccountPanel = await page.evaluate(() => {
+      const summary = document.querySelector('[data-testid="cpar-risk-factor-summary"]');
+      const accountPanel = document.querySelector('[data-testid="cpar-portfolio-account-panel"]');
+      if (!(summary instanceof HTMLElement) || !(accountPanel instanceof HTMLElement)) return false;
+      return Boolean(summary.compareDocumentPosition(accountPanel) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    assert.equal(riskSummaryBeforeAccountPanel, true);
     assert.equal(await page.getByRole("button", { name: "SYNC" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "RECALC" }).count(), 0);
 

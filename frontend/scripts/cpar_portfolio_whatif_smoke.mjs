@@ -495,6 +495,13 @@ try {
     await page.getByTestId("cpar-portfolio-whatif-builder").waitFor();
     await page.getByTestId("cpar-risk-factor-summary").waitFor();
     await page.getByTestId("cpar-risk-positions").waitFor();
+    const riskSummaryBeforeAccountPanel = await page.evaluate(() => {
+      const summary = document.querySelector('[data-testid="cpar-risk-factor-summary"]');
+      const accountPanel = document.querySelector('[data-testid="cpar-portfolio-account-panel"]');
+      if (!(summary instanceof HTMLElement) || !(accountPanel instanceof HTMLElement)) return false;
+      return Boolean(summary.compareDocumentPosition(accountPanel) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    assert.equal(riskSummaryBeforeAccountPanel, true);
     await page.getByTestId("cpar-search-input").fill("SHELL");
     await page.getByRole("button", { name: /Shell ADR/i }).waitFor();
     assert.equal(await page.getByRole("button", { name: /Shell ADR/i }).isDisabled(), true);
