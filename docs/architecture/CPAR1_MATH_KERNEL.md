@@ -56,6 +56,8 @@ Styles:
 
 The registry is owned in `backend/cpar/factor_registry.py`.
 It is not sourced from cUSE4 factor catalogs.
+These proxy ETFs are both the fixed cPAR basis and eligible modeled instruments in the current package build.
+That means `SPY`, sector ETFs, and style ETFs can now receive persisted cPAR fits as single-name instruments.
 
 ## Weekly Anchors And Returns
 
@@ -143,6 +145,11 @@ This is the coefficient vector used for:
 - displayed cPAR loadings
 - hedge construction
 - post-hedge residual display
+
+For proxy ETFs themselves:
+- `SPY` naturally fits near pure `SPY`
+- non-market proxy ETFs such as `XLK` or `IWM` are still governed by the same market-step, orthogonalized residual block, ridge, and back-transform pipeline
+- they should not be hard-coded to identity vectors because their modeled loadings are defined in the same residualized cPAR trade space as every other fitted instrument
 
 ## Hedge Engine Rules
 

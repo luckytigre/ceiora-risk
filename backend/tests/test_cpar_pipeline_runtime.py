@@ -365,13 +365,32 @@ def test_local_ingest_build_persists_expected_cpar_outputs(
     package = cpar_outputs.require_active_package_run(data_db=data_db)
     assert package["package_date"] == "2026-03-13"
     assert package["profile"] == "cpar-weekly"
-    assert package["fit_ok_count"] == 2
+    assert package["universe_count"] == len(build_cpar1_factor_registry()) + 2
+    assert package["fit_ok_count"] == len(build_cpar1_factor_registry()) + 2
     assert package["data_authority"] == "sqlite"
 
     fit = cpar_outputs.load_active_package_instrument_fit("SAPG", data_db=data_db)
     assert fit is not None
     assert fit["fit_status"] == "ok"
     assert fit["warnings"] == ["ex_us_caution"]
+
+    spy_fit = cpar_outputs.load_active_package_instrument_fit("SPY", data_db=data_db)
+    assert spy_fit is not None
+    assert spy_fit["fit_status"] == "ok"
+    assert spy_fit["thresholded_loadings"]["SPY"] == pytest.approx(1.0)
+
+    xlk_fit = cpar_outputs.load_active_package_instrument_fit("XLK", data_db=data_db)
+    assert xlk_fit is not None
+    assert xlk_fit["fit_status"] == "ok"
+    assert xlk_fit["thresholded_loadings"]["XLK"] > 0.05
+
+    iwm_fit = cpar_outputs.load_active_package_instrument_fit("IWM", data_db=data_db)
+    assert iwm_fit is not None
+    assert iwm_fit["fit_status"] == "ok"
+    assert iwm_fit["thresholded_loadings"]["IWM"] > 0.05
+
+    spy_search_rows = cpar_outputs.search_active_package_instrument_fits("SPY", data_db=data_db)
+    assert any(row["ticker"] == "SPY" for row in spy_search_rows)
 
     covariance_rows = cpar_outputs.load_active_package_covariance_rows(data_db=data_db)
     assert len(covariance_rows) == len(build_cpar1_factor_registry()) ** 2

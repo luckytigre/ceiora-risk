@@ -66,7 +66,7 @@ This slice does not introduce any cloud build fallback or request-time fitting.
 `source_read`
 - resolves the fixed cPAR1 factor proxy set from `security_master`
 - loads the cPAR build universe from canonical source tables
-- excludes factor proxies from the instrument build universe
+- keeps factor proxies in the instrument build universe so proxy ETFs themselves also receive persisted cPAR fits
 - loads package-window prices plus latest classification/common-name PIT rows
 - fails early if the local archive is not current through the requested package date for required factor proxies
 

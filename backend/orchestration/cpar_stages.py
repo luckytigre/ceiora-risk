@@ -94,28 +94,6 @@ def _resolve_factor_proxy_map(
     return resolved
 
 
-def _filter_build_universe(
-    universe_rows: list[dict[str, Any]],
-    *,
-    factor_specs: tuple[FactorSpec, ...],
-    factor_proxy_by_id: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    factor_rics = {
-        str(row.get("ric") or "").strip().upper()
-        for row in factor_proxy_by_id.values()
-        if str(row.get("ric") or "").strip()
-    }
-    factor_tickers = {spec.ticker.upper() for spec in factor_specs}
-    filtered: list[dict[str, Any]] = []
-    for row in universe_rows:
-        ric = str(row.get("ric") or "").strip().upper()
-        ticker = str(row.get("ticker") or "").strip().upper()
-        if ric in factor_rics or ticker in factor_tickers:
-            continue
-        filtered.append(dict(row))
-    return filtered
-
-
 def _assert_terminal_anchor_prices_available(
     *,
     package_date: str,
@@ -358,14 +336,9 @@ def run_source_read_stage(
             data_db=data_db,
         )
         factor_proxy_by_id = _resolve_factor_proxy_map(factor_specs, proxy_rows)
-        raw_universe_rows = cpar_source_reads.load_build_universe_rows(data_db=data_db)
-        universe_rows = _filter_build_universe(
-            raw_universe_rows,
-            factor_specs=factor_specs,
-            factor_proxy_by_id=factor_proxy_by_id,
-        )
+        universe_rows = cpar_source_reads.load_build_universe_rows(data_db=data_db)
         if not universe_rows:
-            raise ValueError("No cPAR build-universe rows are available after excluding factor proxies.")
+            raise ValueError("No cPAR build-universe rows are available.")
         universe_rics = [str(row["ric"]) for row in universe_rows if row.get("ric")]
         all_rics = sorted({*universe_rics, *(str(row["ric"]) for row in factor_proxy_by_id.values())})
         _emit_progress(progress_callback, message="Loading cPAR package-window prices from local source archive.", progress_kind="io")
@@ -408,7 +381,6 @@ def run_source_read_stage(
         {
             "package_date": package_date,
             "factor_count": len(factor_specs),
-            "source_universe_count_raw": len(raw_universe_rows),
             "build_universe_count": len(universe_rows),
             "price_row_count": len(price_rows),
             "classification_row_count": len(classification_rows),
