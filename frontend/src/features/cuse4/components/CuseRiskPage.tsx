@@ -170,6 +170,18 @@ export default function ExposuresPage() {
 
   return (
     <div>
+      <div className="chart-card" style={{ marginBottom: 12 }}>
+        <h3>Risk Decomposition</h3>
+        <div className="section-subtitle">
+          Share of total portfolio risk split across market, industry, style, and idiosyncratic components.
+        </div>
+        {riskLoading ? (
+          <AnalyticsLoadingViz message="Loading portfolio risk mix..." />
+        ) : (
+          <RiskDecompChart shares={riskShares} />
+        )}
+      </div>
+
       <div className="chart-card">
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
           <h3 style={{ margin: 0 }}>
@@ -373,18 +385,6 @@ export default function ExposuresPage() {
               label="factors"
             />
           </div>
-        )}
-      </div>
-
-      <div className="chart-card mb-4" style={{ marginTop: 12 }}>
-        <h3>Risk Decomposition</h3>
-        <div className="section-subtitle">
-          Share of total portfolio risk split across market, industry, style, and idiosyncratic components.
-        </div>
-        {riskLoading ? (
-          <AnalyticsLoadingViz message="Loading portfolio risk mix..." />
-        ) : (
-          <RiskDecompChart shares={riskShares} />
         )}
       </div>
 

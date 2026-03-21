@@ -105,6 +105,24 @@ const SHORT_LABELS: Record<string, string> = {
   "Digital Assets": "Crypto",
   "Commodity Derivatives": "Cmdty Deriv",
   "FX Derivatives": "FX Deriv",
+
+  /* ── cPAR GICS sector proxies (SPDR ETFs) ── */
+  Materials: "Matls",
+  "Communication Services": "Comms",
+  "Consumer Discretionary": "Cons Disc",
+  "Consumer Staples": "Staples",
+  "Information Technology": "InfoTech",
+  "Health Care": "Health",
+
+  /* ── cPAR style ETF proxies ── */
+  Momentum: "Mtm",
+  Value: "Value",
+  Quality: "Qual",
+  "Minimum Volatility": "MinVol",
+  "Min Volatility": "MinVol",
+  "Min Vol": "MinVol",
+  "Small Cap": "SmCap",
+  Size: "Size",
 };
 
 const STYLE_FACTOR_NAME_BY_ID: Record<string, string> = {

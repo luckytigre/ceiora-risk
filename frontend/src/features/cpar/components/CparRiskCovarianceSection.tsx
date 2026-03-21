@@ -2,6 +2,7 @@
 
 import LazyMountOnVisible from "@/components/LazyMountOnVisible";
 import CparCovarianceHeatmap from "@/features/cpar/components/CparCovarianceHeatmap";
+import { shortFactorLabel } from "@/lib/factorLabels";
 import type { FactorCatalogEntry } from "@/lib/types/analytics";
 import type { CparCovMatrix, CparFactorSpec } from "@/lib/types/cpar";
 
@@ -9,7 +10,7 @@ function buildFactorCatalog(factors: CparFactorSpec[]): FactorCatalogEntry[] {
   return factors.map((factor) => ({
     factor_id: factor.factor_id,
     factor_name: factor.label,
-    short_label: factor.ticker,
+    short_label: shortFactorLabel(factor.label),
     family: factor.group === "sector" ? "industry" : factor.group,
     block: factor.group,
     display_order: factor.display_order,

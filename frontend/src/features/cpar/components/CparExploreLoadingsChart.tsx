@@ -1,6 +1,7 @@
 "use client";
 
 import { formatCparNumber } from "@/lib/cparTruth";
+import { shortFactorLabel } from "@/lib/factorLabels";
 import type { CparLoading } from "@/lib/types/cpar";
 
 const GROUP_LABELS: Record<string, string> = {
@@ -52,7 +53,7 @@ export default function CparExploreLoadingsChart({
               >
                 <div className="cpar-factor-chart-meta">
                   <div>
-                    <div className="cpar-factor-chart-label">{row.label}</div>
+                    <div className="cpar-factor-chart-label">{shortFactorLabel(row.label)}</div>
                     <div className="cpar-table-sub">{row.factor_id}</div>
                   </div>
                   <div className="cpar-factor-chart-values">

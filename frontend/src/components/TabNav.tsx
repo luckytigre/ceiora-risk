@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useBackground, type BgMode } from "./BackgroundContext";
@@ -11,15 +11,13 @@ const CUSE_TABS = [
   { href: "/cuse/exposures", label: "Risk", matchPrefix: "/cuse/exposures" },
   { href: "/cuse/explore", label: "Explore", matchPrefix: "/cuse/explore" },
   { href: "/cuse/health", label: "Health", matchPrefix: "/cuse/health" },
-  { href: "/positions", label: "Positions" },
 ];
 
 const CPAR_TABS = [
   { href: "/cpar/risk", label: "Risk", matchPrefix: "/cpar/risk" },
   { href: "/cpar/explore", label: "Explore", matchPrefix: "/cpar/explore" },
-  { href: "/cpar/health", label: "Health", matchPrefix: "/cpar/health" },
   { href: "/cpar/hedge", label: "Hedge", matchPrefix: "/cpar/hedge" },
-  { href: "/positions", label: "Positions" },
+  { href: "/cpar/health", label: "Health", matchPrefix: "/cpar/health" },
 ];
 
 const BG_OPTIONS: { value: BgMode; label: string }[] = [
@@ -56,6 +54,8 @@ export default function TabNav() {
   const activePath = pathname || "";
   const activeFamily = activePath.startsWith("/cpar") ? "cpar" : activePath.startsWith("/cuse") ? "cuse" : null;
   const [transitionFamily, setTransitionFamily] = useState<"cuse" | "cpar" | null>(null);
+  const prevFamilyRef = useRef<string | null>(null);
+  const badgeSlotRef = useRef<HTMLSpanElement>(null);
   const showOperatorChrome = activePath.startsWith("/cuse") || activePath === "/positions" || activePath === "/data";
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshActionState, setRefreshActionState] = useState<"idle" | "running" | "failed">("idle");
@@ -74,9 +74,36 @@ export default function TabNav() {
   const refreshStatus = String(refreshState?.status || "idle").toLowerCase();
   const refreshIsRunning = refreshStatus === "running";
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const el = badgeSlotRef.current;
+    if (!el) return;
+
     if (activeFamily) {
       setTransitionFamily(null);
+      const prev = prevFamilyRef.current;
+      prevFamilyRef.current = activeFamily;
+
+      if (!prev) {
+        // Entering from landing — start hidden, then fade in via CSS transition
+        el.style.transition = "none";
+        el.style.opacity = "0";
+        requestAnimationFrame(() => {
+          el.style.transition = "opacity 0.65s ease-out";
+          el.style.opacity = "1";
+        });
+      } else if (prev !== activeFamily) {
+        // Switching families — quick cross-fade
+        el.style.transition = "none";
+        el.style.opacity = "0";
+        setTimeout(() => {
+          el.style.transition = "opacity 0.3s ease-out";
+          el.style.opacity = "1";
+        }, 120);
+      }
+    } else {
+      prevFamilyRef.current = null;
+      el.style.transition = "none";
+      el.style.opacity = "0";
     }
   }, [activeFamily]);
 
@@ -93,17 +120,28 @@ export default function TabNav() {
     };
   }, []);
 
+  const isLanding = !activeFamily && !transitionFamily;
+
   useEffect(() => {
+    if (!navRef.current) return;
+    if (isLanding) {
+      navRef.current.style.backgroundColor = "";
+      navRef.current.style.boxShadow = "";
+      return;
+    }
     const onScroll = () => {
       if (!navRef.current) return;
       const y = window.scrollY;
       const t = Math.min(1, y / 120);
-      const opacity = 0.78 - t * 0.26;
-      navRef.current.style.backgroundColor = `rgba(16, 16, 19, ${opacity})`;
+      const bgOpacity = 0.78 - t * 0.26;
+      const shadowOpacity = 0.25 + t * 0.35;
+      const shadowSpread = 8 + t * 18;
+      navRef.current.style.backgroundColor = `rgba(16, 16, 19, ${bgOpacity})`;
+      navRef.current.style.boxShadow = `0 ${shadowSpread}px ${shadowSpread * 2.5}px rgba(2, 6, 14, ${shadowOpacity})`;
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [isLanding]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -238,19 +276,52 @@ export default function TabNav() {
   }, [activePath]);
   const effectiveFamily = activeFamily ?? transitionFamily;
 
+  const tabsCenterRef = useRef<HTMLDivElement>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
+  const hasAnimatedRef = useRef(false);
+
+  const syncIndicator = useCallback(() => {
+    const container = tabsCenterRef.current;
+    const indicator = indicatorRef.current;
+    if (!container || !indicator) return;
+    const activeEl = container.querySelector<HTMLElement>(".dash-tab-btn.active");
+    if (!activeEl) {
+      indicator.style.opacity = "0";
+      return;
+    }
+    const left = activeEl.offsetLeft;
+    const width = activeEl.offsetWidth;
+    if (!hasAnimatedRef.current) {
+      indicator.style.transition = "none";
+      hasAnimatedRef.current = true;
+      requestAnimationFrame(() => {
+        indicator.style.transition = "";
+      });
+    }
+    indicator.style.transform = `translateX(${left}px)`;
+    indicator.style.width = `${width}px`;
+    indicator.style.opacity = "1";
+  }, []);
+
+  useEffect(() => {
+    syncIndicator();
+  }, [activePath, tabs, syncIndicator]);
+
   return (
-    <nav ref={navRef} className="dash-tabs">
+    <nav ref={navRef} className={`dash-tabs${isLanding ? " dash-tabs-landing" : ""}`}>
       <div className="dash-tabs-brand-cluster">
         <Link href="/" className="dash-tabs-brand">
           Ceiora
         </Link>
         <span
+          ref={badgeSlotRef}
           className={`dash-tabs-family-badge-slot${effectiveFamily ? " is-active" : ""}${!activeFamily && transitionFamily ? " is-preview" : ""}`}
           aria-hidden={effectiveFamily ? undefined : "true"}
         >
           {effectiveFamily ? (
             <span
               className={`dash-tabs-family-badge dash-tabs-family-badge-${effectiveFamily}`}
+              style={!activeFamily ? { visibility: "hidden" } : undefined}
             >
               {effectiveFamily === "cuse" ? (
                 <>
@@ -266,7 +337,7 @@ export default function TabNav() {
         </span>
       </div>
 
-      <div className="dash-tabs-center">
+      <div ref={tabsCenterRef} className="dash-tabs-center">
         {tabs.map((tab) => (
           <Link
             key={tab.href}
@@ -276,6 +347,7 @@ export default function TabNav() {
             {tab.label}
           </Link>
         ))}
+        <span ref={indicatorRef} className="dash-tab-indicator" aria-hidden="true" />
       </div>
 
       <div className="dash-tabs-actions">
@@ -336,6 +408,14 @@ export default function TabNav() {
 
           {menuOpen && (
             <div className="dash-dropdown">
+              <div className="dash-dropdown-section">Navigation</div>
+              <Link
+                href="/positions"
+                className={`dash-dropdown-item${pathname === "/positions" ? " active" : ""}`}
+                onClick={() => setMenuOpen(false)}
+              >
+                Positions
+              </Link>
               <div className="dash-dropdown-section">Settings</div>
               <Link
                 href="/data"

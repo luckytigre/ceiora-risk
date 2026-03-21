@@ -1,10 +1,11 @@
 "use client";
 
 import { Suspense, useMemo } from "react";
-import { CparInlineLoadingState, CparPageLoadingState } from "@/features/cpar/components/CparLoadingState";
+import { CparPageLoadingState } from "@/features/cpar/components/CparLoadingState";
 import CparRiskCovarianceSection from "@/features/cpar/components/CparRiskCovarianceSection";
 import CparRiskFactorSummaryCard from "@/features/cpar/components/CparRiskFactorSummaryCard";
 import CparRiskPositionsContributionTable from "@/features/cpar/components/CparRiskPositionsContributionTable";
+import RiskDecompChart from "@/components/RiskDecompChart";
 import { useCparMeta, useCparRisk } from "@/hooks/useCparApi";
 import {
   normalizeCparRiskData,
@@ -12,6 +13,21 @@ import {
   readCparError,
   sameCparPackageIdentity,
 } from "@/lib/cparTruth";
+import type { CparRiskData } from "@/lib/types/cpar";
+
+function cparRiskShares(risk: CparRiskData) {
+  const contribs = risk.display_factor_variance_contributions ?? risk.factor_variance_contributions ?? [];
+  const byGroup = { market: 0, industry: 0, style: 0 };
+  for (const c of contribs) {
+    const share = (c.variance_share ?? 0) * 100;
+    if (c.group === "market") byGroup.market += share;
+    else if (c.group === "sector") byGroup.industry += share;
+    else if (c.group === "style") byGroup.style += share;
+  }
+  const factorTotal = byGroup.market + byGroup.industry + byGroup.style;
+  const idio = Math.max(0, 100 - factorTotal);
+  return { market: byGroup.market, industry: byGroup.industry, style: byGroup.style, idio };
+}
 
 function CparRiskWorkspaceInner() {
   const { data: meta, error: metaError, isLoading: metaLoading } = useCparMeta();
@@ -25,7 +41,7 @@ function CparRiskWorkspaceInner() {
   const riskState = riskError ? readCparError(riskError) : null;
   const packageMismatch = Boolean(meta && normalizedRisk && !sameCparPackageIdentity(meta, normalizedRisk));
 
-  if (metaLoading && !meta) {
+  if ((metaLoading && !meta) || (!metaState && riskLoading && !risk)) {
     return <CparPageLoadingState message="Loading cPAR risk..." />;
   }
 
@@ -43,11 +59,6 @@ function CparRiskWorkspaceInner() {
 
       {metaState ? (
         null
-      ) : riskLoading && !risk ? (
-        <section className="chart-card" data-testid="cpar-portfolio-loading">
-          <h3>Risk Surface</h3>
-          <CparInlineLoadingState message="Loading aggregate cPAR risk..." />
-        </section>
       ) : riskState ? (
         <section className="chart-card" data-testid="cpar-portfolio-error">
           <h3>Risk Surface</h3>
@@ -73,6 +84,13 @@ function CparRiskWorkspaceInner() {
         </section>
       ) : normalizedRisk ? (
         <>
+          <div className="chart-card" style={{ marginBottom: 12 }}>
+            <h3>Risk Decomposition</h3>
+            <div className="section-subtitle">
+              Share of total portfolio risk split across market, industry, style, and idiosyncratic components.
+            </div>
+            <RiskDecompChart shares={cparRiskShares(normalizedRisk)} />
+          </div>
           <CparRiskFactorSummaryCard portfolio={normalizedRisk} />
           <CparRiskPositionsContributionTable rows={normalizedRisk.positions} />
           <CparRiskCovarianceSection covMatrix={normalizedRisk.cov_matrix} factors={meta?.factors ?? []} />

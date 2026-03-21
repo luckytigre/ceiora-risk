@@ -17,6 +17,7 @@ import {
 } from "chart.js";
 import { Chart } from "react-chartjs-2";
 import { formatCparNumber, formatCparPercent } from "@/lib/cparTruth";
+import { shortFactorLabel } from "@/lib/factorLabels";
 import type { CparFactorChartRow, CparRiskExposureMode } from "@/lib/types/cpar";
 
 ChartJS.register(
@@ -159,7 +160,7 @@ export default function CparRiskFactorLoadingsChart({
       : "factor loading";
   const leftLabel = mode === "risk_contribution" ? "Hedging" : "Short";
   const rightLabel = mode === "risk_contribution" ? "Risk-adding" : "Long";
-  const labels = rows.map((row) => row.label);
+  const labels = rows.map((row) => shortFactorLabel(row.label));
   const negativeValues = rows.map((row) => {
     if (mode === "risk_contribution") {
       if (hasNonZeroDrilldownValues(row, (item) => finiteNumber(item.risk_contribution_pct))) {
@@ -355,18 +356,10 @@ export default function CparRiskFactorLoadingsChart({
         border: { display: false },
         grid: { display: false },
         ticks: {
-          color: (context) => {
-            const row = rows[context.index];
-            return row?.factor_id === selectedFactorId
-              ? "rgba(232, 237, 249, 0.92)"
-              : "rgba(232, 237, 249, 0.6)";
-          },
-          font: (context) => {
-            const row = rows[context.index];
-            return {
-              size: 10,
-              weight: row?.factor_id === selectedFactorId ? 600 : 500,
-            };
+          color: "rgba(232, 237, 249, 0.6)",
+          font: {
+            size: 10,
+            weight: 500,
           },
         },
       },

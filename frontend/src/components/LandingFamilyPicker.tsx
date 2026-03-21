@@ -10,6 +10,11 @@ const FAMILY_TARGETS: Record<FamilyKey, string> = {
   cuse: "/cuse/exposures",
   cpar: "/cpar/risk",
 };
+
+const FAMILY_COLORS: Record<FamilyKey, { top: string; bottom: string }> = {
+  cuse: { top: "rgba(184, 220, 226, 0.96)", bottom: "rgba(118, 164, 172, 0.94)" },
+  cpar: { top: "rgba(228, 190, 220, 0.96)", bottom: "rgba(176, 132, 169, 0.94)" },
+};
 const LANDING_FAMILY_TRANSITION_EVENT = "landing-family-transition-start";
 
 function prefersReducedMotion(): boolean {
@@ -37,20 +42,22 @@ function buildFlightKeyframes(
 ): Keyframe[] {
   const samples = 16;
   const keyframes: Keyframe[] = [];
+  const flightDistance = Math.sqrt(deltaX ** 2 + deltaY ** 2);
+  const liftAmplitude = Math.min(-8, -flightDistance * 0.05);
 
   for (let index = 0; index <= samples; index += 1) {
     const phase = index / samples;
     const curve = minimumJerk(phase);
     const offset = phase;
     const growthBump = gaussianBump(phase, 0.24, 0.13, 0.19);
-    const liftBump = gaussianBump(phase, 0.25, 0.16, -10);
+    const liftBump = gaussianBump(phase, 0.25, 0.16, liftAmplitude);
     const x = lerp(0, deltaX, curve);
     const y = lerp(0, deltaY, curve) + liftBump;
     const scaleX = lerp(1, targetScaleX, curve) + growthBump;
     const scaleY = lerp(1, targetScaleY, curve) + growthBump;
     const fadeProgress = phase <= 0.72 ? 0 : (phase - 0.72) / 0.28;
     const opacity = lerp(1, 0.02, minimumJerk(Math.min(1, Math.max(0, fadeProgress))));
-    const blur = lerp(0, 0.12, minimumJerk(Math.min(1, Math.max(0, fadeProgress))));
+    const blur = lerp(0, 3, minimumJerk(Math.min(1, Math.max(0, fadeProgress))));
 
     keyframes.push({
       transform: `translate3d(${x}px, ${y}px, 0) scale(${scaleX}, ${scaleY})`,
@@ -104,6 +111,7 @@ export default function LandingFamilyPicker() {
       const ghost = sourceEl.cloneNode(true) as HTMLElement;
       ghost.setAttribute("aria-hidden", "true");
       ghost.classList.add("family-split-ghost");
+      const colors = FAMILY_COLORS[family];
       Object.assign(ghost.style, {
         position: "fixed",
         left: `${sourceRect.left}px`,
@@ -114,6 +122,8 @@ export default function LandingFamilyPicker() {
         zIndex: "12000",
         pointerEvents: "none",
         transformOrigin: "top left",
+        "--family-split-top": colors.top,
+        "--family-split-bottom": colors.bottom,
       });
       document.body.appendChild(ghost);
 
@@ -125,7 +135,7 @@ export default function LandingFamilyPicker() {
       const targetScaleY = targetRect.height / sourceRect.height;
 
       const animation = ghost.animate(buildFlightKeyframes(deltaX, deltaY, targetScaleX, targetScaleY), {
-        duration: 1325,
+        duration: 975,
         easing: "linear",
         fill: "forwards",
       });
@@ -145,6 +155,7 @@ export default function LandingFamilyPicker() {
   const cuseDimmed = animatingFamily !== null && animatingFamily !== "cuse";
   const cparDimmed = animatingFamily !== null && animatingFamily !== "cpar";
   const dividerDimmed = animatingFamily !== null;
+  const driftClass = animatingFamily === "cuse" ? " is-drift-right" : animatingFamily === "cpar" ? " is-drift-left" : "";
 
   return (
     <div
@@ -154,20 +165,20 @@ export default function LandingFamilyPicker() {
       <LandingBackgroundLock />
       <a
         href={FAMILY_TARGETS.cuse}
-        className={`family-split-link family-split-link-cuse${cuseDimmed ? " is-dimmed" : ""}${animatingFamily === "cuse" ? " is-selected" : ""}`}
+        className={`family-split-link family-split-link-cuse${cuseDimmed ? ` is-dimmed${driftClass}` : ""}${animatingFamily === "cuse" ? " is-selected" : ""}`}
         onClick={(event) => void navigateWithFlight("cuse", event)}
       >
         <span className="family-split-prefix">c</span>USE
       </a>
       <span
-        className={`family-split-divider${dividerDimmed ? " is-dimmed" : ""}`}
+        className={`family-split-divider${dividerDimmed ? ` is-dimmed${driftClass}` : ""}`}
         aria-hidden="true"
       >
         |
       </span>
       <a
         href={FAMILY_TARGETS.cpar}
-        className={`family-split-link family-split-link-cpar${cparDimmed ? " is-dimmed" : ""}${animatingFamily === "cpar" ? " is-selected" : ""}`}
+        className={`family-split-link family-split-link-cpar${cparDimmed ? ` is-dimmed${driftClass}` : ""}${animatingFamily === "cpar" ? " is-selected" : ""}`}
         onClick={(event) => void navigateWithFlight("cpar", event)}
       >
         <span className="family-split-prefix">c</span>PAR
