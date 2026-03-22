@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from backend import config
 from backend.analytics.pipeline import RISK_ENGINE_METHOD_VERSION, run_refresh
-from backend.data import core_reads, job_runs, rebuild_cross_section_snapshot, sqlite
+from backend.data import core_reads, job_runs, model_outputs, rebuild_cross_section_snapshot, sqlite
 from backend.orchestration import finalize_run, post_run_publish, runtime_support, stage_execution, stage_planning, stage_runner
 from backend.orchestration.profiles import (
     PROFILE_CONFIG,
@@ -287,6 +287,7 @@ def _repair_pit_gap(
 
 def _run_stage(
     *,
+    run_id: str = "stage_test_run",
     profile: str,
     stage: str,
     as_of_date: str,
@@ -306,6 +307,7 @@ def _run_stage(
 ) -> dict[str, Any]:
     return stage_runner.run_stage(
         profile=profile,
+        run_id=run_id,
         stage=stage,
         as_of_date=as_of_date,
         should_run_core=should_run_core,
@@ -324,6 +326,7 @@ def _run_stage(
         config_module=config,
         core_reads_module=core_reads,
         sqlite_module=sqlite,
+        persist_model_outputs_fn=model_outputs.persist_model_outputs,
         bootstrap_cuse4_source_tables_fn=bootstrap_cuse4_source_tables,
         download_from_lseg_fn=download_from_lseg,
         repair_price_gap_fn=_repair_price_gap,

@@ -159,9 +159,11 @@ Parallel cPAR note:
 - Verify backend/frontend/proxy health: `make app-check`
 - Show tracked PIDs, URLs, and log paths: `make app-status`
 - Canonical launcher scripts live under `scripts/local_app/` and write runtime state under `backend/runtime/local_app/`.
+- `scripts/local_app/up.sh` now waits for the backend/frontend listeners to bind and exits nonzero if either process dies during startup; if startup fails, check the tailed log output immediately rather than trusting the pid files.
 - Additional local split entrypoints are available for cloud-native prep validation:
   - `make backend-serve`
   - `make backend-control`
+- Live local ingest and Neon-authoritative rebuild commands should run from `.venv_local` (or another environment with real `lseg-data` installed). `backend/.venv` is sufficient for most repo tests, but not for real LSEG-backed ingest on this machine.
 
 ## Key Commands
 - Orchestrated refresh via API:
@@ -187,6 +189,8 @@ Parallel cPAR note:
   - `python3 -m backend.scripts.run_model_pipeline --profile source-daily-plus-core-if-due`
 - Source-only refresh via script wrapper:
   - `python3 -m backend.scripts.run_model_pipeline --profile source-daily`
+- Repair Neon sync health from an already-successful workspace without rerunning the full core lane:
+  - `python3 -m backend.scripts.repair_neon_sync_health --run-id job_20260322T172131Z --profile core-weekly --as-of-date 2026-03-20 --json`
 - Cold-core refresh via script wrapper:
   - `python3 -m backend.scripts.run_model_pipeline --profile cold-core`
 - Resume a previous run id:
@@ -194,6 +198,7 @@ Parallel cPAR note:
 - Refresh data from LSEG:
   - `python3 -m backend.scripts.download_data_lseg --db-path backend/runtime/data.db`
   - Explicit `--tickers`, `--rics`, and index-derived names only operate on instruments already present in `security_master`; the command now reports any requested names that were not seeded there.
+- When running those local-ingest commands directly, prefer `.venv_local/bin/python -m ...` so the process uses the same LSEG-capable environment as the local app scripts.
 - Repair historical volume coverage only (writes `TR.Volume` into `security_prices_eod.volume`):
   - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/runtime/data.db --start-date 2012-01-03 --end-date 2026-03-04 --volume-only --only-null-volume`
   - Explicit `--rics` repairs likewise only target seeded `security_master` rows and report unmatched requested RICs in the result payload.

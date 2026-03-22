@@ -202,15 +202,16 @@ def test_sync_from_sqlite_to_neon_backfills_full_history_for_partially_initializ
         deleted_entities.extend(entities)
         return len(entities)
 
-    def _fake_copy(_pg_conn, *, table: str, columns: list[str], rows) -> int:
+    def _fake_copy(_pg_conn, *, table: str, columns: list[str], pk_cols: list[str], rows) -> int:
         assert table == "security_prices_eod"
         assert columns == ["ric", "date", "close"]
+        assert pk_cols == ["ric", "date"]
         batch = list(rows)
         copied_batches.append(batch)
         return len(batch)
 
     monkeypatch.setattr(neon_stage2, "_delete_pg_rows_for_entities", _fake_delete)
-    monkeypatch.setattr(neon_stage2, "_copy_into_postgres", _fake_copy)
+    monkeypatch.setattr(neon_stage2, "_copy_into_postgres_idempotent", _fake_copy)
 
     out = neon_stage2.sync_from_sqlite_to_neon(
         sqlite_path=db_path,
@@ -306,14 +307,15 @@ def test_sync_from_sqlite_to_neon_backfills_pit_history_for_partially_initialize
         deleted_entities.extend(entities)
         return len(entities)
 
-    def _fake_copy(_pg_conn, *, table: str, columns: list[str], rows) -> int:
+    def _fake_copy(_pg_conn, *, table: str, columns: list[str], pk_cols: list[str], rows) -> int:
         assert columns == expected_columns
+        assert pk_cols[:2] == ["ric", "as_of_date"]
         batch = list(rows)
         copied_batches.append(batch)
         return len(batch)
 
     monkeypatch.setattr(neon_stage2, "_delete_pg_rows_for_entities", _fake_delete)
-    monkeypatch.setattr(neon_stage2, "_copy_into_postgres", _fake_copy)
+    monkeypatch.setattr(neon_stage2, "_copy_into_postgres_idempotent", _fake_copy)
 
     out = neon_stage2.sync_from_sqlite_to_neon(
         sqlite_path=db_path,

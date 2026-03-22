@@ -8,7 +8,7 @@ from typing import Any
 from backend.data.model_output_schema import ensure_schema
 
 _CANONICAL_SCHEMA_SQL = (
-    Path(__file__).resolve().parents[2] / "docs" / "migrations" / "neon" / "NEON_CANONICAL_SCHEMA.sql"
+    Path(__file__).resolve().parents[2] / "docs" / "reference" / "migrations" / "neon" / "NEON_CANONICAL_SCHEMA.sql"
 )
 
 

@@ -15,6 +15,7 @@ _SERVING_STAGES = {"serving_refresh"}
 def run_stage(
     *,
     profile: str,
+    run_id: str,
     stage: str,
     as_of_date: str,
     should_run_core: bool,
@@ -33,6 +34,7 @@ def run_stage(
     config_module,
     core_reads_module,
     sqlite_module,
+    persist_model_outputs_fn: Callable[..., dict[str, Any]],
     bootstrap_cuse4_source_tables_fn: Callable[..., Any],
     download_from_lseg_fn: Callable[..., Any],
     repair_price_gap_fn: Callable[..., dict[str, Any]],
@@ -83,6 +85,8 @@ def run_stage(
 
     if stage in _CORE_STAGES:
         return stage_core.run_core_stage(
+            profile=profile,
+            run_id=run_id,
             stage=stage,
             as_of_date=as_of_date,
             should_run_core=should_run_core,
@@ -94,7 +98,9 @@ def run_stage(
             reset_core_cache=reset_core_cache,
             progress_callback=progress_callback,
             config_module=config_module,
+            core_reads_module=core_reads_module,
             sqlite_module=sqlite_module,
+            persist_model_outputs_fn=persist_model_outputs_fn,
             rebuild_raw_cross_section_history_fn=rebuild_raw_cross_section_history_fn,
             rebuild_cross_section_snapshot_fn=rebuild_cross_section_snapshot_fn,
             build_and_persist_estu_membership_fn=build_and_persist_estu_membership_fn,

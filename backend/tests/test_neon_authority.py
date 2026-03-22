@@ -75,6 +75,61 @@ def test_assess_neon_rebuild_readiness_requires_model_output_tables() -> None:
     assert "missing_table:model_run_metadata" in out["issues"]
 
 
+def test_assess_neon_rebuild_readiness_allows_expected_monthly_pit_lag_with_bounded_raw_history_slack(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(neon_authority.config, "SOURCE_DAILY_PIT_FREQUENCY", "monthly")
+    table_stats = {
+        "security_master": {"exists": True, "row_count": 10, "min_date": None, "max_date": None},
+        "security_prices_eod": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-17"},
+        "security_fundamentals_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-02-27"},
+        "security_classification_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-02-27"},
+        "barra_raw_cross_section_history": {"exists": True, "row_count": 100, "min_date": "2021-03-23", "max_date": "2026-03-13"},
+        "model_factor_returns_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_factor_covariance_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_specific_risk_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_run_metadata": {"exists": True, "row_count": 10, "min_date": "2026-03-01T00:00:00+00:00", "max_date": "2026-03-14T00:00:00+00:00"},
+    }
+
+    out = neon_authority._assess_neon_rebuild_readiness(
+        profile="core-weekly",
+        table_stats=table_stats,
+        analytics_years=5,
+    )
+
+    assert out["status"] == "ok"
+    assert out["issues"] == []
+    assert out["source_anchor_date"] == "2026-02-27"
+    assert out["history_anchor_date"] == "2026-03-13"
+    assert "latest_date_mismatch:source_tables_expected_pit_lag:2026-02-27" in out["warnings"]
+
+
+def test_assess_neon_rebuild_readiness_still_fails_when_raw_history_is_beyond_slack(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(neon_authority.config, "SOURCE_DAILY_PIT_FREQUENCY", "monthly")
+    table_stats = {
+        "security_master": {"exists": True, "row_count": 10, "min_date": None, "max_date": None},
+        "security_prices_eod": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-03-17"},
+        "security_fundamentals_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-02-27"},
+        "security_classification_pit": {"exists": True, "row_count": 100, "min_date": "2020-01-01", "max_date": "2026-02-27"},
+        "barra_raw_cross_section_history": {"exists": True, "row_count": 100, "min_date": "2021-05-01", "max_date": "2026-03-13"},
+        "model_factor_returns_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_factor_covariance_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_specific_risk_daily": {"exists": True, "row_count": 1000, "min_date": "2021-03-01", "max_date": "2026-03-14"},
+        "model_run_metadata": {"exists": True, "row_count": 10, "min_date": "2026-03-01T00:00:00+00:00", "max_date": "2026-03-14T00:00:00+00:00"},
+    }
+
+    out = neon_authority._assess_neon_rebuild_readiness(
+        profile="core-weekly",
+        table_stats=table_stats,
+        analytics_years=5,
+    )
+
+    assert out["status"] == "error"
+    assert any(item.startswith("insufficient_history:barra_raw_cross_section_history:") for item in out["issues"])
+
+
 def test_sync_workspace_derivatives_to_local_mirror_copies_core_outputs(tmp_path: Path) -> None:
     workspace_data = tmp_path / "workspace_data.db"
     workspace_cache = tmp_path / "workspace_cache.db"

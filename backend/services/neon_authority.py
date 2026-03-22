@@ -11,7 +11,9 @@ from typing import Any
 
 from psycopg import sql
 
+from backend import config
 from backend.data.neon import connect, resolve_dsn
+from backend.trading_calendar import previous_or_same_xnys_session
 
 WORKSPACE_SOURCE_TABLES = (
     "security_master",
@@ -41,6 +43,8 @@ LOCAL_MIRROR_CACHE_KEYS = (
     "risk_engine_specific_risk",
     "risk_engine_meta",
 )
+
+_CORE_HISTORY_SLACK_DAYS = 31
 
 
 @dataclass(frozen=True)
@@ -230,6 +234,51 @@ def _latest_source_anchor(table_stats: dict[str, dict[str, Any]]) -> str | None:
     return min(clean)
 
 
+def _latest_closed_pit_anchor(*, reference_date: str | None, frequency: str) -> str | None:
+    parsed = _parse_iso_date(reference_date)
+    if parsed is None:
+        return None
+    if frequency == "quarterly":
+        quarter_start_month = (((parsed.month - 1) // 3) * 3) + 1
+        current_period_start = date(parsed.year, quarter_start_month, 1)
+    else:
+        current_period_start = date(parsed.year, parsed.month, 1)
+    return previous_or_same_xnys_session((current_period_start - timedelta(days=1)).isoformat())
+
+
+def _expected_pit_lag_matches_source_dates(source_latest_dates: dict[str, str]) -> tuple[bool, str | None]:
+    price_latest = str(source_latest_dates.get("security_prices_eod") or "").strip()
+    expected_pit_anchor = _latest_closed_pit_anchor(
+        reference_date=price_latest or None,
+        frequency=str(config.SOURCE_DAILY_PIT_FREQUENCY or "monthly").strip().lower(),
+    )
+    if not expected_pit_anchor:
+        return False, None
+    fundamentals_latest = str(source_latest_dates.get("security_fundamentals_pit") or "").strip()
+    classification_latest = str(source_latest_dates.get("security_classification_pit") or "").strip()
+    matches = (
+        bool(price_latest)
+        and fundamentals_latest == expected_pit_anchor
+        and classification_latest == expected_pit_anchor
+        and expected_pit_anchor <= price_latest
+    )
+    return matches, expected_pit_anchor
+
+
+def _history_anchor_for_profile(
+    *,
+    profile_key: str,
+    source_anchor: str | None,
+    table_stats: dict[str, dict[str, Any]],
+) -> str | None:
+    if profile_key == "cold-core":
+        return source_anchor
+    raw_max = str((table_stats.get("barra_raw_cross_section_history") or {}).get("max_date") or "").strip()
+    if raw_max:
+        return raw_max
+    return source_anchor
+
+
 def _assess_neon_rebuild_readiness(
     *,
     profile: str,
@@ -237,6 +286,7 @@ def _assess_neon_rebuild_readiness(
     analytics_years: int,
 ) -> dict[str, Any]:
     issues: list[str] = []
+    warnings: list[str] = []
     profile_key = str(profile or "").strip().lower()
     required_tables = [
         "security_master",
@@ -276,20 +326,43 @@ def _assess_neon_rebuild_readiness(
     }
     unique_latest_dates = {value for value in source_latest_dates.values() if value}
     if len(unique_latest_dates) > 1:
-        issues.append("latest_date_mismatch:source_tables")
+        expected_pit_lag, expected_pit_anchor = _expected_pit_lag_matches_source_dates(source_latest_dates)
+        if expected_pit_lag:
+            warnings.append(
+                f"latest_date_mismatch:source_tables_expected_pit_lag:{expected_pit_anchor}"
+            )
+        else:
+            issues.append("latest_date_mismatch:source_tables")
 
     analytics_cutoff = None
-    anchor_date = _parse_iso_date(source_anchor)
+    history_anchor = _history_anchor_for_profile(
+        profile_key=profile_key,
+        source_anchor=source_anchor,
+        table_stats=table_stats,
+    )
+    anchor_date = _parse_iso_date(history_anchor)
     if anchor_date is not None:
         analytics_cutoff = (anchor_date - timedelta(days=365 * max(1, int(analytics_years)))).isoformat()
+        cutoff_date = _parse_iso_date(analytics_cutoff)
+        history_slack_days = 0 if profile_key == "cold-core" else _CORE_HISTORY_SLACK_DAYS
         for table in ("security_prices_eod", "security_fundamentals_pit", "security_classification_pit"):
-            min_date = str((table_stats.get(table) or {}).get("min_date") or "").strip()
-            if min_date and min_date > analytics_cutoff:
+            min_date = _parse_iso_date(str((table_stats.get(table) or {}).get("min_date") or "").strip())
+            if (
+                cutoff_date is not None
+                and min_date is not None
+                and min_date > (cutoff_date + timedelta(days=history_slack_days))
+            ):
                 issues.append(f"insufficient_history:{table}:{analytics_cutoff}")
         if profile_key != "cold-core":
-            raw_min = str((table_stats.get("barra_raw_cross_section_history") or {}).get("min_date") or "").strip()
+            raw_min = _parse_iso_date(
+                str((table_stats.get("barra_raw_cross_section_history") or {}).get("min_date") or "").strip()
+            )
             raw_max = str((table_stats.get("barra_raw_cross_section_history") or {}).get("max_date") or "").strip()
-            if raw_min and raw_min > analytics_cutoff:
+            if (
+                cutoff_date is not None
+                and raw_min is not None
+                and raw_min > (cutoff_date + timedelta(days=history_slack_days))
+            ):
                 issues.append(f"insufficient_history:barra_raw_cross_section_history:{analytics_cutoff}")
             if raw_max and source_anchor and raw_max < source_anchor:
                 issues.append("stale_raw_history_vs_sources")
@@ -298,7 +371,9 @@ def _assess_neon_rebuild_readiness(
         "status": "ok" if not issues else "error",
         "profile": profile_key,
         "issues": issues,
+        "warnings": warnings,
         "source_anchor_date": source_anchor,
+        "history_anchor_date": history_anchor,
         "required_analytics_cutoff": analytics_cutoff,
         "tables": table_stats,
     }

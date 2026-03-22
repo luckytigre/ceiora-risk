@@ -786,7 +786,9 @@ def test_risk_model_stage_writes_workspace_cache_without_global_path_mutation(
     tmp_path: Path,
 ) -> None:
     workspace_cache_db = tmp_path / "workspace_cache.db"
+    workspace_data_db = tmp_path / "workspace_data.db"
     original_cache_path = str(run_model_pipeline.config.SQLITE_PATH)
+    captured: dict[str, object] = {}
 
     monkeypatch.setattr(
         run_model_pipeline,
@@ -806,6 +808,20 @@ def test_risk_model_stage_writes_workspace_cache_without_global_path_mutation(
         "latest_factor_return_date",
         lambda cache_db: "2026-03-13",
     )
+    monkeypatch.setattr(
+        run_model_pipeline.core_reads,
+        "load_source_dates",
+        lambda **_kwargs: {
+            "prices_asof": "2026-03-14",
+            "fundamentals_asof": "2026-02-28",
+            "classification_asof": "2026-02-28",
+        },
+    )
+    monkeypatch.setattr(
+        run_model_pipeline.model_outputs,
+        "persist_model_outputs",
+        lambda **kwargs: captured.update(kwargs) or {"status": "ok", "authority_store": "sqlite"},
+    )
 
     out = run_model_pipeline._run_stage(
         profile="cold-core",
@@ -815,7 +831,7 @@ def test_risk_model_stage_writes_workspace_cache_without_global_path_mutation(
         serving_mode="full",
         force_core=False,
         core_reason="due",
-        data_db=tmp_path / "workspace_data.db",
+        data_db=workspace_data_db,
         cache_db=workspace_cache_db,
     )
 
@@ -823,6 +839,11 @@ def test_risk_model_stage_writes_workspace_cache_without_global_path_mutation(
     assert str(run_model_pipeline.config.SQLITE_PATH) == original_cache_path
     assert run_model_pipeline.sqlite.cache_get_live("risk_engine_meta", db_path=workspace_cache_db)["status"] == "ok"
     assert run_model_pipeline.sqlite.cache_get_live("risk_engine_cov", db_path=workspace_cache_db)["factors"] == ["Market"]
+    assert out["model_outputs_write"]["status"] == "ok"
+    assert captured["data_db"] == workspace_data_db
+    assert captured["cache_db"] == workspace_cache_db
+    assert captured["refresh_mode"] == "cold-core"
+    assert captured["source_dates"]["prices_asof"] == "2026-03-14"
 
 
 def test_explicit_neon_core_window_fails_without_neon_readiness(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

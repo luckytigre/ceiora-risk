@@ -22,7 +22,7 @@ from backend.services.neon_stage2 import (
 
 
 _CANONICAL_SCHEMA_SQL = (
-    Path(__file__).resolve().parents[2] / "docs" / "migrations" / "neon" / "NEON_CANONICAL_SCHEMA.sql"
+    Path(__file__).resolve().parents[2] / "docs" / "reference" / "migrations" / "neon" / "NEON_CANONICAL_SCHEMA.sql"
 )
 
 
@@ -774,6 +774,27 @@ def _value_maps_match(
     return (not issues), issues
 
 
+def _expected_target_history_superset(
+    source: dict[str, Any],
+    target: dict[str, Any],
+) -> dict[str, Any] | None:
+    source_min = _canonical_date_key(source.get("min_date"))
+    target_min = _canonical_date_key(target.get("min_date"))
+    source_max = _canonical_date_key(source.get("max_date"))
+    target_max = _canonical_date_key(target.get("max_date"))
+    if not source_min or not target_min or not source_max or not target_max:
+        return None
+    if target_min >= source_min:
+        return None
+    if target_max != source_max:
+        return None
+    return {
+        "status": "ok",
+        "source_slice_min_date": source_min,
+        "target_retained_min_date": target_min,
+    }
+
+
 def _bounded_sqlite_to_pg_table_audit(
     sqlite_conn: sqlite3.Connection,
     pg_conn,
@@ -822,7 +843,21 @@ def _bounded_sqlite_to_pg_table_audit(
         cutoff=cutoff,
         distinct_col=distinct_col,
     )
-    mismatch = source != target
+    compare_cutoff = cutoff
+    target_compare = target
+    expected_history_superset = None
+    if date_col:
+        expected_history_superset = _expected_target_history_superset(source, target)
+        if expected_history_superset is not None:
+            compare_cutoff = str(expected_history_superset["source_slice_min_date"])
+            target_compare = _pg_count_window(
+                pg_conn,
+                table=target_table,
+                date_col=date_col,
+                cutoff=compare_cutoff,
+                distinct_col=distinct_col,
+            )
+    mismatch = source != target_compare
     if mismatch:
         issues.append(f"mismatch:{target_table}")
 
@@ -831,8 +866,12 @@ def _bounded_sqlite_to_pg_table_audit(
         "source": source,
         "target": target,
         "cutoff": cutoff,
+        "compare_cutoff": compare_cutoff,
         "status": "ok" if not mismatch else "mismatch",
     }
+    if expected_history_superset is not None:
+        table_out["expected_target_history_superset"] = expected_history_superset
+        table_out["target_compare_window"] = target_compare
 
     if key_cols:
         source_dupes = _sqlite_duplicate_key_groups(
@@ -840,14 +879,14 @@ def _bounded_sqlite_to_pg_table_audit(
             table=source_table,
             key_cols=key_cols,
             date_col=date_col,
-            cutoff=cutoff,
+            cutoff=compare_cutoff,
         )
         target_dupes = _pg_duplicate_key_groups(
             pg_conn,
             table=target_table,
             key_cols=key_cols,
             date_col=date_col,
-            cutoff=cutoff,
+            cutoff=compare_cutoff,
         )
         table_out["duplicate_key_groups"] = {
             "source": source_dupes,
@@ -874,9 +913,9 @@ def _bounded_sqlite_to_pg_table_audit(
     if non_null_cols:
         where_sql = ""
         params: tuple[Any, ...] = ()
-        if date_col and cutoff:
+        if date_col and compare_cutoff:
             where_sql = f"WHERE {date_col} >= ?"
-            params = (cutoff,)
+            params = (compare_cutoff,)
         source_non_null = _sqlite_non_null_counts(
             sqlite_conn,
             table=source_table,
@@ -889,7 +928,7 @@ def _bounded_sqlite_to_pg_table_audit(
             table=target_table,
             columns=non_null_cols,
             date_col=date_col,
-            cutoff=cutoff,
+            cutoff=compare_cutoff,
         )
         table_out["source_non_null_counts"] = source_non_null
         table_out["target_non_null_counts"] = target_non_null
@@ -902,7 +941,7 @@ def _bounded_sqlite_to_pg_table_audit(
             sqlite_conn,
             table=source_table,
             date_col=date_col,
-            cutoff=cutoff,
+            cutoff=compare_cutoff,
             limit=3,
         )
         source_counts = _sqlite_group_count_by_date(

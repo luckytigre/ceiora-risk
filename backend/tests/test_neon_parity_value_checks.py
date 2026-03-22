@@ -364,6 +364,123 @@ def test_run_bounded_parity_audit_reports_factor_return_inference_coverage(
     assert table_out["target_non_null_counts"]["robust_se"] == 0
 
 
+def test_run_bounded_parity_audit_allows_target_history_superset_for_model_outputs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sqlite_path = tmp_path / "data.db"
+    cache_path = tmp_path / "cache.db"
+    _create_sqlite_runtime(sqlite_path, cache_path)
+
+    def _fake_pg_count_window(_pg_conn, *, table: str, date_col: str | None, cutoff: str | None, distinct_col: str | None = "ric"):
+        if table == "model_factor_returns_daily":
+            if cutoff == "2026-03-02":
+                return {
+                    "row_count": 2,
+                    "min_date": "2026-03-02",
+                    "max_date": "2026-03-02",
+                    "latest_distinct": None,
+                }
+            return {
+                "row_count": 12,
+                "min_date": "2026-02-01",
+                "max_date": "2026-03-02",
+                "latest_distinct": None,
+            }
+        if table == "model_specific_risk_daily":
+            if cutoff == "2026-03-02":
+                return {
+                    "row_count": 1,
+                    "min_date": "2026-03-02",
+                    "max_date": "2026-03-02",
+                    "latest_distinct": 1,
+                }
+            return {
+                "row_count": 6,
+                "min_date": "2026-02-20",
+                "max_date": "2026-03-02",
+                "latest_distinct": 1,
+            }
+        if table == "model_factor_covariance_daily":
+            return {
+                "row_count": 1,
+                "min_date": "2026-03-02",
+                "max_date": "2026-03-02",
+                "latest_distinct": None,
+            }
+        if table == "model_run_metadata":
+            return {
+                "row_count": 1,
+                "min_date": "2026-03-02T00:05:00+00:00",
+                "max_date": "2026-03-02T00:05:00+00:00",
+                "latest_distinct": None,
+            }
+        return {
+            "row_count": 1,
+            "min_date": "2026-03-01" if date_col else None,
+            "max_date": "2026-03-01" if date_col else None,
+            "latest_distinct": 1 if date_col else None,
+        }
+
+    def _fake_pg_non_null_counts(_pg_conn, *, table: str, columns, date_col=None, cutoff=None):
+        if table == "model_factor_returns_daily":
+            return {col: (2 if cutoff == "2026-03-02" else 12) for col in columns}
+        if table == "model_specific_risk_daily":
+            return {col: (1 if cutoff == "2026-03-02" else 6) for col in columns}
+        return {col: 1 for col in columns}
+
+    monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_mirror, "_pg_columns", lambda _pg_conn, table: _fake_pg_columns(table))
+    monkeypatch.setattr(neon_mirror, "_pg_count_window", _fake_pg_count_window)
+    monkeypatch.setattr(neon_mirror, "_pg_non_null_counts", _fake_pg_non_null_counts)
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_group_count_by_date",
+        lambda _pg_conn, *, table, date_col, dates: {date: (2 if table == "model_factor_returns_daily" else 1) for date in dates},
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_factor_return_values",
+        lambda _pg_conn, *, table, dates: {
+            ("2026-03-02", "Beta"): (0.01, 0.005, 2.0, 0.3, 0.2, 100.0, 95.0, 0.95),
+            ("2026-03-02", "Book-to-Price"): (-0.02, 0.010, -2.0, 0.3, 0.2, 100.0, 95.0, 0.95),
+        },
+    )
+    monkeypatch.setattr(neon_mirror, "_pg_duplicate_key_groups", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_pit_period_health",
+        lambda *_args, **_kwargs: {"periods_with_multiple_anchors": 0, "open_period_rows": 0},
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_sqlite_pit_period_health",
+        lambda *_args, **_kwargs: {"periods_with_multiple_anchors": 0, "open_period_rows": 0},
+    )
+    monkeypatch.setattr(neon_mirror, "_pit_latest_closed_anchor", lambda **_kwargs: "2026-02-27")
+
+    out = neon_mirror.run_bounded_parity_audit(
+        sqlite_path=sqlite_path,
+        cache_path=cache_path,
+        dsn="postgresql://example",
+        analytics_years=5,
+    )
+
+    assert out["status"] == "ok"
+    assert out["issues"] == []
+    factor_table = out["tables"]["model_factor_returns_daily"]
+    assert factor_table["expected_target_history_superset"] == {
+        "status": "ok",
+        "source_slice_min_date": "2026-03-02",
+        "target_retained_min_date": "2026-02-01",
+    }
+    assert factor_table["target_compare_window"]["row_count"] == 2
+    spec_table = out["tables"]["model_specific_risk_daily"]
+    assert spec_table["target_compare_window"]["row_count"] == 1
+
+
 def test_run_bounded_parity_audit_detects_open_period_pit_rows(
     tmp_path: Path,
     monkeypatch,

@@ -192,6 +192,28 @@ CREATE TABLE IF NOT EXISTS model_run_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS projected_instrument_loadings (
+    ric TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    as_of_date DATE NOT NULL,
+    factor_name TEXT NOT NULL,
+    exposure DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (ric, as_of_date, factor_name)
+);
+
+CREATE TABLE IF NOT EXISTS projected_instrument_meta (
+    ric TEXT NOT NULL,
+    as_of_date DATE NOT NULL,
+    projection_method TEXT NOT NULL DEFAULT 'ols_returns_regression',
+    lookback_days INTEGER NOT NULL,
+    obs_count INTEGER NOT NULL,
+    r_squared DOUBLE PRECISION NOT NULL,
+    projected_specific_var DOUBLE PRECISION,
+    projected_specific_vol DOUBLE PRECISION,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (ric, as_of_date)
+);
+
 CREATE TABLE IF NOT EXISTS serving_payload_current (
     payload_name TEXT PRIMARY KEY,
     snapshot_id TEXT NOT NULL,
@@ -222,5 +244,8 @@ CREATE INDEX IF NOT EXISTS idx_model_specific_risk_daily_asof ON model_specific_
 CREATE INDEX IF NOT EXISTS idx_model_specific_risk_daily_ric ON model_specific_risk_daily (ric);
 CREATE INDEX IF NOT EXISTS idx_model_run_metadata_completed ON model_run_metadata (completed_at);
 CREATE INDEX IF NOT EXISTS idx_model_run_metadata_status ON model_run_metadata (status);
+CREATE INDEX IF NOT EXISTS idx_projected_instrument_loadings_asof ON projected_instrument_loadings (as_of_date);
+CREATE INDEX IF NOT EXISTS idx_projected_instrument_loadings_factor ON projected_instrument_loadings (factor_name);
+CREATE INDEX IF NOT EXISTS idx_projected_instrument_meta_asof ON projected_instrument_meta (as_of_date);
 CREATE INDEX IF NOT EXISTS idx_serving_payload_current_updated ON serving_payload_current (updated_at);
 CREATE INDEX IF NOT EXISTS idx_runtime_state_current_updated ON runtime_state_current (updated_at);

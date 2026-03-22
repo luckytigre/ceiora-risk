@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -450,6 +451,67 @@ def _copy_into_postgres(
     return copied
 
 
+def _copy_into_postgres_idempotent(
+    pg_conn,
+    *,
+    table: str,
+    columns: list[str],
+    pk_cols: list[str],
+    rows,
+) -> int:
+    copied = 0
+    temp_name = f"_sync_{table}_{uuid4().hex[:8]}"
+    table_ident = sql.Identifier(table)
+    temp_ident = sql.Identifier(temp_name)
+    cols_sql = sql.SQL(", ").join(sql.Identifier(c) for c in columns)
+    pk_sql = sql.SQL(", ").join(sql.Identifier(c) for c in pk_cols)
+    order_sql = sql.SQL(", ").join(sql.Identifier(c) for c in pk_cols)
+    non_key = [c for c in columns if c not in set(pk_cols)]
+    if non_key:
+        conflict_sql = sql.SQL("ON CONFLICT ({}) DO UPDATE SET {}").format(
+            pk_sql,
+            sql.SQL(", ").join(
+                sql.SQL("{} = EXCLUDED.{}").format(sql.Identifier(c), sql.Identifier(c))
+                for c in non_key
+            ),
+        )
+    else:
+        conflict_sql = sql.SQL("ON CONFLICT ({}) DO NOTHING").format(pk_sql)
+
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("CREATE TEMP TABLE {} (LIKE {} INCLUDING DEFAULTS) ON COMMIT DROP").format(
+                temp_ident,
+                table_ident,
+            )
+        )
+        copy_sql = sql.SQL("COPY {} ({}) FROM STDIN").format(temp_ident, cols_sql)
+        with cur.copy(copy_sql) as cp:
+            for row in rows:
+                cp.write_row(row)
+                copied += 1
+        cur.execute(
+            sql.SQL(
+                """
+                INSERT INTO {} ({})
+                SELECT DISTINCT ON ({}) {}
+                FROM {}
+                ORDER BY {}
+                {}
+                """
+            ).format(
+                table_ident,
+                cols_sql,
+                pk_sql,
+                cols_sql,
+                temp_ident,
+                order_sql,
+                conflict_sql,
+            )
+        )
+    return copied
+
+
 def _upsert_security_master(
     sqlite_conn: sqlite3.Connection,
     pg_conn,
@@ -703,36 +765,71 @@ def sync_from_sqlite_to_neon(
                     )
 
             src_count = _sqlite_count(sqlite_conn, table, where_sql, params)
-            copied = _copy_into_postgres(
-                pg_conn,
-                table=table,
-                columns=cols,
-                rows=_sqlite_select_rows(
-                    sqlite_conn,
-                    table=table,
-                    columns=cols,
-                    where_sql=where_sql,
-                    params=params,
-                    batch_size=max(1_000, int(batch_size)),
-                ),
-            )
-            if identifier_backfill_entities and cfg.entity_col and cfg.date_col:
-                identifier_backfill_rows = _copy_into_postgres(
+            if mode_norm == "incremental":
+                copied = _copy_into_postgres_idempotent(
                     pg_conn,
                     table=table,
                     columns=cols,
-                    rows=_sqlite_select_rows_for_entities_before_date(
+                    pk_cols=list(cfg.pk_cols),
+                    rows=_sqlite_select_rows(
                         sqlite_conn,
                         table=table,
                         columns=cols,
-                        entity_col=str(cfg.entity_col),
-                        entities=identifier_backfill_entities,
-                        date_col=str(cfg.date_col),
-                        from_date=identifier_backfill_from_date,
-                        before_date=str(params[0]),
+                        where_sql=where_sql,
+                        params=params,
                         batch_size=max(1_000, int(batch_size)),
                     ),
                 )
+            else:
+                copied = _copy_into_postgres(
+                    pg_conn,
+                    table=table,
+                    columns=cols,
+                    rows=_sqlite_select_rows(
+                        sqlite_conn,
+                        table=table,
+                        columns=cols,
+                        where_sql=where_sql,
+                        params=params,
+                        batch_size=max(1_000, int(batch_size)),
+                    ),
+                )
+            if identifier_backfill_entities and cfg.entity_col and cfg.date_col:
+                if mode_norm == "incremental":
+                    identifier_backfill_rows = _copy_into_postgres_idempotent(
+                        pg_conn,
+                        table=table,
+                        columns=cols,
+                        pk_cols=list(cfg.pk_cols),
+                        rows=_sqlite_select_rows_for_entities_before_date(
+                            sqlite_conn,
+                            table=table,
+                            columns=cols,
+                            entity_col=str(cfg.entity_col),
+                            entities=identifier_backfill_entities,
+                            date_col=str(cfg.date_col),
+                            from_date=identifier_backfill_from_date,
+                            before_date=str(params[0]),
+                            batch_size=max(1_000, int(batch_size)),
+                        ),
+                    )
+                else:
+                    identifier_backfill_rows = _copy_into_postgres(
+                        pg_conn,
+                        table=table,
+                        columns=cols,
+                        rows=_sqlite_select_rows_for_entities_before_date(
+                            sqlite_conn,
+                            table=table,
+                            columns=cols,
+                            entity_col=str(cfg.entity_col),
+                            entities=identifier_backfill_entities,
+                            date_col=str(cfg.date_col),
+                            from_date=identifier_backfill_from_date,
+                            before_date=str(params[0]),
+                            batch_size=max(1_000, int(batch_size)),
+                        ),
+                    )
             pg_conn.commit()
 
             out["tables"][table] = {

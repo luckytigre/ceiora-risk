@@ -12,6 +12,22 @@ from backend import config
 
 
 TABLE = "job_run_status"
+_SCHEMA_SQL = f"""
+CREATE TABLE IF NOT EXISTS {TABLE} (
+    run_id TEXT NOT NULL,
+    profile TEXT NOT NULL,
+    stage_name TEXT NOT NULL,
+    stage_order INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    started_at TEXT,
+    completed_at TEXT,
+    details_json TEXT,
+    error_type TEXT,
+    error_message TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, stage_name)
+)
+"""
 
 
 def _now_iso() -> str:
@@ -30,33 +46,30 @@ def default_db_path() -> Path:
     return Path(config.DATA_DB_PATH)
 
 
+def _create_schema_objects(conn: sqlite3.Connection) -> None:
+    conn.execute(_SCHEMA_SQL)
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_run_order ON {TABLE}(run_id, stage_order)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_profile_completed ON {TABLE}(profile, completed_at)"
+    )
+
+
+def _reset_corrupt_table(conn: sqlite3.Connection) -> None:
+    conn.execute(f"DROP TABLE IF EXISTS {TABLE}")
+    conn.execute(f"DROP TABLE IF EXISTS {TABLE}__repair")
+    _create_schema_objects(conn)
+    conn.commit()
+
+
 def ensure_schema(db_path: Path) -> None:
     conn = _connect(db_path)
     try:
-        conn.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {TABLE} (
-                run_id TEXT NOT NULL,
-                profile TEXT NOT NULL,
-                stage_name TEXT NOT NULL,
-                stage_order INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                started_at TEXT,
-                completed_at TEXT,
-                details_json TEXT,
-                error_type TEXT,
-                error_message TEXT,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (run_id, stage_name)
-            )
-            """
-        )
-        conn.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_run_order ON {TABLE}(run_id, stage_order)"
-        )
-        conn.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_profile_completed ON {TABLE}(profile, completed_at)"
-        )
+        try:
+            _create_schema_objects(conn)
+        except sqlite3.DatabaseError:
+            _reset_corrupt_table(conn)
         conn.commit()
     finally:
         conn.close()
@@ -74,36 +87,58 @@ def begin_stage(
     conn = _connect(db_path)
     now_iso = _now_iso()
     try:
-        conn.execute(
-            f"""
-            INSERT OR REPLACE INTO {TABLE} (
-                run_id,
-                profile,
-                stage_name,
-                stage_order,
-                status,
-                started_at,
-                completed_at,
-                details_json,
-                error_type,
-                error_message,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                run_id,
-                profile,
-                stage_name,
-                int(stage_order),
-                "running",
-                now_iso,
-                None,
-                json.dumps(details or {}, sort_keys=True),
-                None,
-                None,
-                now_iso,
-            ),
+        params = (
+            run_id,
+            profile,
+            stage_name,
+            int(stage_order),
+            "running",
+            now_iso,
+            None,
+            json.dumps(details or {}, sort_keys=True),
+            None,
+            None,
+            now_iso,
         )
+        try:
+            conn.execute(
+                f"""
+                INSERT OR REPLACE INTO {TABLE} (
+                    run_id,
+                    profile,
+                    stage_name,
+                    stage_order,
+                    status,
+                    started_at,
+                    completed_at,
+                    details_json,
+                    error_type,
+                    error_message,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                params,
+            )
+        except sqlite3.DatabaseError:
+            _reset_corrupt_table(conn)
+            conn.execute(
+                f"""
+                INSERT OR REPLACE INTO {TABLE} (
+                    run_id,
+                    profile,
+                    stage_name,
+                    stage_order,
+                    status,
+                    started_at,
+                    completed_at,
+                    details_json,
+                    error_type,
+                    error_message,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                params,
+            )
         conn.commit()
     finally:
         conn.close()
@@ -122,15 +157,19 @@ def finish_stage(
     now_iso = _now_iso()
     try:
         merged_details: dict[str, Any] = {}
-        row = conn.execute(
-            f"""
-            SELECT details_json
-            FROM {TABLE}
-            WHERE run_id = ?
-              AND stage_name = ?
-            """,
-            (str(run_id), str(stage_name)),
-        ).fetchone()
+        try:
+            row = conn.execute(
+                f"""
+                SELECT details_json
+                FROM {TABLE}
+                WHERE run_id = ?
+                  AND stage_name = ?
+                """,
+                (str(run_id), str(stage_name)),
+            ).fetchone()
+        except sqlite3.DatabaseError:
+            _reset_corrupt_table(conn)
+            row = None
         if row and row[0]:
             try:
                 decoded = json.loads(str(row[0]))
@@ -178,15 +217,19 @@ def heartbeat_stage(
     conn = _connect(db_path)
     now_iso = _now_iso()
     try:
-        row = conn.execute(
-            f"""
-            SELECT details_json
-            FROM {TABLE}
-            WHERE run_id = ?
-              AND stage_name = ?
-            """,
-            (str(run_id), str(stage_name)),
-        ).fetchone()
+        try:
+            row = conn.execute(
+                f"""
+                SELECT details_json
+                FROM {TABLE}
+                WHERE run_id = ?
+                  AND stage_name = ?
+                """,
+                (str(run_id), str(stage_name)),
+            ).fetchone()
+        except sqlite3.DatabaseError:
+            _reset_corrupt_table(conn)
+            row = None
         merged_details: dict[str, Any] = {}
         if row and row[0]:
             try:
@@ -231,13 +274,17 @@ def fail_stale_running_stages(
     now_iso = now.isoformat()
     updated = 0
     try:
-        rows = conn.execute(
-            f"""
-            SELECT run_id, stage_name, started_at, updated_at
-            FROM {TABLE}
-            WHERE status = 'running'
-            """
-        ).fetchall()
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT run_id, stage_name, started_at, updated_at
+                FROM {TABLE}
+                WHERE status = 'running'
+                """
+            ).fetchall()
+        except sqlite3.DatabaseError:
+            _reset_corrupt_table(conn)
+            return 0
         for run_id, stage_name, started_at, updated_at in rows:
             anchor_raw = updated_at or started_at
             try:
@@ -282,15 +329,19 @@ def fail_stale_running_stages(
 def completed_stages(*, db_path: Path, run_id: str) -> set[str]:
     conn = _connect(db_path)
     try:
-        rows = conn.execute(
-            f"""
-            SELECT stage_name
-            FROM {TABLE}
-            WHERE run_id = ?
-              AND status IN ('completed', 'skipped')
-            """,
-            (run_id,),
-        ).fetchall()
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT stage_name
+                FROM {TABLE}
+                WHERE run_id = ?
+                  AND status IN ('completed', 'skipped')
+                """,
+                (run_id,),
+            ).fetchall()
+        except sqlite3.DatabaseError:
+            _reset_corrupt_table(conn)
+            return set()
         return {str(r[0]) for r in rows if r and r[0]}
     finally:
         conn.close()
@@ -300,15 +351,19 @@ def run_rows(*, db_path: Path, run_id: str) -> list[dict[str, Any]]:
     conn = _connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        rows = conn.execute(
-            f"""
-            SELECT *
-            FROM {TABLE}
-            WHERE run_id = ?
-            ORDER BY stage_order ASC
-            """,
-            (run_id,),
-        ).fetchall()
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT *
+                FROM {TABLE}
+                WHERE run_id = ?
+                ORDER BY stage_order ASC
+                """,
+                (run_id,),
+            ).fetchall()
+        except sqlite3.DatabaseError:
+            _reset_corrupt_table(conn)
+            return []
         return [dict(r) for r in rows]
     finally:
         conn.close()

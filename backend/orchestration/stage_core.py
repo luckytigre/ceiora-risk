@@ -10,6 +10,8 @@ import numpy as np
 
 def run_core_stage(
     *,
+    profile: str,
+    run_id: str,
     stage: str,
     as_of_date: str,
     should_run_core: bool,
@@ -21,7 +23,9 @@ def run_core_stage(
     reset_core_cache: bool = False,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
     config_module,
+    core_reads_module,
     sqlite_module,
+    persist_model_outputs_fn: Callable[..., dict[str, Any]],
     rebuild_raw_cross_section_history_fn: Callable[..., Any],
     rebuild_cross_section_snapshot_fn: Callable[..., Any],
     build_and_persist_estu_membership_fn: Callable[..., Any],
@@ -159,6 +163,27 @@ def run_core_stage(
         sqlite_module.cache_set("risk_engine_cov", serialize_covariance_fn(cov), db_path=cache_db)
         sqlite_module.cache_set("risk_engine_specific_risk", specific_risk, db_path=cache_db)
         sqlite_module.cache_set("risk_engine_meta", risk_engine_meta, db_path=cache_db)
+        model_outputs_write = persist_model_outputs_fn(
+            data_db=data_db,
+            cache_db=cache_db,
+            run_id=run_id,
+            refresh_mode=profile,
+            status="ok",
+            started_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            source_dates=core_reads_module.load_source_dates(data_db=data_db),
+            params={
+                "profile": str(profile),
+                "force_core": bool(force_core),
+                "core_reason": str(core_reason),
+                "lookback_days": int(config_module.LOOKBACK_DAYS),
+                "cross_section_min_age_days": int(config_module.CROSS_SECTION_MIN_AGE_DAYS),
+                "risk_recompute_interval_days": int(config_module.RISK_RECOMPUTE_INTERVAL_DAYS),
+            },
+            risk_engine_state=risk_engine_meta,
+            cov=cov,
+            specific_risk_by_ticker=specific_risk,
+        )
         if progress_callback is not None:
             progress_callback(
                 {
@@ -173,6 +198,7 @@ def run_core_stage(
             "factor_count": int(cov.shape[1]) if cov is not None and not cov.empty else 0,
             "specific_risk_ticker_count": int(len(specific_risk)),
             "risk_engine_meta": risk_engine_meta,
+            "model_outputs_write": model_outputs_write,
         }
 
     raise ValueError(f"Unsupported core stage: {stage}")
