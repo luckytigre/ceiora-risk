@@ -25,7 +25,6 @@ AACC.OQ,AACC,,
 AAI.N,AAI,,
 AAI.TH,AAI,,
 AAL.OQ,AAL,US02376R1023,Nasdaq Stock Exchange Global Select Market
-AAMI.K,AAMI,US10948W1036,New York Consolidated
 AAMI.N,AAMI,US10948W1036,New York Stock Exchange
 AAOI.OQ,AAOI,US03823U1025,NASDAQ Stock Exchange Global Market
 AAON.OQ,AAON,US0003602069,Nasdaq Stock Exchange Global Select Market
@@ -39,22 +38,18 @@ ABAT.OQ,ABAT,US02451V3096,NASDAQ Stock Exchange Capital Market
 ABBCD.OQ,ABBCD,,
 ABBV.N,ABBV,US00287Y1091,New York Stock Exchange
 ABC.II,ABC,,
-ABCB.K,ABCB,US03076K1088,New York Consolidated
 ABCB.N,ABCB,US03076K1088,New York Stock Exchange
 ABCD.OQ,ABCD,,
 ABCO.OQ,ABCO,,
 ABCW.OQ,ABCW,,
 ABEO.OQ,ABEO,US00289Y2063,NASDAQ Stock Exchange Capital Market
-ABG,ABG,US0434361046,New York Consolidated
 ABG.N,ABG,US0434361046,New York Stock Exchange
 ABI.II,ABI,,
 ABK.II,ABK,,
-ABM,ABM,US0009571003,New York Consolidated
 ABM.N,ABM,US0009571003,New York Stock Exchange
 ABMD.O^L22,ABMD,US0036541003,Consolidated Issue Listed on Nasdaq Global Select Market
 ABNB.OQ,ABNB,US0090661010,Nasdaq Stock Exchange Global Select Market
 ABOS.OQ,ABOS,US00509G2093,Nasdaq Stock Exchange Global Select Market
-ABR,ABR,US0389231087,New York Consolidated
 ABR.N,ABR,US0389231087,New York Stock Exchange
 ABSI.OQ,ABSI,US00091E1091,Nasdaq Stock Exchange Global Select Market
 ABT.N,ABT,US0028241000,New York Stock Exchange
@@ -62,13 +57,11 @@ ABUS.OQ,ABUS,CA03879J1003,Nasdaq Stock Exchange Global Select Market
 ABX.N,ABX,US00258Y1047,New York Stock Exchange
 ABXA.II,ABXA,,
 ACA.N,ACA,US0396531008,New York Stock Exchange
-ACAD.O,ACAD,US0042251084,Consolidated Issue Listed on Nasdaq Global Select Market
 ACAD.OQ,ACAD,US0042251084,Nasdaq Stock Exchange Global Select Market
 ACAP.O,ACAP,,
 ACAS.OQ,ACAS,,
 ACCAF.TPRM,ACCAF,US03940R1077,TPICAP
 ACCL.OQ,ACCL,KYG0069D1108,NASDAQ Stock Exchange Capital Market
-ACCO.K,ACCO,US00081T1088,New York Consolidated
 ACCO.N,ACCO,US00081T1088,New York Stock Exchange
 ACCRD.CJ,ACCRD,US45816D1000,Costa Rica Exchange
 ACDC.OQ,ACDC,US74319N1000,Nasdaq Stock Exchange Global Select Market
@@ -79,22 +72,18 @@ ACF.N,ACF,,
 ACFN.OQ,ACFN,US0048482063,NASDAQ Stock Exchange Capital Market
 ACGL.OQ,ACGL,BMG0450A1053,Nasdaq Stock Exchange Global Select Market
 ACGP.PK,ACGP,US0455281065,USA Pink Sheets
-ACH,ACH,US6907321029,New York Consolidated
 ACH.N,ACH,US6907321029,New York Stock Exchange
 ACHC.OQ,ACHC,US00404A1097,Nasdaq Stock Exchange Global Select Market
 ACHR.N,ACHR,US03945R1023,New York Stock Exchange
 ACI.N,ACI,US0130911037,New York Stock Exchange
-ACIC.O,ACIC,US9107101027,Consolidated Issue listed on NASDAQ Capital Market
 ACIC.OQ,ACIC,US9107101027,NASDAQ Stock Exchange Capital Market
 ACIW.OQ,ACIW,US0044981019,Nasdaq Stock Exchange Global Select Market
 ACLS.OQ,ACLS,US0545402085,Nasdaq Stock Exchange Global Select Market
 ACLX.OQ,ACLX,US03940C1009,Nasdaq Stock Exchange Global Select Market
-ACM,ACM,US00766T1007,New York Consolidated
 ACM.N,ACM,US00766T1007,New York Stock Exchange
 ACMR.OQ,ACMR,US00108J1097,NASDAQ Stock Exchange Global Market
 ACN.N,ACN,IE00B4BNMY34,New York Stock Exchange
 ACNB.OQ,ACNB,US0008681092,NASDAQ Stock Exchange Capital Market
-ACNT.O,ACNT,US8715651076,NASDAQ National Market System
 ACNT.OQ,ACNT,US8715651076,NASDAQ Stock Exchange Global Market
 ACO.N,ACO,,
 ACOM.OQ,ACOM,,
@@ -116,14 +105,12 @@ ACW.PH,ACW,,
 AD,AD,US9116841084,New York Consolidated
 ADAM.OQ,ADAM,US6496048405,Nasdaq Stock Exchange Global Select Market
 ADBE.OQ,ADBE,US00724F1012,Nasdaq Stock Exchange Global Select Market
-ADC,ADC,US0084921008,New York Consolidated
 ADC.N,ADC,US0084921008,New York Stock Exchange
 ADCT.N,ADCT,CH0499880968,New York Stock Exchange
 ADCT.O^L10,ADCT,US0008863096,Consolidated Issue Listed on Nasdaq Global Select Market
 ADEA.OQ,ADEA,US00676P1075,Nasdaq Stock Exchange Global Select Market
 ADES.OQ,ADES,,
 ADGE.A,ADGE,,
-ADI.O,ADI,US0326541051,Consolidated Issue Listed on Nasdaq Global Select Market
 ADI.OQ,ADI,US0326541051,Nasdaq Stock Exchange Global Select Market
 ADM.N,ADM,US0394831020,New York Stock Exchange
 ADMA.OQ,ADMA,US0008991046,NASDAQ Stock Exchange Global Market
@@ -145,7 +132,6 @@ ADVS.O^G15,ADVS,US0079741080,Consolidated Issue Listed on Nasdaq Global Select M
 ADY.P,ADY,,
 AEBASG.TRE,AEBASG,US0185223007,London Stock Exchange
 AEBI.OQ,AEBI,CH0027352993,Nasdaq Stock Exchange Global Select Market
-AEC.B,AEC,CA03464C2058,Boston SE when trading NASDAQ Global Market
 AEC.N,AEC,CA03464C2058,New York Stock Exchange
 AEE.II,AEE,US02361DAH35,
 AEE.N,AEE,US0236081024,New York Stock Exchange
@@ -153,7 +139,6 @@ AEGR.OQ,AEGR,,
 AEHR.OQ,AEHR,US00760J1088,NASDAQ Stock Exchange Capital Market
 AEIS.OQ,AEIS,US0079731008,Nasdaq Stock Exchange Global Select Market
 AEO.N,AEO,US02553E1064,New York Stock Exchange
-AEP.O,AEP,US0255371017,Consolidated Issue Listed on Nasdaq Global Select Market
 AEP.OQ,AEP,US0255371017,Nasdaq Stock Exchange Global Select Market
 AEPI.OQ,AEPI,,
 AEPI.P,AEPI,,
@@ -186,38 +171,30 @@ AGEN.OQ,AGEN,US00847G8042,NASDAQ Stock Exchange Capital Market
 AGIL.IX,AGIL,,
 AGIO.OQ,AGIO,US00847X1046,Nasdaq Stock Exchange Global Select Market
 AGL.N,AGL,US00857U1079,New York Stock Exchange
-AGM,AGM,US3131483063,New York Consolidated
 AGM.N,AGM,US3131483063,New York Stock Exchange
 AGN.II,AGN,,
 AGN.N,AGN,,
 AGN^E20,AGN^E20,IE00BY9D5467,New York Consolidated
 AGO.P,AGO,BMG0585R1060,NYSE Arca
 AGP^L12,AGP,US03073T1025,New York Consolidated
-AGX,AGX,US04010E1091,New York Consolidated
 AGX.N,AGX,US04010E1091,New York Stock Exchange
-AGYS.O,AGYS,US00847J1051,Consolidated Issue Listed on Nasdaq Global Select Market
 AGYS.OQ,AGYS,US00847J1051,Nasdaq Stock Exchange Global Select Market
 AH.N,AH,,
 AHCO.OQ,AHCO,US00653Q1022,NASDAQ Stock Exchange Capital Market
 AHG.B,AHG,US98422P1084,Boston SE when trading NASDAQ Global Market
 AHL.N,AHL,BMG053845019,New York Stock Exchange
-AHL.PH,AHL,BMG053845019,NASDAQ OMX PSX  SE
 AHM.TH,AHM,,
-AHR.B,AHR,US3981823038,Boston Stock Exchange Inc
 AHR.N,AHR,US3981823038,New York Stock Exchange
-AHRT.K,AHRT,US04208T1088,New York Consolidated
 AHRT.N,AHRT,US04208T1088,New York Stock Exchange
 AHT.N,AHT,US0441037944,New York Stock Exchange
 AI.N,AI,US12468P1049,New York Stock Exchange
 AIG.N,AIG,US0268747849,New York Stock Exchange
 AII.N,AII,US0269481091,New York Stock Exchange
 AIMTN.BCU,AIMTN,US00900T1079,BATS Europe
-AIN,AIN,US0123481089,New York Consolidated
 AIN.N,AIN,US0123481089,New York Stock Exchange
 AINV.OQ,AINV,,
 AIOT.OQ,AIOT,US73931J1097,NASDAQ Stock Exchange Global Market
 AIP.OQ,AIP,US04302A1043,NASDAQ Stock Exchange Global Market
-AIR,AIR,US0003611052,New York Consolidated
 AIR.N,AIR,US0003611052,New York Stock Exchange
 AIRG.OQ,AIRG,US00938A1043,NASDAQ Stock Exchange Capital Market
 AIRJ.OQ,AIRJ,US6121601016,NASDAQ Stock Exchange Capital Market
@@ -225,7 +202,6 @@ AIRM.O,AIRM,,
 AIRO.OQ,AIRO,US0094221068,NASDAQ Stock Exchange Global Market
 AIRS.OQ,AIRS,US0094961002,NASDAQ Stock Exchange Global Market
 AISP.OQ,AISP,US0089401089,NASDAQ Stock Exchange Global Market
-AIT,AIT,US03820C1053,New York Consolidated
 AIT.N,AIT,US03820C1053,New York Stock Exchange
 AIV.II,AIV,,
 AIV.N,AIV,US03748R7474,New York Stock Exchange
@@ -235,7 +211,6 @@ AJG.N,AJG,US3635761097,New York Stock Exchange
 AKAM.OQ,AKAM,US00971T1016,Nasdaq Stock Exchange Global Select Market
 AKBA.OQ,AKBA,US00972D1054,NASDAQ Stock Exchange Capital Market
 AKCA.OQ,AKCA,,
-AKR,AKR,US0042391096,New York Consolidated
 AKR.N,AKR,US0042391096,New York Stock Exchange
 AKRO.OQ^L25,AKRO,US00973Y1082,Nasdaq Stock Exchange Global Select Market
 AKRX.OQ,AKRX,,
@@ -251,7 +226,6 @@ ALFA.OQ,ALFA,,
 ALG.N,ALG,US0113111076,New York Stock Exchange
 ALGM.OQ,ALGM,US01749D1054,Nasdaq Stock Exchange Global Select Market
 ALGN.OQ,ALGN,US0162551016,Nasdaq Stock Exchange Global Select Market
-ALGN.P,ALGN,US0162551016,NYSE Arca when trading NASDAQ Global Market
 ALGS.OQ,ALGS,US01626L2043,NASDAQ Stock Exchange Capital Market
 ALGT.OQ,ALGT,US01748X1028,Nasdaq Stock Exchange Global Select Market
 ALH.N,ALH,US01862Q1076,New York Stock Exchange
@@ -259,7 +233,6 @@ ALHC.OQ,ALHC,US01625V1044,Nasdaq Stock Exchange Global Select Market
 ALIT.N,ALIT,US01626W1018,New York Stock Exchange
 ALJ.N,ALJ,,
 ALJ.PH,ALJ,,
-ALK,ALK,US0116591092,New York Consolidated
 ALK.N,ALK,US0116591092,New York Stock Exchange
 ALKS.OQ,ALKS,IE00B56GVS15,Nasdaq Stock Exchange Global Select Market
 ALKT.OQ,ALKT,US01644J1088,Nasdaq Stock Exchange Global Select Market
@@ -270,7 +243,6 @@ ALLY.N,ALLY,US02005N1000,New York Stock Exchange
 ALMS.OQ,ALMS,US0223071020,Nasdaq Stock Exchange Global Select Market
 ALMU.OQ,ALMU,US00776X1090,NASDAQ Stock Exchange Capital Market
 ALNC.OQ,ALNC,,
-ALNT.O,ALNT,US0193301092,NASDAQ National Market System
 ALNT.OQ,ALNT,US0193301092,NASDAQ Stock Exchange Global Market
 ALNY.OQ,ALNY,US02043Q1076,Nasdaq Stock Exchange Global Select Market
 ALOADE.INS,ALOADE,,
@@ -287,7 +259,6 @@ ALTR.OQ,ALTR,US0213691035,
 ALTRN.BCU,ALTRN,US0213691035,BATS Europe
 ALTU.O,ALTU,US02156Y1038,Consolidated Issue listed on NASDAQ Capital Market
 ALV.N,ALV,US0528001094,New York Stock Exchange
-ALX,ALX,US0147521092,New York Consolidated
 ALX.N,ALX,US0147521092,New York Stock Exchange
 ALXN.O^G21,ALXN,US0153511094,Consolidated Issue Listed on Nasdaq Global Select Market
 ALXO.OQ,ALXO,US00166B1052,Nasdaq Stock Exchange Global Select Market
@@ -302,7 +273,6 @@ AMC.N,AMC,US00165C3025,New York Stock Exchange
 AMCC.II,AMCC,,
 AMCR.N,AMCR,JE00BV7DQ550,New York Stock Exchange
 AMCX.OQ,AMCX,US00164V1035,Nasdaq Stock Exchange Global Select Market
-AMD.O,AMD,US0079031078,Consolidated Issue Listed on Nasdaq Global Select Market
 AMD.OQ,AMD,US0079031078,Nasdaq Stock Exchange Global Select Market
 AME.N,AME,US0311001004,New York Stock Exchange
 AMED.MX,AMED*,US0234361089,Bolsa Mexicana de Valores S.A. de C.V.
@@ -316,7 +286,6 @@ AMKR.OQ,AMKR,US0316521006,Nasdaq Stock Exchange Global Select Market
 AMKRDE.INS,AMKRDE,,
 AMLN.O^H12,AMLN,US0323461089,Consolidated Issue Listed on Nasdaq Global Select Market
 AMLX.OQ,AMLX,US03237H1014,Nasdaq Stock Exchange Global Select Market
-AMN,AMN,US0017441017,New York Consolidated
 AMN.N,AMN,US0017441017,New York Stock Exchange
 AMP.II,AMP,,
 AMP.N,AMP,US03076C1062,New York Stock Exchange
@@ -327,7 +296,6 @@ AMR.N,AMR,US0207641061,New York Stock Exchange
 AMRC.N,AMRC,US02361E1082,New York Stock Exchange
 AMRI.OQ,AMRI,,
 AMRTXP.CJ,AMRTX,US60468T1051,Costa Rica Exchange
-AMRX.O,AMRX,US03168L1052,Consolidated Issue Listed on Nasdaq Global Select Market
 AMRX.OQ,AMRX,US03168L1052,Nasdaq Stock Exchange Global Select Market
 AMSC.OQ,AMSC,US0301112076,Nasdaq Stock Exchange Global Select Market
 AMSCDE.INS,AMSCDE,,
@@ -335,7 +303,6 @@ AMSF.OQ,AMSF,US03071H1005,Nasdaq Stock Exchange Global Select Market
 AMSG.OQ,AMSG,,
 AMSWAN.BCU,AMSWAN,US0296831094,BATS Europe
 AMT.N,AMT,US03027X1000,New York Stock Exchange
-AMTB.K,AMTB,US0235761014,New York Consolidated
 AMTB.N,AMTB,US0235761014,New York Stock Exchange
 AMTD.O^J20,AMTD,US87236Y1082,Consolidated Issue Listed on Nasdaq Global Select Market
 AMTG.N,AMTG,,
@@ -356,7 +323,6 @@ ANDV.K^J18,ANDV,US03349M1053,New York Consolidated
 ANDWDE.INS,ANDWDE,,
 ANEN.OQ,ANEN,,
 ANET.N,ANET,US0404132054,New York Stock Exchange
-ANF,ANF,US0028962076,New York Consolidated
 ANF.N,ANF,US0028962076,New York Stock Exchange
 ANGI.OQ,ANGI,US00183L2016,Nasdaq Stock Exchange Global Select Market
 ANGO.OQ,ANGO,US03475V1017,Nasdaq Stock Exchange Global Select Market
@@ -373,13 +339,10 @@ AOL.N,AOL,,
 AOMR.N,AOMR,US03464Y1082,New York Stock Exchange
 AON.N,AON,IE00BLP1HW54,New York Stock Exchange
 AONE.OQ,AONE,,
-AORT.K,AORT,US2289031005,New York Consolidated
 AORT.N,AORT,US2289031005,New York Stock Exchange
-AOS,AOS,US8318652091,New York Consolidated
 AOS.N,AOS,US8318652091,New York Stock Exchange
 AOSL.OQ,AOSL,BMG6331P1041,Nasdaq Stock Exchange Global Select Market
 AOUT.OQ,AOUT,US02875D1090,Nasdaq Stock Exchange Global Select Market
-AP,AP,US0320371034,New York Consolidated
 AP.N,AP,US0320371034,New York Stock Exchange
 APA.II,APA,,
 APAGF.O,APAGF,,
@@ -411,7 +374,6 @@ AQB.OQ,AQB,US03842K3095,NASDAQ Stock Exchange Capital Market
 AQMS.OQ,AQMS,US03837J3095,NASDAQ Stock Exchange Capital Market
 AQST.OQ,AQST,US03843E1047,NASDAQ Stock Exchange Global Market
 AR.N,AR,US03674X1063,New York Stock Exchange
-ARAY.O,ARAY,US0043971052,Consolidated Issue Listed on Nasdaq Global Select Market
 ARAY.OQ,ARAY,US0043971052,Nasdaq Stock Exchange Global Select Market
 ARBADE.INS,ARBADE,,
 ARCB.OQ,ARCB,US03937C1053,Nasdaq Stock Exchange Global Select Market
@@ -421,7 +383,6 @@ ARD.C,ARD,,
 ARDNA.OQ,ARDNA,,
 ARDT.N,ARDT,US03980N1072,New York Stock Exchange
 ARDX.OQ,ARDX,US0396971071,NASDAQ Stock Exchange Global Market
-ARE,ARE,US0152711091,New York Consolidated
 ARE.N,ARE,US0152711091,New York Stock Exchange
 AREN.A,AREN,US0400441095,American Stock Exchange
 ARES.N,ARES,US03990B1017,New York Stock Exchange
@@ -441,7 +402,6 @@ ARNAN.BCU,ARNAN,US0400476075,BATS Europe
 AROC.N,AROC,US03957W1062,New York Stock Exchange
 AROW.OQ,AROW,US0427441029,Nasdaq Stock Exchange Global Select Market
 ARPI.N,ARPI,,
-ARQ.O,ARQ,US00770C1018,NASDAQ National Market System
 ARQ.OQ,ARQ,US00770C1018,NASDAQ Stock Exchange Global Market
 ARQT.OQ,ARQT,US03969K1088,Nasdaq Stock Exchange Global Select Market
 ARR.N,ARR,US0423157058,New York Stock Exchange
@@ -459,7 +419,6 @@ ARX.N,ARX,KYG008941083,New York Stock Exchange
 ARXT.OQ,ARXT,,
 ARXX.OQ,ARXX,,
 ASAN.N,ASAN,US04342Y1047,New York Stock Exchange
-ASB,ASB,US0454871056,New York Consolidated
 ASB.N,ASB,US0454871056,New York Stock Exchange
 ASC.N,ASC,MHY0207T1001,New York Stock Exchange
 ASCA.OQ,NIVF,VGG0544E1390,NASDAQ Stock Exchange Capital Market
@@ -486,7 +445,6 @@ ASPS.OQ,ASPS,LU0445408270,Nasdaq Stock Exchange Global Select Market
 ASRT.OQ,ASRT,US04546C3043,NASDAQ Stock Exchange Capital Market
 ASST.OQ,ASST,US8629453007,NASDAQ Stock Exchange Global Market
 ASTE.OQ,ASTE,US0462241011,Nasdaq Stock Exchange Global Select Market
-ASTH.O,ASTH,US03763A2078,Consolidated Issue listed on NASDAQ Capital Market
 ASTH.OQ,ASTH,US03763A2078,NASDAQ Stock Exchange Capital Market
 ASTS.OQ,ASTS,US00217D1000,Nasdaq Stock Exchange Global Select Market
 ASTX.OQ,ASTX,,
@@ -511,12 +469,10 @@ ATMI.OQ,ATMI,,
 ATMLN.BCU,ATMLN,US0495131049,BATS Europe
 ATMU.N,ATMU,US04956D1072,New York Stock Exchange
 ATNI.OQ,ATNI,US00215F1075,Nasdaq Stock Exchange Global Select Market
-ATNI.P,ATNI,US00215F1075,NYSE Arca when trading NASDAQ Global Market
 ATNY.OQ,ATNY,,
 ATO.N,ATO,US0495601058,New York Stock Exchange
 ATOM.OQ,ATOM,US04965B1008,NASDAQ Stock Exchange Capital Market
 ATOS.OQ,ATOS,US04962H7044,NASDAQ Stock Exchange Capital Market
-ATR,ATR,US0383361039,New York Consolidated
 ATR.N,ATR,US0383361039,New York Stock Exchange
 ATRA.OQ,ATRA,US0465132068,Nasdaq Stock Exchange Global Select Market
 ATRC.OQ,ATRC,US04963C2098,NASDAQ Stock Exchange Global Market
@@ -527,22 +483,17 @@ ATW.B,ATW,,
 ATW^J17,ATW^J17,US0500951084,New York Consolidated
 ATX.OQ,ATX,,
 ATYR.OQ,ATYR,US0021202025,NASDAQ Stock Exchange Capital Market
-AUB,AUB,US04911A1079,New York Consolidated
 AUB.N,AUB,US04911A1079,New York Stock Exchange
 AUPH.OQ,AUPH,CA05156V1022,NASDAQ Stock Exchange Global Market
 AURA.OQ,AURA,US05153U1079,NASDAQ Stock Exchange Global Market
 AUXL.OQ,AUXL,,
-AVA,AVA,US05379B1070,New York Consolidated
 AVA.N,AVA,US05379B1070,New York Stock Exchange
 AVAH.OQ,AVAH,US05356F1057,Nasdaq Stock Exchange Global Select Market
-AVAV.O,AVAV,US0080731088,Consolidated Issue Listed on Nasdaq Global Select Market
 AVAV.OQ,AVAV,US0080731088,Nasdaq Stock Exchange Global Select Market
-AVB,AVB,US0534841012,New York Consolidated
 AVB.N,AVB,US0534841012,New York Stock Exchange
 AVBH.OQ,AVBH,US05368J1034,Nasdaq Stock Exchange Global Select Market
 AVBP.OQ,AVBP,US04272N1028,NASDAQ Stock Exchange Global Market
 AVCT.OQ,AVCT,,
-AVD,AVD,US0303711081,New York Consolidated
 AVD.N,AVD,US0303711081,New York Stock Exchange
 AVDR.OQ,AVDR,,NASDAQ Stock Exchange Global Market
 AVG.N,AVG,,
@@ -560,8 +511,6 @@ AVO.OQ,AVO,US60510V1089,Nasdaq Stock Exchange Global Select Market
 AVPT.OQ,AVPT,US0536041041,Nasdaq Stock Exchange Global Select Market
 AVP^A20,AVP^A20,US0543031027,New York Consolidated
 AVR.OQ,AVR,US03675P1021,NASDAQ Stock Exchange Global Market
-AVR.PH,AVR,US03675P1021,NASDAQ OMX PSX  SE
-AVT.O,AVT,US0538071038,Consolidated Issue Listed on Nasdaq Global Select Market
 AVT.OQ,AVT,US0538071038,Nasdaq Stock Exchange Global Select Market
 AVTR.N,AVTR,US05352A1007,New York Stock Exchange
 AVTX.OQ,AVTX,US05338F3064,NASDAQ Stock Exchange Capital Market
@@ -572,7 +521,6 @@ AVY.N,AVY,US0536111091,New York Stock Exchange
 AW.N,AW,,
 AWBC.OQ,AWBC,,
 AWK.N,AWK,US0304201033,New York Stock Exchange
-AWR,AWR,US0298991011,New York Consolidated
 AWR.N,AWR,US0298991011,New York Stock Exchange
 AWRE.OQ,AWRE,US05453N1000,NASDAQ Stock Exchange Global Market
 AX.N,AX,US05465C1009,New York Stock Exchange
@@ -581,7 +529,6 @@ AXGN.OQ,AXGN,US05463X1063,NASDAQ Stock Exchange Capital Market
 AXLL.N,AXLL,,
 AXLRNP.CJ,AXLRN,US00434H1086,Costa Rica Exchange
 AXNX.MX,AXNX*,US05465P1012,Bolsa Mexicana de Valores S.A. de C.V.
-AXON.O,AXON,US05464C1018,Consolidated Issue Listed on Nasdaq Global Select Market
 AXON.OQ,AXON,US05464C1018,Nasdaq Stock Exchange Global Select Market
 AXP.N,AXP,US0258161092,New York Stock Exchange
 AXR,AXR,US0321591051,New York Consolidated
@@ -591,16 +538,13 @@ AXTA.N,AXTA,BMG0750C1082,New York Stock Exchange
 AXTI.OQ,AXTI,US00246W1036,Nasdaq Stock Exchange Global Select Market
 AYE.II,AYE,,
 AYE^B11,AYE,US0173611064,New York Consolidated
-AYI,AYI,US00508Y1029,New York Consolidated
 AYI.N,AYI,US00508Y1029,New York Stock Exchange
 AYR.N,AYR,,
 AZNN.MX,AZNN,US0463531089,Bolsa Mexicana de Valores S.A. de C.V.
 AZO.II,AZO,,
 AZO.N,AZO,US0533321024,New York Stock Exchange
 AZPNDE.INS,AZPNDE,,
-AZTA.O,AZTA,US1143401024,Consolidated Issue Listed on Nasdaq Global Select Market
 AZTA.OQ,AZTA,US1143401024,Nasdaq Stock Exchange Global Select Market
-AZZ,AZZ,US0024741045,New York Consolidated
 AZZ.N,AZZ,US0024741045,New York Stock Exchange
 BA.N,BA,US0970231058,New York Stock Exchange
 BABA.N,BABA,US01609W1027,New York Stock Exchange
@@ -622,7 +566,6 @@ BATRK.OQ,BATRK,US0477263026,Nasdaq Stock Exchange Global Select Market
 BAX.N,BAX,US0718131099,New York Stock Exchange
 BBAI.N,BBAI,US08975B1098,New York Stock Exchange
 BBBB.OQ,BBBB,,
-BBBY.K,BBBY,US6903701018,New York Consolidated
 BBBY.N,BBBY,US6903701018,New York Stock Exchange
 BBBYDE.INS,BBBYDE,,
 BBBYN.BCU,BBBYN,US0758961009,BATS Europe
@@ -633,11 +576,9 @@ BBIO.OQ,BBIO,US10806X1028,Nasdaq Stock Exchange Global Select Market
 BBNK.OQ,BBNK,,
 BBNX.OQ,BBNX,US08659B1026,NASDAQ Stock Exchange Global Market
 BBSI.OQ,BBSI,US0684631080,Nasdaq Stock Exchange Global Select Market
-BBT,BBT,US0846801076,New York Consolidated
 BBT.II,BBT,,
 BBT.N,BBT,US0846801076,New York Stock Exchange
 BBUC.TO,BBUC,CA11259V1067,The Toronto Stock Exchange
-BBW,BBW,US1200761047,New York Consolidated
 BBW.N,BBW,US1200761047,New York Stock Exchange
 BBWI.N,BBWI,US0708301041,New York Stock Exchange
 BBX.N,BBX,,
@@ -659,7 +600,6 @@ BCRH.N,BCRH,,
 BCRX.OQ,BCRX,US09058V1035,Nasdaq Stock Exchange Global Select Market
 BCTG.OQ,BCTG,,
 BDC.N,BDC,US0774541066,New York Stock Exchange
-BDC.P,BDC,US0774541066,NYSE Arca
 BDK.N,BDK,,
 BDN.N,BDN,US1053682035,New York Stock Exchange
 BDSX.OQ,BDSX,US09075X2071,NASDAQ Stock Exchange Global Market
@@ -687,10 +627,8 @@ BFAM.OQ,BFAM,,
 BFB.II,BFB,,
 BFB.N,BF.B,US1156372096,New York Stock Exchange
 BFC.OQ,BFC,US06211J1007,NASDAQ Stock Exchange Capital Market
-BFH,BFH,US0185811082,New York Consolidated
 BFH.N,BFH,US0185811082,New York Stock Exchange
 BFLY.N,BFLY,US1241551027,New York Stock Exchange
-BFS,BFS,US8043951016,New York Consolidated
 BFS.N,BFS,US8043951016,New York Stock Exchange
 BFST.OQ,BFST,US12326C1053,Nasdaq Stock Exchange Global Select Market
 BG.N,BG,CH1300646267,New York Stock Exchange
@@ -705,7 +643,6 @@ BGSF.K,BGSF,US05601C1053,New York Consolidated
 BH.N,BH,US08986R3093,New York Stock Exchange
 BHB.A,BHB,US0668491006,American Stock Exchange
 BHBK.OQ,BHBK,,
-BHE,BHE,US08160H1014,New York Consolidated
 BHE.N,BHE,US08160H1014,New York Stock Exchange
 BHF.OQ,BHF,US10922N1037,Nasdaq Stock Exchange Global Select Market
 BHR.N,BHR,US10482B1017,New York Stock Exchange
@@ -718,7 +655,6 @@ BIG.II,BIG,,
 BIGGQ.PK,BIGGQ,US0893021032,USA Pink Sheets
 BIIB.OQ,BIIB,US09062X1037,Nasdaq Stock Exchange Global Select Market
 BILL.N,BILL,US0900431000,New York Stock Exchange
-BIO,BIO,US0905722072,New York Consolidated
 BIO.N,BIO,US0905722072,New York Stock Exchange
 BIOA.OQ,BIOA,US09077V1008,Nasdaq Stock Exchange Global Select Market
 BIPC.N,BIPC,CA11276H1064,New York Stock Exchange
@@ -728,16 +664,13 @@ BJ.N,BJ,US05550J1016,New York Stock Exchange
 BJGP.OQ,BJGP,,
 BJRI.OQ,BJRI,US09180C1062,Nasdaq Stock Exchange Global Select Market
 BJS.II,BJS,,
-BK,BK,US0640581007,New York Consolidated
 BK.N,BK,US0640581007,New York Stock Exchange
 BKD.N,BKD,US1124631045,New York Stock Exchange
 BKE.N,BKE,US1184401065,New York Stock Exchange
-BKH,BKH,US0921131092,New York Consolidated
 BKH.N,BKH,US0921131092,New York Stock Exchange
 BKI.N,BKI,,
 BKKT.N,BKKT,US05759B3050,New York Stock Exchange
 BKNG.OQ,BKNG,US09857L1089,Nasdaq Stock Exchange Global Select Market
-BKR.O,BKR,US05722G1004,Consolidated Issue Listed on Nasdaq Global Select Market
 BKR.OQ,BKR,US05722G1004,Nasdaq Stock Exchange Global Select Market
 BKS.N,BKS,,
 BKSY.N,BKSY,US09263B2079,New York Stock Exchange
@@ -751,7 +684,6 @@ BLBD.OQ,BLBD,US0953061068,NASDAQ Stock Exchange Global Market
 BLC.N,BLC,,
 BLC.PH,BLC,,
 BLD.N,BLD,US89055F1030,New York Stock Exchange
-BLDR.K,BLDR,US12008R1077,New York Consolidated
 BLDR.N,BLDR,US12008R1077,New York Stock Exchange
 BLFS.OQ,BLFS,US09062W2044,NASDAQ Stock Exchange Capital Market
 BLFY.OQ,BLFY,US09549B1044,Nasdaq Stock Exchange Global Select Market
@@ -766,7 +698,6 @@ BLNK.OQ,BLNK,US09354A1007,NASDAQ Stock Exchange Capital Market
 BLOX.N,BLOX,US88636V7284,New York Stock Exchange
 BLT.B,BLT,,
 BLT.N,BLT,,
-BLX,BLX,PAP169941328,New York Consolidated
 BLX.N,BLX,PAP169941328,New York Stock Exchange
 BLZE.OQ,BLZE,US05637B1052,NASDAQ Stock Exchange Global Market
 BMBL.OQ,BMBL,US12047B1052,Nasdaq Stock Exchange Global Select Market
@@ -776,9 +707,7 @@ BMCHN.BCU,BMCHN,US05591B1098,BATS Europe
 BMEA.OQ,BMEA,US09077A1060,Nasdaq Stock Exchange Global Select Market
 BMG3075P1014.TBEA,BMG3075P1014,BMG3075P1014,
 BMG3728V1090.TRE,BMG3728V1090,BMG3728V1090,London Stock Exchange
-BMI,BMI,US0565251081,New York Consolidated
 BMI.N,BMI,US0565251081,New York Stock Exchange
-BMR.C,BMR,IL0011832438,National SE when trading NASDAQ Global Market
 BMR.N,BMR,IL0011832438,New York Stock Exchange
 BMRC.OQ,BMRC,US0634251021,Nasdaq Stock Exchange Global Select Market
 BMRN.OQ,BMRN,US09061G1013,Nasdaq Stock Exchange Global Select Market
@@ -798,14 +727,12 @@ BNT.PH,BNT,BMG174341047,NASDAQ OMX PSX  SE
 BNTC.OQ,BNTC,US08205P2092,NASDAQ Stock Exchange Capital Market
 BNVI.OQ,BNVI,,
 BOBE.O^A18,BOBE,US0967611015,Consolidated Issue Listed on Nasdaq Global Select Market
-BOC,BOC,US1010441053,New York Consolidated
 BOC.N,BOC,US1010441053,New York Stock Exchange
 BODY.OQ,BODY,,
 BOH.N,BOH,US0625401098,New York Stock Exchange
 BOJAN.BCU,BOJAN,US0974881007,BATS Europe
 BOLT.OQ,BOLT,US0977022039,NASDAQ Stock Exchange Capital Market
 BONTQ.PK,BONTQ,US09776J1016,USA Pink Sheets
-BOOM.O,BOOM,US23291C1036,Consolidated Issue Listed on Nasdaq Global Select Market
 BOOM.OQ,BOOM,US23291C1036,Nasdaq Stock Exchange Global Select Market
 BOOT.N,BOOT,US0994061002,New York Stock Exchange
 BORL.IX,BORL,,
@@ -818,7 +745,6 @@ BPZ.N,BPZ,,
 BR.N,BR,US11133T1034,New York Stock Exchange
 BRBR.N,BRBR,US07831C1036,New York Stock Exchange
 BRBS.A,BRBS,US0958251052,American Stock Exchange
-BRC,BRC,US1046741062,New York Consolidated
 BRC.N,BRC,US1046741062,New York Stock Exchange
 BRCB.OQ,BRCB,US0922441029,NASDAQ Stock Exchange Global Market
 BRCC.N,BRCC,US05601U1051,New York Stock Exchange
@@ -837,7 +763,6 @@ BRS.C,BRS,,
 BRSL.K,BRSL,GB00BVG7F061,New York Consolidated
 BRSL.N,BRSL,GB00BVG7F061,New York Stock Exchange
 BRSP.N,BRSP,US10949T1097,New York Stock Exchange
-BRT,BRT,US0556453035,New York Consolidated
 BRT.N,BRT,US0556453035,New York Stock Exchange
 BRW.C,BRW,US78518H2022,The National Stock Exchange (formerly Cincinnati SE)
 BRX.N,BRX,US11120U1051,New York Stock Exchange
@@ -875,7 +800,6 @@ BW.N,BW,US05614L2097,New York Stock Exchange
 BWA.N,BWA,US0997241064,New York Stock Exchange
 BWB.OQ,BWB,US1086211034,NASDAQ Stock Exchange Capital Market
 BWFG.OQ,BWFG,US06654A1034,NASDAQ Stock Exchange Global Market
-BWIN.O,BWIN,US05589G1022,Consolidated Issue Listed on Nasdaq Global Select Market
 BWIN.OQ,BWIN,US05589G1022,Nasdaq Stock Exchange Global Select Market
 BWLD.O^B18,BWLD,US1198481095,Consolidated Issue Listed on Nasdaq Global Select Market
 BWMN.OQ,BWMN,US1030021018,NASDAQ Stock Exchange Global Market
@@ -896,10 +820,8 @@ BYSI.OQ,BYSI,KYG108301006,NASDAQ Stock Exchange Capital Market
 BZ.N,BZ,US48553T1060,New York Stock Exchange
 BZAI.OQ,BZAI,US0929151076,NASDAQ Stock Exchange Global Market
 BZH.N,BZH,US07556Q8814,New York Stock Exchange
-BZH.TH,BZH,US07556Q8814,Third Market Corp
 BZP.A,BZP,,
 C.N,C,US1729674242,New York Stock Exchange
-C.P,C,US1729674242,NYSE Arca
 C2GF.ICEM,C2GF,US12508E1010,TPICAP
 CA.II,CA,,
 CA.N,CA,US23306X8526,New York Stock Exchange
@@ -911,7 +833,6 @@ CAB.PH,CAB,,
 CABO.N,CABO,US12685J1051,New York Stock Exchange
 CAC.OQ,CAC,US1330341082,Nasdaq Stock Exchange Global Select Market
 CACB.OQ,CACB,,
-CACC.O,CACC,US2253101016,Consolidated Issue Listed on Nasdaq Global Select Market
 CACC.OQ,CACC,US2253101016,Nasdaq Stock Exchange Global Select Market
 CACH.OQ,CACH,,
 CACI.N,CACI,US1271903049,New York Stock Exchange
@@ -924,10 +845,8 @@ CAG.N,CAG,US2058871029,New York Stock Exchange
 CAH.N,CAH,US14149Y1082,New York Stock Exchange
 CAKE.OQ,CAKE,US1630721017,Nasdaq Stock Exchange Global Select Market
 CAL.N,CAL,US1295001044,New York Stock Exchange
-CALM.O,CALM,US1280302027,Consolidated Issue Listed on Nasdaq Global Select Market
 CALM.OQ,CALM,US1280302027,Nasdaq Stock Exchange Global Select Market
 CALX.N,CALX,US13100M5094,New York Stock Exchange
-CALY.K,CALY,US1311931042,New York Consolidated
 CALY.N,CALY,US1311931042,New York Stock Exchange
 CAM.MW,CAM,US00039J7726,Chicago Stock Exchange
 CAM.N,CAM,US00039J7726,New York Stock Exchange
@@ -942,18 +861,15 @@ CARS.N,CARS,US14575E1055,New York Stock Exchange
 CART.OQ,CART,US5653941030,Nasdaq Stock Exchange Global Select Market
 CAS.N,CAS,US82889N3843,New York Stock Exchange
 CASH.OQ,CASH,US59100U1088,Nasdaq Stock Exchange Global Select Market
-CASS.O,CASS,US14808P1093,Consolidated Issue Listed on Nasdaq Global Select Market
 CASS.OQ,CASS,US14808P1093,Nasdaq Stock Exchange Global Select Market
 CASY.OQ,CASY,US1475281036,Nasdaq Stock Exchange Global Select Market
 CAT.N,CAT,US1491231015,New York Stock Exchange
-CATO.K,CATO,US1492051065,New York Consolidated
 CATO.N,CATO,US1492051065,New York Stock Exchange
 CATX.A,CATX,US46489V3024,American Stock Exchange
 CATY.OQ,CATY,US1491501045,Nasdaq Stock Exchange Global Select Market
 CAVA.N,CAVA,US1489291021,New York Stock Exchange
 CAVMN.BCU,CAVMN,US14964U1088,BATS Europe
 CB,CB,CH0044328745,New York Consolidated
-CBAN.K,CBAN,US19623P1012,New York Consolidated
 CBAN.N,CBAN,US19623P1012,New York Stock Exchange
 CBE.II,CBE,,
 CBEY.OQ,CBEY,,
@@ -982,9 +898,7 @@ CBRLDE.INS,CBRLDE,,
 CBS.II,CBS,,
 CBSH.OQ,CBSH,US2005251036,Nasdaq Stock Exchange Global Select Market
 CBT.N,CBT,US1270551013,New York Stock Exchange
-CBU,CBU,US2036071064,New York Consolidated
 CBU.N,CBU,US2036071064,New York Stock Exchange
-CBZ,CBZ,US1248051021,New York Consolidated
 CBZ.N,CBZ,US1248051021,New York Stock Exchange
 CB^A16,CB,US1712321017,New York Consolidated
 CC.N,CC,US1638511089,New York Stock Exchange
@@ -1004,9 +918,9 @@ CCL.II,CCL,,
 CCL.N,CCL,PA1436583006,New York Stock Exchange
 CCNE.OQ,CCNE,US1261281075,Nasdaq Stock Exchange Global Select Market
 CCO.N,CCO,US18453H1068,New York Stock Exchange
-CCOI.O,CCOI,US19239V3024,Consolidated Issue Listed on Nasdaq Global Select Market
 CCOI.OQ,CCOI,US19239V3024,Nasdaq Stock Exchange Global Select Market
 CCOW.OQ,CCOW,,
+CCJ.N,CCJ,,New York Stock Exchange
 CCP^H17,CCP^H17,US1416241065,New York Consolidated
 CCRN.OQ,CCRN,US2274831047,Nasdaq Stock Exchange Global Select Market
 CCS.N,CCS,US1565043007,New York Stock Exchange
@@ -1020,23 +934,19 @@ CDI.N,CDI,,
 CDLX.OQ,CDLX,US14161W1053,NASDAQ Stock Exchange Global Market
 CDNA.OQ,CDNA,US14167L1035,NASDAQ Stock Exchange Global Market
 CDNS.OQ,CDNS,US1273871087,Nasdaq Stock Exchange Global Select Market
-CDP,CDP,US22002T1088,New York Consolidated
 CDP.N,CDP,US22002T1088,New York Stock Exchange
 CDRB.OQ,CDRB,,
 CDRE.N,CDRE,US12763L1052,New York Stock Exchange
 CDW.OQ,CDW,US12514G1085,Nasdaq Stock Exchange Global Select Market
 CDXS.OQ,CDXS,US1920051067,Nasdaq Stock Exchange Global Select Market
-CDZI.O,CDZI,US1275372076,NASDAQ National Market System
 CDZI.OQ,CDZI,US1275372076,NASDAQ Stock Exchange Global Market
 CE.N,CE,US1508701034,New York Stock Exchange
 CEB.N,CEB,,
 CEC.B,CEC,,
-CECO.O,CECO,US1251411013,Consolidated Issue Listed on Nasdaq Global Select Market
 CECO.OQ,CECO,US1251411013,Nasdaq Stock Exchange Global Select Market
 CEDC.OQ,CEDC,,
 CEG.II,CEG,,
 CEG.N,CEG,US21037T1097,New York Stock Exchange
-CEG.OQ,CEG,US21037T1097,Nasdaq Stock Exchange Global Select Market
 CEGEDE.INS,CEGEDE,,
 CELC.OQ,CELC,US15102K1007,NASDAQ Stock Exchange Capital Market
 CELG.II,CELG,,
@@ -1046,7 +956,6 @@ CELL.O,CELL,,
 CELL.OQ,CELL,,
 CENT.OQ,CENT,US1535271068,Nasdaq Stock Exchange Global Select Market
 CENTA.OQ,CENTA,US1535272058,Nasdaq Stock Exchange Global Select Market
-CENX.O,CENX,US1564311082,Consolidated Issue Listed on Nasdaq Global Select Market
 CENX.OQ,CENX,US1564311082,Nasdaq Stock Exchange Global Select Market
 CEPH.O^J11,CEPH,US1567081096,Consolidated Issue Listed on Nasdaq Global Select Market
 CERE.OQ,CERE,US15678U1280,NASDAQ Stock Exchange Capital Market
@@ -1054,7 +963,6 @@ CERN.O^F22,CERN,US1567821046,Consolidated Issue Listed on Nasdaq Global Select M
 CERS.OQ,CERS,US1570851014,NASDAQ Stock Exchange Global Market
 CETVN.BCU,CETVN,BMG200452024,BATS Europe
 CEVA.OQ,CEVA,US1572101053,Nasdaq Stock Exchange Global Select Market
-CF,CF,US1252691001,New York Consolidated
 CF.N,CF,US1252691001,New York Stock Exchange
 CFBK.OQ,CFBK,US12520L1098,NASDAQ Stock Exchange Capital Market
 CFC.II,CFC,US22237LHF22,
@@ -1081,7 +989,6 @@ CHCT.N,CHCT,US20369C1062,New York Stock Exchange
 CHD.N,CHD,US1713401024,New York Stock Exchange
 CHDN.OQ,CHDN,US1714841087,Nasdaq Stock Exchange Global Select Market
 CHDX.OQ,CHDX,,
-CHE,CHE,US16359R1032,New York Consolidated
 CHE.N,CHE,US16359R1032,New York Stock Exchange
 CHEF.OQ,CHEF,US1630861011,Nasdaq Stock Exchange Global Select Market
 CHFN.OQ,CHFN,,
@@ -1093,7 +1000,6 @@ CHK.II,CHK,,
 CHKP.OQ,CHKP,IL0010824113,Nasdaq Stock Exchange Global Select Market
 CHMG.OQ,CHMG,US1640241014,Nasdaq Stock Exchange Global Select Market
 CHMI.N,CHMI,US1646511014,New York Stock Exchange
-CHRD.O,CHRD,US6742152076,Consolidated Issue Listed on Nasdaq Global Select Market
 CHRD.OQ,CHRD,US6742152076,Nasdaq Stock Exchange Global Select Market
 CHRS.OQ,CHRS,US19249H1032,NASDAQ Stock Exchange Global Market
 CHRW.II,CHRW,,
@@ -1106,10 +1012,8 @@ CHTT.OQ,CHTT,,
 CHWY.N,CHWY,US16679L1098,New York Stock Exchange
 CHZ.B,CHZ,,
 CI.N,CI,US1255231003,New York Stock Exchange
-CIA,CIA,US1747401008,New York Consolidated
 CIA.N,CIA,US1747401008,New York Stock Exchange
 CIEN.II,CIEN,,
-CIEN.K,CIEN,US1717793095,New York Consolidated
 CIEN.N,CIEN,US1717793095,New York Stock Exchange
 CIFR.OQ,CIFR,US17253J1060,Nasdaq Stock Exchange Global Select Market
 CIM.N,CIM,US16934Q8024,New York Stock Exchange
@@ -1119,7 +1023,6 @@ CIRN.BCU,CIRN,US17273K1097,BATS Europe
 CIT.II,CIT,US12557WGW55,
 CITP.OQ,CITP,,
 CIVB.OQ,CIVB,US1788671071,NASDAQ Stock Exchange Capital Market
-CIX,CIX,US20563P1012,AMEX Consolidated
 CIX.A,CIX,US20563P1012,American Stock Exchange
 CJES.N,CJES,,
 CKPDE.INS,CKPDE,,
@@ -1137,7 +1040,6 @@ CLDX.OQ,CLDX,US15117B2025,NASDAQ Stock Exchange Capital Market
 CLF.N,CLF,US1858991011,New York Stock Exchange
 CLFD.OQ,CLFD,US18482P1030,NASDAQ Stock Exchange Global Market
 CLGX.K^F21,CLGX,US21871D1037,New York Consolidated
-CLH,CLH,US1844961078,New York Consolidated
 CLH.N,CLH,US1844961078,New York Stock Exchange
 CLMB.OQ,CLMB,US9467601053,NASDAQ Stock Exchange Global Market
 CLMS.OQ,CLMS,,
@@ -1161,7 +1063,6 @@ CMA.II,CMA,,
 CMBM.OQ,CMBM,KYG177661090,NASDAQ Stock Exchange Global Market
 CMC.N,CMC,US2017231034,New York Stock Exchange
 CMCL.A,CMCL,JE00BF0XVB15,American Stock Exchange
-CMCO.O,CMCO,US1993331057,Consolidated Issue Listed on Nasdaq Global Select Market
 CMCO.OQ,CMCO,US1993331057,Nasdaq Stock Exchange Global Select Market
 CMCSA.OQ,CMCSA,US20030N1019,Nasdaq Stock Exchange Global Select Market
 CMCSK.O^L15,CMCSK,US20030N2009,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -1176,11 +1077,9 @@ CMI.II,CMI,,
 CMI.N,CMI,US2310211063,New York Stock Exchange
 CMLS.PK,CMLSQ,US2310828015,USA Pink Sheets
 CMOS.II,CMOS,,
-CMP,CMP,US20451N1019,New York Consolidated
 CMP.N,CMP,US20451N1019,New York Stock Exchange
 CMPR.OQ,CMPR,IE00BKYC3F77,Nasdaq Stock Exchange Global Select Market
 CMPX.OQ,CMPX,US20454B1044,NASDAQ Stock Exchange Capital Market
-CMRC.O,CMRC,US08975P1084,NASDAQ National Market System
 CMRC.OQ,CMRC,US08975P1084,NASDAQ Stock Exchange Global Market
 CMRE.N,CMRE,MHY1771G1026,New York Stock Exchange
 CMS.II,CMS,,
@@ -1190,17 +1089,13 @@ CMTG.N,CMTG,US18270D1063,New York Stock Exchange
 CMTL.OQ,CMTL,US2058262096,Nasdaq Stock Exchange Global Select Market
 CMTY.OQ,CMTY,,
 CNB.N,CNB,,
-CNC,CNC,US15135B1017,New York Consolidated
 CNC.N,CNC,US15135B1017,New York Stock Exchange
-CNDT.O,CNDT,US2067871036,Consolidated Issue Listed on Nasdaq Global Select Market
 CNDT.OQ,CNDT,US2067871036,Nasdaq Stock Exchange Global Select Market
 CNET.II,CNET,,
 CNH.N,CNH,NL0010545661,New York Stock Exchange
 CNK.N,CNK,US17243V1026,New York Stock Exchange
-CNL.B,CNL,CA19425C1005,Boston Stock Exchange Inc
 CNL.N,CNL,CA19425C1005,New York Stock Exchange
 CNM.N,CNM,US21874C1027,New York Stock Exchange
-CNMD.K,CNMD,US2074101013,New York Consolidated
 CNMD.N,CNMD,US2074101013,New York Stock Exchange
 CNNE.N,CNNE,US13765N1072,New York Stock Exchange
 CNO.N,CNO,US12621E1038,New York Stock Exchange
@@ -1210,14 +1105,12 @@ CNP.N,CNP,US15189T1079,New York Stock Exchange
 CNQR.O,CNQR,,
 CNQR.OQ,CNQR,,
 CNR.N,CNR,US2189371006,New York Stock Exchange
-CNS,CNS,US19247A1007,New York Consolidated
 CNS.N,CNS,US19247A1007,New York Stock Exchange
 CNTY.OQ,CNTY,US1564921005,NASDAQ Stock Exchange Capital Market
 CNW.N,CNW,,
 CNX.II,CNX,,
 CNX.N,CNX,US12653C1080,New York Stock Exchange
 CNXC.OQ,CNXC,US20602D1019,Nasdaq Stock Exchange Global Select Market
-CNXN.O,CNXN,US69318J1007,Consolidated Issue Listed on Nasdaq Global Select Market
 CNXN.OQ,CNXN,US69318J1007,Nasdaq Stock Exchange Global Select Market
 CNXR.OQ,CNXR,,
 CNXTDE.INS,CNXTDE,,
@@ -1236,14 +1129,12 @@ COH.II,COH,,
 COHR.N,COHR,US19247G1076,New York Stock Exchange
 COHU.OQ,COHU,US1925761066,Nasdaq Stock Exchange Global Select Market
 COIN.OQ,COIN,US19260Q1076,Nasdaq Stock Exchange Global Select Market
-COKE.O,COKE,US1910981026,Consolidated Issue Listed on Nasdaq Global Select Market
 COKE.OQ,COKE,US1910981026,Nasdaq Stock Exchange Global Select Market
 COL.II,COL,,
 COLB.OQ,COLB,US1972361026,Nasdaq Stock Exchange Global Select Market
 COLD.N,COLD,US03064D1081,New York Stock Exchange
 COLL.OQ,COLL,US19459J1043,Nasdaq Stock Exchange Global Select Market
 COLM.OQ,COLM,US1985161066,Nasdaq Stock Exchange Global Select Market
-COLM.P,COLM,US1985161066,NYSE Arca when trading NASDAQ Global Market
 COL^K18,COL^K18,US7743411016,New York Consolidated
 COMP.N,COMP,US20464U1007,New York Stock Exchange
 COMS.O^D10,COMS,US8855351040,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -1252,7 +1143,6 @@ CON.N,CON,US20603L1026,New York Stock Exchange
 COOK.N,COOK,US89269P1030,New York Stock Exchange
 COP.II,COP,,
 COP.N,COP,US20825C1045,New York Stock Exchange
-COR,COR,US03073E1055,New York Consolidated
 COR.N,COR,US03073E1055,New York Stock Exchange
 CORI.OQ,CORI,,
 CORS.OQ,CORS,,
@@ -1300,13 +1190,11 @@ CRDB.N,CRD.B,US2246331076,New York Stock Exchange
 CRDF.OQ,CRDF,US14147L1089,NASDAQ Stock Exchange Capital Market
 CRDO.OQ,CRDO,KYG254571055,Nasdaq Stock Exchange Global Select Market
 CRGY.N,CRGY,US44952J1043,New York Stock Exchange
-CRI,CRI,US1462291097,New York Consolidated
 CRI.N,CRI,US1462291097,New York Stock Exchange
 CRIS.OQ,CRIS,US2312693094,NASDAQ Stock Exchange Capital Market
 CRK.N,CRK,US2057683029,New York Stock Exchange
 CRL.N,CRL,US1598641074,New York Stock Exchange
 CRM.N,CRM,US79466L3024,New York Stock Exchange
-CRMD.O,CRMD,US21900C3088,NASDAQ National Market System
 CRMD.OQ,CRMD,US21900C3088,NASDAQ Stock Exchange Global Market
 CRML.OQ,CRML,VGG2662B1031,NASDAQ Stock Exchange Global Market
 CRMT.OQ,CRMT,US03062T1051,Nasdaq Stock Exchange Global Select Market
@@ -1348,12 +1236,9 @@ CSTE.OQ,CSTE,IL0011259137,Nasdaq Stock Exchange Global Select Market
 CSTL.OQ,CSTL,US14843C1053,NASDAQ Stock Exchange Global Market
 CSTM.N,CSTM,FR0013467479,New York Stock Exchange
 CSV.N,CSV,US1439051079,New York Stock Exchange
-CSW,CSW,US1264021064,New York Consolidated
 CSW.N,CSW,US1264021064,New York Stock Exchange
-CSWC.O,CSWC,US1405011073,Consolidated Issue Listed on Nasdaq Global Select Market
 CSWC.OQ,CSWC,US1405011073,Nasdaq Stock Exchange Global Select Market
 CSX.II,CSX,US126410ER69,
-CSX.O,CSX,US1264081035,Consolidated Issue Listed on Nasdaq Global Select Market
 CSX.OQ,CSX,US1264081035,Nasdaq Stock Exchange Global Select Market
 CTAS.OQ,CTAS,US1729081059,Nasdaq Stock Exchange Global Select Market
 CTB.II,CTB,,
@@ -1372,11 +1257,9 @@ CTO.N,CTO,US22948Q1013,New York Stock Exchange
 CTOS.N,CTOS,US23204X1037,New York Stock Exchange
 CTRA.K,CTRA,US1270971039,New York Consolidated
 CTRC.OQ,CTRC,,
-CTRE.K,CTRE,US14174T1079,New York Consolidated
 CTRE.N,CTRE,US14174T1079,New York Stock Exchange
 CTRI.N,CTRI,US1559231055,New York Stock Exchange
 CTRN.OQ,CTRN,US17306X1028,Nasdaq Stock Exchange Global Select Market
-CTS,CTS,US1265011056,New York Consolidated
 CTS.N,CTS,US1265011056,New York Stock Exchange
 CTSH.OQ,CTSH,US1924461023,Nasdaq Stock Exchange Global Select Market
 CTSHF.INS,CTSHF,,
@@ -1388,15 +1271,12 @@ CTXS.O^J22,CTXS,US1773761002,Consolidated Issue Listed on Nasdaq Global Select M
 CUBE.N,CUBE,US2296631094,New York Stock Exchange
 CUBI.N,CUBI,US23204G1004,New York Stock Exchange
 CUE.OQ,CUE,US22978P1066,NASDAQ Stock Exchange Capital Market
-CULP.K,CULP,US2302151053,Consolidated Issue listed on NASDAQ Capital Market
 CULP.N,CULP,US2302151053,NASDAQ Stock Exchange Capital Market
 CUNB.OQ,CUNB,,
 CURB.N,CURB,US23128Q1013,New York Stock Exchange
-CURI.O,CURI,US23130Q1076,Consolidated Issue listed on NASDAQ Capital Market
 CURI.OQ,CURI,US23130Q1076,NASDAQ Stock Exchange Capital Market
 CURV.N,CURV,US89142B1070,New York Stock Exchange
 CUZ.N,CUZ,US2227955026,New York Stock Exchange
-CV.B,CV,US1409351079,Boston SE when trading NASDAQ Global Market
 CV.OQ,CV,US1409351079,NASDAQ Stock Exchange Capital Market
 CVBF.OQ,CVBF,US1266001056,Nasdaq Stock Exchange Global Select Market
 CVC.N,CVC,,
@@ -1411,7 +1291,6 @@ CVH.II,CVH,,
 CVH^E13,CVH,US2228621049,New York Consolidated
 CVI.N,CVI,US12662P1084,New York Stock Exchange
 CVIA.N,CVIA,,
-CVLG.K,CVLG,US22284P1057,New York Consolidated
 CVLG.N,CVLG,US22284P1057,New York Stock Exchange
 CVLT.OQ,CVLT,US2041661024,Nasdaq Stock Exchange Global Select Market
 CVM.A,CVM,US1508377066,American Stock Exchange
@@ -1420,18 +1299,15 @@ CVNS.OQ,CVNS,,
 CVRX.OQ,CVRX,US1266381052,Nasdaq Stock Exchange Global Select Market
 CVS.II,CVS,,
 CVS.N,CVS,US1266501006,New York Stock Exchange
-CVSA.K,CVSA,US00737L1035,New York Consolidated
 CVSA.N,CVSA,US00737L1035,New York Stock Exchange
 CVT.N,CVT,,
 CVTXDE.INS,CVTXDE,,
 CVU,CVU,US1259193084,AMEX Consolidated
 CVX.II,CVX,,
 CVX.N,CVX,US1667641005,New York Stock Exchange
-CW,CW,US2315611010,New York Consolidated
 CW.N,CW,US2315611010,New York Stock Exchange
 CWAN.N,CWAN,US1851231068,New York Stock Exchange
 CWBC.OQ,CWBC,US2039371073,NASDAQ Stock Exchange Capital Market
-CWCO.O,CWCO,KYG237731073,Consolidated Issue Listed on Nasdaq Global Select Market
 CWCO.OQ,CWCO,KYG237731073,Nasdaq Stock Exchange Global Select Market
 CWEI.N,CWEI,,
 CWEN.N,CWEN,US18539C2044,New York Stock Exchange
@@ -1439,7 +1315,6 @@ CWENA.N,CWEN.A,US18539C1053,New York Stock Exchange
 CWH.N,CWH,US13462K1097,New York Stock Exchange
 CWK.N,CWK,BMG2717C1064,New York Stock Exchange
 CWST.OQ,CWST,US1474481041,Nasdaq Stock Exchange Global Select Market
-CWT,CWT,US1307881029,New York Consolidated
 CWT.N,CWT,US1307881029,New York Stock Exchange
 CXDO.OQ,CXDO,US2265521078,NASDAQ Stock Exchange Capital Market
 CXM.N,CXM,US85208T1079,New York Stock Exchange
@@ -1461,7 +1336,6 @@ CYNO.O,CYNO,,
 CYNO.OQ,CYNO,,
 CYRX.OQ,CYRX,US2290503075,NASDAQ Stock Exchange Capital Market
 CYT.N,CYT,US23284P1030,New York Stock Exchange
-CYTK.O,CYTK,US23282W6057,Consolidated Issue Listed on Nasdaq Global Select Market
 CYTK.OQ,CYTK,US23282W6057,Nasdaq Stock Exchange Global Select Market
 CYTR.OQ,CYTR,,
 CYTR.P,CYTR,,
@@ -1476,9 +1350,7 @@ D.N,D,US25746U1097,New York Stock Exchange
 DAKT.OQ,DAKT,US2342641097,Nasdaq Stock Exchange Global Select Market
 DAL.N,DAL,US2473617023,New York Stock Exchange
 DAN.N,DAN,US2358252052,New York Stock Exchange
-DAR,DAR,US2372661015,New York Consolidated
 DAR.N,DAR,US2372661015,New York Stock Exchange
-DASH.O,DASH,US25809K1051,Consolidated Issue Listed on Nasdaq Global Select Market
 DASH.OQ,DASH,US25809K1051,Nasdaq Stock Exchange Global Select Market
 DAVE.OQ,DAVE,US23834J2015,NASDAQ Stock Exchange Global Market
 DAWN.OQ,DAWN,US23954D1090,Nasdaq Stock Exchange Global Select Market
@@ -1491,7 +1363,6 @@ DBX.OQ,DBX,US26210C1045,Nasdaq Stock Exchange Global Select Market
 DC.A,DC,US46655E1001,American Stock Exchange
 DCEL.P,DCEL,,
 DCGO.OQ,DCGO,US2560861096,NASDAQ Stock Exchange Capital Market
-DCH,DCH,US0240611030,New York Consolidated
 DCH.N,DCH,US0240611030,New York Stock Exchange
 DCI.N,DCI,US2576511099,New York Stock Exchange
 DCO.N,DCO,US2641471097,New York Stock Exchange
@@ -1499,7 +1370,6 @@ DCOM.OQ,DCOM,US25432X1028,Nasdaq Stock Exchange Global Select Market
 DCPHN.BCU,DCPHN,US24344T1016,BATS Europe
 DCTH.OQ,DCTH,US24661P8077,NASDAQ Stock Exchange Capital Market
 DD.N,DD,US26614N1028,New York Stock Exchange
-DDD,DDD,US88554D2053,New York Consolidated
 DDD.N,DDD,US88554D2053,New York Stock Exchange
 DDE.C,DDE,,
 DDOG.OQ,DDOG,US23804L1035,Nasdaq Stock Exchange Global Select Market
@@ -1511,7 +1381,6 @@ DE.N,DE,US2441991054,New York Stock Exchange
 DE8F.TRE,DE8F,US24869P1049,London Stock Exchange
 DEA.N,DEA,US27616P3010,New York Stock Exchange
 DEC,DEC,US25520W1071,New York Consolidated
-DECK.K,DECK,US2435371073,New York Consolidated
 DECK.N,DECK,US2435371073,New York Stock Exchange
 DEEP.OQ,DEEP,,
 DEI.N,DEI,US25960P1093,New York Stock Exchange
@@ -1562,12 +1431,10 @@ DKNG.OQ,DKNG,US26142V1052,Nasdaq Stock Exchange Global Select Market
 DKS.N,DKS,US2533931026,New York Stock Exchange
 DLAPQ.PK,DLAPQ,US2473681037,USA Pink Sheets
 DLB.N,DLB,US25659T1079,New York Stock Exchange
-DLR,DLR,US2538681030,New York Consolidated
 DLR.N,DLR,US2538681030,New York Stock Exchange
 DLTH.OQ,DLTH,US26443V1017,Nasdaq Stock Exchange Global Select Market
 DLTR.OQ,DLTR,US2567461080,Nasdaq Stock Exchange Global Select Market
 DLX.N,DLX,US2480191012,New York Stock Exchange
-DLX.P,DLX,US2480191012,NYSE Arca
 DM.N,DM,US25058X3035,New York Stock Exchange
 DMAC.OQ,DMAC,CA25253X2077,NASDAQ Stock Exchange Capital Market
 DMND.OQ,DMND,,
@@ -1599,7 +1466,6 @@ DPZ.O,DPZ,US25754A2015,Consolidated Issue Listed on Nasdaq Global Select Market
 DR.B,DR,,
 DRA.PH,DRA,,
 DRC.N,DRC,,
-DRH.O,DRH,US2527843013,Consolidated Issue Listed on Nasdaq Global Select Market
 DRH.OQ,DRH,US2527843013,Nasdaq Stock Exchange Global Select Market
 DRI.N,DRI,US2371941053,New York Stock Exchange
 DRII.N,DRII,,
@@ -1610,7 +1476,6 @@ DRUG.CD,DRUG,CA10919W4056,Canadian Trading and Quotation System Inc
 DRVN.OQ,DRVN,US26210V1026,Nasdaq Stock Exchange Global Select Market
 DSCI.OQ,DSCI,,
 DSGN.OQ,DSGN,US25056L1035,Nasdaq Stock Exchange Global Select Market
-DSGR.O,DSGR,US5207761058,Consolidated Issue Listed on Nasdaq Global Select Market
 DSGR.OQ,DSGR,US5207761058,Nasdaq Stock Exchange Global Select Market
 DSP.OQ,DSP,US92557A1016,Nasdaq Stock Exchange Global Select Market
 DST^D18,DST^D18,US2333261079,New York Consolidated
@@ -1618,7 +1483,6 @@ DT.N,DT,US2681501092,New York Stock Exchange
 DTE.II,DTE,,
 DTE.N,DTE,US2333311072,New York Stock Exchange
 DTG.N,DTG,US2333318184,New York Stock Exchange
-DTG.TH,DTG,US2333318184,Third Market Corp
 DTIL.OQ,DTIL,US74019P2074,NASDAQ Stock Exchange Capital Market
 DTLK.OQ,DTLK,,
 DTM.N,DTM,US23345M1071,New York Stock Exchange
@@ -1643,14 +1507,12 @@ DXC.N,DXC,US23355L1061,New York Stock Exchange
 DXCM.OQ,DXCM,US2521311074,Nasdaq Stock Exchange Global Select Market
 DXLG.O,DXLG,US25065K1043,NASDAQ National Market System
 DXPE.OQ,DXPE,US2333774071,Nasdaq Stock Exchange Global Select Market
-DY,DY,US2674751019,New York Consolidated
 DY.N,DY,US2674751019,New York Stock Exchange
 DYAX.OQ,DYAX,,
 DYF1F.TBEA,DYF1F,US2681582019,Tradeweb APA
 DYN.MW,DYN,US26818M1080,Midwest SE when trading NASDAQ Global Market
 DYN.O,DYN,US26818M1080,Consolidated Issue Listed on Nasdaq Global Select Market
 DZSIQ.PK,DZSIQ,US2682111099,USA Pink Sheets
-EA.O,EA,US2855121099,Consolidated Issue Listed on Nasdaq Global Select Market
 EA.OQ,EA,US2855121099,Nasdaq Stock Exchange Global Select Market
 EAC.B,EAC,,
 EAC.N,EAC,,
@@ -1660,11 +1522,9 @@ EAT.N,EAT,US1096411004,New York Stock Exchange
 EB.N,EB,US29975E1091,
 EBAY.OQ,EBAY,US2786421030,Nasdaq Stock Exchange Global Select Market
 EBC.OQ,EBC,US27627N1054,Nasdaq Stock Exchange Global Select Market
-EBF,EBF,US2933891028,New York Consolidated
 EBF.N,EBF,US2933891028,New York Stock Exchange
 EBHI.OQ,EBHI,,
 EBMT.OQ,EBMT,US26942G1004,NASDAQ Stock Exchange Global Market
-EBS,EBS,US29089Q1058,New York Consolidated
 EBS.N,EBS,US29089Q1058,New York Stock Exchange
 ECBK.OQ,ECBK,US26828M1062,NASDAQ Stock Exchange Capital Market
 ECL.II,ECL,,
@@ -1684,7 +1544,6 @@ EDIT.OQ,EDIT,US28106W1036,Nasdaq Stock Exchange Global Select Market
 EDMC.OQ,EDMC,,
 EDO.B,EDO,,
 EDS.N,EDS,,
-EE.B,EE,US30069T1016,Boston Stock Exchange Inc
 EE.N,EE,US30069T1016,New York Stock Exchange
 EEE.MW,EEE,US68190A2033,Midwest SE when trading NASDAQ Global Market
 EEFT.OQ,EEFT,US2987361092,Nasdaq Stock Exchange Global Select Market
@@ -1694,7 +1553,6 @@ EFD.C,EFD,,
 EFIIDE.INS,EFIIDE,,
 EFIIN.BCU,EFIIN,US2860821022,BATS Europe
 EFR.TO,EFR,CA2926717083,The Toronto Stock Exchange
-EFSC.O,EFSC,US2937121059,Consolidated Issue Listed on Nasdaq Global Select Market
 EFSC.OQ,EFSC,US2937121059,Nasdaq Stock Exchange Global Select Market
 EFSI.OQ,EFSI,US26951R1041,NASDAQ Stock Exchange Capital Market
 EFX.II,EFX,,
@@ -1702,21 +1560,17 @@ EFX.N,EFX,US2944291051,New York Stock Exchange
 EG,EG,BMG3223R1088,New York Consolidated
 EGAN.OQ,EGAN,US28225C8064,NASDAQ Stock Exchange Capital Market
 EGBN.OQ,EGBN,US2689481065,NASDAQ Stock Exchange Capital Market
-EGHT.O,EGHT,US2829141009,Consolidated Issue Listed on Nasdaq Global Select Market
 EGHT.OQ,EGHT,US2829141009,Nasdaq Stock Exchange Global Select Market
 EGLT.OQ,EGLT,,
 EGN^K18,EGN^K18,US29265N1081,New York Consolidated
-EGP,EGP,US2772761019,New York Consolidated
 EGP.N,EGP,US2772761019,New York Stock Exchange
 EGRX.PK,EGRX,US2697961082,USA Pink Sheets
-EGY,EGY,US91851C2017,New York Consolidated
 EGY.N,EGY,US91851C2017,New York Stock Exchange
 EHAB.N,EHAB,US29332G1022,New York Stock Exchange
 EHC.N,EHC,US29261A1007,New York Stock Exchange
 EHTH.OQ,EHTH,US28238P1093,Nasdaq Stock Exchange Global Select Market
 EICU.O,EICU,,
 EIG.N,EIG,US2922181043,New York Stock Exchange
-EIG.P,EIG,US2922181043,NYSE Arca
 EIHI.OQ,EIHI,,
 EII.PH,EII,,
 EIX.II,EIX,,
@@ -1735,7 +1589,6 @@ ELNKDE.INS,ELNKDE,,
 ELONDE.INS,ELONDE,,
 ELRC.O,ELRC,,
 ELRC.OQ,ELRC,,
-ELS,ELS,US29472R1086,New York Consolidated
 ELS.N,ELS,US29472R1086,New York Stock Exchange
 ELV,ELV,US0367521038,New York Consolidated
 ELVN.OQ,ELVN,US29337E1029,Nasdaq Stock Exchange Global Select Market
@@ -1743,7 +1596,6 @@ EMBC.OQ,EMBC,US29082K1051,Nasdaq Stock Exchange Global Select Market
 EMC.N,EMC,US37960A6441,New York Stock Exchange
 EMC.P,EMC,US37960A6441,NYSE Arca
 EMCI.OQ,EMCI,,
-EME,EME,US29084Q1004,New York Consolidated
 EME.N,EME,US29084Q1004,New York Stock Exchange
 EML.OQ,EML,US2763171046,NASDAQ Stock Exchange Global Market
 EMLXDE.INS,EMLXDE,,
@@ -1761,7 +1613,6 @@ ENOC.OQ,ENOC,,
 ENOV.N,ENOV,US1940145022,New York Stock Exchange
 ENPH.OQ,ENPH,US29355A1079,NASDAQ Stock Exchange Global Market
 ENR.N,ENR,US29272W1099,New York Stock Exchange
-ENS,ENS,US29275Y1029,New York Consolidated
 ENS.N,ENS,US29275Y1029,New York Stock Exchange
 ENSG.OQ,ENSG,US29358P1012,Nasdaq Stock Exchange Global Select Market
 ENSI.OQ,ENSI,,
@@ -1779,7 +1630,6 @@ EOG.II,EOG,,
 EOG.N,EOG,US26875P1012,New York Stock Exchange
 EOLS.OQ,EOLS,US30052C1071,NASDAQ Stock Exchange Global Market
 EOSE.OQ,EOSE,US29415C1018,NASDAQ Stock Exchange Capital Market
-EP.A,EP,US2920343033,American Stock Exchange
 EP.N,EP,US2920343033,New York Stock Exchange
 EPAC.N,EPAC,US2927651040,New York Stock Exchange
 EPAM.N,EPAM,US29414B1044,New York Stock Exchange
@@ -1796,10 +1646,8 @@ EPM.A,EPM,US30049A1079,American Stock Exchange
 EPR.N,EPR,US26884U1097,New York Stock Exchange
 EPRT.N,EPRT,US29670E1073,New York Stock Exchange
 EPSN.OQ,EPSN,CA2943752097,NASDAQ Stock Exchange Global Market
-EQBK.K,EQBK,US29460X1090,New York Consolidated
 EQBK.N,EQBK,US29460X1090,New York Stock Exchange
 EQH.N,EQH,US29452E1010,New York Stock Exchange
-EQIX.O,EQIX,US29444U7000,Consolidated Issue Listed on Nasdaq Global Select Market
 EQIX.OQ,EQIX,US29444U7000,Nasdaq Stock Exchange Global Select Market
 EQR.II,EQR,,
 EQR.N,EQR,US29476L1070,New York Stock Exchange
@@ -1818,7 +1666,6 @@ ESC.C,ESC,,
 ESC.N,ESC,,
 ESCA.OQ,ESCA,US2960561049,NASDAQ Stock Exchange Global Market
 ESCH.O,ESCH,,
-ESE,ESE,US2963151046,New York Consolidated
 ESE.N,ESE,US2963151046,New York Stock Exchange
 ESI.N,ESI,US28618M1062,New York Stock Exchange
 ESLRDE.INS,ESLRDE,,
@@ -1833,7 +1680,6 @@ ESRX.O^L18,ESRX,US30219G1085,Consolidated Issue Listed on Nasdaq Global Select M
 ESS.N,ESS,US2971781057,New York Stock Exchange
 ESV.II,ESV,,
 ET.N,ET,US29273V1008,New York Stock Exchange
-ETD,ETD,US2976021046,New York Consolidated
 ETD.N,ETD,US2976021046,New York Stock Exchange
 ETFC.C,ETFC,,
 ETFC.O^J20,ETFC,US2692464017,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -1844,7 +1690,6 @@ ETR.N,ETR,US29364G1031,New York Stock Exchange
 ETRF.INS,ETRF,,
 ETSY.K,ETSY,US29786A1060,New York Consolidated
 EU.V,EU,CA29259W7008,Canadian Ventures Exchange
-EVC,EVC,US29382R1077,New York Consolidated
 EVC.N,EVC,US29382R1077,New York Stock Exchange
 EVCM.OQ,EVCM,US29977X1054,Nasdaq Stock Exchange Global Select Market
 EVDY.N,EVDY,,
@@ -1854,7 +1699,6 @@ EVGO.OQ,EVGO,US30052F1003,Nasdaq Stock Exchange Global Select Market
 EVH.N,EVH,US30050B1017,New York Stock Exchange
 EVI.A,EVI,US26929N1028,American Stock Exchange
 EVLV.OQ,EVLV,US30049H1023,NASDAQ Stock Exchange Capital Market
-EVR,EVR,US29977A1051,New York Consolidated
 EVR.N,EVR,US29977A1051,New York Stock Exchange
 EVTC.N,EVTC,PR30040P1032,New York Stock Exchange
 EVVV.P,EVVV,,
@@ -1868,9 +1712,7 @@ EXAC.OQ,EXAC,,
 EXAM.N,EXAM,,
 EXAS.OQ,EXAS,US30063P1057,NASDAQ Stock Exchange Capital Market
 EXBD.OQ,EXBD,,
-EXC.O,EXC,US30161N1019,Consolidated Issue Listed on Nasdaq Global Select Market
 EXC.OQ,EXC,US30161N1019,Nasdaq Stock Exchange Global Select Market
-EXE.O,EXE,US1651677353,Consolidated Issue Listed on Nasdaq Global Select Market
 EXE.OQ,EXE,US1651677353,Nasdaq Stock Exchange Global Select Market
 EXEL.OQ,EXEL,US30161Q1040,Nasdaq Stock Exchange Global Select Market
 EXELDE.INS,EXELDE,,
@@ -1878,13 +1720,11 @@ EXFY.OQ,EXFY,US30219Q1067,Nasdaq Stock Exchange Global Select Market
 EXL.N,EXL,,
 EXLS.OQ,EXLS,US3020811044,Nasdaq Stock Exchange Global Select Market
 EXP.N,EXP,US26969P1084,New York Stock Exchange
-EXPD.K,EXPD,US3021301094,New York Consolidated
 EXPD.N,EXPD,US3021301094,New York Stock Exchange
 EXPDF.INS,EXPDF,,
 EXPE.OQ,EXPE,US30212P3038,Nasdaq Stock Exchange Global Select Market
 EXPI.OQ,EXPI,US30212W1009,NASDAQ Stock Exchange Global Market
 EXPO.OQ,EXPO,US30214U1025,Nasdaq Stock Exchange Global Select Market
-EXR,EXR,US30225T1025,New York Consolidated
 EXR.N,EXR,US30225T1025,New York Stock Exchange
 EXTR.OQ,EXTR,US30226D1063,Nasdaq Stock Exchange Global Select Market
 EXTRDE.INS,EXTRDE,,
@@ -1899,11 +1739,9 @@ FADV.OQ,FADV,,
 FAF.N,FAF,US31847R1023,New York Stock Exchange
 FALC.OQ,FALC,,
 FANG.OQ,FANG,US25278X1090,Nasdaq Stock Exchange Global Select Market
-FARM.O,FARM,US3076751086,Consolidated Issue Listed on Nasdaq Global Select Market
 FARM.OQ,FARM,US3076751086,Nasdaq Stock Exchange Global Select Market
 FAST.OQ,FAST,US3119001044,Nasdaq Stock Exchange Global Select Market
 FATE.OQ,FATE,US31189P1021,NASDAQ Stock Exchange Global Market
-FBIN.K,FBIN,US34964C1062,New York Consolidated
 FBIN.N,FBIN,US34964C1062,New York Stock Exchange
 FBIO.OQ,FBIO,US34960Q3074,NASDAQ Stock Exchange Capital Market
 FBIZ.OQ,FBIZ,US3193901002,Nasdaq Stock Exchange Global Select Market
@@ -1924,15 +1762,12 @@ FCAP.OQ,FCAP,US31942S1042,NASDAQ Stock Exchange Capital Market
 FCBC.OQ,FCBC,US31983A1034,Nasdaq Stock Exchange Global Select Market
 FCBP.OQ,FCBP,,
 FCCO.OQ,FCCO,US3198351047,NASDAQ Stock Exchange Capital Market
-FCEL.O,FCEL,US35952H7008,NASDAQ National Market System
 FCEL.OQ,FCEL,US35952H7008,NASDAQ Stock Exchange Global Market
-FCF,FCF,US3198291078,New York Consolidated
 FCF.N,FCF,US3198291078,New York Stock Exchange
 FCFP.OQ,FCFP,,
 FCFS.OQ,FCFS,US33768G1076,Nasdaq Stock Exchange Global Select Market
 FCH.B,FCH,,
 FCH.N,FCH,,
-FCN,FCN,US3029411093,New York Consolidated
 FCN.N,FCN,US3029411093,New York Stock Exchange
 FCNCA.OQ,FCNCA,US31946M1036,Nasdaq Stock Exchange Global Select Market
 FCPT.N,FCPT,US35086T1097,New York Stock Exchange
@@ -1947,7 +1782,6 @@ FDML.OQ,FDML,,
 FDMT.OQ,FDMT,US35104E1001,Nasdaq Stock Exchange Global Select Market
 FDO.II,FDO,,
 FDO.N,FDO,,
-FDP,FDP,KYG367381053,New York Consolidated
 FDP.N,FDP,KYG367381053,New York Stock Exchange
 FDRYDE.INS,FDRYDE,,
 FDS.N,FDS,US3030751057,New York Stock Exchange
@@ -1973,12 +1807,10 @@ FFCH.OQ,FFCH,,
 FFIC.OQ,FFIC,US3438731057,Nasdaq Stock Exchange Global Select Market
 FFIN.OQ,FFIN,US32020R1095,Nasdaq Stock Exchange Global Select Market
 FFIV.OQ,FFIV,US3156161024,Nasdaq Stock Exchange Global Select Market
-FFWM.K,FFWM,US32026V1044,New York Consolidated
 FFWM.N,FFWM,US32026V1044,New York Stock Exchange
 FG.N,FG,US30190A1043,New York Stock Exchange
 FGAF.TPRM,FGAF,US0248351001,TPICAP
 FGBI.OQ,FGBI,US32043P1066,NASDAQ Stock Exchange Global Market
-FHI,FHI,US3142111034,New York Consolidated
 FHI.N,FHI,US3142111034,New York Stock Exchange
 FHN.II,FHN,,
 FHN.N,FHN,US3205171057,New York Stock Exchange
@@ -2003,7 +1835,6 @@ FITB.II,FITB,,
 FITB.OQ,FITB,US3167731005,Nasdaq Stock Exchange Global Select Market
 FIVE.OQ,FIVE,US33829M1018,Nasdaq Stock Exchange Global Select Market
 FIVN.OQ,FIVN,US3383071012,NASDAQ Stock Exchange Global Market
-FIX,FIX,US1999081045,New York Consolidated
 FIX.N,FIX,US1999081045,New York Stock Exchange
 FIZZ.OQ,FIZZ,US6350171061,Nasdaq Stock Exchange Global Select Market
 FL.MX,FL*,US3448491049,Bolsa Mexicana de Valores S.A. de C.V.
@@ -2017,7 +1848,6 @@ FLL.OQ,FLL,US3596781092,NASDAQ Stock Exchange Capital Market
 FLNC.OQ,FLNC,US34379V1035,Nasdaq Stock Exchange Global Select Market
 FLNG.N,FLNG,BMG359472021,New York Stock Exchange
 FLNT.OQ,FLNT,US34380C2017,NASDAQ Stock Exchange Capital Market
-FLO,FLO,US3434981011,New York Consolidated
 FLO.N,FLO,US3434981011,New York Stock Exchange
 FLOC.N,FLOC,US3429091081,New York Stock Exchange
 FLOW.O,FLOW,,
@@ -2039,7 +1869,6 @@ FMNB.OQ,FMNB,US3096271073,NASDAQ Stock Exchange Capital Market
 FMR.PH,FMR,,
 FMT.B,FMT,,
 FN.N,FN,KYG3323L1005,New York Stock Exchange
-FNB,FNB,US3025201019,New York Consolidated
 FNB.N,FNB,US3025201019,New York Stock Exchange
 FNBC.OQ,FNBC,,
 FND.N,FND,US3397501012,New York Stock Exchange
@@ -2071,7 +1900,6 @@ FPI.N,FPI,US31154R1095,New York Stock Exchange
 FPL.II,FPL,,
 FPO.C,FPO,,
 FPO.N,FPO,,
-FR,FR,US32054K1034,New York Consolidated
 FR.N,FR,US32054K1034,New York Stock Exchange
 FRAF.OQ,FRAF,US3535251082,NASDAQ Stock Exchange Capital Market
 FRBA.OQ,FRBA,US31931U1025,NASDAQ Stock Exchange Global Market
@@ -2115,7 +1943,6 @@ FSNM.OQ,FSNM,,
 FSP.A,FSP,US35471R1068,American Stock Exchange
 FSP.P,FSP,US35471R1068,NYSE Arca
 FSR.N,FSR,US33813J1060,New York Stock Exchange
-FSS,FSS,US3138551086,New York Consolidated
 FSS.N,FSS,US3138551086,New York Stock Exchange
 FST.N,FST,,
 FSTR.OQ,FSTR,US3500601097,Nasdaq Stock Exchange Global Select Market
@@ -2138,7 +1965,6 @@ FTRE.OQ,FTRE,US34965K1079,Nasdaq Stock Exchange Global Select Market
 FUBC.OQ,FUBC,,
 FUBO.N,FUBO,US35953D1046,New York Stock Exchange
 FUEL.OQ,FUEL,,
-FUL,FUL,US3596941068,New York Consolidated
 FUL.N,FUL,US3596941068,New York Stock Exchange
 FULC.OQ,FULC,US3596161097,NASDAQ Stock Exchange Global Market
 FULT.OQ,FULT,US3602711000,Nasdaq Stock Exchange Global Select Market
@@ -2160,37 +1986,30 @@ FXNC.OQ,FXNC,US32106V1070,NASDAQ Stock Exchange Capital Market
 G.N,G,BMG3922B1072,New York Stock Exchange
 G1HF.TRE,G1HF,US3621LQ1099,London Stock Exchange
 GABC.OQ,GABC,US3738651047,Nasdaq Stock Exchange Global Select Market
-GAIA.O,GAIA,US36269P1049,NASDAQ National Market System
 GAIA.OQ,GAIA,US36269P1049,NASDAQ Stock Exchange Global Market
 GAIN.OQ,GAIN,US3765461070,Nasdaq Stock Exchange Global Select Market
 GALT.OQ,GALT,US3632252025,NASDAQ Stock Exchange Capital Market
 GAMB.OQ,GAMB,JE00BL970N11,NASDAQ Stock Exchange Global Market
 GAMI.PK,GAMI,US3614381040,USA Pink Sheets
-GAP,GAP,US3647601083,New York Consolidated
 GAP.N,GAP,US3647601083,New York Stock Exchange
 GAS.N^G16,GAS,US0012041069,New York Stock Exchange
 GAS^L11,GAS,US6540861076,New York Consolidated
 GATEDE.INS,GATEDE,,
-GATX.K,GATX,US3614481030,New York Consolidated
 GATX.N,GATX,US3614481030,New York Stock Exchange
 GBBK.OQ,GBBK,US37961B1044,NASDAQ Stock Exchange Capital Market
-GBCI.K,GBCI,US37637Q1058,New York Consolidated
 GBCI.N,GBCI,US37637Q1058,New York Stock Exchange
 GBDC.OQ,GBDC,US38173M1027,Nasdaq Stock Exchange Global Select Market
 GBE.TH,GBE,,
 GBFH.OQ,GBFH,US36166F1003,NASDAQ Stock Exchange Capital Market
 GBTG.N,GBTG,US37890B1008,New York Stock Exchange
 GBTN.BCU,GBTN,US37890U1088,BATS Europe
-GBX,GBX,US3936571013,New York Consolidated
 GBX.N,GBX,US3936571013,New York Stock Exchange
 GCBC.OQ,GCBC,US3943571071,NASDAQ Stock Exchange Capital Market
 GCI.II,GCI,,
 GCI.N,TDAY,US36472T1097,New York Stock Exchange
 GCMG.OQ,GCMG,US36831E1082,NASDAQ Stock Exchange Global Market
-GCO,GCO,US3715321028,New York Consolidated
 GCO.N,GCO,US3715321028,New York Stock Exchange
 GCOM.OQ,GCOM,,
-GCT.C,GCT,KYG386441037,National SE when trading NASDAQ Global Market
 GCT.OQ,GCT,KYG386441037,NASDAQ Stock Exchange Global Market
 GD.N,GD,US3695501086,New York Stock Exchange
 GDDY.N,GDDY,US3802371076,New York Stock Exchange
@@ -2199,12 +2018,10 @@ GDI.N,GDI,,
 GDOT.N,GDOT,US39304D1028,New York Stock Exchange
 GDYN.OQ,GDYN,US39813G1094,NASDAQ Stock Exchange Capital Market
 GE.N,GE,US3696043013,New York Stock Exchange
-GEF,GEF,US3976241071,New York Consolidated
 GEF.N,GEF,US3976241071,New York Stock Exchange
 GEFB.N,GEF.B,US3976242061,New York Stock Exchange
 GEHC.OQ,GEHC,US36266G1076,Nasdaq Stock Exchange Global Select Market
 GENC.A,GENC,US3686781085,American Stock Exchange
-GENC.K,GENC,US3686781085,AMEX Consolidated
 GENI.N,GENI,GG00BMF1JR16,New York Stock Exchange
 GENNQ.PK,GENNQ,US37185X1063,USA Pink Sheets
 GENZ.O^D11,GENZ,US3729171047,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -2218,7 +2035,6 @@ GETY.N,GETY,US3742751056,New York Stock Exchange
 GEV.N,GEV,US36828A1016,New York Stock Exchange
 GEVA.OQ,GEVA,,
 GEVO.OQ,GEVO,US3743964062,NASDAQ Stock Exchange Capital Market
-GFF,GFF,US3984331021,New York Consolidated
 GFF.N,GFF,US3984331021,New York Stock Exchange
 GFIG.N,GFIG,,
 GFIG.OQ,GFIG,,
@@ -2231,13 +2047,11 @@ GH.OQ,GH,US40131M1099,Nasdaq Stock Exchange Global Select Market
 GHC.N,GHC,US3846371041,New York Stock Exchange
 GHCI.OQ,GHCI,,
 GHL^L23,GHL^L23,US3952591044,New York Consolidated
-GHM,GHM,US3845561063,New York Consolidated
 GHM.N,GHM,US3845561063,New York Stock Exchange
 GHS.PH,GHS,,
 GI.N,GI,,
 GIC.N,GIC,US37892E1029,New York Stock Exchange
 GIG.A,GIG,KYG386481041,AMEX when trading NASDAQ Global Market
-GIII.O,GIII,US36237H1014,Consolidated Issue Listed on Nasdaq Global Select Market
 GIII.OQ,GIII,US36237H1014,Nasdaq Stock Exchange Global Select Market
 GILD.OQ,GILD,US3755581036,Nasdaq Stock Exchange Global Select Market
 GIMO.N,GIMO,,
@@ -2248,11 +2062,9 @@ GKOS.N,GKOS,US3773221029,New York Stock Exchange
 GLAD.OQ,GLAD,US3765358789,Nasdaq Stock Exchange Global Select Market
 GLBC.O,GLBC,,
 GLBL.OQ,GLBL,,
-GLDD.O,GLDD,US3906071093,Consolidated Issue Listed on Nasdaq Global Select Market
 GLDD.OQ,GLDD,US3906071093,Nasdaq Stock Exchange Global Select Market
 GLDNDE.INS,GLDNDE,,
 GLF.N,GLF,,
-GLNG.O,GLNG,BMG9456A1009,Consolidated Issue Listed on Nasdaq Global Select Market
 GLNG.OQ,GLNG,BMG9456A1009,Nasdaq Stock Exchange Global Select Market
 GLOB.N,GLOB,LU0974299876,New York Stock Exchange
 GLPI.OQ,GLPI,US36467J1088,Nasdaq Stock Exchange Global Select Market
@@ -2265,7 +2077,6 @@ GM.N,GM,US37045V1008,New York Stock Exchange
 GMAN.OQ,GMAN,,
 GMCR.OQ,GMCR,,
 GME.N,GME,US36467W1099,New York Stock Exchange
-GME.P,GME,US36467W1099,NYSE Arca
 GMED.N,GMED,US3795772082,New York Stock Exchange
 GMGI.OQ,MRDN,US3810984092,NASDAQ Stock Exchange Capital Market
 GMO.C,GMO,,
@@ -2289,7 +2100,6 @@ GO.OQ,GO,US39874R1014,Nasdaq Stock Exchange Global Select Market
 GOCO.OQ,GOCO,US38046W2044,NASDAQ Stock Exchange Capital Market
 GOGO.OQ,GOGO,US38046C1099,Nasdaq Stock Exchange Global Select Market
 GOK.A,GOK,,
-GOLD.K,GOLD,US00181T1079,New York Consolidated
 GOLD.N,GOLD,US00181T1079,New York Stock Exchange
 GOLF.N,GOLF,US0050981085,New York Stock Exchange
 GOOD.OQ,GOOD,US3765361080,Nasdaq Stock Exchange Global Select Market
@@ -2300,7 +2110,6 @@ GOSS.OQ,GOSS,US38341P1021,Nasdaq Stock Exchange Global Select Market
 GPC.II,GPC,,
 GPC.N,GPC,US3724601055,New York Stock Exchange
 GPGI.N,GPGI,US20459V1052,New York Stock Exchange
-GPI,GPI,US3989051095,New York Consolidated
 GPI.N,GPI,US3989051095,New York Stock Exchange
 GPK.N,GPK,US3886891015,New York Stock Exchange
 GPMT.N,GPMT,US38741L1070,New York Stock Exchange
@@ -2312,12 +2121,9 @@ GPRO.O^H12,GPRO,US36866T1034,Consolidated Issue Listed on Nasdaq Global Select M
 GR.II,GR,,
 GR.N,GR,,
 GRAL.OQ,GRAL,US3847471014,Nasdaq Stock Exchange Global Select Market
-GRBK.K,GRBK,US3927091013,New York Consolidated
 GRBK.N,GRBK,US3927091013,New York Stock Exchange
-GRC,GRC,US3830821043,New York Consolidated
 GRC.N,GRC,US3830821043,New York Stock Exchange
 GRDN.N,GRDN,US40145W1018,New York Stock Exchange
-GRMN.K,GRMN,CH0114405324,New York Consolidated
 GRMN.N,GRMN,CH0114405324,New York Stock Exchange
 GRND.N,GRND,US39854F1012,New York Stock Exchange
 GRNT.N,GRNT,US3874321074,New York Stock Exchange
@@ -2336,23 +2142,18 @@ GSIT.OQ,GSIT,US36241U1060,Nasdaq Stock Exchange Global Select Market
 GSM.OQ,GSM,GB00BYW6GV68,NASDAQ Stock Exchange Capital Market
 GSOL.OQ,GSOL,,
 GSOL.P,GSOL,US38965D1046,NYSE Arca
-GT.O,GT,US3825501014,Consolidated Issue Listed on Nasdaq Global Select Market
 GT.OQ,GT,US3825501014,Nasdaq Stock Exchange Global Select Market
 GTAT.OQ,GTAT,,
 GTBP.OQ,GTBP,US36254L3087,NASDAQ Stock Exchange Capital Market
 GTI.B,GTI,KYG304491395,Boston SE when trading NASDAQ Global Market
 GTIV.OQ,GTIV,,
-GTLS.K,GTLS,US16115Q3083,New York Consolidated
 GTLS.N,GTLS,US16115Q3083,New York Stock Exchange
 GTM.OQ,GTM,US98980F1049,Nasdaq Stock Exchange Global Select Market
-GTN,GTN,US3893751061,New York Consolidated
 GTN.N,GTN,US3893751061,New York Stock Exchange
 GTRC.OQ,GTRC,,
 GTX.OQ,GTX,US3665051054,Nasdaq Stock Exchange Global Select Market
-GTY,GTY,US3742971092,New York Consolidated
 GTY.N,GTY,US3742971092,New York Stock Exchange
 GUID.OQ,GUID,,
-GVA,GVA,US3873281071,New York Consolidated
 GVA.N,GVA,US3873281071,New York Stock Exchange
 GVHR.OQ,GVHR,,
 GW.II,GW,,
@@ -2368,7 +2169,6 @@ GYRE.OQ,GYRE,US4037831033,NASDAQ Stock Exchange Capital Market
 GYRO.OQ,GYRO,US4038291047,NASDAQ Stock Exchange Capital Market
 H.N,H,US4485791028,New York Stock Exchange
 HABT.OQ,HABT,,
-HAE,HAE,US4050241003,New York Consolidated
 HAE.N,HAE,US4050241003,New York Stock Exchange
 HAFC.OQ,HAFC,US4104952043,Nasdaq Stock Exchange Global Select Market
 HAIN.OQ,HAIN,US4052171000,Nasdaq Stock Exchange Global Select Market
@@ -2378,7 +2178,6 @@ HALW.N,HALW,,
 HAN.BCU,HAN,US4198791018,BATS Europe
 HAR.II,HAR,,
 HAR.N,HAR,,
-HAS.O,HAS,US4180561072,Consolidated Issue Listed on Nasdaq Global Select Market
 HAS.OQ,HAS,US4180561072,Nasdaq Stock Exchange Global Select Market
 HASI.N,HASI,US41068X1000,New York Stock Exchange
 HBAN.II,HBAN,,
@@ -2401,7 +2200,6 @@ HD.N,HD,US4370761029,New York Stock Exchange
 HDSN.OQ,HDSN,US4441441098,NASDAQ Stock Exchange Capital Market
 HDWRDE.INS,HDWRDE,,
 HE.N,HE,US4198701009,New York Stock Exchange
-HEI,HEI,US4228061093,New York Consolidated
 HEI.N,HEI,US4228061093,New York Stock Exchange
 HEIA.N,HEI.A,US4228062083,New York Stock Exchange
 HELE.OQ,HELE,BMG4388N1065,Nasdaq Stock Exchange Global Select Market
@@ -2425,7 +2223,6 @@ HIPO.N,HIPO,US4335392027,New York Stock Exchange
 HITK.OQ,HITK,,
 HITT.OQ,HITT,,
 HIVE.N,HIVE,CA4339211035,New York Stock Exchange
-HIW,HIW,US4312841087,New York Consolidated
 HIW.N,HIW,US4312841087,New York Stock Exchange
 HK.N,HK,,
 HL.N,HL,US4227041062,New York Stock Exchange
@@ -2433,9 +2230,7 @@ HLDE.INS,HLDE,,
 HLEX.OQ,HLEX,,
 HLF.N,HLF,KYG4412G1010,New York Stock Exchange
 HLI.N,HLI,US4415931009,New York Stock Exchange
-HLIO.K,HLIO,US42328H1095,New York Consolidated
 HLIO.N,HLIO,US42328H1095,New York Stock Exchange
-HLIT.O,HLIT,US4131601027,Consolidated Issue Listed on Nasdaq Global Select Market
 HLIT.OQ,HLIT,US4131601027,Nasdaq Stock Exchange Global Select Market
 HLLY.N,HLLY,US43538H1032,New York Stock Exchange
 HLMN.OQ,HLMN,US4316361090,NASDAQ Stock Exchange Global Market
@@ -2448,7 +2243,6 @@ HMA,HMA,,
 HMA^A14,HMA,US4219331026,New York Consolidated
 HME.B,HME,,
 HME.N,HME,,
-HMN,HMN,US4403271046,New York Consolidated
 HMN.N,HMN,US4403271046,New York Stock Exchange
 HMPR.OQ,HMPR,,
 HMSYN.BCU,HMSYN,US40425J1016,BATS Europe
@@ -2465,14 +2259,11 @@ HNT.N,HNT,,
 HNVR.OQ,HNVR,US4107091096,Nasdaq Stock Exchange Global Select Market
 HNZ.N,HNZ,,
 HOFF.OQ,HOFF,,
-HOFT.O,HOFT,US4390381006,Consolidated Issue Listed on Nasdaq Global Select Market
 HOFT.OQ,HOFT,US4390381006,Nasdaq Stock Exchange Global Select Market
 HOG.N,HOG,US4128221086,New York Stock Exchange
 HOLX.OQ,HOLX,US4364401012,Nasdaq Stock Exchange Global Select Market
-HOMB.K,HOMB,US4368932004,New York Consolidated
 HOMB.N,HOMB,US4368932004,New York Stock Exchange
 HOME.OQ,HOME,,
-HON.O,HON,US4385161066,Consolidated Issue Listed on Nasdaq Global Select Market
 HON.OQ,HON,US4385161066,Nasdaq Stock Exchange Global Select Market
 HOOD.OQ,HOOD,US7707001027,Nasdaq Stock Exchange Global Select Market
 HOPE.OQ,HOPE,US43940T1097,Nasdaq Stock Exchange Global Select Market
@@ -2519,7 +2310,6 @@ HST.O,HST,US44107P1049,Consolidated Issue Listed on Nasdaq Global Select Market
 HSTM.OQ,HSTM,US42222N1037,Nasdaq Stock Exchange Global Select Market
 HSY.II,HSY,,
 HSY.N,HSY,US4278661081,New York Stock Exchange
-HTB,HTB,US4378721041,New York Consolidated
 HTB.N,HTB,US4378721041,New York Stock Exchange
 HTBK.OQ,HTBK,US4269271098,Nasdaq Stock Exchange Global Select Market
 HTCDE.INS,HTCDE,,
@@ -2528,13 +2318,11 @@ HTFL.OQ,HTFL,US42238D1072,Nasdaq Stock Exchange Global Select Market
 HTGC.N,HTGC,US4270965084,New York Stock Exchange
 HTH.N,HTH,US4327481010,New York Stock Exchange
 HTLD.OQ,HTLD,US4223471040,Nasdaq Stock Exchange Global Select Market
-HTO.O,HTO,US7843051043,Consolidated Issue Listed on Nasdaq Global Select Market
 HTO.OQ,HTO,US7843051043,Nasdaq Stock Exchange Global Select Market
 HTS.N,HTS,,
 HTSI.N,HTSI,,
 HTWR.OQ,HTWR,,
 HTZ.N,HTZ,US42806J7000,New York Stock Exchange
-HTZ.OQ,HTZ,US42806J7000,Nasdaq Stock Exchange Global Select Market
 HUBB.N,HUBB,US4435106079,New York Stock Exchange
 HUBG.OQ,HUBG,US4433201062,Nasdaq Stock Exchange Global Select Market
 HUBS.N,HUBS,US4435731009,New York Stock Exchange
@@ -2547,23 +2335,18 @@ HURC.OQ,HURC,US4473241044,Nasdaq Stock Exchange Global Select Market
 HURN.OQ,HURN,US4474621020,Nasdaq Stock Exchange Global Select Market
 HUT.OQ,HUT,US44812J1043,Nasdaq Stock Exchange Global Select Market
 HVB.N,HVB,,
-HVT,HVT,US4195961010,New York Consolidated
 HVT.N,HVT,US4195961010,New York Stock Exchange
 HW.N,HW,,
 HWBK.OQ,HWBK,US4204761039,Nasdaq Stock Exchange Global Select Market
-HWC.O,HWC,US4101201097,Consolidated Issue Listed on Nasdaq Global Select Market
 HWC.OQ,HWC,US4101201097,Nasdaq Stock Exchange Global Select Market
 HWKN.OQ,HWKN,US4202611095,Nasdaq Stock Exchange Global Select Market
 HWM.N,HWM,US4432011082,New York Stock Exchange
-HXL,HXL,US4282911084,New York Consolidated
 HXL.N,HXL,US4282911084,New York Stock Exchange
 HY.N,HY,US4491721050,New York Stock Exchange
 HYFM.OQ,HYFM,US44888K4076,NASDAQ Stock Exchange Capital Market
 HYLN.A,HYLN,US4491091074,American Stock Exchange
-HYLN.K,HYLN,US4491091074,AMEX Consolidated
 HYREQ.PK,HYREQ,US44916T1079,USA Pink Sheets
 HYTM.O,HYTM,,
-HZO,HZO,US5679081084,New York Consolidated
 HZO.N,HZO,US5679081084,New York Stock Exchange
 I.N,I,,
 I3BF.TBEA,I3BF,US45384B1061,Tradeweb APA/SINT/XOFF/Others (EU)
@@ -2589,7 +2372,6 @@ ICHR.OQ,ICHR,KYG4740B1059,Nasdaq Stock Exchange Global Select Market
 ICO.II,ICO,,
 ICTG.O,ICTG,,
 ICUI.OQ,ICUI,US44930G1076,Nasdaq Stock Exchange Global Select Market
-IDA,IDA,US4511071064,New York Consolidated
 IDA.N,IDA,US4511071064,New York Stock Exchange
 IDCC.OQ,IDCC,US45867G1013,Nasdaq Stock Exchange Global Select Market
 IDCODE.INS,IDCODE,,
@@ -2603,9 +2385,7 @@ IDTI.O^D19,IDTI,US4581181066,Consolidated Issue Listed on Nasdaq Global Select M
 IDXX.OQ,IDXX,US45168D1046,Nasdaq Stock Exchange Global Select Market
 IDYA.OQ,IDYA,US45166A1025,Nasdaq Stock Exchange Global Select Market
 IE.A,IE,US46578C1080,American Stock Exchange
-IESC.O,IESC,US44951W1062,NASDAQ National Market System
 IESC.OQ,IESC,US44951W1062,NASDAQ Stock Exchange Global Market
-IEX,IEX,US45167R1041,New York Consolidated
 IEX.N,IEX,US45167R1041,New York Stock Exchange
 IFC.C,IFC,,
 IFF.II,IFF,,
@@ -2620,7 +2400,6 @@ IHRT.OQ,IHRT,US45174J5092,Nasdaq Stock Exchange Global Select Market
 IHS.PH,IHS,KYG4701H1092,NASDAQ OMX PSX  SE
 IIG.PH,IIG,,
 III.OQ,III,US45675Y1047,NASDAQ Stock Exchange Global Market
-IIIN.K,IIIN,US45774W1080,New York Consolidated
 IIIN.N,IIIN,US45774W1080,New York Stock Exchange
 IIIV.OQ,IIIV,US46571Y1073,Nasdaq Stock Exchange Global Select Market
 IIPR.N,IIPR,US45781V1017,New York Stock Exchange
@@ -2628,15 +2407,12 @@ IKN.B,IKN,,
 IKT.OQ,IKT,US45719W2052,NASDAQ Stock Exchange Capital Market
 IL.N,IL,,
 ILA.B,ILA,,
-ILMN.O,ILMN,US4523271090,Consolidated Issue Listed on Nasdaq Global Select Market
 ILMN.OQ,ILMN,US4523271090,Nasdaq Stock Exchange Global Select Market
 ILPT.OQ,ILPT,US4562371066,Nasdaq Stock Exchange Global Select Market
 IM.N,IM,,
 IMA.B,IMA,US45175G2075,Boston SE when trading NASDAQ Global Market
 IMAX.N,IMAX,CA45245E1097,New York Stock Exchange
-IMKTA.O,IMKTA,US4570301048,Consolidated Issue Listed on Nasdaq Global Select Market
 IMKTA.OQ,IMKTA,US4570301048,Nasdaq Stock Exchange Global Select Market
-IMMR.O,IMMR,US4525211078,Consolidated Issue Listed on Nasdaq Global Select Market
 IMMR.OQ,IMMR,US4525211078,Nasdaq Stock Exchange Global Select Market
 IMMUDE.INS,IMMUDE,,
 IMMUN.BCU,IMMUN,US4529071080,BATS Europe
@@ -2696,7 +2472,6 @@ INVN.N,INVN,US0155646021,New York Stock Exchange
 INVX.N,INVX,US4576511079,New York Stock Exchange
 IODE.INS,IODE,,
 IONQ.N,IONQ,US46222L1089,New York Stock Exchange
-IOSP.O,IOSP,US45768S1050,Consolidated Issue Listed on Nasdaq Global Select Market
 IOSP.OQ,IOSP,US45768S1050,Nasdaq Stock Exchange Global Select Market
 IOT.N,IOT,US79589L1061,New York Stock Exchange
 IOTN.O,IOTN,,
@@ -2708,7 +2483,6 @@ IPCM.OQ,IPCM,,
 IPCR.OQ,IPCR,,
 IPCS.O,IPCS,,
 IPG.II,IPG,,
-IPGP.O,IPGP,US44980X1090,Consolidated Issue Listed on Nasdaq Global Select Market
 IPGP.OQ,IPGP,US44980X1090,Nasdaq Stock Exchange Global Select Market
 IPI.N,IPI,US46121Y2019,New York Stock Exchange
 IPSC.NQT,IPSC,US15673T1007,NYSE BQT Best Quotes and Trades
@@ -2724,11 +2498,11 @@ IRDM.OQ,IRDM,US46269C1027,Nasdaq Stock Exchange Global Select Market
 IRF.N,IRF,,
 IRG.OQ,IRG,,
 IRIS.OQ,IRIS,,
+IREN.OQ,IREN,AU0000185993,Nasdaq Stock Exchange Global Select Market
 IRIX.OQ,IRIX,US4626841013,NASDAQ Stock Exchange Capital Market
 IRM.N,IRM,US46284V1017,New York Stock Exchange
 IRMD.OQ,IRMD,US46266A1097,NASDAQ Stock Exchange Global Market
 IRON.OQ,IRON,US2546041011,NASDAQ Stock Exchange Global Market
-IRT,IRT,US45378A1060,New York Consolidated
 IRT.N,IRT,US45378A1060,New York Stock Exchange
 IRTC.OQ,IRTC,US4500561067,Nasdaq Stock Exchange Global Select Market
 IRWD.OQ,IRWD,US46333X1081,Nasdaq Stock Exchange Global Select Market
@@ -2743,7 +2517,6 @@ ISRG.OQ,ISRG,US46120E6023,Nasdaq Stock Exchange Global Select Market
 ISSC.OQ,ISSC,US45769N1054,Nasdaq Stock Exchange Global Select Market
 ISSI.OQ,ISSI,,
 ISTR.OQ,ISTR,US46134L1052,NASDAQ Stock Exchange Global Market
-IT,IT,US3666511072,New York Consolidated
 IT.N,IT,US3666511072,New York Stock Exchange
 ITGR.N,ITGR,US45826H1095,New York Stock Exchange
 ITIC.OQ,ITIC,US4618041069,Nasdaq Stock Exchange Global Select Market
@@ -2776,11 +2549,9 @@ JBIO.OQ,JBIO,US0080642061,NASDAQ Stock Exchange Capital Market
 JBL.N,JBL,US4663131039,New York Stock Exchange
 JBLU.OQ,JBLU,US4771431016,Nasdaq Stock Exchange Global Select Market
 JBSS.OQ,JBSS,US8004221078,Nasdaq Stock Exchange Global Select Market
-JBTM.K,JBTM,US4778391049,New York Consolidated
 JBTM.N,JBTM,US4778391049,New York Stock Exchange
 JBXW.B,JBXW,,
 JCAP.N,JCAP,US47248R1032,New York Stock Exchange
-JCAP.OQ,JCAP,US47248R1032,Nasdaq Stock Exchange Global Select Market
 JCG.PH,JCG,,
 JCG^C11,JCG,US46612H4020,New York Consolidated
 JCI.II,JCI,,
@@ -2825,7 +2596,6 @@ JXN.N,JXN,US46817M1071,New York Stock Exchange
 JYNT.OQ,JYNT,US47973J1025,NASDAQ Stock Exchange Capital Market
 K.II,K,,
 K.MX,K*,US4878361082,Bolsa Mexicana de Valores S.A. de C.V.
-KAI,KAI,US48282T1043,New York Consolidated
 KAI.N,KAI,US48282T1043,New York Stock Exchange
 KALA.OQ,KALA,US4831192020,NASDAQ Stock Exchange Capital Market
 KALU.OQ,KALU,US4830077040,Nasdaq Stock Exchange Global Select Market
@@ -2860,17 +2630,14 @@ KEYS.N,KEYS,US49338L1035,New York Stock Exchange
 KEYS.OQ,KEYS,,
 KEYW.OQ,KEYW,,
 KFED.O,KFED,,
-KFRC.K,KFRC,US4937321010,New York Consolidated
 KFRC.N,KFRC,US4937321010,New York Stock Exchange
 KFS.N,KFS,US4969042021,New York Stock Exchange
-KFY,KFY,US5006432000,New York Consolidated
 KFY.N,KFY,US5006432000,New York Stock Exchange
 KG.II,KG,,
 KG.OQ,KG,BMG5260K1027,NASDAQ Stock Exchange Capital Market
 KGS.N,KGS,US50012A1088,New York Stock Exchange
 KHC.OQ,KHC,US5007541064,Nasdaq Stock Exchange Global Select Market
 KIDS.OQ,KIDS,US68752L1008,NASDAQ Stock Exchange Global Market
-KIM,KIM,US49446R1095,New York Consolidated
 KIM.N,KIM,US49446R1095,New York Stock Exchange
 KINS.OQ,KINS,US4967191051,NASDAQ Stock Exchange Capital Market
 KIOR.OQ,KIOR,,
@@ -2899,9 +2666,7 @@ KND.PH,KND,,
 KND^G18,KND^G18,US4945801037,New York Consolidated
 KNF.N,KNF,US4988941047,New York Stock Exchange
 KNSA.OQ,KNSA,GB00BRXB0C07,Nasdaq Stock Exchange Global Select Market
-KNSL.K,KNSL,US49714P1084,New York Consolidated
 KNSL.N,KNSL,US49714P1084,New York Stock Exchange
-KNTK.K,KNTK,US02215L2097,New York Consolidated
 KNTK.N,KNTK,US02215L2097,New York Stock Exchange
 KNX.N,KNX,US4990491049,New York Stock Exchange
 KO.N,KO,US1912161007,New York Stock Exchange
@@ -2910,7 +2675,6 @@ KOD.OQ,KOD,US50015M1099,NASDAQ Stock Exchange Global Market
 KODK.N,KODK,US2774614067,New York Stock Exchange
 KOG.N,KOG,,
 KOMG.OQ,KOMG,,
-KOP,KOP,US50060P1066,New York Consolidated
 KOP.N,KOP,US50060P1066,New York Stock Exchange
 KOPN.OQ,KOPN,US5006001011,NASDAQ Stock Exchange Capital Market
 KOS.N,KOS,US5006881065,New York Stock Exchange
@@ -2923,11 +2687,9 @@ KREF.N,KREF,US48251K1007,New York Stock Exchange
 KRG.N,KRG,US49803T3005,New York Stock Exchange
 KRMD.OQ,KRMD,US7599101026,NASDAQ Stock Exchange Capital Market
 KRNY.OQ,KRNY,US48716P1084,Nasdaq Stock Exchange Global Select Market
-KRO,KRO,US50105F1057,New York Consolidated
 KRO.N,KRO,US50105F1057,New York Stock Exchange
 KROS.OQ,KROS,US4923271013,NASDAQ Stock Exchange Global Market
 KRRO.OQ,KRRO,US5009461089,NASDAQ Stock Exchange Capital Market
-KRT.O,KRT,US48563L1017,Consolidated Issue Listed on Nasdaq Global Select Market
 KRT.OQ,KRT,US48563L1017,Nasdaq Stock Exchange Global Select Market
 KRTX.MX,KRTX*,US48576A1007,Bolsa Mexicana de Valores S.A. de C.V.
 KRUS.OQ,KRUS,US5012701026,NASDAQ Stock Exchange Global Market
@@ -2952,9 +2714,7 @@ KYMR.OQ,KYMR,US5015751044,NASDAQ Stock Exchange Global Market
 KYPH.OQ,KYPH,,
 KZR.OQ,KZR,US49372L2097,NASDAQ Stock Exchange Capital Market
 L.N,L,US5404241086,New York Stock Exchange
-LAB.O,LAB,US34385P1084,Consolidated Issue Listed on Nasdaq Global Select Market
 LAB.OQ,LAB,US34385P1084,Nasdaq Stock Exchange Global Select Market
-LAD,LAD,US5367971034,New York Consolidated
 LAD.N,LAD,US5367971034,New York Stock Exchange
 LADR.N,LADR,US5057431042,New York Stock Exchange
 LAKE.OQ,LAKE,US5117951062,NASDAQ Stock Exchange Global Market
@@ -2999,11 +2759,9 @@ LEN.II,LEN,,
 LEN.N,LEN,US5260571048,New York Stock Exchange
 LEND.OQ,LEND,,
 LENZ.OQ,LENZ,US52635N1037,Nasdaq Stock Exchange Global Select Market
-LEU,LEU,US15643U1043,New York Consolidated
 LEU.N,LEU,US15643U1043,New York Stock Exchange
 LF.N,LF,,
 LF.PH,LF,,
-LFCR.O,LFCR,US5147661046,Consolidated Issue Listed on Nasdaq Global Select Market
 LFCR.OQ,LFCR,US5147661046,Nasdaq Stock Exchange Global Select Market
 LFG.B,LFG,,
 LFMD.OQ,LFMD,US53216B1044,NASDAQ Stock Exchange Global Market
@@ -3013,7 +2771,6 @@ LFUS.OQ,LFUS,US5370081045,Nasdaq Stock Exchange Global Select Market
 LFVN.OQ,LFVN,US53222K2050,NASDAQ Stock Exchange Capital Market
 LGFB.N^E25,LGFB,CA5359195008,New York Stock Exchange
 LGIH.OQ,LGIH,US50187T1060,Nasdaq Stock Exchange Global Select Market
-LGN.C,LGN,US52476L1098,National SE when trading NASDAQ Global Market
 LGN.OQ,LGN,US52476L1098,Nasdaq Stock Exchange Global Select Market
 LGND.OQ,LGND,US53220K5048,NASDAQ Stock Exchange Global Market
 LGNDDE.INS,LGNDDE,,
@@ -3028,7 +2785,6 @@ LII.N,LII,US5261071071,New York Stock Exchange
 LILA.OQ,LILA,BMG9001E1021,Nasdaq Stock Exchange Global Select Market
 LILAK.OQ,LILAK,BMG9001E1286,Nasdaq Stock Exchange Global Select Market
 LIN.OQ,LIN,IE000S9YS762,Nasdaq Stock Exchange Global Select Market
-LINC.O,LINC,US5335351004,Consolidated Issue Listed on Nasdaq Global Select Market
 LINC.OQ,LINC,US5335351004,Nasdaq Stock Exchange Global Select Market
 LIND.OQ,LIND,US5352191093,NASDAQ Stock Exchange Capital Market
 LION.N,LION,CA53626N1024,New York Stock Exchange
@@ -3039,7 +2795,6 @@ LIVN.L,LIVN,,
 LIVN.OQ,LIVN,GB00BYMT0J19,Nasdaq Stock Exchange Global Select Market
 LIZ.II,LIZ,,
 LKFN.OQ,LKFN,US5116561003,Nasdaq Stock Exchange Global Select Market
-LKQ.O,LKQ,US5018892084,Consolidated Issue Listed on Nasdaq Global Select Market
 LKQ.OQ,LKQ,US5018892084,Nasdaq Stock Exchange Global Select Market
 LLEX.A,LLEX,,
 LLL.II,LLL,,
@@ -3064,7 +2819,6 @@ LNCR.O^H12,LNCR,US5327911005,Consolidated Issue Listed on Nasdaq Global Select M
 LNG,LNG,US16411R2085,New York Consolidated
 LNKB.OQ,LNKB,US53578P1057,NASDAQ Stock Exchange Capital Market
 LNKD.N,LNKD,,
-LNN,LNN,US5355551061,New York Consolidated
 LNN.N,LNN,US5355551061,New York Stock Exchange
 LNSR.OQ,LNSR,US52634L1089,NASDAQ Stock Exchange Capital Market
 LNT.O,LNT,US0188021085,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -3073,7 +2827,6 @@ LNUXDE.INS,LNUXDE,,
 LNWO.PK,LNWO,US80874P1093,USA Pink Sheets
 LNY.B,LNY,,
 LO.N,LO,,
-LOB,LOB,US53803X1054,New York Consolidated
 LOB.N,LOB,US53803X1054,New York Stock Exchange
 LOCK.N,LOCK,,
 LOCO.OQ,LOCO,US2686031079,Nasdaq Stock Exchange Global Select Market
@@ -3092,14 +2845,12 @@ LPG.N,LPG,MHY2106R1100,New York Stock Exchange
 LPLA.OQ,LPLA,US50212V1008,Nasdaq Stock Exchange Global Select Market
 LPNT.OQ,LPNT,,
 LPRO.OQ,LPRO,US68373J1043,NASDAQ Stock Exchange Global Market
-LPSN.O,LPSN,US5381463091,Consolidated Issue Listed on Nasdaq Global Select Market
 LPSN.OQ,LPSN,US5381463091,Nasdaq Stock Exchange Global Select Market
 LPS^A14,LPS,US52602E1029,New York Consolidated
 LPT.N,LPT,,
 LPT.N^B20,LPT,US5311721048,New York Stock Exchange
 LPX.N,LPX,US5463471053,New York Stock Exchange
 LQDA.OQ,LQDA,US53635D2027,NASDAQ Stock Exchange Capital Market
-LQDT.O,LQDT,US53635B1070,Consolidated Issue Listed on Nasdaq Global Select Market
 LQDT.OQ,LQDT,US53635B1070,Nasdaq Stock Exchange Global Select Market
 LRCX.OQ,LRCX,US5128073062,Nasdaq Stock Exchange Global Select Market
 LRMR.OQ,LRMR,US5171251003,NASDAQ Stock Exchange Global Market
@@ -3107,19 +2858,15 @@ LRN.N,LRN,US86333M1080,New York Stock Exchange
 LRW.B,LRW,,
 LSAK.O,LSAK,US64107N2062,Consolidated Issue Listed on Nasdaq Global Select Market
 LSBG.OQ,LSBG,,
-LSCC.O,LSCC,US5184151042,Consolidated Issue Listed on Nasdaq Global Select Market
 LSCC.OQ,LSCC,US5184151042,Nasdaq Stock Exchange Global Select Market
-LSE.C,LSE,KYG5462C1069,National SE when trading NASDAQ Global Market
 LSE.N,LSE,KYG5462C1069,New York Stock Exchange
 LSF.A,LSF,US50736T1025,American Stock Exchange
 LSI.O^E14,LSI,US5021611026,Consolidated Issue Listed on Nasdaq Global Select Market
 LSTR.OQ,LSTR,US5150981018,Nasdaq Stock Exchange Global Select Market
 LTBG.OQ,LTBG,,
 LTBR.OQ,LTBR,US53224K3023,NASDAQ Stock Exchange Capital Market
-LTC,LTC,US5021751020,New York Consolidated
 LTC.N,LTC,US5021751020,New York Stock Exchange
 LTH.N,LTH,US53190C1027,New York Stock Exchange
-LTM.C,LTM,US51817R2058,The National Stock Exchange (formerly Cincinnati SE)
 LTM.N,LTM,US51817R2058,New York Stock Exchange
 LTR.II,LTR,,
 LTS.B,LTS,,
@@ -3130,7 +2877,6 @@ LULU.OQ,LULU,US5500211090,Nasdaq Stock Exchange Global Select Market
 LUM.B,LUM,,
 LUMN.N,LUMN,US5502411037,New York Stock Exchange
 LUNA.PK,LUNA,US5503511009,USA Pink Sheets
-LUNG.O,LUNG,US7458481014,Consolidated Issue Listed on Nasdaq Global Select Market
 LUNG.OQ,LUNG,US7458481014,Nasdaq Stock Exchange Global Select Market
 LUNR.OQ,LUNR,US46125A1007,NASDAQ Stock Exchange Global Market
 LUV.II,LUV,,
@@ -3150,23 +2896,18 @@ LXFT.N,LXFT,,
 LXK.N,LXK,,
 LXP.N,LXP,US5290434084,New York Stock Exchange
 LXRX.OQ,LXRX,US5288723027,NASDAQ Stock Exchange Capital Market
-LXU,LXU,US5021601043,New York Consolidated
 LXU.N,LXU,US5021601043,New York Stock Exchange
 LYB.N,LYB,NL0009434992,New York Stock Exchange
 LYEL.OQ,LYEL,US55083R2031,Nasdaq Stock Exchange Global Select Market
 LYFT.OQ,LYFT,US55087P1049,Nasdaq Stock Exchange Global Select Market
 LYTS.OQ,LYTS,US50216C1080,Nasdaq Stock Exchange Global Select Market
-LYV,LYV,US5380341090,New York Consolidated
 LYV.N,LYV,US5380341090,New York Stock Exchange
 LZ.OQ,LZ,US52466B1035,Nasdaq Stock Exchange Global Select Market
-LZB,LZB,US5053361078,New York Consolidated
 LZB.N,LZB,US5053361078,New York Stock Exchange
 LZM.N,LZM,IM00BLCY1J27,New York Stock Exchange
 LZ^I11,LZ,US5492711040,New York Consolidated
-M,M,US55616P1049,New York Consolidated
 M.N,M,US55616P1049,New York Stock Exchange
 MA.N,MA,US57636Q1040,New York Stock Exchange
-MAA,MAA,US59522J1034,New York Consolidated
 MAA.N,MAA,US59522J1034,New York Stock Exchange
 MAC.N,MAC,US5543821012,New York Stock Exchange
 MAFB.OQ,MAFB,,
@@ -3180,7 +2921,6 @@ MANT.O^I22,MANT,US5645631046,Consolidated Issue Listed on Nasdaq Global Select M
 MAPS.OQ,MAPS,US92971A1097,Nasdaq Stock Exchange Global Select Market
 MAQ.PH,MAQ,,
 MAR.II,MAR,,
-MAR.O,MAR,US5719032022,Consolidated Issue Listed on Nasdaq Global Select Market
 MAR.OQ,MAR,US5719032022,Nasdaq Stock Exchange Global Select Market
 MARA.OQ,MARA,US5657881067,NASDAQ Stock Exchange Capital Market
 MAS.II,MAS,,
@@ -3189,7 +2929,6 @@ MASI.OQ,MASI,US5747951003,Nasdaq Stock Exchange Global Select Market
 MASS.OQ,MASS,US65443P1021,NASDAQ Stock Exchange Global Market
 MAT.OQ,MAT,US5770811025,Nasdaq Stock Exchange Global Select Market
 MATR.OQ,MATR,,
-MATV.K,MATV,US8085411069,New York Consolidated
 MATV.N,MATV,US8085411069,New York Stock Exchange
 MATW.OQ,MATW,US5771281012,Nasdaq Stock Exchange Global Select Market
 MATX.N,MATX,US57686G1058,New York Stock Exchange
@@ -3219,10 +2958,8 @@ MCBS.OQ,MCBS,US59165J1051,Nasdaq Stock Exchange Global Select Market
 MCD.N,MCD,US5801351017,New York Stock Exchange
 MCFT.OQ,MCFT,US57637H1032,NASDAQ Stock Exchange Global Market
 MCGC.OQ,MCGC,,
-MCHB.O,MCHB,US43785V1026,Consolidated Issue Listed on Nasdaq Global Select Market
 MCHB.OQ,MCHB,US43785V1026,Nasdaq Stock Exchange Global Select Market
 MCHP.OQ,MCHP,US5950171042,Nasdaq Stock Exchange Global Select Market
-MCHX.O,MCHX,US56624R1086,Consolidated Issue Listed on Nasdaq Global Select Market
 MCHX.OQ,MCHX,US56624R1086,Nasdaq Stock Exchange Global Select Market
 MCK.II,MCK,,
 MCK.N,MCK,US58155Q1031,New York Stock Exchange
@@ -3233,7 +2970,6 @@ MCRI.OQ,MCRI,US6090271072,Nasdaq Stock Exchange Global Select Market
 MCRL.OQ,MCRL,,
 MCRN.N,MCRN,,
 MCRS.O^I14,MCRS,US5949011002,Consolidated Issue Listed on Nasdaq Global Select Market
-MCS,MCS,US5663301068,New York Consolidated
 MCS.N,MCS,US5663301068,New York Stock Exchange
 MCW.OQ,MCW,US60646V1052,Nasdaq Stock Exchange Global Select Market
 MCY.N,MCY,US5894001008,New York Stock Exchange
@@ -3268,7 +3004,6 @@ MEDW.OQ,MEDW,,
 MEDXDE.INS,MEDXDE,,
 MEET.OQ,MEET,,
 MEE^F11,MEE,US5762061068,New York Consolidated
-MEG.B,MEG,US6151111019,Boston Stock Exchange Inc
 MEG.N,MEG,US6151111019,New York Stock Exchange
 MEH.B,MEH,,
 MEI.N,MEI,US5915202007,New York Stock Exchange
@@ -3280,7 +3015,6 @@ MERC.O,MERC,US5880561015,Consolidated Issue Listed on Nasdaq Global Select Marke
 MESG.OQ,MESG,,
 MET.II,MET,US59156RAR93,
 MET.N,MET,US59156R1086,New York Stock Exchange
-META.O,META,US30303M1027,Consolidated Issue Listed on Nasdaq Global Select Market
 META.OQ,META,US30303M1027,Nasdaq Stock Exchange Global Select Market
 METC.OQ,METC,US75134P6007,Nasdaq Stock Exchange Global Select Market
 METH.OQ,METH,,
@@ -3290,7 +3024,6 @@ MFB.N,MFB,,
 MFB.PH,MFB,,
 MFE^C11,MFE,US5790641063,New York Consolidated
 MFI.OQ,MFI,VGG6065C1216,NASDAQ Stock Exchange Capital Market
-MFIN.O,MFIN,US5839281061,Consolidated Issue Listed on Nasdaq Global Select Market
 MFIN.OQ,MFIN,US5839281061,Nasdaq Stock Exchange Global Select Market
 MFLX.OQ,MFLX,US33740F5089,NASDAQ Stock Exchange Global Market
 MFRM.OQ,MFRM,,
@@ -3301,7 +3034,6 @@ MGEE.OQ,MGEE,US55277P1049,Nasdaq Stock Exchange Global Select Market
 MGM.N,MGM,US5529531015,New York Stock Exchange
 MGNI.OQ,MGNI,US55955D1000,Nasdaq Stock Exchange Global Select Market
 MGNX.OQ,MGNX,US5560991094,Nasdaq Stock Exchange Global Select Market
-MGPI.O,MGPI,US55303J1060,Consolidated Issue Listed on Nasdaq Global Select Market
 MGPI.OQ,MGPI,US55303J1060,Nasdaq Stock Exchange Global Select Market
 MGRC.OQ,MGRC,US5805891091,Nasdaq Stock Exchange Global Select Market
 MGTX.OQ,MGTX,KYG596651029,Nasdaq Stock Exchange Global Select Market
@@ -3310,7 +3042,6 @@ MH.N,MH,US5809071039,New York Stock Exchange
 MHGC.O,MHGC,,
 MHGC.OQ,MHGC,,
 MHK.N,MHK,US6081901042,New York Stock Exchange
-MHO,MHO,US55305B1017,New York Consolidated
 MHO.N,MHO,US55305B1017,New York Stock Exchange
 MHP.II,MHP,,
 MHR.N,MHR,,
@@ -3318,7 +3049,6 @@ MHS.II,MHS,,
 MHS^D12,MHS,US58405U1025,New York Consolidated
 MIAX.N,MIAX,US59356Q1085,New York Stock Exchange
 MIDD.OQ,MIDD,US5962781010,Nasdaq Stock Exchange Global Select Market
-MIG.C,MIG,US92189H8622,The National Stock Exchange (formerly Cincinnati SE)
 MIG.N,MIG,US92189H8622,New York Stock Exchange
 MIKN.BCU,MIKN,US59408Q1067,BATS Europe
 MIL.II,MIL,,
@@ -3343,14 +3073,10 @@ MKTW.OQ,MKTW,US57064P2065,NASDAQ Stock Exchange Global Market
 MKTX.OQ,MKTX,US57060D1081,Nasdaq Stock Exchange Global Select Market
 MLAB.OQ,MLAB,US59064R1095,Nasdaq Stock Exchange Global Select Market
 MLAN.OQ,MLAN,,
-MLI,MLI,US6247561029,New York Consolidated
 MLI.N,MLI,US6247561029,New York Stock Exchange
-MLKN.O,MLKN,US6005441000,Consolidated Issue Listed on Nasdaq Global Select Market
 MLKN.OQ,MLKN,US6005441000,Nasdaq Stock Exchange Global Select Market
 MLM.N,MLM,US5732841060,New York Stock Exchange
-MLP,MLP,US5773451019,New York Consolidated
 MLP.N,MLP,US5773451019,New York Stock Exchange
-MLR,MLR,US6005512040,New York Consolidated
 MLR.N,MLR,US6005512040,New York Stock Exchange
 MLYS.OQ,MLYS,US6031701013,Nasdaq Stock Exchange Global Select Market
 MM.MW,MM,,
@@ -3359,12 +3085,10 @@ MMM.N,MMM,US88579Y1010,New York Stock Exchange
 MMPI.O,MMPI,,
 MMR.B,MMR,,
 MMR.N,MMR,,
-MMS,MMS,US5779331041,New York Consolidated
 MMS.N,MMS,US5779331041,New York Stock Exchange
 MMSI.OQ,MMSI,US5898891040,Nasdaq Stock Exchange Global Select Market
 MNC.B,MNC,,
 MNK.N,MNK,,
-MNKD.O,MNKD,US56400P7069,NASDAQ National Market System
 MNKD.OQ,MNKD,US56400P7069,NASDAQ Stock Exchange Global Market
 MNOV.OQ,MNOV,US58468P2065,NASDAQ Stock Exchange Global Market
 MNPR.OQ,MNPR,US61023L2079,NASDAQ Stock Exchange Capital Market
@@ -3376,11 +3100,9 @@ MNT.B,MNT,,
 MNTG.II,MNTG,,
 MNTK.OQ,MNTK,US61218C1036,NASDAQ Stock Exchange Capital Market
 MO.N,MO,US02209S1033,New York Stock Exchange
-MOD,MOD,US6078281002,New York Consolidated
 MOD.N,MOD,US6078281002,New York Stock Exchange
 MOGA,MOGB,HU0000153937,New York Consolidated
 MOGA.N,MOG.A,US6153942023,New York Stock Exchange
-MOH,MOH,US60855R1005,New York Consolidated
 MOH.N,MOH,US60855R1005,New York Stock Exchange
 MOLX.O^L13,MOLX,US6085541018,Consolidated Issue Listed on Nasdaq Global Select Market
 MOLXF.INS,MOLXF,,
@@ -3389,14 +3111,12 @@ MORE.N,MORE,,
 MORN.OQ,MORN,US6177001095,Nasdaq Stock Exchange Global Select Market
 MOS.N,MOS,US61945C1036,New York Stock Exchange
 MOTC.BR^I08,PMO,BE0004464021,Brussels Stock Exchange
-MOV,MOV,US6245801062,New York Consolidated
 MOV.N,MOV,US6245801062,New York Stock Exchange
 MOVE.OQ,MOVE,US62459M3051,NASDAQ Stock Exchange Capital Market
 MP.N,MP,US5533681012,New York Stock Exchange
 MPAA.OQ,MPAA,US6200711009,Nasdaq Stock Exchange Global Select Market
 MPB.OQ,MPB,US59540G1076,NASDAQ Stock Exchange Global Market
 MPC.N,MPC,US56585A1025,New York Stock Exchange
-MPG.B,MPG,US88340C8423,Boston SE when trading NASDAQ Global Market
 MPG.N,MPG,US88340C8423,New York Stock Exchange
 MPLT.OQ,MPLT,US56565P1030,Nasdaq Stock Exchange Global Select Market
 MPO.N,MPO,,
@@ -3406,9 +3126,7 @@ MPS.N,MPS,,
 MPSX.N,MPSX,,
 MPT,MPT,US58463J3041,New York Consolidated
 MPTI.A,MPTI,US55380K1097,American Stock Exchange
-MPWR.O,MPWR,US6098391054,Consolidated Issue Listed on Nasdaq Global Select Market
 MPWR.OQ,MPWR,US6098391054,Nasdaq Stock Exchange Global Select Market
-MPX,MPX,US5684271084,New York Consolidated
 MPX.N,MPX,US5684271084,New York Stock Exchange
 MQ.OQ,MQ,US57142B1044,Nasdaq Stock Exchange Global Select Market
 MRBK.OQ,MRBK,US58958P1049,Nasdaq Stock Exchange Global Select Market
@@ -3429,7 +3147,6 @@ MRTN.OQ,MRTN,US5730751089,Nasdaq Stock Exchange Global Select Market
 MRVCDE.INS,MRVCDE,,
 MRVI.OQ,MRVI,US56600D1072,Nasdaq Stock Exchange Global Select Market
 MRVL.OQ,MRVL,US5738741041,Nasdaq Stock Exchange Global Select Market
-MRX.C,MRX,GB00BMT7GT62,National SE when trading NASDAQ Global Market
 MRX.OQ,MRX,GB00BMT7GT62,Nasdaq Stock Exchange Global Select Market
 MRX^L12,MRX,US5846903095,New York Consolidated
 MS.N,MS,US6174464486,New York Stock Exchange
@@ -3439,7 +3156,6 @@ MSCCN.BCU,MSCCN,US5951371005,BATS Europe
 MSCI.N,MSCI,US55354G1004,New York Stock Exchange
 MSEX.OQ,MSEX,US5966801087,Nasdaq Stock Exchange Global Select Market
 MSFT.OQ,MSFT,US5949181045,Nasdaq Stock Exchange Global Select Market
-MSFT.P,MSFT,US5949181045,NYSE Arca when trading NASDAQ Global Market
 MSGE.N,MSGE,US5582561032,New York Stock Exchange
 MSI.N,MSI,US6200763075,New York Stock Exchange
 MSM.N,MSM,US5535301064,New York Stock Exchange
@@ -3447,7 +3163,6 @@ MSO.B,MSO,,
 MSO.N,MSO,,
 MSPD.OQ,MSPD,,
 MSTR.OQ,MSTR,US5949724083,Nasdaq Stock Exchange Global Select Market
-MSW.C,MSW,KYG614401068,National SE when trading NASDAQ Global Market
 MSW.OQ,MSW,KYG614401068,NASDAQ Stock Exchange Capital Market
 MTB.II,MTB,,
 MTB.N,MTB,US55261F1049,New York Stock Exchange
@@ -3459,25 +3174,18 @@ MTEX.OQ,MTEX,US5637712036,NASDAQ Stock Exchange Capital Market
 MTG.II,MTG,,
 MTG.N,MTG,US5528481030,New York Stock Exchange
 MTGE.OQ,MTGE,,
-MTH,MTH,US59001A1025,New York Consolidated
 MTH.N,MTH,US59001A1025,New York Stock Exchange
-MTN,MTN,US91879Q1094,New York Consolidated
 MTN.N,MTN,US91879Q1094,New York Stock Exchange
 MTNB.A,MTNB,US5768103039,American Stock Exchange
 MTRN.N,MTRN,US5766901012,New York Stock Exchange
-MTRX.O,MTRX,US5768531056,Consolidated Issue Listed on Nasdaq Global Select Market
 MTRX.OQ,MTRX,US5768531056,Nasdaq Stock Exchange Global Select Market
 MTSI.OQ,MTSI,US55405Y1001,Nasdaq Stock Exchange Global Select Market
 MTSN.O,MTSN,,
 MTSN.OQ,MTSN,,
-MTUS.K,MTUS,US8873991033,New York Consolidated
 MTUS.N,MTUS,US8873991033,New York Stock Exchange
 MTW.N,MTW,US5635714059,New York Stock Exchange
-MTX,MTX,US6031581068,New York Consolidated
 MTX.N,MTX,US6031581068,New York Stock Exchange
-MTZ,MTZ,US5763231090,New York Consolidated
 MTZ.N,MTZ,US5763231090,New York Stock Exchange
-MU.O,MU,US5951121038,Consolidated Issue Listed on Nasdaq Global Select Market
 MU.OQ,MU,US5951121038,Nasdaq Stock Exchange Global Select Market
 MUR.II,MUR,,
 MUR.N,MUR,US6267171022,New York Stock Exchange
@@ -3491,7 +3199,6 @@ MVL.N,MVL,,
 MVSN.OQ,MVSN,,
 MVSND.OQ,MVSND,,
 MVST.OQ,MVST,US59516C1062,NASDAQ Stock Exchange Capital Market
-MWA,MWA,US6247581084,New York Consolidated
 MWA.N,MWA,US6247581084,New York Stock Exchange
 MWIV.OQ,MWIV,,
 MWP.C,MWP,,
@@ -3502,10 +3209,8 @@ MWY.C,MWY,,
 MXCT.OQ,MXCT,US57777K1060,Nasdaq Stock Exchange Global Select Market
 MXGL.OQ,MXGL,,
 MXIM.O^H21,MXIM,US57772K1016,Consolidated Issue Listed on Nasdaq Global Select Market
-MXL.O,MXL,US57776J1007,Consolidated Issue Listed on Nasdaq Global Select Market
 MXL.OQ,MXL,US57776J1007,Nasdaq Stock Exchange Global Select Market
 MYCC.N,MYCC,,
-MYE,MYE,US6284641098,New York Consolidated
 MYE.N,MYE,US6284641098,New York Stock Exchange
 MYFW.OQ,MYFW,US33751L1052,Nasdaq Stock Exchange Global Select Market
 MYGN.OQ,MYGN,US62855J1043,Nasdaq Stock Exchange Global Select Market
@@ -3515,17 +3220,14 @@ MYO.A,MYO,US62857J2015,American Stock Exchange
 MYOKN.BCU,MYOKN,US62857M1053,BATS Europe
 MYPS.OQ,MYPS,US72815G1085,NASDAQ Stock Exchange Global Market
 MYRG.OQ,MYRG,US55405W1045,Nasdaq Stock Exchange Global Select Market
-MZTI.O,MZTI,US5138471033,Consolidated Issue Listed on Nasdaq Global Select Market
 MZTI.OQ,MZTI,US5138471033,Nasdaq Stock Exchange Global Select Market
 NABL.N,NABL,US62878D1000,New York Stock Exchange
 NADL.N,NADL,,
 NAFC.OQ,NAFC,,
-NAGE.O,NAGE,US1710774076,Consolidated Issue listed on NASDAQ Capital Market
 NAGE.OQ,NAGE,US1710774076,NASDAQ Stock Exchange Capital Market
 NAL.C,NAL,,
 NAME.OQ,NAME,,
 NASB.PK,NASB,US6289681099,USA Pink Sheets
-NAT,NAT,BMG657731060,New York Consolidated
 NAT.N,NAT,BMG657731060,New York Stock Exchange
 NATH.OQ,NATH,US6323471002,Nasdaq Stock Exchange Global Select Market
 NATI.O^J23,NATI,US6365181022,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -3545,13 +3247,11 @@ NBN.OQ,NBN,US66405S1006,NASDAQ Stock Exchange Global Market
 NBR.II,NBR,,
 NBR.N,NBR,BMG6359F1370,New York Stock Exchange
 NBTB.OQ,NBTB,US6287781024,Nasdaq Stock Exchange Global Select Market
-NC,NC,US6295791031,New York Consolidated
 NC.N,NC,US6295791031,New York Stock Exchange
 NCC.II,NCC,US634902GJ32,
 NCI.N,NCI,KYG6421C1208,New York Stock Exchange
 NCIT.OQ,NCIT,,
 NCLH.K,NCLH,BMG667211046,New York Consolidated
-NCMI.O,NCMI,US6353092066,Consolidated Issue Listed on Nasdaq Global Select Market
 NCMI.OQ,NCMI,US6353092066,Nasdaq Stock Exchange Global Select Market
 NCOM.OQ,NCOM,,
 NCSM.OQ,NCSM,US6288772014,NASDAQ Stock Exchange Capital Market
@@ -3573,7 +3273,6 @@ NERV.OQ,NERV,US6033802058,NASDAQ Stock Exchange Capital Market
 NESR.O,NESR,VGG6375R1073,Consolidated Issue listed on NASDAQ Capital Market
 NESR.OQ^D23,NESR,VGG6375R1073,NASDAQ Stock Exchange Capital Market
 NET.N,NET,US18915M1071,New York Stock Exchange
-NEU,NEU,US6515871076,New York Consolidated
 NEU.N,NEU,US6515871076,New York Stock Exchange
 NEWP.O,NEWP,,
 NEWR.K^K23,NEWR,US64829B1008,New York Consolidated
@@ -3596,29 +3295,24 @@ NGPC.OQ,NGPC,,
 NGS.N,NGS,US63886Q1094,New York Stock Exchange
 NGVC.N,NGVC,US63888U1088,New York Stock Exchange
 NGVT.N,NGVT,US45688C1071,New York Stock Exchange
-NHC,NHC,US6359061008,AMEX Consolidated
 NHC.A,NHC,US6359061008,American Stock Exchange
 NHC.TO,NHC,,
-NHI,NHI,US63633D1046,New York Consolidated
 NHI.N,NHI,US63633D1046,New York Stock Exchange
 NHP^G11,NHP,US6386201049,New York Consolidated
 NHTC.OQ,NHTC,US63888P4063,NASDAQ Stock Exchange Capital Market
 NI.II,NI,US66526HAP38,
 NI.N,NI,US65473P1057,New York Stock Exchange
-NIC,NIC,US65406E1029,New York Consolidated
 NIC.N,NIC,US65406E1029,New York Stock Exchange
 NIHD.OQ,NIHD,,
 NILE.OQ,NILE,,
 NINEQ.PK,NINEQ,US65441V1017,USA Pink Sheets
 NITE.OQ,NITE,,
-NJR,NJR,US6460251068,New York Consolidated
 NJR.N,NJR,US6460251068,New York Stock Exchange
 NKE.N,NKE,US6541061031,New York Stock Exchange
 NKSH.OQ,NKSH,US6348651091,NASDAQ Stock Exchange Capital Market
 NKTR.OQ,NKTR,US6402683063,NASDAQ Stock Exchange Capital Market
 NKTRDE.INS,NKTRDE,,
 NKTX.OQ,NKTX,US65487U1088,Nasdaq Stock Exchange Global Select Market
-NL,NL,US6291564077,New York Consolidated
 NL.N,NL,US6291564077,New York Stock Exchange
 NLOP.N,NLOP,US64110Y1082,New York Stock Exchange
 NLSN.K^J22,NLSN,GB00BWFY5505,New York Consolidated
@@ -3626,22 +3320,18 @@ NLY.N,NLY,US0357108390,New York Stock Exchange
 NMAX.N,NMAX,US65250K1051,New York Stock Exchange
 NMBL.N,NMBL,US45259A7798,New York Stock Exchange
 NMFC.O,NMFC,US6475511001,Consolidated Issue Listed on Nasdaq Global Select Market
-NMIH.O,NMIH,US6292093050,NASDAQ National Market System
 NMIH.OQ,NMIH,US6292093050,NASDAQ Stock Exchange Global Market
 NMRK.OQ,NMRK,US65158N1028,Nasdaq Stock Exchange Global Select Market
 NN.OQ,NN,US65345N1063,NASDAQ Stock Exchange Capital Market
 NNBR.OQ,NNBR,US6293371067,Nasdaq Stock Exchange Global Select Market
 NNE.OQ,NNE,US63010H1086,NASDAQ Stock Exchange Capital Market
-NNI,NNI,US64031N1081,New York Consolidated
 NNI.N,NNI,US64031N1081,New York Stock Exchange
-NNN,NNN,US6374171063,New York Consolidated
 NNN.N,NNN,US6374171063,New York Stock Exchange
 NNOX.OQ,NNOX,IL0011681371,NASDAQ Stock Exchange Global Market
 NOBL.OQ,NOBL,,
 NOC.II,NOC,,
 NOC.N,NOC,US6668071029,New York Stock Exchange
 NODK.OQ,NODK,US65342T1060,NASDAQ Stock Exchange Capital Market
-NOG,NOG,US6655313079,New York Consolidated
 NOG.N,NOG,US6655313079,New York Stock Exchange
 NOR.N,NOR,,
 NOTV.OQ,NOTV,US45783Q1004,NASDAQ Stock Exchange Capital Market
@@ -3655,16 +3345,12 @@ NOW.N,NOW,US81762P1021,New York Stock Exchange
 NPB.N,NPB,US66661N8864,New York Stock Exchange
 NPBC.OQ,NPBC,,
 NPCE.OQ,NPCE,US6412881053,NASDAQ Stock Exchange Global Market
-NPK,NPK,US6372151042,New York Consolidated
 NPK.N,NPK,US6372151042,New York Stock Exchange
-NPKI.K,NPKI,US6517185046,New York Consolidated
 NPKI.N,NPKI,US6517185046,New York Stock Exchange
-NPO,NPO,US29355X1072,New York Consolidated
 NPO.N,NPO,US29355X1072,New York Stock Exchange
 NPSI.OQ,NPSI,,
 NPSP.OQ,NPSP,,
 NPWR.N,NPWR,US64107A1051,New York Stock Exchange
-NRC.O,NRC,US6373722023,Consolidated Issue Listed on Nasdaq Global Select Market
 NRC.OQ,NRC,US6373722023,Nasdaq Stock Exchange Global Select Market
 NRDS.OQ,NRDS,US64082B1026,NASDAQ Stock Exchange Global Market
 NRDY.N,NRDY,US64081V1098,New York Stock Exchange
@@ -3690,7 +3376,6 @@ NTAP.OQ,NTAP,US64110D1046,Nasdaq Stock Exchange Global Select Market
 NTB.N,NTB,BMG0772R2087,New York Stock Exchange
 NTCT.OQ,NTCT,US64115T1043,Nasdaq Stock Exchange Global Select Market
 NTES.OQ,NTES,US64110W1027,Nasdaq Stock Exchange Global Select Market
-NTGR.O,NTGR,US64111Q1040,Consolidated Issue Listed on Nasdaq Global Select Market
 NTGR.OQ,NTGR,US64111Q1040,Nasdaq Stock Exchange Global Select Market
 NTK.OQ,NTK,,
 NTLA.OQ,NTLA,US45826J1051,NASDAQ Stock Exchange Global Market
@@ -3716,14 +3401,12 @@ NUVL.OQ,NUVL,US6707031075,Nasdaq Stock Exchange Global Select Market
 NVAX.OQ,NVAX,US6700024010,Nasdaq Stock Exchange Global Select Market
 NVCR.OQ,NVCR,JE00BYSS4X48,Nasdaq Stock Exchange Global Select Market
 NVCT.OQ,NVCT,US67080T1088,NASDAQ Stock Exchange Capital Market
-NVDA.O,NVDA,US67066G1040,Consolidated Issue Listed on Nasdaq Global Select Market
 NVDA.OQ,NVDA,US67066G1040,Nasdaq Stock Exchange Global Select Market
 NVEC.OQ,NVEC,US6294452064,NASDAQ Stock Exchange Capital Market
 NVE^L13,NVE,US67073Y1064,New York Consolidated
 NVGS.N,NVGS,MHY621321089,New York Stock Exchange
 NVLS.O^F12,NVLS,US6700081010,Consolidated Issue Listed on Nasdaq Global Select Market
 NVR.N,NVR,US62944T1051,New York Stock Exchange
-NVRI.K,NVRI,US4158641070,New York Consolidated
 NVRI.N,NVRI,US4158641070,New York Stock Exchange
 NVST.N,NVST,US29415F1049,New York Stock Exchange
 NVT.N,NVT,IE00BDVJJQ56,New York Stock Exchange
@@ -3731,7 +3414,6 @@ NVTAN.BCU,NVTAN,US46185L1035,BATS Europe
 NVTS.OQ,NVTS,US63942X1063,NASDAQ Stock Exchange Global Market
 NWBI.OQ,NWBI,US6673401039,Nasdaq Stock Exchange Global Select Market
 NWBO.OQ,NWBO,,
-NWE.O,NWE,US6680743050,Consolidated Issue Listed on Nasdaq Global Select Market
 NWE.OQ,NWE,US6680743050,Nasdaq Stock Exchange Global Select Market
 NWEC.OQ,NWEC,,
 NWFL.OQ,NWFL,US6695491075,NASDAQ Stock Exchange Global Market
@@ -3750,7 +3432,6 @@ NXDR.N,NXDR,US65345M1080,New York Stock Exchange
 NXDT.N,NXDT,US65340G2057,New York Stock Exchange
 NXPI.OQ,NXPI,NL0009538784,Nasdaq Stock Exchange Global Select Market
 NXRT.N,NXRT,US65341D1028,New York Stock Exchange
-NXST.O,NXST,US65336K1034,Consolidated Issue Listed on Nasdaq Global Select Market
 NXST.OQ,NXST,US65336K1034,Nasdaq Stock Exchange Global Select Market
 NXT.OQ,NXT,US65290E1010,Nasdaq Stock Exchange Global Select Market
 NXTC.OQ,NXTC,US65343E2072,Nasdaq Stock Exchange Global Select Market
@@ -3761,14 +3442,12 @@ NYT.II,NYT,,
 NYT.N,NYT,US6501111073,New York Stock Exchange
 NYX.C,NYX,US67079G1094,
 NYX^K13,NYX,US6294911010,New York Consolidated
-O,O,US7561091049,New York Consolidated
 O.N,O,US7561091049,New York Stock Exchange
 OABC.OQ,OABC,,
 OABI.OQ,OABI,US68218J1034,NASDAQ Stock Exchange Global Market
 OATS.O,OATS,,
 OA^F18,OA,US68557N1037,New York Consolidated
 OB.N,TEAD,US69002R1032,New York Stock Exchange
-OBK,OBK,US68621T1025,New York Consolidated
 OBK.N,OBK,US68621T1025,New York Stock Exchange
 OBT.OQ,OBT,US68417L1070,NASDAQ Stock Exchange Capital Market
 OC.N,OC,US6907421019,New York Stock Exchange
@@ -3790,28 +3469,22 @@ OFIX.OQ,OFIX,US68752M1080,Nasdaq Stock Exchange Global Select Market
 OFLX.OQ,OFLX,US6820951043,NASDAQ Stock Exchange Global Market
 OGE.N,OGE,US6708371033,New York Stock Exchange
 OGS.N,OGS,US68235P1084,New York Stock Exchange
-OHI,OHI,US6819361006,New York Consolidated
 OHI.N,OHI,US6819361006,New York Stock Exchange
-OI,OI,US67098H1041,New York Consolidated
 OI.N,OI,US67098H1041,New York Stock Exchange
 OII.N,OII,US6752321025,New York Stock Exchange
-OIS,OIS,US6780261052,New York Consolidated
 OIS.N,OIS,US6780261052,New York Stock Exchange
 OKE.N,OKE,US6826801036,New York Stock Exchange
 OKLO.N,OKLO,US02156V1098,New York Stock Exchange
 OKSB.OQ,OKSB,,
 OKTA.OQ,OKTA,US6792951054,Nasdaq Stock Exchange Global Select Market
-OLED.O,OLED,US91347P1057,Consolidated Issue Listed on Nasdaq Global Select Market
 OLED.OQ,OLED,US91347P1057,Nasdaq Stock Exchange Global Select Market
 OLLI.OQ,OLLI,US6811161099,NASDAQ Stock Exchange Global Market
 OLMA.OQ,OLMA,US68062P1066,Nasdaq Stock Exchange Global Select Market
-OLN,OLN,US6806652052,New York Consolidated
 OLN.N,OLN,US6806652052,New York Stock Exchange
 OLP.N,OLP,US6824061039,New York Stock Exchange
 OLPX.OQ,OLPX,US6793691089,Nasdaq Stock Exchange Global Select Market
 OM.O,OM,US6901452069,Consolidated Issue Listed on Nasdaq Global Select Market
 OMC.N,OMC,US6819191064,New York Stock Exchange
-OMCL.O,OMCL,US68213N1090,Consolidated Issue Listed on Nasdaq Global Select Market
 OMCL.OQ,OMCL,US68213N1090,Nasdaq Stock Exchange Global Select Market
 OMDA.OQ,OMDA,US68170A1088,Nasdaq Stock Exchange Global Select Market
 OME.N,OME,,
@@ -3826,13 +3499,11 @@ OMPI.OQ,OMPI,,
 OMRI.O,OMRI,,
 OMTR.OQ,OMTR,,
 OMX.N,OMX,,
-ONB.O,ONB,US6800331075,Consolidated Issue Listed on Nasdaq Global Select Market
 ONB.OQ,ONB,US6800331075,Nasdaq Stock Exchange Global Select Market
 ONCEN.BCU,ONCEN,US84652J1034,BATS Europe
 ONDK.N,ONDK,,
 ONE.N,ONE,,
 ONEW.OQ,ONEW,US68280L1017,NASDAQ Stock Exchange Global Market
-ONIT.K,ONIT,US6757466064,New York Consolidated
 ONIT.N,ONIT,US6757466064,New York Stock Exchange
 ONNNF.INS,ONNNF,,
 ONT.B,ONT,,
@@ -3848,16 +3519,13 @@ OPCH.OQ,OPCH,US68404L2016,Nasdaq Stock Exchange Global Select Market
 OPEN.OQ,OPEN,US6837121036,Nasdaq Stock Exchange Global Select Market
 OPFI.N,OPFI,US68386H1032,New York Stock Exchange
 OPITQ.PK,OPITQ,US67623C1099,USA Pink Sheets
-OPK.O,OPK,US68375N1037,Consolidated Issue Listed on Nasdaq Global Select Market
 OPK.OQ,OPK,US68375N1037,Nasdaq Stock Exchange Global Select Market
-OPLN.K,OPLN,US48238T1097,New York Consolidated
 OPLN.N,OPLN,US48238T1097,New York Stock Exchange
 OPRT.OQ,OPRT,US68376D1046,Nasdaq Stock Exchange Global Select Market
 OPRX.OQ,OPRX,US68401U2042,NASDAQ Stock Exchange Capital Market
 OPSW.O,OPSW,,
 OPTM.O,OPTM,,
 OPTN.OQ,OPTN,US68404V2097,Nasdaq Stock Exchange Global Select Market
-OPTU.K,OPTU,US02156K1034,New York Consolidated
 OPTU.N,OPTU,US02156K1034,New York Stock Exchange
 OPWR.N,OPWR,,
 OPY.N,OPY,US6837971042,New York Stock Exchange
@@ -3865,7 +3533,6 @@ ORA.N,ORA,US6866881021,New York Stock Exchange
 ORB.B,ORB,,
 ORBCN.BCU,ORBCN,US68555P1003,BATS Europe
 ORC.N,ORC,US68571X3017,New York Stock Exchange
-ORCL.K,ORCL,US68389X1054,New York Consolidated
 ORCL.N,ORCL,US68389X1054,New York Stock Exchange
 OREX.OQ,OREX,,
 ORGO.OQ,ORGO,US68621F1021,NASDAQ Stock Exchange Capital Market
@@ -3882,15 +3549,12 @@ ORN.N,ORN,US68628V3087,New York Stock Exchange
 ORRF.OQ,ORRF,US6873801053,NASDAQ Stock Exchange Capital Market
 OSBC.OQ,OSBC,US6802771005,Nasdaq Stock Exchange Global Select Market
 OSCR.N,OSCR,US6877931096,New York Stock Exchange
-OSG,OSG,US0231398845,New York Consolidated
 OSG.N,OSG,US0231398845,New York Stock Exchange
 OSIR.OQ,OSIR,,
-OSIS.O,OSIS,US6710441055,Consolidated Issue Listed on Nasdaq Global Select Market
 OSIS.OQ,OSIS,US6710441055,Nasdaq Stock Exchange Global Select Market
 OSK.N,OSK,US6882392011,New York Stock Exchange
 OSPIDE.INS,OSPIDE,,
 OSPN.OQ,OSPN,US68287N1000,NASDAQ Stock Exchange Capital Market
-OSUR.O,OSUR,US68554V1089,Consolidated Issue Listed on Nasdaq Global Select Market
 OSUR.OQ,OSUR,US68554V1089,Nasdaq Stock Exchange Global Select Market
 OSW.OQ,OSW,BSP736841136,NASDAQ Stock Exchange Capital Market
 OTLK.OQ,OTLK,US69012T3059,NASDAQ Stock Exchange Capital Market
@@ -3905,7 +3569,6 @@ OVLY.OQ,OVLY,US6718071052,NASDAQ Stock Exchange Capital Market
 OVV.N,OVV,US69047Q1022,New York Stock Exchange
 OWL.N,OWL,US09581B1035,New York Stock Exchange
 OWW.N,OWW,,
-OXM,OXM,US6914973093,New York Consolidated
 OXM.N,OXM,US6914973093,New York Stock Exchange
 OXPS.OQ,OXPS,,
 OXY.N,OXY,US6745991058,New York Stock Exchange
@@ -3922,14 +3585,11 @@ PAHC.OQ,PAHC,US71742Q1067,NASDAQ Stock Exchange Global Market
 PAL.OQ,PAL,US74317M1045,Nasdaq Stock Exchange Global Select Market
 PALM.OQ,PALM,,
 PALMDE.INS,PALMDE,,
-PAMT.O,PAMT,US6931491061,NASDAQ National Market System
 PAMT.OQ,PAMT,US6931491061,NASDAQ Stock Exchange Global Market
 PANL.OQ,PANL,BMG6891L1054,NASDAQ Stock Exchange Capital Market
 PANLDE.INS,PANLDE,,
-PANW.O,PANW,US6974351057,Consolidated Issue Listed on Nasdaq Global Select Market
 PANW.OQ,PANW,US6974351057,Nasdaq Stock Exchange Global Select Market
 PAR.N,PAR,US6988841036,New York Stock Exchange
-PARR.K,PARR,US69888T2078,New York Consolidated
 PARR.N,PARR,US69888T2078,New York Stock Exchange
 PAS.N,PAS,,
 PASG.OQ,PASG,US7027122099,NASDAQ Stock Exchange Capital Market
@@ -3942,13 +3602,11 @@ PAYO.OQ,PAYO,US70451X1046,NASDAQ Stock Exchange Global Market
 PAYS.OQ,PAYS,US70451A1043,NASDAQ Stock Exchange Capital Market
 PAYX.OQ,PAYX,US7043261079,Nasdaq Stock Exchange Global Select Market
 PAY^H18,PAY^H18,US92342Y1091,New York Consolidated
-PB,PB,US7436061052,New York Consolidated
 PB.N,PB,US7436061052,New York Stock Exchange
 PBCT.O^D22,PBCT,US7127041058,Consolidated Issue Listed on Nasdaq Global Select Market
 PBF.N,PBF,US69318G1067,New York Stock Exchange
 PBFS.OQ,PBFS,US7235611065,NASDAQ Stock Exchange Capital Market
 PBG.II,PBG,,
-PBH,PBH,US74112D1019,New York Consolidated
 PBH.N,PBH,US74112D1019,New York Stock Exchange
 PBI.II,PBI,,
 PBI.N,PBI,US7244791007,New York Stock Exchange
@@ -3977,7 +3635,6 @@ PDC.C,PDC,US27030F2020,National SE when trading NASDAQ Global Market
 PDD.OQ,PDD,US7223041028,Nasdaq Stock Exchange Global Select Market
 PDEX.OQ,PDEX,US74265M2052,NASDAQ Stock Exchange Capital Market
 PDE^F11,PDE,US74153Q1022,New York Consolidated
-PDFS.O,PDFS,US6932821050,Consolidated Issue Listed on Nasdaq Global Select Market
 PDFS.OQ,PDFS,US6932821050,Nasdaq Stock Exchange Global Select Market
 PDGI.OQ,PDGI,,
 PDLB.OQ,PDLB,US7323441060,NASDAQ Stock Exchange Global Market
@@ -3996,7 +3653,6 @@ PEN.N,PEN,US70975L1070,New York Stock Exchange
 PENG.OQ,PENG,US7069151055,Nasdaq Stock Exchange Global Select Market
 PENN.OQ,PENN,US7075691094,Nasdaq Stock Exchange Global Select Market
 PEOP.OQ,PEOP,,
-PEP.O,PEP,US7134481081,Consolidated Issue Listed on Nasdaq Global Select Market
 PEP.OQ,PEP,US7134481081,Nasdaq Stock Exchange Global Select Market
 PER.B,PER,,
 PERF.OQ,PERF,,
@@ -4015,7 +3671,6 @@ PFGC.OQ,PFGC,,
 PFIS.OQ,PFIS,US7110401053,Nasdaq Stock Exchange Global Select Market
 PFPTN.BCU,PFPTN,US7434241037,BATS Europe
 PFS.N,PFS,US74386T1051,New York Stock Exchange
-PFS.P,PFS,US74386T1051,NYSE Arca
 PFSI.N,PFSI,US70932M1071,New York Stock Exchange
 PFWD.O,PFWD,,
 PG.II,PG,,
@@ -4043,12 +3698,10 @@ PHR.N,PHR,US71944F1066,New York Stock Exchange
 PHRM.O,PHRM,,
 PHUN.OQ,PHUN,US71948P2092,NASDAQ Stock Exchange Capital Market
 PI.OQ,PI,US4532041096,Nasdaq Stock Exchange Global Select Market
-PII,PII,US7310681025,New York Consolidated
 PII.N,PII,US7310681025,New York Stock Exchange
 PIKE.N,PIKE,,
 PINE.N,PINE,US02083X1037,New York Stock Exchange
 PINS.N,PINS,US72352L1061,New York Stock Exchange
-PIPR.K,PIPR,US7240781002,New York Consolidated
 PIPR.N,PIPR,US7240781002,New York Stock Exchange
 PIR.II,PIR,,
 PIR.N,PIR,,
@@ -4060,7 +3713,6 @@ PKD.N,PKD,,
 PKE.N,PKE,US70014A1043,New York Stock Exchange
 PKG.N,PKG,US6951561090,New York Stock Exchange
 PKI.II,PKI,,
-PKOH.O,PKOH,US7006661000,Consolidated Issue Listed on Nasdaq Global Select Market
 PKOH.OQ,PKOH,US7006661000,Nasdaq Stock Exchange Global Select Market
 PKST.N,PKST,US39818P7996,New York Stock Exchange
 PKT.OQ,PKT,,
@@ -4083,18 +3735,15 @@ PLMD.OQ,PLMD,,
 PLMR.OQ,PLMR,US69753M1053,Nasdaq Stock Exchange Global Select Market
 PLNT.N,PLNT,US72703H1014,New York Stock Exchange
 PLOW.N,PLOW,US25960R1059,New York Stock Exchange
-PLPC.O,PLPC,US7404441047,Consolidated Issue Listed on Nasdaq Global Select Market
 PLPC.OQ,PLPC,US7404441047,Nasdaq Stock Exchange Global Select Market
 PLPM.OQ,PLPM,,
 PLRX.OQ,PLRX,US7291391057,Nasdaq Stock Exchange Global Select Market
 PLSE.OQ,PLSE,US74587B1017,NASDAQ Stock Exchange Capital Market
 PLTE.O,PLTE,,
 PLTK.OQ,PLTK,US72815L1070,Nasdaq Stock Exchange Global Select Market
-PLTR.O,PLTR,US69608A1088,Consolidated Issue Listed on Nasdaq Global Select Market
 PLTR.OQ,PLTR,US69608A1088,Nasdaq Stock Exchange Global Select Market
 PLUG.OQ,PLUG,US72919P2020,NASDAQ Stock Exchange Capital Market
 PLUS.OQ,PLUS,US2942681071,Nasdaq Stock Exchange Global Select Market
-PLX,PLX,US74365A3095,AMEX Consolidated
 PLX.A,PLX,US74365A3095,American Stock Exchange
 PLXS.OQ,PLXS,US7291321005,Nasdaq Stock Exchange Global Select Market
 PLXT.O,PLXT,,
@@ -4133,17 +3782,13 @@ POM^C16,POM,US7132911022,New York Consolidated
 PONE.OQ,PONE,,
 PONR.O,PONR,,
 POOL.OQ,POOL,US73278L1052,Nasdaq Stock Exchange Global Select Market
-POR,POR,US7365088472,New York Consolidated
 POR.N,POR,US7365088472,New York Stock Exchange
 POS.B,POS,,
 POST.N,POST,US7374461041,New York Stock Exchange
 POWI.OQ,POWI,US7392761034,Nasdaq Stock Exchange Global Select Market
-POWL.O,POWL,US7391281067,Consolidated Issue Listed on Nasdaq Global Select Market
 POWL.OQ,POWL,US7391281067,Nasdaq Stock Exchange Global Select Market
 POWR.N,POWR,US4642863439,New York Stock Exchange
-POWW.O,POWW,US00175J1079,Consolidated Issue listed on NASDAQ Capital Market
 POWW.OQ,POWW,US00175J1079,NASDAQ Stock Exchange Capital Market
-PPC.O,PPC,US72147K1088,Consolidated Issue Listed on Nasdaq Global Select Market
 PPC.OQ,PPC,US72147K1088,Nasdaq Stock Exchange Global Select Market
 PPCO.O,PPCO,,
 PPDI.O^L11,PPDI,US7171241018,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -4155,7 +3800,6 @@ PPS.B,PPS,,
 PPS.N,PPS,,
 PPTA.TO,PPTA,CA7142661031,The Toronto Stock Exchange
 PR.N,PR,US71424F1057,New York Stock Exchange
-PRA,PRA,US74267C1062,New York Consolidated
 PRA.N,PRA,US74267C1062,New York Stock Exchange
 PRAA.OQ,PRAA,US69354N1063,Nasdaq Stock Exchange Global Select Market
 PRAI.OQ,PRAI,,
@@ -4168,11 +3812,8 @@ PRF0D.TRE,PRF0D,US60783X1046,London Stock Exchange
 PRG.N,PRG,US74319R1014,New York Stock Exchange
 PRGS.OQ,PRGS,US7433121008,Nasdaq Stock Exchange Global Select Market
 PRI.N,PRI,US74164M1080,New York Stock Exchange
-PRIM.K,PRIM,US74164F1030,New York Consolidated
 PRIM.N,PRIM,US74164F1030,New York Stock Exchange
-PRK,PRK,US7006581075,AMEX Consolidated
 PRK.A,PRK,US7006581075,American Stock Exchange
-PRKS.K,PRKS,US81282V1008,New York Consolidated
 PRKS.N,PRKS,US81282V1008,New York Stock Exchange
 PRLB.N,PRLB,US7437131094,New York Stock Exchange
 PRLD.OQ,PRLD,US74065P1012,Nasdaq Stock Exchange Global Select Market
@@ -4182,7 +3823,6 @@ PRMW.OQ,PRMW,,
 PROP.OQ,PROP,US7396501097,NASDAQ Stock Exchange Capital Market
 PROV.OQ,PROV,US7438681014,Nasdaq Stock Exchange Global Select Market
 PRPL.OQ,PRPL,US74640Y1064,Nasdaq Stock Exchange Global Select Market
-PRSU.K,PRSU,US92552R4065,New York Consolidated
 PRSU.N,PRSU,US92552R4065,New York Stock Exchange
 PRTA.OQ,PRTA,IE00B91XRN20,Nasdaq Stock Exchange Global Select Market
 PRTH.OQ,PRTH,US74275G1076,NASDAQ Stock Exchange Capital Market
@@ -4195,7 +3835,6 @@ PRX.B,PRX,,
 PRX.N,PRX,,
 PRXI.OQ,PRXI,,
 PRXL.OQ,PRXL,,
-PSA,PSA,US74460D1090,New York Consolidated
 PSA.N,PSA,US74460D1090,New York Stock Exchange
 PSD.N,PSD,,
 PSDO.OQ,PSDO,,
@@ -4205,7 +3844,6 @@ PSEM.OQ,PSEM,,
 PSFE.N,PSFE,BMG6964L2062,New York Stock Exchange
 PSG.TO,PSG,,
 PSIX.OQ,PSIX,US73933G2021,NASDAQ Stock Exchange Capital Market
-PSMT.O,PSMT,US7415111092,Consolidated Issue Listed on Nasdaq Global Select Market
 PSMT.OQ,PSMT,US7415111092,Nasdaq Stock Exchange Global Select Market
 PSN.N,PSN,US70202L1026,New York Stock Exchange
 PSNL.OQ,PSNL,US71535D1063,NASDAQ Stock Exchange Global Market
@@ -4256,7 +3894,6 @@ QADI.OQ,QADI,,
 QBTS.N,QBTS,US26740W1099,New York Stock Exchange
 QCOM.OQ,QCOM,US7475251036,Nasdaq Stock Exchange Global Select Market
 QCRH.OQ,QCRH,US74727A1043,NASDAQ Stock Exchange Global Market
-QDEL.O,QDEL,US2197981051,Consolidated Issue Listed on Nasdaq Global Select Market
 QDEL.OQ,QDEL,US2197981051,Nasdaq Stock Exchange Global Select Market
 QEP^C21,QEP^C21,US74733V1008,New York Consolidated
 QLGC.O^H16,QLGC,US7472771010,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -4296,7 +3933,6 @@ RAX.N,RAX,,
 RBA.TO,RBA,CA74935Q1072,The Toronto Stock Exchange
 RBB.OQ,RBB,US74930B1052,Nasdaq Stock Exchange Global Select Market
 RBBN.OQ,RBBN,US7625441040,Nasdaq Stock Exchange Global Select Market
-RBC,RBC,US75524B1044,New York Consolidated
 RBC.N,RBC,US75524B1044,New York Stock Exchange
 RBCAA.OQ,RBCAA,US7602812049,Nasdaq Stock Exchange Global Select Market
 RBKB.OQ,RBKB,US7620931029,NASDAQ Stock Exchange Capital Market
@@ -4325,7 +3961,6 @@ REAL.OQ,REAL,US88339P1012,Nasdaq Stock Exchange Global Select Market
 REAX.OQ,REAX,CA75585H2063,NASDAQ Stock Exchange Capital Market
 REFI.OQ,REFI,US1672391026,NASDAQ Stock Exchange Global Market
 REG.O,REG,US7588491032,Consolidated Issue Listed on Nasdaq Global Select Market
-REGN.O,REGN,US75886F1075,Consolidated Issue Listed on Nasdaq Global Select Market
 REGN.OQ,REGN,US75886F1075,Nasdaq Stock Exchange Global Select Market
 REI.A,REI,US76680V1089,American Stock Exchange
 REKR.OQ,REKR,US7594191048,NASDAQ Stock Exchange Capital Market
@@ -4333,25 +3968,20 @@ RELL.OQ,RELL,US7631651079,Nasdaq Stock Exchange Global Select Market
 RELY.OQ,RELY,US75960P1049,Nasdaq Stock Exchange Global Select Market
 REPL.OQ,REPL,US76029N1063,Nasdaq Stock Exchange Global Select Market
 REPX.A,REPX,US76665T1025,American Stock Exchange
-RES,RES,US7496601060,New York Consolidated
 RES.N,RES,US7496601060,New York Stock Exchange
 REX.N,REX,US7616241052,New York Stock Exchange
 REXR.N,REXR,US76169C1009,New York Stock Exchange
 REZI.N,REZI,US76118Y1047,New York Stock Exchange
 RF.N,RF,US7591EP1005,New York Stock Exchange
-RFL.A,RFL,US75062E1064,American Stock Exchange
 RFL.N,RFL,US75062E1064,New York Stock Exchange
 RFMD.O^A15,RFMD,US7499411004,Consolidated Issue Listed on Nasdaq Global Select Market
 RFMDDE.INS,RFMDDE,,
-RGA,RGA,US7593516047,New York Consolidated
 RGA.N,RGA,US7593516047,New York Stock Exchange
 RGCO.OQ,RGCO,US74955L1035,NASDAQ Stock Exchange Global Market
 RGEN.OQ,RGEN,US7599161095,Nasdaq Stock Exchange Global Select Market
 RGLD.OQ,RGLD,US7802871084,Nasdaq Stock Exchange Global Select Market
 RGNX.OQ,RGNX,US75901B1070,Nasdaq Stock Exchange Global Select Market
-RGP.O,RGP,US76122Q1058,Consolidated Issue Listed on Nasdaq Global Select Market
 RGP.OQ,RGP,US76122Q1058,Nasdaq Stock Exchange Global Select Market
-RGR,RGR,US8641591081,New York Consolidated
 RGR.N,RGR,US8641591081,New York Stock Exchange
 RGTI.OQ,RGTI,US76655K1034,NASDAQ Stock Exchange Capital Market
 RH.N,RH,US74967X1037,New York Stock Exchange
@@ -4362,7 +3992,6 @@ RHP.N,RHP,US78377T1079,New York Stock Exchange
 RHT^G19,RHT^G19,US7565771026,New York Consolidated
 RICK.OQ,RICK,US74934Q1085,NASDAQ Stock Exchange Global Market
 RIG.N,RIG,CH0048265513,New York Stock Exchange
-RIGL.O,RIGL,US7665597024,Consolidated Issue Listed on Nasdaq Global Select Market
 RIGL.OQ,RIGL,US7665597024,Nasdaq Stock Exchange Global Select Market
 RILY.OQ,RILY,US05580M1080,NASDAQ Stock Exchange Global Market
 RIOT.OQ,RIOT,US7672921050,NASDAQ Stock Exchange Capital Market
@@ -4371,14 +4000,12 @@ RIV.C,RIV,US76881Y1091,The National Stock Exchange (formerly Cincinnati SE)
 RJET.OQ,RJET,US5904794089,Nasdaq Stock Exchange Global Select Market
 RJF.N,RJF,US7547301090,New York Stock Exchange
 RKDA.OQ,RKDA,US0390143032,NASDAQ Stock Exchange Capital Market
-RKT.C,RKT,US77311W1018,The National Stock Exchange (formerly Cincinnati SE)
 RKT.N,RKT,US77311W1018,New York Stock Exchange
 RKUS.N,RKUS,,
 RL.N,RL,US7512121010,New York Stock Exchange
 RLAY.OQ,RLAY,US75943R1023,NASDAQ Stock Exchange Global Market
 RLD.N,RLD,,
 RLGT.A,RLGT,US75025X1000,American Stock Exchange
-RLI,RLI,US7496071074,New York Consolidated
 RLI.N,RLI,US7496071074,New York Stock Exchange
 RLJ.N,RLJ,US74965L1017,New York Stock Exchange
 RLMD.OQ,RLMD,US75955J4022,NASDAQ Stock Exchange Capital Market
@@ -4390,7 +4017,6 @@ RMBI.OQ,RMBI,US76525P1003,NASDAQ Stock Exchange Capital Market
 RMBS.OQ,RMBS,US7509171069,Nasdaq Stock Exchange Global Select Market
 RMD.N,RMD,US7611521078,New York Stock Exchange
 RMIX.O,RMIX,,
-RMNI.DG,RMNI,US76674Q1076,Direct Edge - EDGX when trading NASDAQ
 RMNI.OQ,RMNI,US76674Q1076,NASDAQ Stock Exchange Global Market
 RMR.OQ,RMR,US74967R1068,NASDAQ Stock Exchange Capital Market
 RMTI.OQ,RMTI,US7743743004,NASDAQ Stock Exchange Capital Market
@@ -4401,7 +4027,6 @@ RNG.N,RNG,US76680R2067,New York Stock Exchange
 RNGR.N,RNGR,US75282U1043,New York Stock Exchange
 RNOW.O,RNOW,,
 RNR.N,RNR,BMG7496G1033,New York Stock Exchange
-RNST.K,RNST,US75970E1073,New York Consolidated
 RNST.N,RNST,US75970E1073,New York Stock Exchange
 RNT.C,RNT,,
 RNWKDE.INS,RNWKDE,,
@@ -4409,16 +4034,13 @@ ROAD.OQ,ROAD,US21044C1071,Nasdaq Stock Exchange Global Select Market
 ROAN.N,ROAN,,
 ROC.P,ROC,US7530401048,NYSE Arca when trading NASDAQ Global Market
 ROCK.OQ,ROCK,US3746891072,Nasdaq Stock Exchange Global Select Market
-ROG,ROG,US7751331015,New York Consolidated
 ROG.N,ROG,US7751331015,New York Stock Exchange
 ROH.II,ROH,,
 ROIV.OQ,ROIV,BMG762791017,Nasdaq Stock Exchange Global Select Market
 ROK.N,ROK,US7739031091,New York Stock Exchange
-ROL,ROL,US7757111049,New York Consolidated
 ROL.N,ROL,US7757111049,New York Stock Exchange
 ROMA.OQ,ROMA,KYG7633Y1089,NASDAQ Stock Exchange Capital Market
 ROOT.OQ,ROOT,US77664L2079,Nasdaq Stock Exchange Global Select Market
-ROP.O,ROP,US7766961061,Consolidated Issue Listed on Nasdaq Global Select Market
 ROP.OQ,ROP,US7766961061,Nasdaq Stock Exchange Global Select Market
 ROSE.OQ,ROSE,,
 ROST.OQ,ROST,US7782961038,Nasdaq Stock Exchange Global Select Market
@@ -4434,13 +4056,10 @@ RPTP.OQ,RPTP,,
 RPXC.OQ,RPXC,,
 RR.OQ,RR,US7655041058,NASDAQ Stock Exchange Capital Market
 RRBI.OQ,RRBI,US75686R2022,Nasdaq Stock Exchange Global Select Market
-RRC,RRC,US75281A1097,New York Consolidated
 RRC.N,RRC,US75281A1097,New York Stock Exchange
-RRGB.O,RRGB,US75689M1018,Consolidated Issue Listed on Nasdaq Global Select Market
 RRGB.OQ,RRGB,US75689M1018,Nasdaq Stock Exchange Global Select Market
 RRR.OQ,RRR,US75700L1089,Nasdaq Stock Exchange Global Select Market
 RRTS.N,RRTS,,
-RRX,RRX,US7587501039,New York Consolidated
 RRX.N,RRX,US7587501039,New York Stock Exchange
 RS.N,RS,US7595091023,New York Stock Exchange
 RSE.N,RSE,,
@@ -4459,11 +4078,11 @@ RTK.OQ,RTK,,
 RTN^D20,RTN^D20,US7551115071,New York Consolidated
 RTSX.OQ,RTSX,,
 RTW.N,RTW,,
+RTX.N,RTX,US75513E1010,New York Stock Exchange
 RUE.OQ,RUE,,
 RUM.OQ,RUM,US78137L1052,NASDAQ Stock Exchange Global Market
 RUN.OQ,RUN,US86771W1053,Nasdaq Stock Exchange Global Select Market
 RUS.B,RUS,,
-RUSHA.O,RUSHA,US7818462092,Consolidated Issue Listed on Nasdaq Global Select Market
 RUSHA.OQ,RUSHA,US7818462092,Nasdaq Stock Exchange Global Select Market
 RUSHB.OQ,RUSHB,US7818463082,Nasdaq Stock Exchange Global Select Market
 RVBD.OQ,RVBD,,
@@ -4475,7 +4094,6 @@ RVMD.OQ,RVMD,US76155X1000,Nasdaq Stock Exchange Global Select Market
 RVP.A,RVP,US76129W1053,American Stock Exchange
 RVSB.OQ,RVSB,US7693971001,Nasdaq Stock Exchange Global Select Market
 RVTY.K,RVTY,US7140461093,New York Consolidated
-RWT,RWT,US7580754023,New York Consolidated
 RWT.N,RWT,US7580754023,New York Stock Exchange
 RX.II,RX,,
 RXO.N,RXO,US74982T1034,New York Stock Exchange
@@ -4488,7 +4106,6 @@ RYAN.N,RYAN,US78351F1075,New York Stock Exchange
 RYL.N,RYL,,
 RYN.N,RYN,US7549071030,New York Stock Exchange
 RYTM.OQ,RYTM,US76243J1051,NASDAQ Stock Exchange Global Market
-RYZ,RYZ,US7837541041,New York Consolidated
 RYZ.N,RYZ,US7837541041,New York Stock Exchange
 RZLT.OQ,RZLT,US76200L3096,NASDAQ Stock Exchange Capital Market
 RZLV.OQ,RZLV,GB00BQH8G337,NASDAQ Stock Exchange Global Market
@@ -4499,17 +4116,13 @@ SAAS.OQ,SAAS,,
 SABA.OQ,SABA,,
 SABR.OQ,SABR,US78573M1045,Nasdaq Stock Exchange Global Select Market
 SAFE.N,SAFE,US78646V1070,New York Stock Exchange
-SAFT.O,SAFT,US78648T1007,Consolidated Issue Listed on Nasdaq Global Select Market
 SAFT.OQ,SAFT,US78648T1007,Nasdaq Stock Exchange Global Select Market
 SAFX.OQ,SAFX,US98400U1034,NASDAQ Stock Exchange Capital Market
-SAH,SAH,US83545G1022,New York Consolidated
 SAH.N,SAH,US83545G1022,New York Stock Exchange
 SAIA.OQ,SAIA,US78709Y1055,Nasdaq Stock Exchange Global Select Market
-SAIC.O,SAIC,US8086251076,Consolidated Issue Listed on Nasdaq Global Select Market
 SAIC.OQ,SAIC,US8086251076,Nasdaq Stock Exchange Global Select Market
 SALE.OQ,SALE,,
 SALM.PK,SALM,US7940931048,USA Pink Sheets
-SAM,SAM,US1005571070,New York Consolidated
 SAM.N,SAM,US1005571070,New York Stock Exchange
 SAMG.OQ,SAMG,US8283591092,NASDAQ Stock Exchange Global Market
 SANA.OQ,SANA,US7995661045,Nasdaq Stock Exchange Global Select Market
@@ -4527,14 +4140,12 @@ SBC.OQ,SBC,US73245B1070,NASDAQ Stock Exchange Global Market
 SBCF.OQ,SBCF,US8117078019,Nasdaq Stock Exchange Global Select Market
 SBFG.OQ,SBFG,US78408D1054,NASDAQ Stock Exchange Capital Market
 SBGI.OQ,SBGI,US8292421067,Nasdaq Stock Exchange Global Select Market
-SBH,SBH,US79546E1047,New York Consolidated
 SBH.N,SBH,US79546E1047,New York Stock Exchange
 SBIB.OQ,SBIB,,
 SBKC.O,SBKC,,
 SBNY.PK,SBNY,US82669G1040,USA Pink Sheets
 SBP.B,SBP,,
 SBRA.OQ,SBRA,US78573L1061,Nasdaq Stock Exchange Global Select Market
-SBSI.K,SBSI,US84470P1093,New York Consolidated
 SBSI.N,SBSI,US84470P1093,New York Stock Exchange
 SBT.OQ^D25,SBT,US85917W1027,NASDAQ Stock Exchange Capital Market
 SBUX.OQ,SBUX,US8552441094,Nasdaq Stock Exchange Global Select Market
@@ -4545,10 +4156,8 @@ SCAI.OQ,SCAI,,
 SCG^A19,SCG^A19,US80589M1027,New York Consolidated
 SCHL.OQ,SCHL,US8070661058,Nasdaq Stock Exchange Global Select Market
 SCHS.OQ,SCHS,,
-SCHW.K,SCHW,US8085131055,New York Consolidated
 SCHW.N,SCHW,US8085131055,New York Stock Exchange
 SCI.N,SCI,US8175651046,New York Stock Exchange
-SCL,SCL,US8585861003,New York Consolidated
 SCL.N,SCL,US8585861003,New York Stock Exchange
 SCLN.OQ,SCLN,,
 SCMP.OQ,SCMP,,
@@ -4576,7 +4185,6 @@ SEE.II,SEE,,
 SEE.N,SEE,US81211K1007,New York Stock Exchange
 SEER.OQ,SEER,US81578P1066,Nasdaq Stock Exchange Global Select Market
 SEG.N,SEG,US8122152007,New York Stock Exchange
-SEI,SEI,US83418M1036,New York Consolidated
 SEI.N,SEI,US83418M1036,New York Stock Exchange
 SEIC.OQ,SEIC,US7841171033,Nasdaq Stock Exchange Global Select Market
 SEM.N,SEM,US81619Q1058,New York Stock Exchange
@@ -4589,10 +4197,8 @@ SERA.OQ,SERA,US81749D1072,NASDAQ Stock Exchange Global Market
 SERV.OQ,SERV,US81758H1068,NASDAQ Stock Exchange Capital Market
 SEVN.OQ,SEVN,US81784E1010,NASDAQ Stock Exchange Capital Market
 SEZL.OQ,SEZL,US78435P1057,NASDAQ Stock Exchange Capital Market
-SF,SF,US8606301021,New York Consolidated
 SF.N,SF,US8606301021,New York Stock Exchange
 SFBC.OQ,SFBC,US83607A1007,NASDAQ Stock Exchange Capital Market
-SFBS.K,SFBS,US81768T1088,New York Consolidated
 SFBS.N,SFBS,US81768T1088,New York Stock Exchange
 SFC.B,SFC,,
 SFD^I13,SFD,US8322481081,New York Consolidated
@@ -4602,20 +4208,17 @@ SFIX.OQ,SFIX,US8608971078,Nasdaq Stock Exchange Global Select Market
 SFL.N,SFL,BMG7738W1064,New York Stock Exchange
 SFLY.O,SFLY,,
 SFM.OQ,SFM,US85208M1027,Nasdaq Stock Exchange Global Select Market
-SFNC.O,SFNC,US8287302009,Consolidated Issue Listed on Nasdaq Global Select Market
 SFNC.OQ,SFNC,US8287302009,Nasdaq Stock Exchange Global Select Market
 SFR.N,SFR,,
 SFS.N,SFS,,
 SFST.OQ,SFST,US8428731017,NASDAQ Stock Exchange Global Market
 SFXE.OQ,SFXE,,
 SG.N,SG,US87043Q1085,New York Stock Exchange
-SGA.O,SGA,US7865983008,NASDAQ National Market System
 SGA.OQ,SGA,US7865983008,NASDAQ Stock Exchange Global Market
 SGBK.OQ,SGBK,,
 SGC.OQ,SGC,US8683581024,NASDAQ Stock Exchange Global Market
 SGHC.N,SGHC,GG00BMG42V42,New York Stock Exchange
 SGHT.OQ,SGHT,US82657M1053,Nasdaq Stock Exchange Global Select Market
-SGI,SGI,US88023U1016,New York Consolidated
 SGI.N,SGI,US88023U1016,New York Stock Exchange
 SGI.OQ,SGI,,
 SGIC.OQ,SGIC,,
@@ -4637,7 +4240,6 @@ SHEN.OQ,SHEN,US82312B1061,Nasdaq Stock Exchange Global Select Market
 SHFL.OQ,SHFL,,
 SHLD.II,SHLD,US8124JFAP15,
 SHLS.OQ,SHLS,US82489W1071,NASDAQ Stock Exchange Global Market
-SHO,SHO,US8678921011,New York Consolidated
 SHO.N,SHO,US8678921011,New York Stock Exchange
 SHOO.OQ,SHOO,US5562691080,Nasdaq Stock Exchange Global Select Market
 SHOP.OQ,SHOP,CA82509L1076,Nasdaq Stock Exchange Global Select Market
@@ -4676,17 +4278,14 @@ SJM.N,SJM,US8326964058,New York Stock Exchange
 SKIL.N,SKIL,US83066P3091,New York Stock Exchange
 SKIN.OQ,SKIN,US88331L1089,NASDAQ Stock Exchange Capital Market
 SKS^K13,SKS,US79377W1080,New York Consolidated
-SKT,SKT,US8754651060,New York Consolidated
 SKT.N,SKT,US8754651060,New York Stock Exchange
 SKUL.OQ,SKUL,,
 SKWD.OQ,SKWD,US8309401029,Nasdaq Stock Exchange Global Select Market
 SKX.MX,SKX*,US8305661055,Bolsa Mexicana de Valores S.A. de C.V.
-SKY,SKY,US8308301055,New York Consolidated
 SKY.N,SKY,US8308301055,New York Stock Exchange
 SKYH.N,SKYH,US83085C1071,New York Stock Exchange
 SKYT.OQ,SKYT,US83089J1088,NASDAQ Stock Exchange Capital Market
 SKYW.OQ,SKYW,US8308791024,Nasdaq Stock Exchange Global Select Market
-SKYW.P,SKYW,US8308791024,NYSE Arca when trading NASDAQ Global Market
 SKYX.OQ,SKYX,US78471E1055,NASDAQ Stock Exchange Capital Market
 SLAB.OQ,SLAB,US8269191024,Nasdaq Stock Exchange Global Select Market
 SLB.II,SLB,,
@@ -4697,11 +4296,9 @@ SLDE.OQ,SLDE,US8313491057,Nasdaq Stock Exchange Global Select Market
 SLDP.OQ,SLDP,US83422N1054,Nasdaq Stock Exchange Global Select Market
 SLFI.OQ,SLFI,,
 SLG.N,SLG,US78440X8873,New York Stock Exchange
-SLGN.K,SLGN,US8270481091,New York Consolidated
 SLGN.N,SLGN,US8270481091,New York Stock Exchange
 SLH.N,SLH,,
 SLM.II,SLM,US78490FBE88,
-SLM.O,SLM,US78442P1066,Consolidated Issue Listed on Nasdaq Global Select Market
 SLM.OQ,SLM,US78442P1066,Nasdaq Stock Exchange Global Select Market
 SLND.A,SLND,US84445C1009,American Stock Exchange
 SLNO.OQ,SLNO,US8342033094,NASDAQ Stock Exchange Capital Market
@@ -4713,11 +4310,9 @@ SLSN.OQ,SLSN,US6300791018,NASDAQ Stock Exchange Capital Market
 SLVM.N,SLVM,US8713321029,New York Stock Exchange
 SLXP.O,SLXP,,
 SM.N,SM,US78454L1008,New York Stock Exchange
-SMA.C,SMA,US83192D4025,The National Stock Exchange (formerly Cincinnati SE)
 SMA.N,SMA,US83192D4025,New York Stock Exchange
 SMBC.OQ,SMBC,US8433801060,NASDAQ Stock Exchange Global Market
 SMBI.OQ,SMBI,,
-SMBK.K,SMBK,US83190L2088,New York Consolidated
 SMBK.N,SMBK,US83190L2088,New York Stock Exchange
 SMC.N,SMC,US86614G1013,New York Stock Exchange
 SMCI.OQ,SMCI,US86800U3023,Nasdaq Stock Exchange Global Select Market
@@ -4728,13 +4323,11 @@ SMHI.N,SMHI,US78413P1012,New York Stock Exchange
 SMID.OQ,SMID,US8321561032,NASDAQ Stock Exchange Capital Market
 SMMT.OQ,SMMT,US86627T1088,NASDAQ Stock Exchange Global Market
 SMMXDE.INS,SMMXDE,,
-SMP,SMP,US8536661056,New York Consolidated
 SMP.N,SMP,US8536661056,New York Stock Exchange
 SMPL.OQ,SMPL,US82900L1026,NASDAQ Stock Exchange Capital Market
 SMR.N,SMR,US67079K1007,New York Stock Exchange
 SMRT.OQ,SMRT,,
 SMSI.OQ,SMSI,US8321544053,NASDAQ Stock Exchange Capital Market
-SMTC.O,SMTC,US8168501018,Consolidated Issue Listed on Nasdaq Global Select Market
 SMTC.OQ,SMTC,US8168501018,Nasdaq Stock Exchange Global Select Market
 SMTI.OQ,SMTI,US79957L1008,NASDAQ Stock Exchange Capital Market
 SMTL.O,SMTL,,
@@ -4765,7 +4358,6 @@ SNS.B,SNS,,
 SNSE.OQ,SNSE,US81728A2078,NASDAQ Stock Exchange Capital Market
 SNWL.O,SNWL,,
 SNWV.OQ,SNWV,US80303D3052,NASDAQ Stock Exchange Global Market
-SNX,SNX,US87162W1009,New York Consolidated
 SNX.N,SNX,US87162W1009,New York Stock Exchange
 SO.N,SO,US8425871071,New York Stock Exchange
 SOC.N,SOC,US78574H1041,New York Stock Exchange
@@ -4774,7 +4366,6 @@ SOLV.N,SOLV,US83444M1018,New York Stock Exchange
 SON.N,SON,US8354951027,New York Stock Exchange
 SONC.P,SONC,,NYSE Arca when trading NASDAQ Global Market
 SONM.OQ,SONM,US83548F4081,NASDAQ Stock Exchange Capital Market
-SONO.O,SONO,US83570H1086,Consolidated Issue Listed on Nasdaq Global Select Market
 SONO.OQ,SONO,US83570H1086,Nasdaq Stock Exchange Global Select Market
 SONSDE.INS,SONSDE,,
 SORC.OQ,SORC,,
@@ -4787,7 +4378,6 @@ SPFI.OQ,SPFI,US83946P1075,Nasdaq Stock Exchange Global Select Market
 SPG.II,SPG,,
 SPG.N,SPG,US8288061091,New York Stock Exchange
 SPGI.N,SPGI,US78409V1044,New York Stock Exchange
-SPHR.K,SPHR,US55826T1025,New York Consolidated
 SPHR.N,SPHR,US55826T1025,New York Stock Exchange
 SPIR.N,SPIR,US8485603067,New York Stock Exchange
 SPLK.MX,SPLK*,US8486371045,Bolsa Mexicana de Valores S.A. de C.V.
@@ -4799,13 +4389,11 @@ SPOK.OQ,SPOK,US84863T1060,Nasdaq Stock Exchange Global Select Market
 SPOT.N,SPOT,LU1778762911,New York Stock Exchange
 SPPIN.BCU,SPPIN,US84763A1088,BATS Europe
 SPRO.OQ,SPRO,US84833T1034,Nasdaq Stock Exchange Global Select Market
-SPRY.O,SPRY,US82835W1080,NASDAQ National Market System
 SPRY.OQ,SPRY,US82835W1080,NASDAQ Stock Exchange Global Market
 SPSC.OQ,SPSC,US78463M1071,Nasdaq Stock Exchange Global Select Market
 SPSN.OQ,SPSN,,
 SPSS.OQ,SPSS,,
 SPSX.OQ,SPSX,,
-SPT.O,SPT,US85209W1099,Consolidated Issue listed on NASDAQ Capital Market
 SPT.OQ,SPT,US85209W1099,NASDAQ Stock Exchange Capital Market
 SPWH.OQ,SPWH,US84920Y1064,Nasdaq Stock Exchange Global Select Market
 SPWR.OQ,SPWR,US20460L1044,NASDAQ Stock Exchange Global Market
@@ -4815,14 +4403,12 @@ SQAA.C,SQAA,,
 SQI.OQ,SQI,,
 SQNM.OQ,SQNM,,
 SQZB.PK,SQZB,US78472W1045,USA Pink Sheets
-SR.B,SR,US84857L1017,Boston Stock Exchange Inc
 SR.N,SR,US84857L1017,New York Stock Exchange
 SRBK.OQ,SRBK,US85227J1060,NASDAQ Stock Exchange Capital Market
 SRCE.OQ,SRCE,US3369011032,Nasdaq Stock Exchange Global Select Market
 SRE.II,SRE,,
 SRE.N,SRE,US8168511090,New York Stock Exchange
 SRG.N,SRG,US81752R1005,New York Stock Exchange
-SRI,SRI,US86183P1021,New York Consolidated
 SRI.N,SRI,US86183P1021,New York Stock Exchange
 SRNE.PK,SRNE,US83587F2020,USA Pink Sheets
 SRPT.OQ,SRPT,US8036071004,Nasdaq Stock Exchange Global Select Market
@@ -4835,26 +4421,22 @@ SRX.C,SRX,,
 SRX^G11,SRX,US78464R1059,New York Consolidated
 SRZ.B,SRZ,,
 SSB.N,SSB,US84472E1029,New York Stock Exchange
-SSD,SSD,US8290731053,New York Consolidated
 SSD.N,SSD,US8290731053,New York Stock Exchange
 SSE.N,SSE,,
 SSI.N,SSI,,
 SSI.PH,SSI,,
 SSNC.OQ,SSNC,US78467J1007,Nasdaq Stock Exchange Global Select Market
-SSP.O,SSP,US8110544025,Consolidated Issue Listed on Nasdaq Global Select Market
 SSP.OQ,SSP,US8110544025,Nasdaq Stock Exchange Global Select Market
 SSRM.OQ,SSRM,CA7847301032,Nasdaq Stock Exchange Global Select Market
 SSTI.OQ,SSTI,US82536T1079,NASDAQ Stock Exchange Capital Market
 SSTIDE.INS,SSTIDE,,
 SSTK.N,SSTK,US8256901005,New York Stock Exchange
 SSYS.OQ,SSYS,IL0011267213,Nasdaq Stock Exchange Global Select Market
-SSYS.P,SSYS,IL0011267213,NYSE Arca when trading NASDAQ Global Market
 ST.N,ST,GB00BFMBMT84,New York Stock Exchange
 ST4TG.TBEA,ST4TG,US85917W1027,Tradeweb APA/SINT/XOFF/Others (EU)
 STAA.OQ,STAA,US8523123052,NASDAQ Stock Exchange Global Market
 STAG.N,STAG,US85254J1025,New York Stock Exchange
 STBA.OQ,STBA,US7838591011,Nasdaq Stock Exchange Global Select Market
-STC,STC,US8603721015,New York Consolidated
 STC.N,STC,US8603721015,New York Stock Exchange
 STE.N,STE,IE00BFY8C754,New York Stock Exchange
 STEC.O,BVC,KYG4691A1141,Consolidated Issue listed on NASDAQ Capital Market
@@ -4883,7 +4465,6 @@ STRI.N,STRI,,
 STRL.OQ,STRL,US8592411016,Nasdaq Stock Exchange Global Select Market
 STRO.OQ,STRO,US8693672011,NASDAQ Stock Exchange Global Market
 STRP.A,STRP,,
-STRS.O,STRS,US8631672016,Consolidated Issue Listed on Nasdaq Global Select Market
 STRS.OQ,STRS,US8631672016,Nasdaq Stock Exchange Global Select Market
 STRT.OQ,STRT,US8631111007,NASDAQ Stock Exchange Global Market
 STRW.A,STRW,US8631821019,American Stock Exchange
@@ -4901,7 +4482,6 @@ STZ.N,STZ,US21036P1084,New York Stock Exchange
 SU6F.TRE,SU6F,US8688731004,London Stock Exchange
 SUF.II,SUF,,
 SUG^C12,SUG,US8440301062,New York Consolidated
-SUI,SUI,US8666741041,New York Consolidated
 SUI.N,SUI,US8666741041,New York Stock Exchange
 SUM.CN,SUM,US86614U1007,Bolsa de Valores de Colombia
 SUN.II,SUN,,
@@ -4937,21 +4517,17 @@ SWKS.OQ,SWKS,US83088M1027,Nasdaq Stock Exchange Global Select Market
 SWNN.BCU,SWNN,US8454671095,BATS Europe
 SWS.C,SWS,,
 SWSI.OQ,SWSI,,
-SWX,SWX,US8448951025,New York Consolidated
 SWX.N,SWX,US8448951025,New York Stock Exchange
 SWY.II,SWY,,
 SWY.N,SWY,,
 SXC.N,SXC,US86722A1034,New York Stock Exchange
 SXE.PH,SXE,,
-SXI,SXI,US8542311076,New York Consolidated
 SXI.N,SXI,US8542311076,New York Stock Exchange
-SXT,SXT,US81725T1007,New York Consolidated
 SXT.N,SXT,US81725T1007,New York Stock Exchange
 SY9F.TPRM,SY9F,US8589121081,TPICAP
 SYA.N,SYA,,
 SYBSDE.INS,SYBSDE,,
 SYBT.OQ,SYBT,US8610251048,Nasdaq Stock Exchange Global Select Market
-SYBT.P,SYBT,US8610251048,NYSE Arca when trading NASDAQ Global Market
 SYK.II,SYK,,
 SYK.N,SYK,US8636671013,New York Stock Exchange
 SYM.B,SYM,US87151X1019,Boston SE when trading NASDAQ Global Market
@@ -4975,14 +4551,12 @@ TARS.OQ,TARS,US87650L1035,Nasdaq Stock Exchange Global Select Market
 TASRDE.INS,TASRDE,,
 TAYC.OQ,TAYC,,
 TBBK.OQ,TBBK,US05969A1051,Nasdaq Stock Exchange Global Select Market
-TBCH.O,TBCH,US9004502061,NASDAQ National Market System
 TBCH.OQ,TBCH,US9004502061,NASDAQ Stock Exchange Global Market
 TBHC.O,TBHC,US4974981056,Consolidated Issue Listed on Nasdaq Global Select Market
 TBI.N,TBI,US89785X1019,New York Stock Exchange
 TBL^I11,TBL,US8871001058,New York Consolidated
 TBPH.OQ,TBPH,KYG8807B1068,NASDAQ Stock Exchange Global Market
 TBRA.OQ,TBRA,,
-TBRG.O,TBRG,US2053061030,Consolidated Issue Listed on Nasdaq Global Select Market
 TBRG.OQ,TBRG,US2053061030,Nasdaq Stock Exchange Global Select Market
 TBV.PH,TBV,,
 TCBI.OQ,TCBI,US88224Q1076,Nasdaq Stock Exchange Global Select Market
@@ -4996,19 +4570,15 @@ TCPC.OQ,TCPC,US09259E1082,Nasdaq Stock Exchange Global Select Market
 TCX.OQ,TCX,US8986972060,NASDAQ Stock Exchange Capital Market
 TDAY.K,TDAY,US36472T1097,New York Consolidated
 TDAY.N,TDAY,US36472T1097,New York Stock Exchange
-TDC,TDC,US88076W1036,New York Consolidated
 TDC.N,TDC,US88076W1036,New York Stock Exchange
-TDG,TDG,US8936411003,New York Consolidated
 TDG.N,TDG,US8936411003,New York Stock Exchange
 TDOC.N,TDOC,US87918A1051,New York Stock Exchange
 TDS.N,TDS,US8794338298,New York Stock Exchange
 TDUP.OQ,TDUP,US88556E1029,Nasdaq Stock Exchange Global Select Market
 TDW.N,TDW,US88642R1095,New York Stock Exchange
-TDY,TDY,US8793601050,New York Consolidated
 TDY.N,TDY,US8793601050,New York Stock Exchange
 TE.II,TE,,
 TE.N,TE,US35834F1049,New York Stock Exchange
-TEAD.O,TEAD,US69002R1032,Consolidated Issue Listed on Nasdaq Global Select Market
 TEAD.OQ,TEAD,US69002R1032,Nasdaq Stock Exchange Global Select Market
 TEAM.OQ,TEAM,US0494681010,Nasdaq Stock Exchange Global Select Market
 TECD.O^G20,TECD,US8782371061,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -5026,12 +4596,10 @@ TEVA.K,TEVA,US8816242098,New York Consolidated
 TEX.II,TEX,,
 TEX.N,TEX,US8807791038,New York Stock Exchange
 TE^G16,TE,US8723751009,New York Consolidated
-TFIN.K,TFIN,US89679E3009,New York Consolidated
 TFIN.N,TFIN,US89679E3009,New York Stock Exchange
 TFM.OQ,TFM,,
 TFSM.OQ,TFSM,,
 TFX.N,TFX,US8793691069,New York Stock Exchange
-TG,TG,US8946501009,New York Consolidated
 TG.N,TG,US8946501009,New York Stock Exchange
 TGE.OQ,TGE,,
 TGIC.OQ,TGIC,,
@@ -5059,7 +4627,6 @@ TIF.W,TIF,,
 TIF^A21,TIF^A21,US8865471085,New York Consolidated
 TIGO.O,TIGO,LU0038705702,Consolidated Issue Listed on Nasdaq Global Select Market
 TIL.O,TIL,US45783C2008,Consolidated Issue listed on NASDAQ Capital Market
-TILE.O,TILE,US4586653044,Consolidated Issue Listed on Nasdaq Global Select Market
 TILE.OQ,TILE,US4586653044,Nasdaq Stock Exchange Global Select Market
 TIME.N,TIME,US88636J3297,New York Stock Exchange
 TIN^B12,TIN,US8798681073,New York Consolidated
@@ -5077,7 +4644,6 @@ TKR.N,TKR,US8873891043,New York Stock Exchange
 TLAB.O^L13,TLAB,US8796641004,Consolidated Issue Listed on Nasdaq Global Select Market
 TLMR.OQ,TLMR,,
 TLN.N,TLN,US87422Q1094,New York Stock Exchange
-TLN.OQ,TLN,US87422Q1094,Nasdaq Stock Exchange Global Select Market
 TLRA.N,TLRA,,
 TLRD.N,TLRD,,
 TLRD.N^H20,TLRD,US87403A1079,New York Stock Exchange
@@ -5091,21 +4657,18 @@ TMHC.N,TMHC,US87724P1066,New York Stock Exchange
 TMK.II,TMK,,
 TMO.II,TMO,,
 TMO.N,TMO,US8835561023,New York Stock Exchange
-TMP,TMP,US8901101092,AMEX Consolidated
 TMP.A,TMP,US8901101092,American Stock Exchange
 TMR.B,TMR,,
 TMRK.PH,TMRK,,
 TMS.N,TMS,,
 TMUS.OQ,TMUS,US8725901040,Nasdaq Stock Exchange Global Select Market
 TNB^E12,TNB,US8843151023,New York Consolidated
-TNC,TNC,US8803451033,New York Consolidated
 TNC.N,TNC,US8803451033,New York Stock Exchange
 TNDM.OQ,TNDM,US8753722037,NASDAQ Stock Exchange Global Market
 TNET.N,TNET,US8962881079,New York Stock Exchange
 TNGO.OQ,TNGO,,
 TNK.N,TNK,BMG8726X1065,New York Stock Exchange
 TNL.N,TNL,US8941641024,New York Stock Exchange
-TNL.P,TNL,US8941641024,NYSE Arca
 TNOX.O,TNOX,,
 TNS.C,TNS,,
 TNXP.OQ,TNXP,US8902608392,Nasdaq Stock Exchange Global Select Market
@@ -5124,21 +4687,17 @@ TPICQ.PK,TPICQ,US87266J1043,USA Pink Sheets
 TPL.N,TPL,US88262P1021,New York Stock Exchange
 TPLM.A,TPLM,,
 TPR.N,TPR,US8760301072,New York Stock Exchange
-TR,TR,US8905161076,New York Consolidated
 TR.N,TR,US8905161076,New York Stock Exchange
 TRA.II,TRA,,
 TRA.N,TRA,,
-TRAK.K,TRAK,US7002153044,New York Consolidated
 TRAK.N,TRAK,US7002153044,New York Stock Exchange
 TRAK.O,TRAK,,
 TRAK.OQ,TRAK,,
 TRBN.OQ,TRBN,,
-TRC,TRC,US8790801091,New York Consolidated
 TRC.N,TRC,US8790801091,New York Stock Exchange
 TRCA.O,TRCA,,
 TRDA.OQ,TRDA,US29384C1080,NASDAQ Stock Exchange Global Market
 TREE.OQ,TREE,US52603B1070,Nasdaq Stock Exchange Global Select Market
-TREX.K,TREX,US89531P1057,New York Consolidated
 TREX.N,TREX,US89531P1057,New York Stock Exchange
 TRGP.N,TRGP,US87612G1013,New York Stock Exchange
 TRI.TO,TRI,CA8849038085,The Toronto Stock Exchange
@@ -5156,14 +4715,11 @@ TROW.II,TROW,,
 TROW.OQ,TROW,US74144T1088,Nasdaq Stock Exchange Global Select Market
 TROX.N,TROX,GB00BJT16S69,New York Stock Exchange
 TRR.N,TRR,,
-TRS.O,TRS,US8962152091,Consolidated Issue Listed on Nasdaq Global Select Market
 TRS.OQ,TRS,US8962152091,Nasdaq Stock Exchange Global Select Market
 TRST.OQ,TRST,US8983492047,Nasdaq Stock Exchange Global Select Market
 TRTX.N,TRTX,US87266M1071,New York Stock Exchange
 TRU.N,TRU,US89400J1079,New York Stock Exchange
-TRUP.O,TRUP,US8982021060,NASDAQ National Market System
 TRUP.OQ,TRUP,US8982021060,NASDAQ Stock Exchange Global Market
-TRV,TRV,US89417E1091,New York Consolidated
 TRV.N,TRV,US89417E1091,New York Stock Exchange
 TRVI.OQ,TRVI,US89532M1018,NASDAQ Stock Exchange Global Market
 TRXB.PH,TRXB,,
@@ -5213,9 +4769,7 @@ TWB.B,TWB,,
 TWC.N,TWC,,
 TWER.OQ,TWER,,
 TWGP.OQ,TWGP,,
-TWI,TWI,US88830M1027,New York Consolidated
 TWI.N,TWI,US88830M1027,New York Stock Exchange
-TWIN.O,TWIN,US9014761012,Consolidated Issue Listed on Nasdaq Global Select Market
 TWIN.OQ,TWIN,US9014761012,Nasdaq Stock Exchange Global Select Market
 TWLL.O,TWLL,,
 TWLO.N,TWLO,US90138F1021,New York Stock Exchange
@@ -5228,9 +4782,7 @@ TWX^F18,TWX^F18,US8873173038,New York Consolidated
 TXCO.O,TXCO,,
 TXG.OQ,TXG,US88025U1097,Nasdaq Stock Exchange Global Select Market
 TXMD.OQ,TXMD,US88338N2062,Nasdaq Stock Exchange Global Select Market
-TXN.O,TXN,US8825081040,Consolidated Issue Listed on Nasdaq Global Select Market
 TXN.OQ,TXN,US8825081040,Nasdaq Stock Exchange Global Select Market
-TXNM.K,TXNM,US69349H1077,New York Consolidated
 TXNM.N,TXNM,US69349H1077,New York Stock Exchange
 TXNS.INS,TXNS,,
 TXRH.OQ,TXRH,US8826811098,Nasdaq Stock Exchange Global Select Market
@@ -5238,7 +4790,6 @@ TXT.II,TXT,US88319QJ204,
 TXT.N,TXT,US8832031012,New York Stock Exchange
 TXTR.N,TXTR,,
 TYC.N,TYC,,
-TYL,TYL,US9022521051,New York Consolidated
 TYL.N,TYL,US9022521051,New York Stock Exchange
 TYPE.OQ,TYPE,,
 TYRA.OQ,TYRA,US90240B1061,Nasdaq Stock Exchange Global Select Market
@@ -5257,7 +4808,6 @@ UBFO.OQ,UBFO,US9114601035,Nasdaq Stock Exchange Global Select Market
 UBH.B,UBH,,
 UBNK.OQ,UBNK,,
 UBSI.OQ,UBSI,US9099071071,Nasdaq Stock Exchange Global Select Market
-UCB,UCB,US90984P3038,New York Consolidated
 UCB.N,UCB,US90984P3038,New York Stock Exchange
 UCBH.OQ,UCBH,,
 UCFC.OQ,UCFC,,
@@ -5279,13 +4829,11 @@ UGI.N,UGI,US9026811052,New York Stock Exchange
 UHAL.K,UHAL,US0235861004,New York Consolidated
 UHCO.OQ,UHCO,,
 UHS.N,UHS,US9139031002,New York Stock Exchange
-UHT,UHT,US91359E1055,New York Consolidated
 UHT.N,UHT,US91359E1055,New York Stock Exchange
 UIC.B,UIC,,
 UIL.B,UIL,,
 UIL.N,UIL,,
 UIS.N,UIS,US9092143067,New York Stock Exchange
-ULH.O,ULH,US91388P1057,Consolidated Issue Listed on Nasdaq Global Select Market
 ULH.OQ,ULH,US91388P1057,Nasdaq Stock Exchange Global Select Market
 ULS.N,ULS,US9037311076,New York Stock Exchange
 ULTA.OQ,ULTA,US90384S3031,Nasdaq Stock Exchange Global Select Market
@@ -5296,9 +4844,7 @@ UMH.N,UMH,US9030021037,New York Stock Exchange
 UMPQ.O^C23,UMPQ,US9042141039,Consolidated Issue Listed on Nasdaq Global Select Market
 UNB.OQ,UNB,US9054001071,NASDAQ Stock Exchange Global Market
 UNCA.O,UNCA,,
-UNF,UNF,US9047081040,New York Consolidated
 UNF.N,UNF,US9047081040,New York Stock Exchange
-UNFI.K,UNFI,US9111631035,New York Consolidated
 UNFI.N,UNFI,US9111631035,New York Stock Exchange
 UNH.N,UNH,US91324P1021,New York Stock Exchange
 UNIS.OQ,UNIS,,
@@ -5313,7 +4859,6 @@ UNT.N^E20,UNT,US9092181091,New York Stock Exchange
 UNTD.OQ,UNTD,,
 UNTY.OQ,UNTY,US9132901029,NASDAQ Stock Exchange Global Market
 UPB.OQ,UPB,US91678A1079,Nasdaq Stock Exchange Global Select Market
-UPBD.O,UPBD,US76009N1000,Consolidated Issue Listed on Nasdaq Global Select Market
 UPBD.OQ,UPBD,US76009N1000,Nasdaq Stock Exchange Global Select Market
 UPL.N,UPL,,
 UPLD.OQ,UPLD,US91544A1097,NASDAQ Stock Exchange Global Market
@@ -5400,16 +4945,13 @@ USBE.OQ,USBE,,
 USCB.OQ,USCB,US90355N1019,NASDAQ Stock Exchange Global Market
 USFD.N,USFD,US9120081099,New York Stock Exchange
 USLM.OQ,USLM,US9119221029,Nasdaq Stock Exchange Global Select Market
-USNA.K,USNA,US90328M1071,New York Consolidated
 USNA.N,USNA,US90328M1071,New York Stock Exchange
-USPH.K,USPH,US90337L1089,New York Consolidated
 USPH.N,USPH,US90337L1089,New York Stock Exchange
 UST.II,UST,,
 UTEK.O,UTEK,,
 UTEK.OQ,UTEK,,
 UTHR.OQ,UTHR,US91307C1027,Nasdaq Stock Exchange Global Select Market
 UTHRDE.INS,UTHRDE,,
-UTI,UTI,US9139151040,New York Consolidated
 UTI.N,UTI,US9139151040,New York Stock Exchange
 UTIW.OQ,UTIW,,
 UTL.N,UTL,US9132591077,New York Stock Exchange
@@ -5417,18 +4959,14 @@ UTMD.OQ,UTMD,US9174881089,Nasdaq Stock Exchange Global Select Market
 UTSIDE.INS,UTSIDE,,
 UTZ.N,UTZ,US9180901012,New York Stock Exchange
 UUUU.A,UUUU,CA2926717083,American Stock Exchange
-UVE,UVE,US91359V1070,New York Consolidated
 UVE.N,UVE,US91359V1070,New York Stock Exchange
-UVSP.O,UVSP,US9152711001,Consolidated Issue Listed on Nasdaq Global Select Market
 UVSP.OQ,UVSP,US9152711001,Nasdaq Stock Exchange Global Select Market
-UVV,UVV,US9134561094,New York Consolidated
 UVV.N,UVV,US9134561094,New York Stock Exchange
 V.N,V,US92826C8394,New York Stock Exchange
 VA.OQ,VA,,
 VABK.OQ,VABK,US9280311039,NASDAQ Stock Exchange Capital Market
 VAC.N,VAC,US57164Y1073,New York Stock Exchange
 VAL.N,VAL,BMG9460G1015,New York Stock Exchange
-VALU.O,VALU,US9204371002,Consolidated Issue listed on NASDAQ Capital Market
 VALU.OQ,VALU,US9204371002,NASDAQ Stock Exchange Capital Market
 VARI.OQ,VARI,,
 VAR^D21,VAR^D21,US92220P1057,New York Consolidated
@@ -5443,7 +4981,6 @@ VCI.N,VCI,,
 VCTR.OQ,VCTR,US92645B1035,Nasdaq Stock Exchange Global Select Market
 VCYT.OQ,VCYT,US92337F1075,NASDAQ Stock Exchange Global Market
 VECO.OQ,VECO,US9224171002,Nasdaq Stock Exchange Global Select Market
-VECO.P,VECO,US9224171002,NYSE Arca when trading NASDAQ Global Market
 VEEV.N,VEEV,US9224751084,New York Stock Exchange
 VEL.N,VEL,US92262D1019,New York Stock Exchange
 VERA.OQ,VERA,US92337R1014,NASDAQ Stock Exchange Global Market
@@ -5469,31 +5006,25 @@ VIRT.K,VIRT,US9282541013,New York Consolidated
 VISN.OQ,VISN,US20337X1090,Nasdaq Stock Exchange Global Select Market
 VITC.OQ,VITC,,
 VITL.OQ,VITL,US92847W1036,NASDAQ Stock Exchange Global Market
-VITL.P,VITL,US92847W1036,NYSE Arca when trading NASDAQ Global Market
 VKTX.OQ,VKTX,US92686J1060,NASDAQ Stock Exchange Capital Market
 VLCM.OQ,VLCM,,
 VLDRN.BCU,VLDRN,US92259F1012,BATS Europe
-VLGEA.O,VLGEA,US9271074091,Consolidated Issue Listed on Nasdaq Global Select Market
 VLGEA.OQ,VLGEA,US9271074091,Nasdaq Stock Exchange Global Select Market
 VLO.II,VLO,,
 VLO.N,VLO,US91913Y1001,New York Stock Exchange
 VLTO.N,VLTO,US92338C1036,New York Stock Exchange
 VLTR.O,VLTR,,
 VLTR.OQ,VLTR,,
-VLY.O,VLY,US9197941076,Consolidated Issue Listed on Nasdaq Global Select Market
 VLY.OQ,VLY,US9197941076,Nasdaq Stock Exchange Global Select Market
 VMC.II,VMC,,
 VMC.N,VMC,US9291601097,New York Stock Exchange
-VMD.O,VMD,CA92663R1055,Consolidated Issue listed on NASDAQ Capital Market
 VMD.OQ,VMD,CA92663R1055,NASDAQ Stock Exchange Capital Market
 VMED.OQ,VMED,,
 VMEM.N,VMEM,,
-VMI,VMI,US9202531011,New York Consolidated
 VMI.N,VMI,US9202531011,New York Stock Exchange
 VMSI.OQ,VMSI,,
 VMW.MX,VMW*,US9285634021,Bolsa Mexicana de Valores S.A. de C.V.
 VNCE.O,VNCE,US92719W2070,Consolidated Issue listed on NASDAQ Capital Market
-VNDA.O,VNDA,US9216591084,NASDAQ National Market System
 VNDA.OQ,VNDA,US9216591084,NASDAQ Stock Exchange Global Market
 VNO.II,VNO,,
 VNO.N,VNO,US9290421091,New York Stock Exchange
@@ -5518,7 +5049,6 @@ VRAYQ.PK,VRAYQ,US92672L1070,USA Pink Sheets
 VRAZ.OQ,VRAZ,,
 VRCA.OQ,VRCA,US92511W2070,NASDAQ Stock Exchange Capital Market
 VRDN.OQ,VRDN,US92790C1045,NASDAQ Stock Exchange Capital Market
-VRE,VRE,US5544891048,New York Consolidated
 VRE.N,VRE,US5544891048,New York Stock Exchange
 VREX.OQ,VREX,US92214X1063,Nasdaq Stock Exchange Global Select Market
 VRM.OQ,VRM,US92918V3078,NASDAQ Stock Exchange Global Market
@@ -5527,7 +5057,6 @@ VRRM.OQ,VRRM,US92511U1025,NASDAQ Stock Exchange Capital Market
 VRSK.OQ,VRSK,US92345Y1064,Nasdaq Stock Exchange Global Select Market
 VRSN.OQ,VRSN,US92343E1029,Nasdaq Stock Exchange Global Select Market
 VRT.N,VRT,US92537N1081,New York Stock Exchange
-VRTS.K,VRTS,US92828Q1094,New York Consolidated
 VRTS.N,VRTS,US92828Q1094,New York Stock Exchange
 VRTX.OQ,VRTX,US92532F1003,Nasdaq Stock Exchange Global Select Market
 VSAT.OQ,VSAT,US92552V1008,Nasdaq Stock Exchange Global Select Market
@@ -5557,22 +5086,17 @@ VUZI.OQ,VUZI,US92921W3007,NASDAQ Stock Exchange Capital Market
 VVC^B19,VVC^B19,US92240G1013,New York Consolidated
 VVUSDE.INS,VVUSDE,,
 VVV.N,VVV,US92047W1018,New York Stock Exchange
-VVX,VVX,US92242T1016,New York Consolidated
 VVX.N,VVX,US92242T1016,New York Stock Exchange
 VXRT.PK,VXRT,US92243A2006,USA Pink Sheets
 VYGR.OQ,VYGR,US92915B1061,Nasdaq Stock Exchange Global Select Market
-VYX,VYX,US62886E1082,New York Consolidated
 VYX.N,VYX,US62886E1082,New York Stock Exchange
 VZ.N,VZ,US92343V1044,New York Stock Exchange
 W.N,W,US94419L1017,New York Stock Exchange
 WAAS.N,WAAS,,
-WAB,WAB,US9297401088,New York Consolidated
 WAB.N,WAB,US9297401088,New York Stock Exchange
 WABC.OQ,WABC,US9570901036,Nasdaq Stock Exchange Global Select Market
-WAFD.O,WAFD,US9388241096,Consolidated Issue Listed on Nasdaq Global Select Market
 WAFD.OQ,WAFD,US9388241096,Nasdaq Stock Exchange Global Select Market
 WAG.II,WAG,,
-WAL,WAL,US9576381092,New York Consolidated
 WAL.N,WAL,US9576381092,New York Stock Exchange
 WALD.OQ,WALD,JE00BPG99318,NASDAQ Stock Exchange Capital Market
 WASH.OQ,WASH,US9406101082,Nasdaq Stock Exchange Global Select Market
@@ -5597,7 +5121,6 @@ WCN.TO,WCN,CA94106B1013,The Toronto Stock Exchange
 WCRX.OQ,WCRX,,
 WD.N,WD,US93148P1021,New York Stock Exchange
 WDAY.OQ,WDAY,US98138H1014,Nasdaq Stock Exchange Global Select Market
-WDC.O,WDC,US9581021055,Consolidated Issue Listed on Nasdaq Global Select Market
 WDC.OQ,WDC,US9581021055,Nasdaq Stock Exchange Global Select Market
 WDFC.OQ,WDFC,US9292361071,Nasdaq Stock Exchange Global Select Market
 WDR^E21,WDR^E21,US9300591008,New York Consolidated
@@ -5608,7 +5131,6 @@ WEN.OQ,WEN,US95058W1009,Nasdaq Stock Exchange Global Select Market
 WERN.OQ,WERN,US9507551086,Nasdaq Stock Exchange Global Select Market
 WEST.OQ,WEST,US96145W1036,NASDAQ Stock Exchange Global Market
 WEX.N,WEX,US96208T1043,New York Stock Exchange
-WEYS.O,WEYS,US9621491003,Consolidated Issue Listed on Nasdaq Global Select Market
 WEYS.OQ,WEYS,US9621491003,Nasdaq Stock Exchange Global Select Market
 WFBI.OQ,WFBI,,
 WFC.N,WFC,US9497461015,New York Stock Exchange
@@ -5621,7 +5143,6 @@ WFT.II,WFT,,
 WG.B,WG,,
 WG.N,WG,,
 WGL^G18,WGL^G18,US92924F1066,New York Consolidated
-WGO,WGO,US9746371007,New York Consolidated
 WGO.N,WGO,US9746371007,New York Stock Exchange
 WGS.OQ,WGS,US81663L2007,Nasdaq Stock Exchange Global Select Market
 WH.N,WH,US98311A1051,New York Stock Exchange
@@ -5641,7 +5162,6 @@ WINN.O,WINN,,
 WINS.OQ,WINS,,
 WIX.OQ,WIX,IL0011301780,Nasdaq Stock Exchange Global Select Market
 WK.N,WK,US98139A1051,New York Stock Exchange
-WKC,WKC,US9814751064,New York Consolidated
 WKC.N,WKC,US9814751064,New York Stock Exchange
 WKHS.OQ,WKHS,US98138J5039,NASDAQ Stock Exchange Capital Market
 WLDN.OQ,WLDN,US96924N1000,NASDAQ Stock Exchange Global Market
@@ -5650,7 +5170,6 @@ WLH.N,WLH,US5520747008,New York Stock Exchange
 WLK.N,WLK,US9604131022,New York Stock Exchange
 WLP.II,WLP,,
 WLSC.OQ,WLSC,,
-WLY,WLY,US9682232064,New York Consolidated
 WLY.N,WLY,US9682232064,New York Stock Exchange
 WL^E11,WL,US9718071023,New York Consolidated
 WM.II,WM,,
@@ -5661,12 +5180,9 @@ WMB.N,WMB,US9694571004,New York Stock Exchange
 WMG.OQ,WMG,US9345502036,Nasdaq Stock Exchange Global Select Market
 WMGI.OQ,WMGI,,
 WMI.N,WMI,,
-WMK,WMK,US9488491047,New York Consolidated
 WMK.N,WMK,US9488491047,New York Stock Exchange
 WMS.N,WMS,US00790R1041,New York Stock Exchange
-WMT.O,WMT,US9311421039,Consolidated Issue Listed on Nasdaq Global Select Market
 WMT.OQ,WMT,US9311421039,Nasdaq Stock Exchange Global Select Market
-WNC,WNC,US9295661071,New York Consolidated
 WNC.N,WNC,US9295661071,New York Stock Exchange
 WNEB.OQ,WNEB,US9588921018,Nasdaq Stock Exchange Global Select Market
 WNG.N,WNG,,
@@ -5674,7 +5190,6 @@ WNR.N,WNR,,
 WOLF.O,WOLF,,
 WON.B,WON,,
 WOOF.OQ,WOOF,US71601V1052,Nasdaq Stock Exchange Global Select Market
-WOR,WOR,US9818111026,New York Consolidated
 WOR.N,WOR,US9818111026,New York Stock Exchange
 WPC.N,WPC,US92936U1097,New York Stock Exchange
 WPL.P,WPL,,
@@ -5697,19 +5212,15 @@ WSC.OQ,WSC,US9713781048,NASDAQ Stock Exchange Capital Market
 WSFS.OQ,WSFS,US9293281021,Nasdaq Stock Exchange Global Select Market
 WSII.O,WSII,,
 WSM.N,WSM,US9699041011,New York Stock Exchange
-WSO,WSO,US9426222009,New York Consolidated
 WSO.N,WSO,US9426222009,New York Stock Exchange
 WSR.N,WSR,US9660842041,New York Stock Exchange
-WST,WST,US9553061055,New York Consolidated
 WST.N,WST,US9553061055,New York Stock Exchange
 WSTC.OQ,WSTC,,
-WT,WT,US97717P1049,New York Consolidated
 WT.N,WT,US97717P1049,New York Stock Exchange
 WTBA.OQ,WTBA,US95123P1066,Nasdaq Stock Exchange Global Select Market
 WTFC.OQ,WTFC,US97650W1080,Nasdaq Stock Exchange Global Select Market
 WTI.N,WTI,US92922P1066,New York Stock Exchange
 WTRG.N,WTRG,US29670G1022,New York Stock Exchange
-WTS,WTS,US9427491025,New York Consolidated
 WTS.N,WTS,US9427491025,New York Stock Exchange
 WTTR.N,WTTR,US81617J3014,New York Stock Exchange
 WTW.O,WTW,IE00BDB6Q211,Consolidated Issue Listed on Nasdaq Global Select Market
@@ -5720,10 +5231,8 @@ WULF.OQ,WULF,US88080T1043,NASDAQ Stock Exchange Capital Market
 WVE.OQ,WVE,SG9999014716,NASDAQ Stock Exchange Global Market
 WW.B,WW,US98262P2002,Boston SE when trading NASDAQ Global Market
 WWAV.N,WWAV,,
-WWD.O,WWD,US9807451037,Consolidated Issue Listed on Nasdaq Global Select Market
 WWD.OQ,WWD,US9807451037,Nasdaq Stock Exchange Global Select Market
 WWIN.O,WWIN,,
-WWW,WWW,US9780971035,New York Consolidated
 WWW.N,WWW,US9780971035,New York Stock Exchange
 WWY.II,WWY,,
 WXH.N,WXH,,
@@ -5740,7 +5249,6 @@ XCO.N,XCO,,
 XCO.PH,XCO,,
 XEC^J21,XEC^J21,US1717981013,New York Consolidated
 XEL.II,XEL,US665789AW33,
-XEL.O,XEL,US98389B1008,Consolidated Issue Listed on Nasdaq Global Select Market
 XEL.OQ,XEL,US98389B1008,Nasdaq Stock Exchange Global Select Market
 XENE.OQ,XENE,CA98420N1050,NASDAQ Stock Exchange Global Market
 XENTN.BCU,XENTN,US46071F1030,BATS Europe
@@ -5763,7 +5271,6 @@ XPEL.OQ,XPEL,US98379L1008,NASDAQ Stock Exchange Capital Market
 XPER.N,XPER,US98423J1016,New York Stock Exchange
 XPO.N,XPO,US9837931008,New York Stock Exchange
 XPOF.N,XPOF,US98422X1019,New York Stock Exchange
-XPRO.K,XPRO,NL0010556684,New York Consolidated
 XPRO.N,XPRO,NL0010556684,New York Stock Exchange
 XRAY.OQ,XRAY,US24906P1093,Nasdaq Stock Exchange Global Select Market
 XRIS.INS,XRIS,,
@@ -5796,14 +5303,12 @@ ZAZA.OQ,ZAZA,,
 ZBH,ZBH,US98956P1021,New York Consolidated
 ZBIO.OQ,ZBIO,US98937L1052,Nasdaq Stock Exchange Global Select Market
 ZBRA.OQ,ZBRA,US9892071054,Nasdaq Stock Exchange Global Select Market
-ZD.O,ZD,US48123V1026,Consolidated Issue Listed on Nasdaq Global Select Market
 ZD.OQ,ZD,US48123V1026,Nasdaq Stock Exchange Global Select Market
 ZETA.N,ZETA,US98956A1051,New York Stock Exchange
 ZGEN.O,ZGEN,,
 ZGN.N,ZGN,NL0015000PB5,New York Stock Exchange
 ZIGO.OQ,ZIGO,,
 ZINC.OQ,ZINC,,
-ZION.O,ZION,US9897011071,Consolidated Issue Listed on Nasdaq Global Select Market
 ZION.OQ,ZION,US9897011071,Nasdaq Stock Exchange Global Select Market
 ZIP.N,ZIP,US98980B1035,New York Stock Exchange
 ZIP.OQ,ZIP,,
@@ -5821,7 +5326,6 @@ ZSPC.OQ,ZSPC,US98980W1071,NASDAQ Stock Exchange Capital Market
 ZTS.N,ZTS,US98978V1035,New York Stock Exchange
 ZUMZ.OQ,ZUMZ,US9898171015,Nasdaq Stock Exchange Global Select Market
 ZVIA.N,ZVIA,US98955K1043,New York Stock Exchange
-ZVRA.O,ZVRA,US4884452065,Consolidated Issue Listed on Nasdaq Global Select Market
 ZVRA.OQ,ZVRA,US4884452065,Nasdaq Stock Exchange Global Select Market
 ZWS.N,ZWS,US98983L1089,New York Stock Exchange
 ZYME.OQ,ZYME,US98985Y1082,Nasdaq Stock Exchange Global Select Market
