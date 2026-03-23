@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useExposures, usePortfolio, useRisk } from "@/hooks/useCuse4Api";
-import ExposureBarChart, { chartPresentationThreshold } from "@/features/cuse4/components/ExposureBarChart";
+import ExposureBarChart from "@/features/cuse4/components/ExposureBarChart";
 import FactorDrilldown from "@/features/cuse4/components/FactorDrilldown";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ExposurePositionsTable from "@/features/cuse4/components/ExposurePositionsTable";
@@ -18,10 +18,9 @@ import { exposureTier as exposureMethodTier, normalizeExposureOrigin } from "@/l
 import { factorDisplayName } from "@/lib/factorLabels";
 import { buildAnalyticsTruthCompactSummary, summarizeAnalyticsTruth } from "@/lib/cuse4Truth";
 import {
+  COMBINED_DECOMP_SUBTITLE,
   deriveRawLoadingSharesFromRiskDetails,
-  RAW_LOADING_SUBTITLE,
   RISK_DECOMP_SECTION_TITLE,
-  VOL_SCALED_SUBTITLE,
 } from "@/lib/riskDecompBars";
 
 const MODES = [
@@ -38,7 +37,17 @@ export default function ExposuresPage() {
   const [riskSortKey, setRiskSortKey] = useState<SortKey>("pct_of_total");
   const [riskSortAsc, setRiskSortAsc] = useState(false);
   const [showAllRiskRows, setShowAllRiskRows] = useState(false);
-  const { data, isLoading, error } = useExposures(mode);
+  const rawExposureQuery = useExposures("raw");
+  const sensitivityExposureQuery = useExposures("sensitivity");
+  const riskContributionExposureQuery = useExposures("risk_contribution");
+  const exposureDataByMode = {
+    raw: rawExposureQuery.data,
+    sensitivity: sensitivityExposureQuery.data,
+    risk_contribution: riskContributionExposureQuery.data,
+  } as const;
+  const data = exposureDataByMode[mode as keyof typeof exposureDataByMode];
+  const isLoading = rawExposureQuery.isLoading || sensitivityExposureQuery.isLoading || riskContributionExposureQuery.isLoading;
+  const error = rawExposureQuery.error || sensitivityExposureQuery.error || riskContributionExposureQuery.error;
   const { data: portfolioData, isLoading: portfolioLoading, error: portfolioError } = usePortfolio();
   const { data: riskData, isLoading: riskLoading, error: riskError } = useRisk();
   const positions = portfolioData?.positions ?? [];
@@ -51,17 +60,36 @@ export default function ExposuresPage() {
     [positions, riskDetails],
   );
   const visibleFactorIds = useMemo(() => {
-    const rawThreshold = chartPresentationThreshold("raw");
-    const sensitivityThreshold = chartPresentationThreshold("sensitivity");
-    const contributionThreshold = chartPresentationThreshold("risk_contribution");
+    const thresholds = {
+      raw: 0.04,
+      sensitivity: 0.0015,
+      risk_contribution: 0.075,
+    } as const;
+    const visible = new Set<string>();
+    (["raw", "sensitivity", "risk_contribution"] as const).forEach((key) => {
+      const factors = exposureDataByMode[key]?.factors ?? [];
+      const threshold = thresholds[key];
+      for (const factor of factors) {
+        const net = Math.abs(Number(factor.value || 0));
+        const gross = (factor.drilldown ?? []).reduce(
+          (sum, item) => sum + Math.abs(Number(item.contribution || 0)),
+          0,
+        );
+        if (net >= threshold || gross >= threshold) {
+          visible.add(factor.factor_id);
+        }
+      }
+    });
+    if (visible.size > 0) return Array.from(visible);
+
     return riskDetails
       .filter((detail) => (
-        Math.abs(Number(detail.exposure || 0)) >= rawThreshold
-        || Math.abs(Number(detail.sensitivity || 0)) >= sensitivityThreshold
-        || Math.abs(Number(detail.pct_of_total || 0)) >= contributionThreshold
+        Math.abs(Number(detail.exposure || 0)) >= thresholds.raw
+        || Math.abs(Number(detail.sensitivity || 0)) >= thresholds.sensitivity
+        || Math.abs(Number(detail.pct_of_total || 0)) >= thresholds.risk_contribution
       ))
       .map((detail) => detail.factor_id);
-  }, [riskDetails]);
+  }, [exposureDataByMode, riskDetails]);
   const cov = riskData?.cov_matrix
     ? {
         factors: riskData.cov_matrix.factors ?? [],
@@ -196,24 +224,17 @@ export default function ExposuresPage() {
       <div className="chart-card" style={{ marginBottom: 12 }}>
         <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
         <div className="section-subtitle">
-          {RAW_LOADING_SUBTITLE}
+          {COMBINED_DECOMP_SUBTITLE}
         </div>
         {riskLoading ? (
           <AnalyticsLoadingViz message="Loading portfolio risk mix..." />
         ) : (
-          <RiskDecompChart shares={rawLoadingShares} />
-        )}
-      </div>
-
-      <div className="chart-card" style={{ marginBottom: 12 }}>
-        <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
-        <div className="section-subtitle">
-          {VOL_SCALED_SUBTITLE}
-        </div>
-        {riskLoading ? (
-          <AnalyticsLoadingViz message="Loading portfolio risk mix..." />
-        ) : (
-          <RiskDecompChart shares={volScaledShares} />
+          <RiskDecompChart
+            rows={[
+              { label: "Raw Loadings", shares: rawLoadingShares },
+              { label: "Vol-Scaled", shares: volScaledShares },
+            ]}
+          />
         )}
       </div>
 

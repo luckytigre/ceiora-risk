@@ -3,8 +3,9 @@
 import { useState } from "react";
 import type { Position } from "@/lib/types/cuse4";
 import TableRowToggle from "@/components/TableRowToggle";
+import MethodLabel from "@/components/MethodLabel";
 import InlineShareDraftEditor from "@/features/holdings/components/InlineShareDraftEditor";
-import { exposureMethodDisplayLabel, exposureMethodRank } from "@/lib/exposureOrigin";
+import { exposureMethodDisplayLabel, exposureMethodRank, exposureMethodTone } from "@/lib/exposureOrigin";
 
 interface ExposurePositionsTableProps {
   positions: Position[];
@@ -154,7 +155,12 @@ export default function ExposurePositionsTable({
           {visibleRows.map((pos) => (
             <tr key={pos.ticker}>
               <td>{pos.ticker}</td>
-              <td>{exposureMethodDisplayLabel(pos.exposure_origin, pos.model_status)}</td>
+              <td>
+                <MethodLabel
+                  label={exposureMethodDisplayLabel(pos.exposure_origin, pos.model_status)}
+                  tone={exposureMethodTone(pos.exposure_origin, pos.model_status)}
+                />
+              </td>
               <td>{pos.trbc_industry_group || "Unmapped"}</td>
               <td className="text-right">
                 {getDraftQuantityText && onDraftQuantityChange && onAdjust ? (

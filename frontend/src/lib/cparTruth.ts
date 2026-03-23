@@ -20,7 +20,7 @@ import type {
   CparWarning,
 } from "@/lib/types/cpar";
 
-type BadgeTone = "success" | "warning" | "error" | "neutral";
+export type BadgeTone = "success" | "warning" | "error" | "neutral";
 
 interface CparApiErrorDetail {
   status?: string;
@@ -156,6 +156,45 @@ export function describeCparFitStatus(status: CparFitStatus | string | null | un
     label: "Unknown",
     tone: "neutral",
     detail: "Fit status was not recognized by the cPAR frontend contract.",
+  };
+}
+
+export function describeCparPositionMethod(
+  coverage: string | null | undefined,
+  fitStatus: CparFitStatus | string | null | undefined,
+): CparBadgeDescriptor {
+  if (coverage === "missing_price") {
+    return {
+      label: "Missing Price",
+      tone: "error",
+      detail: "A current price row is missing, so the position cannot be included in the aggregate cPAR surface.",
+    };
+  }
+  if (coverage === "missing_cpar_fit") {
+    return {
+      label: "Missing cPAR Fit",
+      tone: "error",
+      detail: "The active cPAR package does not contain a fit row for this security.",
+    };
+  }
+  if (coverage === "insufficient_history" || fitStatus === "insufficient_history") {
+    return {
+      label: "Insufficient History",
+      tone: "error",
+      detail: "The active package does not have enough weekly observations to expose this security.",
+    };
+  }
+  if (fitStatus === "limited_history") {
+    return {
+      label: "Package Fit (Limited)",
+      tone: "warning",
+      detail: "The position is usable in the active package, but its fit is based on weaker-than-ideal history depth or continuity.",
+    };
+  }
+  return {
+    label: "Package Fit",
+    tone: "success",
+    detail: "The position is covered by the active cPAR package fit.",
   };
 }
 

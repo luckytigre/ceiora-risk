@@ -5,10 +5,11 @@ import type { FactorDrilldownItem } from "@/lib/types/cuse4";
 import TableRowToggle from "@/components/TableRowToggle";
 import FactorHistoryChart from "@/components/FactorHistoryChart";
 import HelpLabel from "@/components/HelpLabel";
+import MethodLabel from "@/components/MethodLabel";
 import { useFactorHistory } from "@/hooks/useCuse4Api";
 import { shortFactorLabel } from "@/lib/factorLabels";
 import type { FactorCatalogEntry } from "@/lib/types/cuse4";
-import { exposureMethodDisplayLabel, exposureMethodRank } from "@/lib/exposureOrigin";
+import { exposureMethodDisplayLabel, exposureMethodRank, exposureMethodTone } from "@/lib/exposureOrigin";
 
 interface FactorDrilldownProps {
   factorId: string;
@@ -253,7 +254,12 @@ export default function FactorDrilldown({
             {visibleRows.map((item) => (
               <tr key={item.ticker}>
                 <td><strong>{item.ticker}</strong></td>
-                <td>{exposureMethodDisplayLabel(item.exposure_origin, item.model_status)}</td>
+                <td>
+                  <MethodLabel
+                    label={exposureMethodDisplayLabel(item.exposure_origin, item.model_status)}
+                    tone={exposureMethodTone(item.exposure_origin, item.model_status)}
+                  />
+                </td>
                 <td className="text-right">{(item.weight * 100).toFixed(2)}%</td>
                 <td className="text-right">
                   <span className={item.exposure >= 0 ? "positive" : "negative"}>

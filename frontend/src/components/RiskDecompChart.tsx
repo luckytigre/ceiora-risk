@@ -17,41 +17,57 @@ import type { RiskShares } from "@/lib/types/cuse4";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
-interface RiskDecompChartProps {
+export interface RiskDecompRow {
+  label: string;
   shares: RiskShares;
   showIdio?: boolean;
 }
 
-export default function RiskDecompChart({ shares, showIdio = true }: RiskDecompChartProps) {
-  const labels = ["Risk Decomposition"];
+interface RiskDecompChartProps {
+  rows: RiskDecompRow[];
+}
+
+export default function RiskDecompChart({ rows }: RiskDecompChartProps) {
+  const labels = rows.map((row) => row.label);
+  const normalizedRows = rows.map((row) => ({
+    label: row.label,
+    shares: row.shares,
+    showIdio: row.showIdio ?? true,
+  }));
   const datasets = [
     {
       label: "Market",
-      data: [shares.market || 0],
+      data: normalizedRows.map((row) => row.shares.market || 0),
       backgroundColor: "#58b6c7",
-      barThickness: 18,
+      barThickness: 12,
+      categoryPercentage: 0.52,
+      barPercentage: 0.82,
     },
     {
       label: "Industry",
-      data: [shares.industry || 0],
+      data: normalizedRows.map((row) => row.shares.industry || 0),
       backgroundColor: "#cc3558",
-      barThickness: 18,
+      barThickness: 12,
+      categoryPercentage: 0.52,
+      barPercentage: 0.82,
     },
     {
       label: "Style",
-      data: [shares.style || 0],
+      data: normalizedRows.map((row) => row.shares.style || 0),
       backgroundColor: "#f5bae4",
-      barThickness: 18,
+      barThickness: 12,
+      categoryPercentage: 0.52,
+      barPercentage: 0.82,
+    },
+    {
+      label: "Idiosyncratic",
+      data: normalizedRows.map((row) => (row.showIdio ? (row.shares.idio || 0) : 0)),
+      backgroundColor: "#ff8f2a",
+      barThickness: 12,
+      categoryPercentage: 0.52,
+      barPercentage: 0.82,
     },
   ];
-  if (showIdio) {
-    datasets.push({
-      label: "Idiosyncratic",
-      data: [shares.idio || 0],
-      backgroundColor: "#ff8f2a",
-      barThickness: 18,
-    });
-  }
   const data: ChartData<"bar", number[], string> = {
     labels,
     datasets,
@@ -61,6 +77,9 @@ export default function RiskDecompChart({ shares, showIdio = true }: RiskDecompC
     indexAxis: "y" as const,
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: { top: 8, bottom: 6 },
+    },
     plugins: {
       legend: {
         display: true,
@@ -75,10 +94,15 @@ export default function RiskDecompChart({ shares, showIdio = true }: RiskDecompC
       tooltip: {
         ...tooltipOptions(),
         callbacks: {
+          title: (items: TooltipItem<"bar">[]) => items[0]?.label ?? "",
           label: (ctx: TooltipItem<"bar">) => {
             const raw = Number(ctx.raw ?? 0);
             return `${ctx.dataset.label}: ${raw.toFixed(1)}%`;
           },
+        },
+        filter: (ctx) => {
+          if (String(ctx.dataset.label || "") !== "Idiosyncratic") return true;
+          return Boolean(normalizedRows[ctx.dataIndex]?.showIdio);
         },
       },
     },
@@ -96,13 +120,21 @@ export default function RiskDecompChart({ shares, showIdio = true }: RiskDecompC
       },
       y: {
         stacked: true,
-        display: false,
+        border: { display: false },
+        grid: { display: false },
+        ticks: {
+          color: "rgba(232, 237, 249, 0.6)",
+          font: { size: 10, weight: 500 },
+          padding: 10,
+        },
       },
     },
   };
 
+  const height = Math.max(132, normalizedRows.length * 56 + 28);
+
   return (
-    <div style={{ height: 68 }}>
+    <div style={{ height }}>
       <Bar data={data} options={options} />
     </div>
   );

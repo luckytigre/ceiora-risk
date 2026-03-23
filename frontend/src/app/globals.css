@@ -3344,6 +3344,33 @@ main {
   color: rgba(240, 133, 160, 0.96);
 }
 
+.method-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgba(223, 228, 238, 0.88);
+}
+
+.method-label.success {
+  color: rgba(223, 228, 238, 0.88);
+}
+
+.method-label.projection {
+  color: rgba(236, 219, 166, 0.95);
+}
+
+.method-label.warning {
+  color: rgba(239, 220, 160, 0.95);
+}
+
+.method-label.error {
+  color: rgba(214, 94, 128, 0.96);
+}
+
+.method-label.neutral {
+  color: rgba(169, 182, 210, 0.72);
+}
+
 /* Detail panel */
 .detail-panel {
   width: min(88%, 980px);

@@ -4,10 +4,8 @@ import type { FactorDetail, Position, RiskShares } from "@/lib/types/analytics";
 import type { CparFactorChartRow, CparLoading, CparPortfolioPositionRow, CparRiskShares } from "@/lib/types/cpar";
 
 export const RISK_DECOMP_SECTION_TITLE = "Factor Decomposition";
-export const RAW_LOADING_SUBTITLE =
-  "Absolute raw loading footprint split across market, industry, style, and implied idiosyncratic loading.";
-export const VOL_SCALED_SUBTITLE =
-  "Vol-scaled footprint split across market, industry, style, and idiosyncratic components.";
+export const COMBINED_DECOMP_SUBTITLE =
+  "Raw loadings and vol-scaled footprint shown together across market, industry, style, and idiosyncratic components.";
 
 type SharedRiskBucket = "market" | "industry" | "style";
 

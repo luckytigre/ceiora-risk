@@ -2,11 +2,12 @@
 
 import { useMemo, type Ref } from "react";
 import ExposureBarChart from "@/features/cuse4/components/ExposureBarChart";
+import MethodLabel, { type MethodLabelTone } from "@/components/MethodLabel";
 import { compareNumber, compareText, useSortableRows } from "@/hooks/useSortableRows";
 import { shortFactorLabel } from "@/lib/factorLabels";
 import type { WhatIfPreviewData } from "@/lib/types/cuse4";
 import { formatAsOfDate } from "@/lib/cuse4Truth";
-import { exposureMethodDisplayLabel } from "@/lib/exposureOrigin";
+import { exposureMethodDisplayLabel, exposureMethodTone } from "@/lib/exposureOrigin";
 import { fmtQty, WHAT_IF_MODES, type WhatIfMode } from "@/features/whatif/whatIfUtils";
 
 type RiskShareSortKey = "bucket" | "current" | "hypothetical" | "delta";
@@ -47,11 +48,15 @@ export default function WhatIfPreviewPanel({
   const currentSideDescription = servedModelPreview
     ? "Current side = live holdings projected through the current served model snapshot"
     : "Current side = live holdings projected through current published loadings plus live risk-cache fallback";
-  const methodByAccountTicker = new Map<string, string>();
-  const methodByTicker = new Map<string, string>();
-  const collectMethod = (accountId: string | null | undefined, ticker: string | null | undefined, method: string) => {
+  const methodByAccountTicker = new Map<string, { label: string; tone: MethodLabelTone }>();
+  const methodByTicker = new Map<string, { label: string; tone: MethodLabelTone }>();
+  const collectMethod = (
+    accountId: string | null | undefined,
+    ticker: string | null | undefined,
+    method: { label: string; tone: MethodLabelTone },
+  ) => {
     const tickerKey = String(ticker || "").trim().toUpperCase();
-    if (!tickerKey || method === "\u2014") return;
+    if (!tickerKey || method.label === "\u2014") return;
     const accountKey = String(accountId || "").trim().toUpperCase();
     methodByTicker.set(tickerKey, methodByTicker.get(tickerKey) || method);
     if (accountKey) {
@@ -59,7 +64,10 @@ export default function WhatIfPreviewPanel({
     }
   };
   for (const pos of [...previewData.current.positions, ...previewData.hypothetical.positions]) {
-    const method = exposureMethodDisplayLabel(pos.exposure_origin, pos.model_status);
+    const method = {
+      label: exposureMethodDisplayLabel(pos.exposure_origin, pos.model_status),
+      tone: exposureMethodTone(pos.exposure_origin, pos.model_status),
+    };
     collectMethod(pos.account, pos.ticker, method);
   }
   const methodForHoldingDelta = (accountId: string, ticker: string) => {
@@ -68,7 +76,7 @@ export default function WhatIfPreviewPanel({
     return (
       methodByAccountTicker.get(`${accountKey}:${tickerKey}`)
       || methodByTicker.get(tickerKey)
-      || "\u2014"
+      || { label: "\u2014", tone: "neutral" as const }
     );
   };
   const riskShareRows = useMemo(
@@ -93,7 +101,7 @@ export default function WhatIfPreviewPanel({
     () => ({
       account: (left, right) => compareText(left.account_id, right.account_id),
       ticker: (left, right) => compareText(left.ticker, right.ticker),
-      method: (left, right) => compareText(methodForHoldingDelta(left.account_id, left.ticker), methodForHoldingDelta(right.account_id, right.ticker)),
+      method: (left, right) => compareText(methodForHoldingDelta(left.account_id, left.ticker).label, methodForHoldingDelta(right.account_id, right.ticker).label),
       current: (left, right) => compareNumber(left.current_quantity, right.current_quantity),
       hypothetical: (left, right) => compareNumber(left.hypothetical_quantity, right.hypothetical_quantity),
       delta: (left, right) => compareNumber(left.delta_quantity, right.delta_quantity),
@@ -246,7 +254,12 @@ export default function WhatIfPreviewPanel({
                     <tr key={`${row.account_id}:${row.ticker}`}>
                       <td>{row.account_id}</td>
                       <td>{row.ticker}</td>
-                      <td>{methodForHoldingDelta(row.account_id, row.ticker)}</td>
+                      <td>
+                        <MethodLabel
+                          label={methodForHoldingDelta(row.account_id, row.ticker).label}
+                          tone={methodForHoldingDelta(row.account_id, row.ticker).tone}
+                        />
+                      </td>
                       <td className="text-right">{fmtQty(row.current_quantity)}</td>
                       <td className="text-right">{fmtQty(row.hypothetical_quantity)}</td>
                       <td className={`text-right ${row.delta_quantity >= 0 ? "positive" : "negative"}`.trim()}>

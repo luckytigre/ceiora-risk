@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import ApiErrorState from "@/features/cuse4/components/ApiErrorState";
+import MethodLabel from "@/components/MethodLabel";
 import TableRowToggle from "@/components/TableRowToggle";
 import type { HoldingsPosition, Position } from "@/lib/types/cuse4";
 import type { CparPortfolioPositionRow } from "@/lib/types/cpar";
-import { exposureMethodDisplayLabel, exposureMethodRank } from "@/lib/exposureOrigin";
-import { describeCparFitStatus } from "@/lib/cparTruth";
+import { exposureMethodDisplayLabel, exposureMethodRank, exposureMethodTone } from "@/lib/exposureOrigin";
+import { describeCparPositionMethod } from "@/lib/cparTruth";
 import InlineShareDraftEditor from "./InlineShareDraftEditor";
 
 interface HoldingsLedgerSectionProps {
@@ -44,17 +45,9 @@ function normalizeAccountId(value: string | null | undefined): string {
   return String(value || "").trim().toLowerCase();
 }
 
-function rowIdentity(accountId: string | null | undefined, ticker: string | null | undefined, ric: string | null | undefined): string {
-  return `${normalizeAccountId(accountId)}:${normalizeTicker(ticker || ric)}`;
-}
-
 function cparMethodLabel(row: CparPortfolioPositionRow | null | undefined): string {
   if (!row) return "—";
-  if (row.coverage === "missing_price") return "Missing Price";
-  if (row.coverage === "missing_cpar_fit") return "Missing cPAR Fit";
-  if (row.coverage === "insufficient_history") return "Insufficient History";
-  if (!row.fit_status) return "Package Fit";
-  return describeCparFitStatus(row.fit_status).label;
+  return describeCparPositionMethod(row.coverage, row.fit_status).label;
 }
 
 function fmtQty(n: number): string {
@@ -108,17 +101,43 @@ export default function HoldingsLedgerSection({
   }, [modeledPositions]);
 
   const cparModeledMap = useMemo(() => {
-    const out = new Map<string, CparPortfolioPositionRow>();
+    const byAccountRic = new Map<string, CparPortfolioPositionRow>();
+    const byAccountTicker = new Map<string, CparPortfolioPositionRow>();
+    const byRic = new Map<string, CparPortfolioPositionRow>();
+    const byTicker = new Map<string, CparPortfolioPositionRow>();
     for (const pos of cparModeledPositions) {
-      out.set(rowIdentity(pos.account_id, pos.ticker, pos.ric), pos);
+      const accountId = normalizeAccountId(pos.account_id);
+      const ticker = normalizeTicker(pos.ticker);
+      const ric = String(pos.ric || "").trim().toUpperCase();
+      if (accountId && ric && !byAccountRic.has(`${accountId}:${ric}`)) {
+        byAccountRic.set(`${accountId}:${ric}`, pos);
+      }
+      if (accountId && ticker && !byAccountTicker.has(`${accountId}:${ticker}`)) {
+        byAccountTicker.set(`${accountId}:${ticker}`, pos);
+      }
+      if (ric && !byRic.has(ric)) {
+        byRic.set(ric, pos);
+      }
+      if (ticker && !byTicker.has(ticker)) {
+        byTicker.set(ticker, pos);
+      }
     }
-    return out;
+    return { byAccountRic, byAccountTicker, byRic, byTicker };
   }, [cparModeledPositions]);
 
   const enrichedRows = useMemo(() => {
     return holdingsRows.map((row) => {
       const modeled = modeledMap.get(normalizeTicker(row.ticker));
-      const cparModeled = cparModeledMap.get(rowIdentity(row.account_id, row.ticker, row.ric));
+      const accountId = normalizeAccountId(row.account_id);
+      const ticker = normalizeTicker(row.ticker);
+      const ric = String(row.ric || "").trim().toUpperCase();
+      const cparModeled = (
+        (accountId && ric ? cparModeledMap.byAccountRic.get(`${accountId}:${ric}`) : null)
+        || (accountId && ticker ? cparModeledMap.byAccountTicker.get(`${accountId}:${ticker}`) : null)
+        || (ric ? cparModeledMap.byRic.get(ric) : null)
+        || (ticker ? cparModeledMap.byTicker.get(ticker) : null)
+        || null
+      );
       return {
         row,
         modeled,
@@ -247,8 +266,18 @@ export default function HoldingsLedgerSection({
             {visibleRows.map(({ row, modeled, cparModeled, price, marketValue }) => (
               <tr key={`${row.account_id}:${row.ric || row.ticker}`}>
                 <td>{row.ticker || "—"}</td>
-                <td>{exposureMethodDisplayLabel(modeled?.exposure_origin, modeled?.model_status)}</td>
-                <td>{cparMethodLabel(cparModeled)}</td>
+                <td>
+                  <MethodLabel
+                    label={exposureMethodDisplayLabel(modeled?.exposure_origin, modeled?.model_status)}
+                    tone={exposureMethodTone(modeled?.exposure_origin, modeled?.model_status)}
+                  />
+                </td>
+                <td>
+                  <MethodLabel
+                    label={cparMethodLabel(cparModeled)}
+                    tone={cparModeled ? describeCparPositionMethod(cparModeled.coverage, cparModeled.fit_status).tone : "neutral"}
+                  />
+                </td>
                 <td className="text-right">
                   <InlineShareDraftEditor
                     quantityText={getDraftQuantityText(row)}

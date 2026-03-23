@@ -14,10 +14,9 @@ import {
   sameCparPackageIdentity,
 } from "@/lib/cparTruth";
 import {
+  COMBINED_DECOMP_SUBTITLE,
   deriveRawLoadingSharesFromCparLoadings,
-  RAW_LOADING_SUBTITLE,
   RISK_DECOMP_SECTION_TITLE,
-  VOL_SCALED_SUBTITLE,
 } from "@/lib/riskDecompBars";
 
 function CparRiskWorkspaceInner() {
@@ -87,16 +86,14 @@ function CparRiskWorkspaceInner() {
           <div className="chart-card" style={{ marginBottom: 12 }}>
             <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
             <div className="section-subtitle">
-              {RAW_LOADING_SUBTITLE}
+              {COMBINED_DECOMP_SUBTITLE}
             </div>
-            <CparRiskDecompChart shares={rawLoadingShares} />
-          </div>
-          <div className="chart-card" style={{ marginBottom: 12 }}>
-            <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
-            <div className="section-subtitle">
-              {VOL_SCALED_SUBTITLE}
-            </div>
-            <CparRiskDecompChart shares={volScaledShares} />
+            <CparRiskDecompChart
+              rows={[
+                { label: "Raw Loadings", shares: rawLoadingShares },
+                { label: "Vol-Scaled", shares: volScaledShares },
+              ]}
+            />
           </div>
           <CparRiskFactorSummaryCard portfolio={normalizedRisk} />
           <CparRiskPositionsContributionTable rows={normalizedRisk.positions} />

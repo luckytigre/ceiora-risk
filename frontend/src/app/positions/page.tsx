@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ApiErrorState from "@/features/cuse4/components/ApiErrorState";
 import ConfirmActionModal from "@/components/ConfirmActionModal";
+import MethodLabel, { type MethodLabelTone } from "@/components/MethodLabel";
 import { compareNumber, compareText, useSortableRows } from "@/hooks/useSortableRows";
 import {
   useHoldingsAccounts,
@@ -20,7 +21,7 @@ import HoldingsMutationFeedback from "@/features/holdings/components/HoldingsMut
 import ManualPositionEditor from "@/features/holdings/components/ManualPositionEditor";
 import { useHoldingsManager } from "@/features/holdings/hooks/useHoldingsManager";
 import { buildAnalyticsTruthCompactSummary, summarizeAnalyticsTruth } from "@/lib/cuse4Truth";
-import { exposureMethodDisplayLabel } from "@/lib/exposureOrigin";
+import { exposureMethodDisplayLabel, exposureMethodTone } from "@/lib/exposureOrigin";
 
 type ModelDiffSortKey = "account" | "ticker" | "method" | "status" | "live" | "modeled" | "delta";
 
@@ -133,7 +134,7 @@ export default function PositionsPage() {
   const modelVsLiveDiffs = useMemo(() => {
     const liveMap = new Map<string, { accountScope: string; ticker: string; quantity: number }>();
     const accountsByTicker = new Map<string, Set<string>>();
-    const modelMap = new Map<string, { ticker: string; quantity: number; method: string }>();
+    const modelMap = new Map<string, { ticker: string; quantity: number; method: string; methodTone: MethodLabelTone }>();
 
     for (const row of liveHoldingsRows) {
       const ticker = normalizeTicker(row.ticker || row.ric);
@@ -159,6 +160,7 @@ export default function PositionsPage() {
         ticker,
         quantity: Number(pos.shares) || 0,
         method: exposureMethodDisplayLabel(pos.exposure_origin, pos.model_status),
+        methodTone: exposureMethodTone(pos.exposure_origin, pos.model_status),
       });
     }
 
@@ -180,6 +182,7 @@ export default function PositionsPage() {
         accountScope: liveRow?.accountScope || (live === null ? "MODELED" : "—"),
         ticker: liveRow?.ticker || modeledRow?.ticker || "",
         method: modeledRow?.method || "\u2014",
+        methodTone: modeledRow?.methodTone || "neutral",
         live,
         modeled,
         delta,
@@ -423,7 +426,7 @@ export default function PositionsPage() {
                       <tr key={`${row.accountScope}:${row.ticker}`}>
                         <td>{row.accountScope || "—"}</td>
                         <td>{row.ticker}</td>
-                        <td>{row.method}</td>
+                        <td><MethodLabel label={row.method} tone={(row.methodTone || "neutral") as MethodLabelTone} /></td>
                         <td>{row.status}</td>
                         <td className="text-right">{row.live === null ? "—" : fmtQty(row.live)}</td>
                         <td className="text-right">{row.modeled === null ? "—" : fmtQty(row.modeled)}</td>

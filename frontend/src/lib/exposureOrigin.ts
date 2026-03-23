@@ -1,4 +1,5 @@
 import type { ExposureOrigin, ModelStatus } from "@/lib/types/cuse4";
+import type { MethodLabelTone } from "@/components/MethodLabel";
 
 export type ExposureTier = "core" | "fundamental" | "returns";
 
@@ -70,4 +71,15 @@ export function exposureMethodRank(
   if (tier === "core") return 0;
   if (tier === "fundamental") return 1;
   return 2;
+}
+
+export function exposureMethodTone(
+  origin?: ExposureOrigin | null,
+  modelStatus?: ModelStatus | null,
+): MethodLabelTone {
+  if (!hasExposureMethodMetadata(origin, modelStatus)) return "neutral";
+  if (modelStatus === "ineligible") return "error";
+  const tier = exposureTier(origin, modelStatus);
+  if (tier === "fundamental" || tier === "returns") return "projection";
+  return "success";
 }

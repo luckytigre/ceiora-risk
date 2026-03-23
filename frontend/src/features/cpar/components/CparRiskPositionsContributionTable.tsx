@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import TableRowToggle from "@/components/TableRowToggle";
-import { describeCparFitStatus, formatCparMarketValueThousands } from "@/lib/cparTruth";
+import MethodLabel from "@/components/MethodLabel";
+import { describeCparPositionMethod, formatCparMarketValueThousands } from "@/lib/cparTruth";
 import type { CparPortfolioPositionRow } from "@/lib/types/cpar";
 
 const COLLAPSED_ROWS = 8;
@@ -19,13 +20,7 @@ function fmtShares(value: number | null | undefined): string {
 }
 
 function methodLabel(row: CparPortfolioPositionRow): string {
-  if (row.coverage === "missing_price") return "Missing Price";
-  if (row.coverage === "missing_cpar_fit") return "Missing cPAR Fit";
-  if (row.coverage === "insufficient_history") return "Insufficient History";
-  if (!row.fit_status) return "Package Fit";
-  if (row.fit_status === "limited_history") return "Limited Fit";
-  const fit = describeCparFitStatus(row.fit_status);
-  return fit.label;
+  return describeCparPositionMethod(row.coverage, row.fit_status).label;
 }
 
 function normalizeRiskMix(row: CparPortfolioPositionRow) {
@@ -170,7 +165,12 @@ export default function CparRiskPositionsContributionTable({
               visibleRows.map((row) => (
                 <tr key={row.ric}>
                   <td>{row.ticker || "—"}</td>
-                  <td>{methodLabel(row)}</td>
+                  <td>
+                    <MethodLabel
+                      label={methodLabel(row)}
+                      tone={describeCparPositionMethod(row.coverage, row.fit_status).tone}
+                    />
+                  </td>
                   <td>{row.trbc_industry_group || "Unmapped"}</td>
                   <td className="text-right">{fmtShares(row.quantity)}</td>
                   <td className="text-right">{fmtMarketValue(row.market_value)}</td>

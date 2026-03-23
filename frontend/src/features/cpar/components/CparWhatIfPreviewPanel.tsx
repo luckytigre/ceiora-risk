@@ -2,11 +2,12 @@
 
 import { useMemo, type Ref } from "react";
 import CparExposureBarChart from "@/features/cpar/components/CparExposureBarChart";
+import MethodLabel, { type MethodLabelTone } from "@/components/MethodLabel";
 import { compareNumber, compareText, useSortableRows } from "@/hooks/useSortableRows";
 import { shortFactorLabel } from "@/lib/factorLabels";
-import { describeCparFitStatus, formatCparPackageDate } from "@/lib/cparTruth";
+import { describeCparPositionMethod, formatCparPackageDate } from "@/lib/cparTruth";
 import type { FactorCatalogEntry, FactorExposure } from "@/lib/types/analytics";
-import type { CparExploreWhatIfData, CparPortfolioPositionRow } from "@/lib/types/cpar";
+import type { CparExploreWhatIfData } from "@/lib/types/cpar";
 import {
   CPAR_EXPLORE_MODES,
   fmtQty,
@@ -18,15 +19,6 @@ type HoldingDeltaSortKey = "account" | "ticker" | "method" | "current" | "hypoth
 type FactorDeltaSortKey = "factor" | "current" | "hypothetical" | "delta";
 type CparHoldingDeltaRow = CparExploreWhatIfData["holding_deltas"][number];
 type CparFactorDeltaRow = CparExploreWhatIfData["diff"]["factor_deltas"][CparExploreMode][number];
-
-function methodLabel(row: CparPortfolioPositionRow | null | undefined): string {
-  if (!row) return "—";
-  if (row.coverage === "missing_price") return "Missing Price";
-  if (row.coverage === "missing_cpar_fit") return "Missing cPAR Fit";
-  if (row.coverage === "insufficient_history") return "Insufficient History";
-  if (!row.fit_status) return "Package Fit";
-  return describeCparFitStatus(row.fit_status).label;
-}
 
 function factorCatalog(side: CparExploreWhatIfData["current"]): FactorCatalogEntry[] {
   return (side.factor_catalog || []).map((factor) => ({
@@ -90,9 +82,10 @@ export default function CparWhatIfPreviewPanel({
   const factorDeltaModes = previewData.diff.display_factor_deltas ?? previewData.diff.factor_deltas;
   const currentFactors = chartFactors(currentExposureModes[mode]);
   const hypotheticalFactors = chartFactors(hypotheticalExposureModes[mode]);
-  const methodByRic = new Map<string, string>();
+  const methodByRic = new Map<string, { label: string; tone: MethodLabelTone }>();
   for (const row of [...previewData.current.positions, ...previewData.hypothetical.positions]) {
-    methodByRic.set(row.ric, methodLabel(row));
+    const descriptor = describeCparPositionMethod(row.coverage, row.fit_status);
+    methodByRic.set(row.ric, { label: descriptor.label, tone: descriptor.tone });
   }
   const riskShareRows = useMemo(
     () => (["market", "industry", "style", "idio"] as const).map((bucket) => ({
@@ -116,7 +109,7 @@ export default function CparWhatIfPreviewPanel({
     () => ({
       account: (left, right) => compareText(left.account_id, right.account_id),
       ticker: (left, right) => compareText(left.ticker || left.ric, right.ticker || right.ric),
-      method: (left, right) => compareText(methodByRic.get(left.ric) || "Package Fit", methodByRic.get(right.ric) || "Package Fit"),
+      method: (left, right) => compareText(methodByRic.get(left.ric)?.label || "Package Fit", methodByRic.get(right.ric)?.label || "Package Fit"),
       current: (left, right) => compareNumber(left.current_quantity, right.current_quantity),
       hypothetical: (left, right) => compareNumber(left.hypothetical_quantity, right.hypothetical_quantity),
       delta: (left, right) => compareNumber(left.delta_quantity, right.delta_quantity),
@@ -262,7 +255,12 @@ export default function CparWhatIfPreviewPanel({
                     <tr key={`${row.account_id}:${row.ric}`}>
                       <td>{row.account_id}</td>
                       <td>{row.ticker || row.ric}</td>
-                      <td>{methodByRic.get(row.ric) || "Package Fit"}</td>
+                      <td>
+                        <MethodLabel
+                          label={methodByRic.get(row.ric)?.label || "Package Fit"}
+                          tone={methodByRic.get(row.ric)?.tone || "success"}
+                        />
+                      </td>
                       <td className="text-right">{fmtQty(row.current_quantity)}</td>
                       <td className="text-right">{fmtQty(row.hypothetical_quantity)}</td>
                       <td className={`text-right ${row.delta_quantity >= 0 ? "positive" : "negative"}`.trim()}>
