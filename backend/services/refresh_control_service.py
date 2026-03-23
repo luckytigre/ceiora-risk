@@ -113,6 +113,20 @@ def _load_reconciled_refresh_status() -> dict[str, Any]:
     return _reconcile_cloud_run_refresh_state(load_persisted_refresh_status())
 
 
+def _cloud_dispatch_unconfigured_state() -> dict[str, Any]:
+    state = dict(load_persisted_refresh_status())
+    state.setdefault("status", "unavailable")
+    state["dispatch_backend"] = "cloud_run_job"
+    state["error"] = {
+        "type": "cloud_run_job_unconfigured",
+        "message": (
+            "Cloud serve-refresh dispatch is unavailable because the Cloud Run Job "
+            "environment contract is incomplete."
+        ),
+    }
+    return state
+
+
 def start_refresh(
     *,
     force_risk_recompute: bool,
@@ -124,6 +138,9 @@ def start_refresh(
     to_stage: str | None = None,
     force_core: bool = False,
 ) -> tuple[bool, dict[str, Any]]:
+    if config.cloud_mode() and not config.serve_refresh_cloud_job_configured():
+        return False, _cloud_dispatch_unconfigured_state()
+
     if not config.serve_refresh_cloud_job_configured():
         from backend.services.refresh_manager import start_refresh as _start_refresh
 
@@ -228,6 +245,9 @@ def start_refresh(
 
 
 def get_refresh_status() -> dict[str, Any]:
+    if config.cloud_mode() and not config.serve_refresh_cloud_job_configured():
+        return _cloud_dispatch_unconfigured_state()
+
     if config.serve_refresh_cloud_job_configured():
         return _load_reconciled_refresh_status()
 

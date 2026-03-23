@@ -28,6 +28,13 @@ resource "google_cloud_run_v2_service" "frontend" {
     containers {
       image = local.frontend_image_ref
 
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = var.frontend_memory_limit
+        }
+      }
+
       ports {
         container_port = 3000
       }
@@ -92,6 +99,13 @@ resource "google_cloud_run_v2_service" "serve" {
 
     containers {
       image = local.serve_image_ref
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = var.serve_memory_limit
+        }
+      }
 
       ports {
         container_port = 8000
@@ -175,6 +189,13 @@ resource "google_cloud_run_v2_service" "control" {
 
     containers {
       image = local.control_image_ref
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = var.control_memory_limit
+        }
+      }
 
       ports {
         container_port = 8000

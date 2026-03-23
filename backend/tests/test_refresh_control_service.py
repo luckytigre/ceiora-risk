@@ -5,9 +5,11 @@ import pytest
 from backend.services import refresh_control_service
 
 
-def test_start_refresh_delegates_to_refresh_manager_when_cloud_jobs_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_start_refresh_delegates_to_refresh_manager_when_cloud_jobs_disabled_locally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_JOBS_ENABLED", False)
-    monkeypatch.setattr(refresh_control_service.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(refresh_control_service.config, "APP_RUNTIME_ROLE", "local-ingest")
 
     captured: dict[str, object] = {}
 
@@ -28,6 +30,32 @@ def test_start_refresh_delegates_to_refresh_manager_when_cloud_jobs_disabled(mon
     assert started is True
     assert state["status"] == "running"
     assert captured["profile"] == "serve-refresh"
+
+
+def test_start_refresh_fails_closed_when_cloud_jobs_disabled_in_cloud_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_JOBS_ENABLED", False)
+    monkeypatch.setattr(refresh_control_service.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(
+        refresh_control_service,
+        "load_persisted_refresh_status",
+        lambda: {"status": "idle"},
+    )
+    monkeypatch.setattr(
+        "backend.services.refresh_manager.start_refresh",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("local refresh manager should not be used")),
+    )
+
+    started, state = refresh_control_service.start_refresh(
+        force_risk_recompute=False,
+        profile="serve-refresh",
+    )
+
+    assert started is False
+    assert state["status"] == "idle"
+    assert state["dispatch_backend"] == "cloud_run_job"
+    assert state["error"]["type"] == "cloud_run_job_unconfigured"
 
 
 def test_start_refresh_dispatches_cloud_run_job_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,6 +208,28 @@ def test_get_refresh_status_reads_persisted_state_when_cloud_jobs_enabled(monkey
         "status": "running",
         "dispatch_backend": "cloud_run_job",
     }
+
+
+def test_get_refresh_status_fails_closed_when_cloud_jobs_disabled_in_cloud_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(refresh_control_service.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_JOBS_ENABLED", False)
+    monkeypatch.setattr(
+        refresh_control_service,
+        "load_persisted_refresh_status",
+        lambda: {"status": "idle"},
+    )
+    monkeypatch.setattr(
+        "backend.services.refresh_manager.get_refresh_status",
+        lambda: (_ for _ in ()).throw(AssertionError("local refresh manager should not be used")),
+    )
+
+    out = refresh_control_service.get_refresh_status()
+
+    assert out["status"] == "idle"
+    assert out["dispatch_backend"] == "cloud_run_job"
+    assert out["error"]["type"] == "cloud_run_job_unconfigured"
 
 
 def test_get_refresh_status_reconciles_failed_cloud_run_execution(monkeypatch: pytest.MonkeyPatch) -> None:

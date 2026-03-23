@@ -2,14 +2,14 @@
 
 Date: 2026-03-21
 Owner: Codex
-Status: `run.app` rollout validated, final custom-domain cutover not yet complete
+Status: `run.app` rollout live and validated, Google-side custom-domain ingress staged, Cloudflare DNS cutover still pending
 
 ## Purpose
 
 Define the process split and environment contract needed to run the app in a cloud-native shape without relying on one all-in-one web process.
 
-This is deployment prep only.
-It does not imply that the repo has already been deployed to a cloud provider.
+This runbook now covers the live Cloud Run rollout path as well as the remaining cutover steps.
+The `run.app` rollout is live; the final custom-domain cutover is still incomplete.
 
 ## Frozen Production Hostnames
 
@@ -228,11 +228,18 @@ Current Cloud Run Job prep:
   - `CLOUD_RUN_PROJECT_ID`
   - `CLOUD_RUN_REGION`
   - `SERVE_REFRESH_CLOUD_RUN_JOB_NAME`
+- in `cloud-serve`, missing Cloud Run Job dispatch env is now a fail-closed control-plane error:
+  - the control service must not fall back to the local in-process `refresh_manager` path
+  - status continues to read the persisted refresh state instead of switching owners
 
 Current Cloud Run service prep:
 - the Terraform `prod` root now defines frontend, serve, and control service resources
 - all three services are intentionally public at the Cloud Run layer for the first `run.app` smoke phase
 - the control service stays operator-token-protected in-app
+- the live service headroom is now:
+  - frontend: `1 vCPU`, `1Gi`, `maxScale=4`
+  - serve: `1 vCPU`, `1Gi`, `maxScale=4`
+  - control: `1 vCPU`, `1Gi`, `maxScale=3`
 - the frontend image build must follow this rule:
   - final-domain default: `BACKEND_API_ORIGIN=https://api.ceiora.com`
   - `run.app` smoke: rebuild the frontend image against the serve service's `run.app` URL, then set:
@@ -263,8 +270,6 @@ Current observability prep:
 
 ## Remaining Out Of Scope
 
-- live cloud deployment
-- provider-specific ingress/networking/secrets config
 - queue-based refresh execution
 - dedicated worker surface for deeper local-ingest/core/cold-core lanes
 - autoscaling or multi-region strategy
@@ -320,6 +325,9 @@ Before using these split surfaces for real deployment:
   - `https://app.ceiora.com`
   - `https://api.ceiora.com`
   - `https://control.ceiora.com`
+  - `https://app.ceiora.com/api/refresh/status` with the operator token
+  - `POST https://control.ceiora.com/api/refresh?profile=serve-refresh` with the operator token
+  - terminal refresh-status reconciliation after that dispatch
 
 ## Current Rollout Notes
 
@@ -339,12 +347,18 @@ Before using these split surfaces for real deployment:
   - the control service needed to reconcile persisted `running` refresh state against terminal Cloud Run execution status so OOM-killed jobs do not remain stuck forever.
 - Those repo fixes are now in place.
 - Current remaining rollout blockers before custom-domain cutover:
-  - decide when to promote the validated `run.app` rollout state to the final-domain cutover,
+  - promote the now-created GCP ingress surface at `34.50.154.73` by switching Cloudflare DNS for `app`, `api`, and `control`,
+  - wait for the managed certificate to move from `PROVISIONING` to `ACTIVE` after DNS points at that IP,
+  - switch the frontend service to the final-domain image built against `https://api.ceiora.com`,
   - address `security_master` parity if projection-only loadings should become available in cloud mode instead of remaining fail-closed/unavailable.
 - Latest validated `run.app` state:
   - the control service account can now read `serve-refresh` execution status and reconcile stale `running` rows,
   - a fresh `serve-refresh` Cloud Run Job run completed successfully with the `4Gi` memory limit,
   - the frontend `run.app` surface successfully proxies both serve and control routes,
+  - frontend, serve, and control now run with `1Gi` memory and higher `maxScale` headroom,
+  - cloud control misconfiguration now fails closed instead of falling back to the local in-process refresh manager,
+  - the final-domain frontend image is already published as `frontend:20260323-finaldomain-r1`,
+  - the Google load balancer, serverless NEGs, forwarding rules, and managed certificate resource are live on `34.50.154.73`,
   - projection-only loadings still warn and degrade unavailable when `security_master` parity is absent, but the refresh path remains green and publishes serving payloads.
 
 ## Control Smoke

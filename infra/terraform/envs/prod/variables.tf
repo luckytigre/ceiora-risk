@@ -82,19 +82,37 @@ variable "frontend_backend_control_origin" {
 variable "frontend_max_instances" {
   description = "Maximum Cloud Run instances for the frontend service."
   type        = number
-  default     = 3
+  default     = 4
 }
 
 variable "serve_max_instances" {
   description = "Maximum Cloud Run instances for the serve API."
   type        = number
-  default     = 3
+  default     = 4
 }
 
 variable "control_max_instances" {
   description = "Maximum Cloud Run instances for the control API."
   type        = number
-  default     = 2
+  default     = 3
+}
+
+variable "frontend_memory_limit" {
+  description = "Memory limit for the frontend Cloud Run service."
+  type        = string
+  default     = "1Gi"
+}
+
+variable "serve_memory_limit" {
+  description = "Memory limit for the serve Cloud Run service."
+  type        = string
+  default     = "1Gi"
+}
+
+variable "control_memory_limit" {
+  description = "Memory limit for the control Cloud Run service."
+  type        = string
+  default     = "1Gi"
 }
 
 variable "cloudflare_zone_name" {

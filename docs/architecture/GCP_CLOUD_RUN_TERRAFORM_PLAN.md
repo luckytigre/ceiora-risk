@@ -430,6 +430,9 @@ Do not treat this as optional if the goal is a durable cloud-native runtime.
 - [ ] Validate operator/control routes through `control.ceiora.com`.
 - [ ] Confirm scale-to-zero behavior does not break job dispatch/status visibility.
 - [x] Keep operator credentials required in cloud mode.
+- [x] Keep `cloud-serve` refresh dispatch fail-closed:
+  - missing Cloud Run Job env must not fall back to the local in-process `refresh_manager`,
+  - status should stay on the persisted runtime-state owner even when dispatch is unavailable.
 
 ### Slice 7: Custom Domains, Ingress, And Certificates
 
@@ -605,3 +608,18 @@ Additional validation by phase:
   - reran `serve-refresh` under the `4Gi` Cloud Run Job spec and observed a successful execution (`ceiora-prod-serve-refresh-xzl9k`) with Neon-backed serving payload publication,
   - validated the frontend `run.app` surface proxies both serve (`/api/cpar/meta`) and control (`/api/refresh/status`) correctly with the split-origin cloud wiring,
   - confirmed projection-only loadings currently degrade unavailable with a warning instead of crashing the refresh path when `security_master` parity is absent.
+- 2026-03-23: Service headroom was raised for the live `run.app` rollout while keeping the smoke image contract stable:
+  - frontend now runs at `1 vCPU`, `1Gi`, `maxScale=4`,
+  - serve now runs at `1 vCPU`, `1Gi`, `maxScale=4`,
+  - control now runs at `1 vCPU`, `1Gi`, `maxScale=3`,
+  - the current `run.app` frontend image and `run.app` serve/control origins were kept pinned during that change so the headroom bump did not silently promote the final-domain frontend bake.
+- 2026-03-23: Control-plane dispatch hardening landed before final-domain cutover:
+  - in `cloud-serve`, missing Cloud Run Job dispatch env now fails closed instead of delegating to the local in-process `refresh_manager`,
+  - `get_refresh_status` keeps reading the persisted runtime-state owner in that degraded case instead of switching to local process state,
+  - the runbook now explicitly records the live Cloud Run headroom, the fail-closed control contract, and the extra final-domain smoke gates for frontend-proxied control status plus post-cutover `serve-refresh` dispatch.
+- 2026-03-23: Final-domain cutover staging advanced on the Google side:
+  - built and pushed the final-domain frontend image `frontend:20260323-finaldomain-r1` against `https://api.ceiora.com`,
+  - created the Google global HTTPS load balancer, serverless NEGs, backend services, URL maps, proxies, and forwarding rules,
+  - reserved the shared ingress IP `34.50.154.73`,
+  - created the managed certificate resource for `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com`,
+  - left the current `run.app` frontend bake pinned in place until the DNS cutover and certificate activation steps are completed.
