@@ -622,4 +622,10 @@ Additional validation by phase:
   - created the Google global HTTPS load balancer, serverless NEGs, backend services, URL maps, proxies, and forwarding rules,
   - reserved the shared ingress IP `34.50.154.73`,
   - created the managed certificate resource for `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com`,
-  - left the current `run.app` frontend bake pinned in place until the DNS cutover and certificate activation steps are completed.
+  - left the `run.app` smoke path as the last fully validated ingress path until DNS cutover and final HTTPS smoke complete.
+- 2026-03-23: Final-domain DNS cutover and frontend promotion completed:
+  - removed the legacy Cloudflare CNAMEs that still pointed `app.ceiora.com` at Vercel and `api.ceiora.com` at Railway,
+  - applied the Terraform-managed Cloudflare A records so `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com` now resolve to `34.50.154.73`,
+  - promoted the frontend Cloud Run service to the final-domain image `frontend:20260323-finaldomain-r1` with `https://api.ceiora.com` and `https://control.ceiora.com` origins,
+  - verified the HTTP listener redirects to HTTPS on the final domains,
+  - left Slice 7 validation open until the Google-managed certificate becomes `ACTIVE` and final HTTPS smoke passes.

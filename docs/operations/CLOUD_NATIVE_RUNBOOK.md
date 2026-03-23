@@ -2,14 +2,14 @@
 
 Date: 2026-03-21
 Owner: Codex
-Status: `run.app` rollout live and validated, Google-side custom-domain ingress staged, Cloudflare DNS cutover still pending
+Status: `run.app` rollout live and validated, Cloudflare DNS cutover completed, managed-certificate activation and final HTTPS validation pending
 
 ## Purpose
 
 Define the process split and environment contract needed to run the app in a cloud-native shape without relying on one all-in-one web process.
 
 This runbook now covers the live Cloud Run rollout path as well as the remaining cutover steps.
-The `run.app` rollout is live; the final custom-domain cutover is still incomplete.
+The `run.app` rollout is live, Cloudflare DNS now points `app` / `api` / `control` at the GCP load balancer, and the frontend is already promoted to the final-domain image. The remaining gate is Google managed-certificate activation followed by final HTTPS smoke.
 
 ## Frozen Production Hostnames
 
@@ -346,10 +346,10 @@ Before using these split surfaces for real deployment:
   - eligibility reads needed to use Neon/core-read paths instead of SQLite-only source tables,
   - the control service needed to reconcile persisted `running` refresh state against terminal Cloud Run execution status so OOM-killed jobs do not remain stuck forever.
 - Those repo fixes are now in place.
-- Current remaining rollout blockers before custom-domain cutover:
-  - promote the now-created GCP ingress surface at `34.50.154.73` by switching Cloudflare DNS for `app`, `api`, and `control`,
-  - wait for the managed certificate to move from `PROVISIONING` to `ACTIVE` after DNS points at that IP,
-  - switch the frontend service to the final-domain image built against `https://api.ceiora.com`,
+- Current remaining rollout blockers before final-domain validation can be closed:
+  - wait for the managed certificate to move from `PROVISIONING` to `ACTIVE` now that Cloudflare DNS points `app`, `api`, and `control` at `34.50.154.73`,
+  - run final HTTPS smoke against `app.ceiora.com`, `api.ceiora.com`, `control.ceiora.com`, and the frontend-proxied control routes after that activation.
+- Separate cloud caveat still open after cutover:
   - address `security_master` parity if projection-only loadings should become available in cloud mode instead of remaining fail-closed/unavailable.
 - Latest validated `run.app` state:
   - the control service account can now read `serve-refresh` execution status and reconcile stale `running` rows,
@@ -359,6 +359,8 @@ Before using these split surfaces for real deployment:
   - cloud control misconfiguration now fails closed instead of falling back to the local in-process refresh manager,
   - the final-domain frontend image is already published as `frontend:20260323-finaldomain-r1`,
   - the Google load balancer, serverless NEGs, forwarding rules, and managed certificate resource are live on `34.50.154.73`,
+  - Cloudflare DNS now points `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com` at that shared ingress IP,
+  - the frontend Cloud Run service is already running the final-domain bake against `https://api.ceiora.com` and `https://control.ceiora.com`,
   - projection-only loadings still warn and degrade unavailable when `security_master` parity is absent, but the refresh path remains green and publishes serving payloads.
 
 ## Control Smoke
