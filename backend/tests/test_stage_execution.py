@@ -34,6 +34,7 @@ def test_run_selected_stages_routes_neon_workspace_into_core_and_serving_refresh
     def _run_stage(**kwargs):
         captured.append(
             {
+                "run_id": kwargs["run_id"],
                 "stage": kwargs["stage"],
                 "data_db": kwargs["data_db"],
                 "cache_db": kwargs["cache_db"],
@@ -87,6 +88,7 @@ def test_run_selected_stages_routes_neon_workspace_into_core_and_serving_refresh
     assert out["neon_mirror_cache_path"] == workspace_cache_db.resolve()
 
     by_stage = {str(item["stage"]): item for item in captured}
+    assert all(item["run_id"] == "run_1" for item in captured)
     assert by_stage["source_sync"]["data_db"] == local_data_db
     assert by_stage["source_sync"]["cache_db"] == local_cache_db
     assert by_stage["neon_readiness"]["workspace_root"] == tmp_path / "neon_rebuild_workspace" / "run_1"

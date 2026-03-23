@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -28,6 +29,20 @@ def _execution_url() -> str:
     )
 
 
+def _execution_resource_name(execution_name: str) -> str:
+    clean = str(execution_name or "").strip()
+    if not clean:
+        raise ValueError("Cloud Run execution name is required.")
+    if clean.startswith("projects/"):
+        return clean
+    if not dispatch_enabled():
+        raise RuntimeError("Cloud Run Jobs dispatch is not configured for serve-refresh.")
+    return (
+        f"projects/{config.CLOUD_RUN_PROJECT_ID}/locations/{config.CLOUD_RUN_REGION}/"
+        f"jobs/{config.SERVE_REFRESH_CLOUD_RUN_JOB_NAME}/executions/{clean}"
+    )
+
+
 def _access_token() -> str:
     credentials, _ = google.auth.default(scopes=[_SCOPE])
     credentials.refresh(Request())
@@ -35,6 +50,20 @@ def _access_token() -> str:
     if not token:
         raise RuntimeError("Google application credentials did not return an access token.")
     return token
+
+
+def _request_json(url: str, *, method: str = "GET", payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    req = urllib.request.Request(
+        url,
+        data=(json.dumps(payload).encode("utf-8") if payload is not None else None),
+        headers={
+            "Authorization": f"Bearer {_access_token()}",
+            "Content-Type": "application/json",
+        },
+        method=method,
+    )
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8") or "{}")
 
 
 def _env_overrides(
@@ -93,18 +122,52 @@ def dispatch_serve_refresh(
             ]
         }
     }
-    req = urllib.request.Request(
-        _execution_url(),
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {_access_token()}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=30) as response:
-        body = json.loads(response.read().decode("utf-8") or "{}")
+    body = _request_json(_execution_url(), method="POST", payload=payload)
     return {
         "execution_name": body.get("name"),
         "metadata": body,
+    }
+
+
+def describe_execution(execution_name: str) -> dict[str, Any]:
+    resource_name = _execution_resource_name(execution_name)
+    try:
+        return _request_json(f"https://run.googleapis.com/v2/{resource_name}")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise FileNotFoundError(f"Cloud Run execution not found: {resource_name}") from exc
+        raise
+
+
+def execution_terminal_summary(execution: dict[str, Any]) -> dict[str, Any]:
+    conditions = execution.get("conditions") or execution.get("status", {}).get("conditions") or []
+    completed = next(
+        (cond for cond in conditions if str(cond.get("type") or "").strip() == "Completed"),
+        {},
+    )
+    state = str(completed.get("state") or completed.get("status") or "").strip()
+    finished_at = (
+        str(execution.get("completionTime") or execution.get("status", {}).get("completionTime") or "").strip()
+        or None
+    )
+    message = str(completed.get("message") or "").strip() or None
+    if state in {"CONDITION_SUCCEEDED", "True", "true"}:
+        return {
+            "terminal": True,
+            "status": "ok",
+            "finished_at": finished_at,
+            "message": message,
+        }
+    if state in {"CONDITION_FAILED", "False", "false"}:
+        return {
+            "terminal": True,
+            "status": "failed",
+            "finished_at": finished_at,
+            "message": message,
+        }
+    return {
+        "terminal": False,
+        "status": "running",
+        "finished_at": finished_at,
+        "message": message,
     }

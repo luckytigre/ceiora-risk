@@ -1020,6 +1020,51 @@ def test_serving_refresh_skip_risk_engine_prefers_persisted_model_state(monkeypa
     assert reason == "risk_cache_current"
 
 
+def test_serving_refresh_skip_risk_engine_accepts_persisted_authority_artifacts_when_local_cache_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _EmptySQLite:
+        @staticmethod
+        def cache_get_live_first(_key: str, *, db_path=None):
+            return None
+
+    monkeypatch.setattr(
+        run_model_pipeline.runtime_support.model_outputs,
+        "load_latest_rebuild_authority_covariance_payload",
+        lambda: {"factors": ["Market"], "matrix": [[0.04]]},
+    )
+    monkeypatch.setattr(
+        run_model_pipeline.runtime_support.model_outputs,
+        "load_latest_rebuild_authority_specific_risk_payload",
+        lambda: {"AAPL.OQ": {"specific_var": 0.01}},
+    )
+    monkeypatch.setattr(
+        run_model_pipeline.runtime_support.analytics_pipeline,
+        "_resolve_effective_risk_engine_meta",
+        lambda **kwargs: (
+            {
+                "method_version": "current",
+                "last_recompute_date": "2026-03-16",
+                "factor_returns_latest_date": "2026-03-13",
+            },
+            "model_run_metadata",
+        ),
+    )
+    monkeypatch.setattr(
+        run_model_pipeline.runtime_support,
+        "risk_recompute_due",
+        lambda meta, **_kwargs: (False, "within_interval"),
+    )
+
+    skip, reason = run_model_pipeline.runtime_support.serving_refresh_skip_risk_engine(
+        today_utc=run_model_pipeline.date(2026, 3, 16),
+        sqlite_module=_EmptySQLite(),
+    )
+
+    assert skip is True
+    assert reason == "risk_cache_current"
+
+
 def test_get_refresh_status_reconciles_orphaned_running_state(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 

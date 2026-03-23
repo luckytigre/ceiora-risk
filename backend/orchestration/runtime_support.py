@@ -12,7 +12,7 @@ import numpy as np
 from backend import config
 from backend.analytics import pipeline as analytics_pipeline
 from backend.analytics.refresh_policy import latest_factor_return_date, risk_recompute_due
-from backend.data import core_reads, sqlite
+from backend.data import core_reads, model_outputs, sqlite
 from backend.orchestration.profiles import profile_source_sync_required
 
 
@@ -27,9 +27,7 @@ def serialize_covariance(cov) -> dict[str, Any]:
     }
 
 
-def risk_cache_ready(*, cache_db: Path | None = None, sqlite_module=sqlite) -> bool:
-    cov_payload = sqlite_module.cache_get_live_first("risk_engine_cov", db_path=cache_db)
-    specific_payload = sqlite_module.cache_get_live_first("risk_engine_specific_risk", db_path=cache_db)
+def _risk_artifacts_ready(cov_payload: Any, specific_payload: Any) -> bool:
     factors = cov_payload.get("factors") if isinstance(cov_payload, dict) else None
     matrix = cov_payload.get("matrix") if isinstance(cov_payload, dict) else None
     return bool(
@@ -43,6 +41,44 @@ def risk_cache_ready(*, cache_db: Path | None = None, sqlite_module=sqlite) -> b
     )
 
 
+def risk_cache_ready(
+    *,
+    cache_db: Path | None = None,
+    sqlite_module=sqlite,
+    persisted_cov_loader=None,
+    persisted_specific_loader=None,
+) -> bool:
+    cov_payload = sqlite_module.cache_get_live_first("risk_engine_cov", db_path=cache_db)
+    specific_payload = sqlite_module.cache_get_live_first("risk_engine_specific_risk", db_path=cache_db)
+    if _risk_artifacts_ready(cov_payload, specific_payload):
+        return True
+
+    cov_loader = persisted_cov_loader or model_outputs.load_latest_rebuild_authority_covariance_payload
+    specific_loader = persisted_specific_loader or model_outputs.load_latest_rebuild_authority_specific_risk_payload
+    try:
+        persisted_cov_payload = cov_loader()
+    except Exception:
+        persisted_cov_payload = {}
+    try:
+        persisted_specific_payload = specific_loader()
+    except Exception:
+        persisted_specific_payload = {}
+    return _risk_artifacts_ready(persisted_cov_payload, persisted_specific_payload)
+
+
+def resolve_effective_risk_engine_meta(
+    *,
+    cache_db: Path | None = None,
+    sqlite_module=sqlite,
+    resolve_effective_risk_engine_meta_fn=None,
+) -> tuple[dict[str, Any], str]:
+    if resolve_effective_risk_engine_meta_fn is None:
+        resolve_effective_risk_engine_meta_fn = analytics_pipeline._resolve_effective_risk_engine_meta
+    return resolve_effective_risk_engine_meta_fn(
+        fallback_loader=lambda key: sqlite_module.cache_get_live_first(key, db_path=cache_db),
+    )
+
+
 def serving_refresh_skip_risk_engine(
     *,
     today_utc: date,
@@ -50,12 +86,12 @@ def serving_refresh_skip_risk_engine(
     sqlite_module=sqlite,
     resolve_effective_risk_engine_meta_fn=None,
 ) -> tuple[bool, str]:
-    if resolve_effective_risk_engine_meta_fn is None:
-        resolve_effective_risk_engine_meta_fn = analytics_pipeline._resolve_effective_risk_engine_meta
     if not risk_cache_ready(cache_db=cache_db, sqlite_module=sqlite_module):
         return False, "risk_cache_missing"
-    risk_engine_meta, _ = resolve_effective_risk_engine_meta_fn(
-        fallback_loader=lambda key: sqlite_module.cache_get_live_first(key, db_path=cache_db),
+    risk_engine_meta, _ = resolve_effective_risk_engine_meta(
+        cache_db=cache_db,
+        sqlite_module=sqlite_module,
+        resolve_effective_risk_engine_meta_fn=resolve_effective_risk_engine_meta_fn,
     )
     should_recompute, recompute_reason = risk_recompute_due(
         risk_engine_meta,

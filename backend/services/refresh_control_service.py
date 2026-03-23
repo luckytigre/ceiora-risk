@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -15,6 +16,8 @@ from backend.services.refresh_status_service import load_persisted_refresh_statu
 from backend.services.refresh_status_service import persist_refresh_status
 from backend.services.refresh_status_service import try_claim_refresh_status
 
+logger = logging.getLogger(__name__)
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -25,6 +28,89 @@ def _persist_state(**updates: Any) -> dict[str, Any]:
     state.update(updates)
     persist_refresh_status(state)
     return state
+
+
+def _reconcile_cloud_run_refresh_state(current: dict[str, Any] | None = None) -> dict[str, Any]:
+    state = dict(current or load_persisted_refresh_status())
+    if str(state.get("status") or "").strip() != "running":
+        return state
+    if str(state.get("dispatch_backend") or "").strip() != "cloud_run_job":
+        return state
+    execution_name = str(state.get("dispatch_id") or state.get("job_id") or "").strip()
+    if not execution_name:
+        return state
+    try:
+        execution = cloud_run_jobs.describe_execution(execution_name)
+        terminal = cloud_run_jobs.execution_terminal_summary(execution)
+    except FileNotFoundError:
+        return state
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to inspect Cloud Run execution %s for refresh reconciliation", execution_name)
+        return state
+    if not bool(terminal.get("terminal")):
+        return state
+
+    latest = load_persisted_refresh_status()
+    if str(latest.get("status") or "").strip() != "running":
+        return latest
+    latest_execution = str(latest.get("dispatch_id") or latest.get("job_id") or "").strip()
+    if latest_execution != execution_name:
+        return latest
+
+    status = "ok" if str(terminal.get("status") or "").strip() == "ok" else "failed"
+    message = str(terminal.get("message") or "").strip() or None
+    try:
+        mark_refresh_finished(
+            profile=str(latest.get("profile") or "").strip() or None,
+            run_id=str(latest.get("pipeline_run_id") or "").strip() or None,
+            status=status,
+            message=message,
+            clear_pending=(status == "ok"),
+        )
+    except Exception:
+        logger.exception("Failed to reconcile holdings refresh terminal state from Cloud Run execution")
+
+    latest.update(
+        status=status,
+        finished_at=str(terminal.get("finished_at") or _now_iso()).strip(),
+        current_stage=None,
+        current_stage_substage=None,
+        current_stage_substage_status=None,
+        current_stage_diagnostics_section=None,
+        stage_started_at=None,
+        current_stage_message=None,
+        current_stage_progress_pct=None,
+        current_stage_items_processed=None,
+        current_stage_items_total=None,
+        current_stage_unit=None,
+        current_stage_heartbeat_at=None,
+        result=(
+            {
+                "status": "ok",
+                "dispatch_backend": "cloud_run_job",
+                "execution_name": execution_name,
+                "reconciled": True,
+            }
+            if status == "ok"
+            else None
+        ),
+        error=(
+            None
+            if status == "ok"
+            else {
+                "type": "cloud_run_job_failed",
+                "message": message or "Cloud Run Job execution terminated without updating refresh status.",
+            }
+        ),
+        dispatch_backend="cloud_run_job",
+        dispatch_id=execution_name,
+    )
+    persist_refresh_status(latest)
+    return latest
+
+
+def _load_reconciled_refresh_status() -> dict[str, Any]:
+    return _reconcile_cloud_run_refresh_state(load_persisted_refresh_status())
 
 
 def start_refresh(
@@ -59,6 +145,9 @@ def start_refresh(
         force_core=force_core,
         force_risk_recompute=force_risk_recompute,
     )
+    current = _load_reconciled_refresh_status()
+    if str(current.get("status") or "").strip() == "running":
+        return False, current
     job_id = uuid.uuid4().hex[:12]
     pipeline_run_id = (str(resume_run_id).strip() if resume_run_id else f"crj_{job_id}")
     now = _now_iso()
@@ -140,7 +229,7 @@ def start_refresh(
 
 def get_refresh_status() -> dict[str, Any]:
     if config.serve_refresh_cloud_job_configured():
-        return load_persisted_refresh_status()
+        return _load_reconciled_refresh_status()
 
     from backend.services.refresh_manager import get_refresh_status as _get_refresh_status
 

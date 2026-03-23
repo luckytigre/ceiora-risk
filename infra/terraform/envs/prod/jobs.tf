@@ -16,6 +16,13 @@ resource "google_cloud_run_v2_job" "serve_refresh" {
         image   = local.control_image_ref
         command = ["python", "-m", "backend.scripts.run_refresh_job"]
 
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "4Gi"
+          }
+        }
+
         env {
           name  = "APP_RUNTIME_ROLE"
           value = "cloud-serve"

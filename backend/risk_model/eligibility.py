@@ -10,6 +10,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
+from backend.data import core_read_backend as core_backend
 from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
 from backend.data.trbc_schema import (
     ensure_trbc_naming,
@@ -36,6 +37,36 @@ class EligibilityContext:
     trbc_industry_panel: pd.DataFrame
     hq_country_code_panel: pd.DataFrame
     dates: list[str]
+
+
+def _use_neon_reads() -> bool:
+    return core_backend.use_neon_core_reads()
+
+
+def _fetch_rows(data_db: Path, sql: str, params: list[object] | None = None) -> list[dict[str, object]]:
+    return core_backend.fetch_rows(
+        sql,
+        params,
+        data_db=data_db,
+        neon_enabled=_use_neon_reads(),
+    )
+
+
+def _table_columns_neon(data_db: Path, table: str) -> set[str]:
+    rows = _fetch_rows(
+        data_db,
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema='public' AND table_name=?
+        """,
+        [table],
+    )
+    return {
+        str(row.get("column_name") or "")
+        for row in rows
+        if str(row.get("column_name") or "").strip()
+    }
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -93,6 +124,17 @@ def most_recent_date(sorted_dates: list[str], target: str) -> str | None:
 
 
 def load_trading_dates(data_db: Path) -> list[str]:
+    if _use_neon_reads():
+        rows = _fetch_rows(
+            data_db,
+            """
+            SELECT DISTINCT date
+            FROM security_prices_eod
+            WHERE date IS NOT NULL
+            ORDER BY date
+            """,
+        )
+        return [str(row.get("date")) for row in rows if row.get("date")]
     conn = sqlite3.connect(str(data_db))
     try:
         rows = conn.execute(
@@ -114,11 +156,9 @@ def load_exposure_snapshots(
     dates: list[str] | None = None,
 ) -> tuple[list[str], dict[str, pd.DataFrame]]:
     """Load exposure snapshots keyed by as_of_date (RIC-indexed)."""
-    conn = sqlite3.connect(str(data_db))
-    try:
-        ensure_trbc_naming(conn)
+    if _use_neon_reads():
         source_table = "barra_raw_cross_section_history"
-        cols = _table_columns(conn, source_table)
+        cols = _table_columns_neon(data_db, source_table)
         if not {"ric", "as_of_date"}.issubset(cols):
             return [], {}
         style_cols = [c for c in STYLE_COLUMN_TO_LABEL.keys() if c in cols]
@@ -132,16 +172,17 @@ def load_exposure_snapshots(
         upper_bound: str | None = None
         if requested_dates:
             upper_bound = requested_dates[-1]
-            snapshot_rows = conn.execute(
+            snapshot_rows = _fetch_rows(
+                data_db,
                 f"""
                 SELECT DISTINCT as_of_date
                 FROM {source_table}
                 WHERE as_of_date <= ?
                 ORDER BY as_of_date
                 """,
-                (upper_bound,),
-            ).fetchall()
-            snapshot_dates = [str(row[0]) for row in snapshot_rows if row and row[0]]
+                [upper_bound],
+            )
+            snapshot_dates = [str(row.get("as_of_date")) for row in snapshot_rows if row.get("as_of_date")]
             lower_bound = most_recent_date(snapshot_dates, requested_dates[0])
             if lower_bound is None:
                 return [], {}
@@ -149,18 +190,65 @@ def load_exposure_snapshots(
             where_clause = "WHERE as_of_date >= ? AND as_of_date <= ?"
         else:
             where_clause = ""
-        df = pd.read_sql_query(
+        rows = _fetch_rows(
+            data_db,
             f"""
             SELECT UPPER(ric) AS ric, UPPER(ticker) AS ticker, as_of_date, {", ".join(style_cols)}, {business_select}
             FROM {source_table}
             {where_clause}
             ORDER BY as_of_date, ric
             """,
-            conn,
-            params=params,
+            params,
         )
-    finally:
-        conn.close()
+        df = pd.DataFrame(rows)
+    else:
+        conn = sqlite3.connect(str(data_db))
+        try:
+            ensure_trbc_naming(conn)
+            source_table = "barra_raw_cross_section_history"
+            cols = _table_columns(conn, source_table)
+            if not {"ric", "as_of_date"}.issubset(cols):
+                return [], {}
+            style_cols = [c for c in STYLE_COLUMN_TO_LABEL.keys() if c in cols]
+            business_col = pick_trbc_business_sector_column(cols)
+            business_select = (
+                f"{business_col} AS trbc_business_sector" if business_col else "NULL AS trbc_business_sector"
+            )
+            requested_dates = sorted({str(d) for d in (dates or []) if str(d).strip()})
+            params: list[str] = []
+            lower_bound: str | None = None
+            upper_bound: str | None = None
+            if requested_dates:
+                upper_bound = requested_dates[-1]
+                snapshot_rows = conn.execute(
+                    f"""
+                    SELECT DISTINCT as_of_date
+                    FROM {source_table}
+                    WHERE as_of_date <= ?
+                    ORDER BY as_of_date
+                    """,
+                    (upper_bound,),
+                ).fetchall()
+                snapshot_dates = [str(row[0]) for row in snapshot_rows if row and row[0]]
+                lower_bound = most_recent_date(snapshot_dates, requested_dates[0])
+                if lower_bound is None:
+                    return [], {}
+                params.extend([lower_bound, upper_bound])
+                where_clause = "WHERE as_of_date >= ? AND as_of_date <= ?"
+            else:
+                where_clause = ""
+            df = pd.read_sql_query(
+                f"""
+                SELECT UPPER(ric) AS ric, UPPER(ticker) AS ticker, as_of_date, {", ".join(style_cols)}, {business_select}
+                FROM {source_table}
+                {where_clause}
+                ORDER BY as_of_date, ric
+                """,
+                conn,
+                params=params,
+            )
+        finally:
+            conn.close()
     if df.empty:
         return [], {}
 
@@ -187,20 +275,34 @@ def load_exposure_snapshots(
 def _load_market_cap_panel(data_db: Path, dates: list[str]) -> pd.DataFrame:
     if not dates:
         return pd.DataFrame()
-    conn = sqlite3.connect(str(data_db))
-    try:
-        df = pd.read_sql_query(
-            """
-            SELECT UPPER(f.ric) AS ric, f.as_of_date AS fetch_date, f.market_cap
-            FROM security_fundamentals_pit f
-            WHERE f.as_of_date <= ?
-            ORDER BY f.as_of_date, UPPER(f.ric)
-            """,
-            conn,
-            params=(dates[-1],),
+    if _use_neon_reads():
+        df = pd.DataFrame(
+            _fetch_rows(
+                data_db,
+                """
+                SELECT UPPER(f.ric) AS ric, f.as_of_date AS fetch_date, f.market_cap
+                FROM security_fundamentals_pit f
+                WHERE f.as_of_date <= ?
+                ORDER BY f.as_of_date, UPPER(f.ric)
+                """,
+                [dates[-1]],
+            )
         )
-    finally:
-        conn.close()
+    else:
+        conn = sqlite3.connect(str(data_db))
+        try:
+            df = pd.read_sql_query(
+                """
+                SELECT UPPER(f.ric) AS ric, f.as_of_date AS fetch_date, f.market_cap
+                FROM security_fundamentals_pit f
+                WHERE f.as_of_date <= ?
+                ORDER BY f.as_of_date, UPPER(f.ric)
+                """,
+                conn,
+                params=(dates[-1],),
+            )
+        finally:
+            conn.close()
     if df.empty:
         return pd.DataFrame(index=dates)
     df["ric"] = df["ric"].astype(str).str.upper()
@@ -224,20 +326,17 @@ def _load_trbc_classification_panel(
     if not dates:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    conn = sqlite3.connect(str(data_db))
-    try:
-        ensure_trbc_naming(conn)
-        parts: list[pd.DataFrame] = []
-
-        # Historical TRBC table (single source of truth for point-in-time classes).
-        if _table_exists(conn, "security_classification_pit"):
-            hcols = _table_columns(conn, "security_classification_pit")
-            h_biz_col = pick_trbc_business_sector_column(hcols)
-            h_ind_col = pick_trbc_industry_column(hcols)
-            h_sec_col = _pick_trbc_economic_sector_short_column(hcols)
-            if h_biz_col and h_sec_col:
-                ind_expr = f"h.{h_ind_col}" if h_ind_col else "NULL"
-                hist = pd.read_sql_query(
+    parts: list[pd.DataFrame] = []
+    if _use_neon_reads():
+        hcols = _table_columns_neon(data_db, "security_classification_pit")
+        h_biz_col = pick_trbc_business_sector_column(hcols)
+        h_ind_col = pick_trbc_industry_column(hcols)
+        h_sec_col = _pick_trbc_economic_sector_short_column(hcols)
+        if h_biz_col and h_sec_col:
+            ind_expr = f"h.{h_ind_col}" if h_ind_col else "NULL"
+            hist = pd.DataFrame(
+                _fetch_rows(
+                    data_db,
                     f"""
                     SELECT UPPER(h.ric) AS ric,
                            h.as_of_date AS ref_date,
@@ -248,14 +347,44 @@ def _load_trbc_classification_panel(
                     FROM security_classification_pit h
                     WHERE h.as_of_date <= ?
                     """,
-                    conn,
-                    params=(dates[-1],),
+                    [dates[-1]],
                 )
-                if not hist.empty:
-                    hist["priority"] = 2
-                    parts.append(hist)
-    finally:
-        conn.close()
+            )
+            if not hist.empty:
+                hist["priority"] = 2
+                parts.append(hist)
+    else:
+        conn = sqlite3.connect(str(data_db))
+        try:
+            ensure_trbc_naming(conn)
+
+            # Historical TRBC table (single source of truth for point-in-time classes).
+            if _table_exists(conn, "security_classification_pit"):
+                hcols = _table_columns(conn, "security_classification_pit")
+                h_biz_col = pick_trbc_business_sector_column(hcols)
+                h_ind_col = pick_trbc_industry_column(hcols)
+                h_sec_col = _pick_trbc_economic_sector_short_column(hcols)
+                if h_biz_col and h_sec_col:
+                    ind_expr = f"h.{h_ind_col}" if h_ind_col else "NULL"
+                    hist = pd.read_sql_query(
+                        f"""
+                        SELECT UPPER(h.ric) AS ric,
+                               h.as_of_date AS ref_date,
+                               h.{h_sec_col} AS trbc_economic_sector_short,
+                               h.{h_biz_col} AS trbc_business_sector,
+                               {ind_expr} AS trbc_industry_group,
+                               COALESCE(UPPER(TRIM(h.hq_country_code)), '') AS hq_country_code
+                        FROM security_classification_pit h
+                        WHERE h.as_of_date <= ?
+                        """,
+                        conn,
+                        params=(dates[-1],),
+                    )
+                    if not hist.empty:
+                        hist["priority"] = 2
+                        parts.append(hist)
+        finally:
+            conn.close()
 
     if not parts:
         empty = pd.DataFrame(index=dates)
@@ -320,12 +449,11 @@ def _load_panels_from_cross_section_snapshot(
     if not dates:
         empty = pd.DataFrame()
         return empty, empty, empty, empty
-    conn = sqlite3.connect(str(data_db))
-    try:
-        if not _table_exists(conn, "universe_cross_section_snapshot"):
+    if _use_neon_reads():
+        cols = _table_columns_neon(data_db, "universe_cross_section_snapshot")
+        if not cols:
             empty = pd.DataFrame()
             return empty, empty, empty, empty
-        cols = _table_columns(conn, "universe_cross_section_snapshot")
         sector_expr_parts: list[str] = []
         if "trbc_economic_sector_short" in cols:
             sector_expr_parts.append("NULLIF(trbc_economic_sector_short, '')")
@@ -348,24 +476,71 @@ def _load_panels_from_cross_section_snapshot(
             if business_expr_parts
             else "'' AS trbc_business_sector"
         )
-        df = pd.read_sql_query(
-            f"""
-            SELECT
-                ticker,
-                as_of_date AS ref_date,
-                market_cap,
-                {sector_expr},
-                {business_expr},
-                trbc_industry_group
-            FROM universe_cross_section_snapshot
-            WHERE as_of_date <= ?
-            ORDER BY as_of_date, ticker
-            """,
-            conn,
-            params=(dates[-1],),
+        df = pd.DataFrame(
+            _fetch_rows(
+                data_db,
+                f"""
+                SELECT
+                    ticker,
+                    as_of_date AS ref_date,
+                    market_cap,
+                    {sector_expr},
+                    {business_expr},
+                    trbc_industry_group
+                FROM universe_cross_section_snapshot
+                WHERE as_of_date <= ?
+                ORDER BY as_of_date, ticker
+                """,
+                [dates[-1]],
+            )
         )
-    finally:
-        conn.close()
+    else:
+        conn = sqlite3.connect(str(data_db))
+        try:
+            if not _table_exists(conn, "universe_cross_section_snapshot"):
+                empty = pd.DataFrame()
+                return empty, empty, empty, empty
+            cols = _table_columns(conn, "universe_cross_section_snapshot")
+            sector_expr_parts: list[str] = []
+            if "trbc_economic_sector_short" in cols:
+                sector_expr_parts.append("NULLIF(trbc_economic_sector_short, '')")
+            if "trbc_sector" in cols:
+                sector_expr_parts.append("NULLIF(trbc_sector, '')")
+            if "trbc_economic_sector" in cols:
+                sector_expr_parts.append("NULLIF(trbc_economic_sector, '')")
+            sector_expr = (
+                f"COALESCE({', '.join(sector_expr_parts)}, '') AS trbc_economic_sector_short"
+                if sector_expr_parts
+                else "'' AS trbc_economic_sector_short"
+            )
+            business_expr_parts: list[str] = []
+            if "trbc_business_sector" in cols:
+                business_expr_parts.append("NULLIF(trbc_business_sector, '')")
+            if "business_sector" in cols:
+                business_expr_parts.append("NULLIF(business_sector, '')")
+            business_expr = (
+                f"COALESCE({', '.join(business_expr_parts)}, '') AS trbc_business_sector"
+                if business_expr_parts
+                else "'' AS trbc_business_sector"
+            )
+            df = pd.read_sql_query(
+                f"""
+                SELECT
+                    ticker,
+                    as_of_date AS ref_date,
+                    market_cap,
+                    {sector_expr},
+                    {business_expr},
+                    trbc_industry_group
+                FROM universe_cross_section_snapshot
+                WHERE as_of_date <= ?
+                ORDER BY as_of_date, ticker
+                """,
+                conn,
+                params=(dates[-1],),
+            )
+        finally:
+            conn.close()
     if df.empty:
         empty = pd.DataFrame()
         return empty, empty, empty, empty

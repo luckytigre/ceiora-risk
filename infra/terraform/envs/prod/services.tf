@@ -269,6 +269,14 @@ resource "google_cloud_run_v2_job_iam_member" "control_dispatch_invoker" {
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.serve_refresh.name
-  role     = "roles/run.invoker"
+  role     = "roles/run.jobsExecutorWithOverrides"
+  member   = "serviceAccount:${module.service_accounts.email_by_key["control"]}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "control_execution_viewer" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_job.serve_refresh.name
+  role     = "roles/run.viewer"
   member   = "serviceAccount:${module.service_accounts.email_by_key["control"]}"
 }

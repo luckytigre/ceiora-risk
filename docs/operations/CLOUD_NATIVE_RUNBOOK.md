@@ -2,7 +2,7 @@
 
 Date: 2026-03-21
 Owner: Codex
-Status: Prep complete, deployment not yet executed
+Status: `run.app` rollout validated, final custom-domain cutover not yet complete
 
 ## Purpose
 
@@ -208,6 +208,8 @@ Operator build entrypoints:
 - `make cloud-images-push`
 - `scripts/cloud/build_images.sh`
 - `scripts/cloud/build_and_push_images.sh`
+- the repo-owned Cloud Run image path now explicitly builds `linux/amd64` images via `docker buildx`; do not use the plain host-architecture Docker default for rollout images.
+- the same scripts also support `BUILD_TARGETS=frontend` for the temporary `run.app` smoke rebuild, so the smoke exception can retarget only the frontend image without rebuilding serve/control.
 
 Build-time contract:
 - the frontend image reads `BACKEND_API_ORIGIN` at build time so the Next rewrite proxy is baked for the target serve API host
@@ -296,6 +298,7 @@ Before using these split surfaces for real deployment:
 - final-domain default:
   - build/push frontend against `https://api.ceiora.com`
   - build/push serve and control normally
+  - use the repo-owned scripts so the published images stay `linux/amd64` for Cloud Run
 - `run.app` smoke exception:
   - apply the Cloud Run services first,
   - capture the serve `run.app` URL from Terraform outputs,
@@ -307,6 +310,7 @@ Before using these split surfaces for real deployment:
 - serve `/api/cpar/meta`
 - control `/api/refresh/status` with `X-Operator-Token`
 - verify the control service can dispatch the `serve-refresh` Cloud Run Job
+  - the control service's job IAM must allow execution overrides because the dispatch path sets env overrides on the Cloud Run Job request
 
 5. Cut over custom domains
 - apply the ingress and DNS resources
@@ -316,6 +320,32 @@ Before using these split surfaces for real deployment:
   - `https://app.ceiora.com`
   - `https://api.ceiora.com`
   - `https://control.ceiora.com`
+
+## Current Rollout Notes
+
+- `run.app` deployment is now live for:
+  - frontend
+  - serve
+  - control
+  - `serve-refresh` Cloud Run Job
+- Basic `run.app` smoke already passed for:
+  - frontend root
+  - serve `/api/cpar/meta`
+  - control `/api/refresh/status`
+  - control dispatch of `serve-refresh`
+- The first cloud `serve-refresh` attempts surfaced three cloud-only follow-ups:
+  - persisted risk-artifact reuse needed to honor runtime-state risk metadata when it outranks stale model-run metadata,
+  - eligibility reads needed to use Neon/core-read paths instead of SQLite-only source tables,
+  - the control service needed to reconcile persisted `running` refresh state against terminal Cloud Run execution status so OOM-killed jobs do not remain stuck forever.
+- Those repo fixes are now in place.
+- Current remaining rollout blockers before custom-domain cutover:
+  - decide when to promote the validated `run.app` rollout state to the final-domain cutover,
+  - address `security_master` parity if projection-only loadings should become available in cloud mode instead of remaining fail-closed/unavailable.
+- Latest validated `run.app` state:
+  - the control service account can now read `serve-refresh` execution status and reconcile stale `running` rows,
+  - a fresh `serve-refresh` Cloud Run Job run completed successfully with the `4Gi` memory limit,
+  - the frontend `run.app` surface successfully proxies both serve and control routes,
+  - projection-only loadings still warn and degrade unavailable when `security_master` parity is absent, but the refresh path remains green and publishes serving payloads.
 
 ## Control Smoke
 

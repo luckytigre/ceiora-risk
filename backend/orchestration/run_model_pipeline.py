@@ -427,8 +427,12 @@ def run_model_pipeline(
     else:
         as_of = stage_planning.current_xnys_session(datetime_cls=datetime)
     today_utc = datetime.fromisoformat(stage_planning.current_xnys_session(datetime_cls=datetime)).date()
+    effective_risk_engine_meta, _ = runtime_support.resolve_effective_risk_engine_meta(
+        cache_db=CACHE_DB,
+        sqlite_module=sqlite,
+    )
     due, due_reason = runtime_support.risk_recompute_due(
-        sqlite.cache_get_live_first("risk_engine_meta") or {},
+        effective_risk_engine_meta,
         today_utc=today_utc,
         method_version=RISK_ENGINE_METHOD_VERSION,
         interval_days=config.RISK_RECOMPUTE_INTERVAL_DAYS,

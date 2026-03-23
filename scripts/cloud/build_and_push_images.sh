@@ -9,6 +9,7 @@ REGION="${REGION:-us-east4}"
 REPOSITORY="${REPOSITORY:-ceiora-images}"
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 BACKEND_API_ORIGIN="${BACKEND_API_ORIGIN:-https://api.ceiora.com}"
+CLOUD_RUN_PLATFORM="${CLOUD_RUN_PLATFORM:-linux/amd64}"
 
 REGISTRY_BASE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}"
 FRONTEND_IMAGE="${FRONTEND_IMAGE:-${REGISTRY_BASE}/frontend:${IMAGE_TAG}}"
@@ -22,13 +23,11 @@ REGION="${REGION}" \
 REPOSITORY="${REPOSITORY}" \
 IMAGE_TAG="${IMAGE_TAG}" \
 BACKEND_API_ORIGIN="${BACKEND_API_ORIGIN}" \
+CLOUD_RUN_PLATFORM="${CLOUD_RUN_PLATFORM}" \
+BUILD_OUTPUT="push" \
 FRONTEND_IMAGE="${FRONTEND_IMAGE}" \
 SERVE_IMAGE="${SERVE_IMAGE}" \
 CONTROL_IMAGE="${CONTROL_IMAGE}" \
 ./scripts/cloud/build_images.sh
 
-docker push "${FRONTEND_IMAGE}"
-docker push "${SERVE_IMAGE}"
-docker push "${CONTROL_IMAGE}"
-
-printf 'Pushed images:\n- %s\n- %s\n- %s\n' "${FRONTEND_IMAGE}" "${SERVE_IMAGE}" "${CONTROL_IMAGE}"
+printf 'Pushed images for %s:\n- %s\n- %s\n- %s\n' "${CLOUD_RUN_PLATFORM}" "${FRONTEND_IMAGE}" "${SERVE_IMAGE}" "${CONTROL_IMAGE}"

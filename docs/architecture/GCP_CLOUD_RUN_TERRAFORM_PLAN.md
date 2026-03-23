@@ -412,23 +412,24 @@ Do not treat this as optional if the goal is a durable cloud-native runtime.
 - [x] Freeze temporary Cloud Run layer access for smoke:
   - all three services are explicitly internet-reachable at `run.app`,
   - control remains token-protected in-app even though Cloud Run ingress is public for the first smoke phase.
-- [ ] Deploy frontend and serve first against default `run.app` hostnames for smoke validation.
-- [ ] Freeze the temporary control-origin coexistence rule for this phase:
+- [x] Deploy frontend and serve first against default `run.app` hostnames for smoke validation.
+- [x] Freeze the temporary control-origin coexistence rule for this phase:
   - either operator/control routes are intentionally unavailable in the public smoke environment,
   - or the cloud frontend points `BACKEND_CONTROL_ORIGIN` at the cloud control smoke endpoint only after Slice 6 exists.
 - [ ] Validate:
+- [x] Validate:
   - Neon-backed reads
   - split-origin proxy behavior
   - no local SQLite dependency in cloud mode
-  - expected behavior when operator/control routes are not yet public
+  - expected behavior when operator/control routes remain token-protected through the cloud frontend proxy
   - projection-only instruments and other fail-closed degraded states still behave correctly
 
 ### Slice 6: Control Cloud Run Rollout
 
-- [ ] Deploy the control API after Slice 5 is implemented.
+- [x] Deploy the control API after Slice 5 is implemented.
 - [ ] Validate operator/control routes through `control.ceiora.com`.
 - [ ] Confirm scale-to-zero behavior does not break job dispatch/status visibility.
-- [ ] Keep operator credentials required in cloud mode.
+- [x] Keep operator credentials required in cloud mode.
 
 ### Slice 7: Custom Domains, Ingress, And Certificates
 
@@ -559,3 +560,48 @@ Additional validation by phase:
   - added Cloud Monitoring uptime checks for `app.ceiora.com` and `api.ceiora.com`,
   - explicitly kept `control.ceiora.com` on an operator-token smoke path instead of a public uptime probe,
   - expanded the runbook with the exact secret-version, image-build, Terraform, smoke, and custom-domain sequencing needed for the first live rollout while preserving the local app as a first-class path.
+- 2026-03-23: Live rollout phase 1 completed:
+  - applied the Terraform bootstrap root and created the shared GCS state bucket `ceiora-risk-project-4e18de12-63a3-4206-aaa-tfstate`,
+  - initialized the Terraform `prod` root against that remote backend,
+  - applied the foundation resources needed before runtime secret versions and image pushes:
+    - required project services,
+    - Artifact Registry,
+    - runtime service accounts,
+    - Secret Manager secret containers,
+    - secret accessor IAM bindings,
+  - confirmed the rollout remains on `us-east4` and is ready for runtime secret version provisioning.
+- 2026-03-23: Live rollout phase 2 completed:
+  - added version `1` to all three production runtime secrets in Secret Manager:
+    - `ceiora-prod-neon-database-url`
+    - `ceiora-prod-operator-api-token`
+    - `ceiora-prod-editor-api-token`,
+  - generated fresh operator/editor tokens for the cloud stack and stored them in 1Password as:
+    - `GCP - Ceiora Prod Operator Token`
+    - `GCP - Ceiora Prod Editor Token`,
+  - confirmed the prod root now has the secret material needed for Cloud Run service and job deployment.
+- 2026-03-23: Live rollout phase 3 build-path correction:
+  - the first service deployment attempt failed because the operator workstation published OCI indexes without a guaranteed `linux/amd64` runtime image,
+  - the repo-owned cloud build scripts now default to `docker buildx` with `CLOUD_RUN_PLATFORM=linux/amd64`,
+  - `build_and_push_images.sh` now publishes Cloud Run-compatible images directly instead of relying on a separate `docker push` of host-default artifacts.
+- 2026-03-23: Live rollout phase 4 `run.app` deployment completed:
+  - deployed frontend, serve, control, and the `serve-refresh` Cloud Run Job to `us-east4`,
+  - basic smoke passed against the Cloud Run hostnames:
+    - frontend root,
+    - serve `/api/cpar/meta`,
+    - control `/api/refresh/status`,
+    - control `/api/refresh?profile=serve-refresh` dispatch,
+  - Slice 5 and Slice 6 are now deployed on `run.app`, but final validation remains open until `serve-refresh` finishes cleanly in cloud mode.
+- 2026-03-23: Live rollout phase 5 cloud-runtime fixes landed during the first `serve-refresh` attempts:
+  - cloud `serve-refresh` was incorrectly refusing to reuse richer persisted risk artifacts when runtime state, rather than model-run metadata, was the effective risk-engine source; the pipeline now reuses those artifacts only when the persisted risk metadata matches the effective runtime metadata,
+  - cloud `serve-refresh` was still reading SQLite-only eligibility inputs such as `security_fundamentals_pit`; the risk-model eligibility loaders now use the Neon/core-read backend in cloud mode,
+  - the control-plane refresh owner now reconciles persisted `running` cloud-job state against terminal Cloud Run executions so OOM-killed or otherwise terminated jobs do not leave refresh status permanently stuck.
+- 2026-03-23: Live rollout blockers remaining after the first cloud `serve-refresh` executions:
+  - the Cloud Run Job hit memory pressure at `512Mi` and again at `2Gi`; Terraform raised the `serve-refresh` job memory limit to `4Gi`,
+  - projection-only cloud refresh still warns that `security_master` parity is missing in the cloud runtime path, so those outputs remain explicitly fail-closed/unavailable until that source-of-truth gap is addressed,
+  - final-domain cutover remains blocked until the `run.app` rollout state is deliberately promoted.
+- 2026-03-23: Live rollout phase 6 `run.app` validation completed:
+  - granted the control service account Cloud Run execution-view access on the `serve-refresh` job so persisted refresh state can reconcile against actual Cloud Run executions,
+  - verified the stale `running` refresh row reconciles to terminal `failed` after an OOM-killed execution instead of blocking future dispatch forever,
+  - reran `serve-refresh` under the `4Gi` Cloud Run Job spec and observed a successful execution (`ceiora-prod-serve-refresh-xzl9k`) with Neon-backed serving payload publication,
+  - validated the frontend `run.app` surface proxies both serve (`/api/cpar/meta`) and control (`/api/refresh/status`) correctly with the split-origin cloud wiring,
+  - confirmed projection-only loadings currently degrade unavailable with a warning instead of crashing the refresh path when `security_master` parity is absent.

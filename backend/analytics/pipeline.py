@@ -165,6 +165,27 @@ def _persisted_risk_artifacts_are_richer(
     )
 
 
+def _persisted_risk_artifacts_match_effective_meta(
+    *,
+    effective_risk_engine_meta: dict[str, Any],
+    persisted_risk_engine_state: dict[str, Any],
+) -> bool:
+    effective_method = str(effective_risk_engine_meta.get("method_version") or "").strip()
+    persisted_method = str(persisted_risk_engine_state.get("method_version") or "").strip()
+    effective_factor_date = str(effective_risk_engine_meta.get("factor_returns_latest_date") or "").strip()
+    persisted_factor_date = str(persisted_risk_engine_state.get("factor_returns_latest_date") or "").strip()
+    effective_recompute_date = str(effective_risk_engine_meta.get("last_recompute_date") or "").strip()
+    persisted_recompute_date = str(persisted_risk_engine_state.get("last_recompute_date") or "").strip()
+    return bool(
+        effective_method
+        and effective_factor_date
+        and effective_recompute_date
+        and effective_method == persisted_method
+        and effective_factor_date == persisted_factor_date
+        and effective_recompute_date == persisted_recompute_date
+    )
+
+
 def _specific_risk_by_ticker_view(
     specific_risk_by_security: dict[str, SpecificRiskPayload] | None,
 ) -> dict[str, SpecificRiskPayload]:
@@ -497,32 +518,37 @@ def run_refresh(
     cached_factor_count = _covariance_factor_count(cov)
     cached_specific_count = _specific_risk_entry_count(specific_risk_by_security)
 
-    if risk_engine_meta_source == "model_run_metadata":
-        persisted_cov_payload = model_outputs.load_latest_rebuild_authority_covariance_payload()
-        persisted_specific_payload = model_outputs.load_latest_rebuild_authority_specific_risk_payload()
-        if _persisted_risk_artifacts_are_richer(
-            cached_cov=cov,
-            cached_specific=specific_risk_by_security,
-            persisted_cov_payload=persisted_cov_payload,
-            persisted_specific_payload=persisted_specific_payload,
-        ):
-            persisted_cov = _deserialize_covariance(persisted_cov_payload)
-            if not persisted_cov.empty:
-                cov = persisted_cov
-            if isinstance(persisted_specific_payload, dict) and persisted_specific_payload:
-                specific_risk_by_security = {
-                    str(key): dict(value)
-                    for key, value in persisted_specific_payload.items()
-                    if isinstance(value, dict)
-                }
-            logger.warning(
-                "Using persisted model-output risk artifacts instead of degraded runtime cache: "
-                "cached_factor_count=%s persisted_factor_count=%s cached_specific_count=%s persisted_specific_count=%s",
-                cached_factor_count,
-                int(len(persisted_cov_payload.get('factors') or [])) if isinstance(persisted_cov_payload, dict) else 0,
-                cached_specific_count,
-                _specific_risk_entry_count(persisted_specific_payload),
-            )
+    persisted_risk_engine_state = model_outputs.load_latest_rebuild_authority_risk_engine_state()
+    persisted_cov_payload = model_outputs.load_latest_rebuild_authority_covariance_payload()
+    persisted_specific_payload = model_outputs.load_latest_rebuild_authority_specific_risk_payload()
+    if _persisted_risk_artifacts_match_effective_meta(
+        effective_risk_engine_meta=risk_engine_meta,
+        persisted_risk_engine_state=persisted_risk_engine_state,
+    ) and _persisted_risk_artifacts_are_richer(
+        cached_cov=cov,
+        cached_specific=specific_risk_by_security,
+        persisted_cov_payload=persisted_cov_payload,
+        persisted_specific_payload=persisted_specific_payload,
+    ):
+        persisted_cov = _deserialize_covariance(persisted_cov_payload)
+        if not persisted_cov.empty:
+            cov = persisted_cov
+        if isinstance(persisted_specific_payload, dict) and persisted_specific_payload:
+            specific_risk_by_security = {
+                str(key): dict(value)
+                for key, value in persisted_specific_payload.items()
+                if isinstance(value, dict)
+            }
+        logger.warning(
+            "Using persisted model-output risk artifacts instead of degraded runtime cache: "
+            "cached_factor_count=%s persisted_factor_count=%s cached_specific_count=%s persisted_specific_count=%s "
+            "risk_engine_meta_source=%s",
+            cached_factor_count,
+            int(len(persisted_cov_payload.get('factors') or [])) if isinstance(persisted_cov_payload, dict) else 0,
+            cached_specific_count,
+            _specific_risk_entry_count(persisted_specific_payload),
+            risk_engine_meta_source,
+        )
 
     if skip_risk_engine:
         if cov.empty or not specific_risk_by_security:

@@ -182,6 +182,7 @@ def run_selected_stages(
 
             out = run_stage_fn(
                 profile=profile_key,
+                run_id=effective_run_id,
                 stage=stage,
                 as_of_date=as_of,
                 should_run_core=bool(should_run_core),

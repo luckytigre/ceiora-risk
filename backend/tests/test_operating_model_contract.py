@@ -12,6 +12,7 @@ from backend.portfolio import positions_store
 from backend.services import holdings_runtime_state
 from backend.services import refresh_manager
 
+refresh_execution_module = importlib.import_module("backend.orchestration.refresh_execution")
 run_model_pipeline_module = importlib.import_module("backend.orchestration.run_model_pipeline")
 
 
@@ -1167,6 +1168,303 @@ def test_run_refresh_prefers_live_risk_engine_artifacts_over_active_snapshot(
     assert captured["recompute_reason"] == "orchestrator_precomputed"
 
 
+def test_run_refresh_skip_risk_engine_reuses_persisted_risk_artifacts_when_runtime_state_meta_wins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    source_dates = {
+        "fundamentals_asof": "2026-02-27",
+        "classification_asof": "2026-03-01",
+        "prices_asof": "2026-03-07",
+        "exposures_asof": "2026-03-07",
+    }
+    risk_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-03-07",
+        "factor_returns_latest_date": "2026-03-07",
+        "cross_section_min_age_days": 7,
+        "lookback_days": 504,
+        "specific_risk_ticker_count": 1,
+        "recompute_interval_days": 7,
+        "latest_r2": 0.4,
+    }
+    cached_universe_loadings = {
+        "factors": ["style_beta_score"],
+        "factor_vols": {"style_beta_score": 0.05},
+        "ticker_count": 1,
+        "eligible_ticker_count": 1,
+        "source_dates": dict(source_dates),
+        "risk_engine": dict(risk_meta),
+        "by_ticker": {
+            "AAPL": {
+                "ticker": "AAPL",
+                "price": 100.0,
+                "weight": 1.0,
+                "name": "Apple",
+                "exposures": {"style_beta_score": 1.1},
+                "specific_var": 0.01,
+                "specific_vol": 0.1,
+                "model_status": "core_estimated",
+            }
+        },
+    }
+
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_source_dates",
+        lambda **kwargs: dict(source_dates),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_latest_prices",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not load latest prices")),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_latest_fundamentals",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not load latest fundamentals")),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_raw_cross_section_latest",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not load latest exposures")),
+    )
+    monkeypatch.setattr(pipeline.config, "CUSE4_ENABLE_ESTU_AUDIT", False)
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_effective_risk_engine_meta",
+        lambda **kwargs: (dict(risk_meta), "runtime_state"),
+    )
+
+    def _cache_get(key: str):
+        payloads = {
+            "risk_engine_meta": dict(risk_meta),
+            "risk": {
+                "cov_matrix": {"factors": ["style_beta_score"], "correlation": [[1.0]]},
+            },
+            "universe_loadings": dict(cached_universe_loadings),
+        }
+        return payloads.get(key)
+
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "load_runtime_state",
+        lambda key, fallback_loader=None: _cache_get(key),
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_rebuild_authority_covariance_payload",
+        lambda: {"factors": ["style_beta_score"], "matrix": [[1.0]]},
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_rebuild_authority_risk_engine_state",
+        lambda: dict(risk_meta),
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_rebuild_authority_specific_risk_payload",
+        lambda: {
+            "AAPL.OQ": {
+                "ticker": "AAPL",
+                "specific_var": 0.01,
+                "specific_vol": 0.1,
+            }
+        },
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_build_positions_from_universe",
+        lambda by_ticker: ([{"ticker": "AAPL", "weight": 1.0, "exposures": {"style_beta_score": 1.1}}], 100.0),
+    )
+
+    def _risk_decomposition(**kwargs):
+        assert list(kwargs["cov"].columns) == ["style_beta_score"]
+        assert "AAPL" in kwargs["specific_risk_by_ticker"]
+        return (
+            {"market": 0.0, "industry": 10.0, "style": 20.0, "idio": 70.0},
+            {"market": 0.0, "industry": 0.1, "style": 0.2},
+            [{"factor_id": "style_beta_score", "sensitivity": 0.3, "factor_vol": 0.05}],
+        )
+
+    monkeypatch.setattr(pipeline, "risk_decomposition", _risk_decomposition)
+    monkeypatch.setattr(
+        pipeline,
+        "_compute_position_risk_mix",
+        lambda **kwargs: {"AAPL": {"market": 0.0, "industry": 0.2, "style": 0.3, "idio": 0.5}},
+    )
+    monkeypatch.setattr(pipeline, "_load_latest_factor_coverage", lambda _cache_db, **kwargs: (None, {}))
+    monkeypatch.setattr(
+        pipeline,
+        "_compute_exposures_modes",
+        lambda *args, **kwargs: {"raw": [], "sensitivity": [], "risk_contribution": []},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "stage_refresh_cache_snapshot",
+        lambda **kwargs: captured.update(
+            {
+                "staged_universe_loadings": kwargs["universe_loadings"],
+                "reuse_cached_static_payloads": kwargs["reuse_cached_static_payloads"],
+            }
+        )
+        or {
+            "snapshot_id": "snap_1",
+            "risk_engine_state": {"status": "ok"},
+            "sanity": {"status": "ok"},
+            "health_refreshed": False,
+            "persisted_payloads": {},
+        },
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "persist_model_outputs",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not persist model outputs on holdings-only fast path")),
+    )
+    monkeypatch.setattr(
+        pipeline.serving_outputs,
+        "persist_current_payloads",
+        lambda **kwargs: {"status": "ok", "run_id": kwargs["run_id"]},
+    )
+    monkeypatch.setattr(pipeline.sqlite, "cache_set", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "publish_active_snapshot",
+        lambda snapshot_id, fallback_publisher=None: captured.update({"published": snapshot_id}) or {"status": "ok"},
+    )
+
+    out = pipeline.run_refresh(
+        mode="light",
+        refresh_scope="full",
+        skip_snapshot_rebuild=True,
+        skip_cuse4_foundation=True,
+        skip_risk_engine=True,
+    )
+
+    assert out["status"] == "ok"
+    assert out["model_outputs_write"]["status"] == "skipped"
+    assert out["model_outputs_write"]["reason"] == "risk_engine_reused"
+    assert captured["reuse_cached_static_payloads"] is True
+    assert captured["published"] == "snap_1"
+    assert isinstance(captured["staged_universe_loadings"], dict)
+
+
+def test_run_refresh_skip_risk_engine_does_not_reuse_incompatible_persisted_risk_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_dates = {
+        "fundamentals_asof": "2026-02-27",
+        "classification_asof": "2026-03-01",
+        "prices_asof": "2026-03-07",
+        "exposures_asof": "2026-03-07",
+    }
+    runtime_risk_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-03-07",
+        "factor_returns_latest_date": "2026-03-07",
+        "cross_section_min_age_days": 7,
+        "lookback_days": 504,
+        "specific_risk_ticker_count": 1,
+        "recompute_interval_days": 7,
+    }
+    persisted_risk_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-03-14",
+        "factor_returns_latest_date": "2026-03-14",
+        "cross_section_min_age_days": 7,
+        "lookback_days": 504,
+        "specific_risk_ticker_count": 2,
+        "recompute_interval_days": 7,
+    }
+    cached_universe_loadings = {
+        "factors": ["style_beta_score"],
+        "factor_vols": {"style_beta_score": 0.05},
+        "ticker_count": 1,
+        "eligible_ticker_count": 1,
+        "source_dates": dict(source_dates),
+        "risk_engine": dict(runtime_risk_meta),
+        "by_ticker": {
+            "AAPL": {
+                "ticker": "AAPL",
+                "price": 100.0,
+                "weight": 1.0,
+                "name": "Apple",
+                "exposures": {"style_beta_score": 1.1},
+                "specific_var": 0.01,
+                "specific_vol": 0.1,
+                "model_status": "core_estimated",
+            }
+        },
+    }
+
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_source_dates",
+        lambda **kwargs: dict(source_dates),
+    )
+    monkeypatch.setattr(pipeline.config, "CUSE4_ENABLE_ESTU_AUDIT", False)
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_effective_risk_engine_meta",
+        lambda **kwargs: (dict(runtime_risk_meta), "runtime_state"),
+    )
+
+    def _cache_get(key: str):
+        payloads = {
+            "risk_engine_meta": dict(runtime_risk_meta),
+            "risk": {
+                "cov_matrix": {"factors": ["style_beta_score"], "correlation": [[1.0]]},
+            },
+            "universe_loadings": dict(cached_universe_loadings),
+        }
+        return payloads.get(key)
+
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(pipeline.sqlite, "cache_get_live_first", lambda key, **kwargs: _cache_get(key))
+    monkeypatch.setattr(
+        pipeline.runtime_state,
+        "load_runtime_state",
+        lambda key, fallback_loader=None: _cache_get(key),
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_rebuild_authority_risk_engine_state",
+        lambda: dict(persisted_risk_meta),
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_rebuild_authority_covariance_payload",
+        lambda: {"factors": ["style_beta_score"], "matrix": [[1.0]]},
+    )
+    monkeypatch.setattr(
+        pipeline.model_outputs,
+        "load_latest_rebuild_authority_specific_risk_payload",
+        lambda: {
+            "AAPL.OQ": {
+                "ticker": "AAPL",
+                "specific_var": 0.01,
+                "specific_vol": 0.1,
+            }
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="skip_risk_engine requested but risk-engine cache is missing"):
+        pipeline.run_refresh(
+            mode="light",
+            refresh_scope="full",
+            skip_snapshot_rebuild=True,
+            skip_cuse4_foundation=True,
+            skip_risk_engine=True,
+        )
+
+
 def test_resolve_effective_risk_engine_meta_prefers_persisted_model_run_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2210,9 +2508,13 @@ def test_run_model_pipeline_reports_stage_runtime_details(monkeypatch: pytest.Mo
 def test_refresh_manager_marks_holdings_failure_on_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(refresh_manager, "run_model_pipeline", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        refresh_execution_module,
+        "run_model_pipeline",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
     monkeypatch.setattr(refresh_manager, "_set_state", lambda **kwargs: kwargs)
-    monkeypatch.setattr(refresh_manager, "mark_refresh_finished", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(refresh_execution_module, "mark_refresh_finished", lambda **kwargs: captured.update(kwargs))
 
     class _FakeLock:
         def release(self) -> None:
@@ -2261,7 +2563,7 @@ def test_refresh_manager_tracks_current_stage_from_pipeline_callback(monkeypatch
         )
         return {"status": "ok", "run_id": "run_123"}
 
-    monkeypatch.setattr(refresh_manager, "run_model_pipeline", _run_model_pipeline)
+    monkeypatch.setattr(refresh_execution_module, "run_model_pipeline", _run_model_pipeline)
     monkeypatch.setattr(refresh_manager, "_set_state", lambda **kwargs: updates.append(kwargs) or kwargs)
 
     class _FakeLock:
