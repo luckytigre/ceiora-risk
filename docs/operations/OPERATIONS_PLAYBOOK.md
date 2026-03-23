@@ -163,7 +163,8 @@ Parallel cPAR note:
 - Additional local split entrypoints are available for cloud-native prep validation:
   - `make backend-serve`
   - `make backend-control`
-- Live local ingest and Neon-authoritative rebuild commands should run from `.venv_local` (or another environment with real `lseg-data` installed). `backend/.venv` is sufficient for most repo tests, but not for real LSEG-backed ingest on this machine.
+- `make setup` now provisions `.venv_local` for the real local app/runtime path. `backend/.venv` may still exist for repo tests, but the launcher scripts and ingest/rebuild commands should use `.venv_local`.
+- Live local ingest and Neon-authoritative rebuild commands should run from `.venv_local` (or another environment with real `lseg-data` installed). `serve-refresh` and other non-ingest lanes should not require `lseg-data` just to import/run.
 
 ## Key Commands
 - Orchestrated refresh via API:
@@ -196,9 +197,10 @@ Parallel cPAR note:
 - Resume a previous run id:
   - `python3 -m backend.scripts.run_model_pipeline --profile source-daily-plus-core-if-due --resume-run-id <run_id>`
 - Refresh data from LSEG:
-  - `python3 -m backend.scripts.download_data_lseg --db-path backend/runtime/data.db`
+  - `.venv_local/bin/python -m backend.scripts.download_data_lseg --db-path backend/runtime/data.db`
   - Explicit `--tickers`, `--rics`, and index-derived names only operate on instruments already present in `security_master`; the command now reports any requested names that were not seeded there.
 - When running those local-ingest commands directly, prefer `.venv_local/bin/python -m ...` so the process uses the same LSEG-capable environment as the local app scripts.
+- `make doctor` verifies `.venv_local`, core backend imports, whether `lseg.data` is available in that environment, and whether clean duplicate aliases are still present in the seed/local `security_master`.
 - Repair historical volume coverage only (writes `TR.Volume` into `security_prices_eod.volume`):
   - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/runtime/data.db --start-date 2012-01-03 --end-date 2026-03-04 --volume-only --only-null-volume`
   - Explicit `--rics` repairs likewise only target seeded `security_master` rows and report unmatched requested RICs in the result payload.

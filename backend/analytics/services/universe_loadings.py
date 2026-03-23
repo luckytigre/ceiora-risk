@@ -36,6 +36,22 @@ from backend.risk_model.model_status import derive_model_status
 
 logger = logging.getLogger(__name__)
 
+_RIC_SUFFIX_RANK = {
+    ".N": 0,
+    ".OQ": 1,
+    ".O": 2,
+    ".K": 3,
+    ".P": 4,
+}
+
+
+def _ric_priority_key(ric: str) -> tuple[int, str]:
+    ric_txt = str(ric or "").upper().strip()
+    for suffix, rank in _RIC_SUFFIX_RANK.items():
+        if ric_txt.endswith(suffix):
+            return int(rank), ric_txt
+    return 99, ric_txt
+
 
 def build_universe_ticker_loadings(
     exposures_df: pd.DataFrame,
@@ -79,7 +95,9 @@ def build_universe_ticker_loadings(
             ticker = str(row.get("ticker") or "").upper().strip()
             if not ric or not ticker:
                 continue
-            ric_by_ticker[ticker] = ric
+            existing = ric_by_ticker.get(ticker)
+            if existing is None or _ric_priority_key(ric) < _ric_priority_key(existing):
+                ric_by_ticker[ticker] = ric
             if ric not in ticker_by_ric:
                 ticker_by_ric[ric] = ticker
 

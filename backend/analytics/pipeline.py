@@ -58,6 +58,7 @@ from backend.risk_model import (
 )
 from backend.risk_model.projected_loadings import (
     compute_projected_loadings,
+    latest_persisted_projection_asof,
     load_persisted_projected_loadings,
 )
 from backend.universe import bootstrap_cuse4_source_tables, build_and_persist_estu_membership
@@ -699,7 +700,23 @@ def run_refresh(
                 projection_universe_rows = load_projection_only_universe_rows(_proj_conn)
             finally:
                 _proj_conn.close()
-            should_refresh_projection_outputs = bool(refresh_projected_loadings or recomputed_this_refresh)
+            persisted_projection_asof = (
+                latest_persisted_projection_asof(
+                    data_db=effective_data_db,
+                    projection_rics=projection_universe_rows,
+                )
+                if projection_universe_rows and active_core_state_through_date
+                else None
+            )
+            should_refresh_projection_outputs = bool(
+                refresh_projected_loadings
+                or recomputed_this_refresh
+                or (
+                    projection_universe_rows
+                    and active_core_state_through_date
+                    and persisted_projection_asof != active_core_state_through_date
+                )
+            )
             if projection_universe_rows and should_refresh_projection_outputs and active_core_state_through_date:
                 _emit_refresh_progress(
                     progress_callback,

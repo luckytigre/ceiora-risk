@@ -135,11 +135,95 @@ def test_build_universe_ticker_loadings_surfaces_projection_only_instrument_as_u
     )
 
     spy = out["by_ticker"]["SPY"]
-    assert spy["exposure_origin"] == "projected_returns"
+    assert spy["exposure_origin"] == "projected"
     assert spy["model_status"] == "ineligible"
     assert spy["model_status_reason"] == "projection_unavailable"
     assert spy["projection_asof"] == "2026-03-13"
     assert spy["exposures"] == {}
+
+
+def test_build_universe_ticker_loadings_prefers_primary_ric_for_duplicate_ticker_rows(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    eligibility_df = pd.DataFrame(
+        [
+            {
+                "ric": "IBKR.OQ",
+                "is_structural_eligible": True,
+                "exclusion_reason": "",
+                "market_cap": 1000.0,
+                "trbc_business_sector": "Banking & Investment Services",
+                "trbc_industry_group": "Investment Banking & Investment Services",
+                "trbc_economic_sector_short": "Financials",
+                "hq_country_code": "US",
+            }
+        ]
+    ).set_index("ric")
+    monkeypatch.setattr(
+        "backend.analytics.services.universe_loadings.build_eligibility_context",
+        lambda data_db, dates: object(),
+    )
+    monkeypatch.setattr(
+        "backend.analytics.services.universe_loadings.structural_eligibility_for_date",
+        lambda ctx, as_of_date: (None, eligibility_df),
+    )
+
+    exposures_df = pd.DataFrame(
+        [
+            {"ric": "IBKR.O", "ticker": "IBKR", "as_of_date": "2026-03-13", "beta_score": 0.1, "size_score": 0.2},
+            {"ric": "IBKR.OQ", "ticker": "IBKR", "as_of_date": "2026-03-13", "beta_score": 0.1, "size_score": 0.2},
+        ]
+    )
+    fundamentals_df = pd.DataFrame(
+        [
+            {
+                "ric": "IBKR.O",
+                "ticker": "IBKR",
+                "market_cap": 1000.0,
+                "trbc_business_sector": "Banking & Investment Services",
+                "trbc_industry_group": "Investment Banking & Investment Services",
+                "trbc_economic_sector_short": "Financials",
+                "company_name": "Interactive Brokers Group Inc",
+            },
+            {
+                "ric": "IBKR.OQ",
+                "ticker": "IBKR",
+                "market_cap": 1000.0,
+                "trbc_business_sector": "Banking & Investment Services",
+                "trbc_industry_group": "Investment Banking & Investment Services",
+                "trbc_economic_sector_short": "Financials",
+                "company_name": "Interactive Brokers Group Inc",
+            },
+        ]
+    )
+    prices_df = pd.DataFrame(
+        [
+            {"ric": "IBKR.O", "ticker": "IBKR", "close": 100.0},
+            {"ric": "IBKR.OQ", "ticker": "IBKR", "close": 100.0},
+        ]
+    )
+    cov = pd.DataFrame(
+        np.eye(4, dtype=float),
+        index=["Market", "Banking & Investment Services", "Size", "Beta"],
+        columns=["Market", "Banking & Investment Services", "Size", "Beta"],
+    )
+
+    out = build_universe_ticker_loadings(
+        exposures_df=exposures_df,
+        fundamentals_df=fundamentals_df,
+        prices_df=prices_df,
+        cov=cov,
+        data_db=tmp_path / "data.db",
+        factor_catalog_by_name=build_factor_catalog_for_factors(
+            ["Market", "Banking & Investment Services", "Size", "Beta"],
+            method_version="test_method",
+        ),
+    )
+
+    ibkr = out["by_ticker"]["IBKR"]
+    assert ibkr["ric"] == "IBKR.OQ"
+    assert ibkr["model_status"] == "core_estimated"
 
 
 def test_build_universe_ticker_loadings_prefers_well_covered_snapshot(monkeypatch, tmp_path: Path) -> None:
@@ -443,13 +527,13 @@ def test_build_universe_ticker_loadings_marks_non_us_names_projected_only(
     assert out["ineligible_ticker_count"] == 0
     assert out["by_ticker"]["AAPL"]["exposure_origin"] == "native"
     assert out["by_ticker"]["BABA"]["exposures"]["market"] == 1.0
-    assert out["by_ticker"]["BABA"]["exposure_origin"] == "projected_fundamental"
-    assert out["by_ticker"]["BABA"]["model_status_reason"] == "fundamental_projection"
+    assert out["by_ticker"]["BABA"]["exposure_origin"] == "native"
+    assert out["by_ticker"]["BABA"]["model_status_reason"] == ""
     assert "industry_retailers" not in out["by_ticker"]["BABA"]["exposures"]
     assert "specific risk" in out["by_ticker"]["BABA"]["model_warning"]
     index_by_ticker = {row["ticker"]: row for row in out["index"]}
-    assert index_by_ticker["AAPL"]["exposure_origin"] == "native"
-    assert index_by_ticker["BABA"]["exposure_origin"] == "projected_fundamental"
+    assert index_by_ticker["AAPL"]["model_status"] == "core_estimated"
+    assert index_by_ticker["BABA"]["model_status"] == "projected_only"
 
 
 def test_build_universe_ticker_loadings_preserves_factor_ids_in_covariance_path(

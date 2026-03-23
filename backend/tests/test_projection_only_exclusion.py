@@ -15,6 +15,7 @@ from backend.universe.security_master_sync import (
     load_projection_only_universe_rows,
     load_price_ingest_universe_rows,
     sync_security_master_seed,
+    upsert_security_master_rows,
 )
 
 
@@ -123,6 +124,51 @@ class TestPriceIngestUniverseRows:
         rows = load_price_ingest_universe_rows(conn, include_pending_seed=False)
         rics = [r["ric"] for r in rows]
         assert len(rics) == len(set(rics))
+
+
+def test_lseg_upsert_preserves_projection_only_coverage_role(tmp_path: Path) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    ensure_cuse4_schema(conn)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible,
+            coverage_role, source, updated_at
+        ) VALUES ('SPY.P', 'SPY', 0, 0, 'projection_only', 'security_master_seed', ?)
+        """,
+        (now_iso,),
+    )
+    conn.commit()
+
+    upsert_security_master_rows(
+        conn,
+        [
+            {
+                "ric": "SPY.P",
+                "ticker": "SPY",
+                "classification_ok": 1,
+                "is_equity_eligible": 1,
+                "exchange_name": "NYSE Arca",
+                "source": "lseg_toolkit",
+                "job_run_id": "lseg_job",
+                "updated_at": now_iso,
+            }
+        ],
+    )
+    conn.commit()
+
+    row = conn.execute(
+        """
+        SELECT classification_ok, is_equity_eligible, coverage_role, source
+        FROM security_master
+        WHERE ric = 'SPY.P'
+        """
+    ).fetchone()
+    conn.close()
+
+    assert row == (1, 1, "projection_only", "lseg_toolkit")
 
 
 class TestCoverageRoleColumnMigration:

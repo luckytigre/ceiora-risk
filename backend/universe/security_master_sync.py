@@ -277,14 +277,19 @@ def upsert_security_master_rows(
             source,
             job_run_id,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, 'native_equity'), ?, ?, ?)
         ON CONFLICT(ric) DO UPDATE SET
             ticker = COALESCE(NULLIF(excluded.ticker, ''), {SECURITY_MASTER_TABLE}.ticker),
             isin = COALESCE(NULLIF(excluded.isin, ''), {SECURITY_MASTER_TABLE}.isin),
             exchange_name = COALESCE(NULLIF(excluded.exchange_name, ''), {SECURITY_MASTER_TABLE}.exchange_name),
             classification_ok = COALESCE(excluded.classification_ok, {SECURITY_MASTER_TABLE}.classification_ok),
             is_equity_eligible = COALESCE(excluded.is_equity_eligible, {SECURITY_MASTER_TABLE}.is_equity_eligible),
-            coverage_role = COALESCE(NULLIF(excluded.coverage_role, ''), {SECURITY_MASTER_TABLE}.coverage_role),
+            coverage_role = CASE
+                WHEN {SECURITY_MASTER_TABLE}.coverage_role = 'projection_only'
+                     AND COALESCE(NULLIF(excluded.coverage_role, ''), 'native_equity') = 'native_equity'
+                THEN {SECURITY_MASTER_TABLE}.coverage_role
+                ELSE COALESCE(NULLIF(excluded.coverage_role, ''), {SECURITY_MASTER_TABLE}.coverage_role)
+            END,
             source = COALESCE(NULLIF(excluded.source, ''), {SECURITY_MASTER_TABLE}.source),
             job_run_id = COALESCE(NULLIF(excluded.job_run_id, ''), {SECURITY_MASTER_TABLE}.job_run_id),
             updated_at = COALESCE(NULLIF(excluded.updated_at, ''), {SECURITY_MASTER_TABLE}.updated_at)
@@ -297,7 +302,7 @@ def upsert_security_master_rows(
             normalize_optional_text(row.get("exchange_name")),
             int(row.get("classification_ok") or 0),
             int(row.get("is_equity_eligible") or 0),
-            normalize_optional_text(row.get("coverage_role")) or "native_equity",
+            normalize_optional_text(row.get("coverage_role")),
             normalize_optional_text(row.get("source")),
             normalize_optional_text(row.get("job_run_id")),
             normalize_optional_text(row.get("updated_at")),

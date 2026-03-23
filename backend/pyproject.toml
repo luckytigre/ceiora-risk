@@ -23,7 +23,7 @@ dev = [
     "pytest>=7.4.0",
 ]
 lseg = [
-    "jl-lseg-toolkit>=0.1.0; python_version >= '3.12'",
+    "lseg-data; python_version >= '3.12'",
 ]
 
 [build-system]

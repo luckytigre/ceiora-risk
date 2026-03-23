@@ -108,6 +108,7 @@ Key actions:
 Rule:
 - Universe maintenance is explicit and file-driven.
 - The committed `security_master_seed.csv` is a registry/bootstrap input only; LSEG enrichment is the authority for live identifiers and the source for derived eligibility flags.
+- When `DATA_BACKEND=neon`, Neon `security_master` is the operating source of truth for app/runtime reads; local SQLite remains the ingest/archive/mirror surface that feeds or repairs Neon.
 - No separate universe-builder artifacts should be needed at runtime.
 - After approved universe changes, regenerate and commit `data/reference/security_master_seed.csv`.
 

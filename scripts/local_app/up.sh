@@ -14,6 +14,12 @@ FRONTEND_CMD=(env NEXT_TELEMETRY_DISABLED=1 npm run dev -- --hostname 127.0.0.1 
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
+if [[ ! -x "$ROOT_DIR/.venv_local/bin/python" ]]; then
+  echo "missing .venv_local backend environment"
+  echo "run ./scripts/setup_local_env.sh first"
+  exit 1
+fi
+
 is_running() {
   local pid="$1"
   kill -0 "$pid" >/dev/null 2>&1

@@ -35,6 +35,7 @@ Current policy:
 
 Run checks immediately after the merge:
 - duplicate RIC check
+- duplicate alias check (`same ticker + same ISIN` should collapse to one canonical primary RIC)
 - blank `ric` check
 - confirm new rows are present in `security_master`
 - confirm newly added rows remain pending (`classification_ok = 0`, `is_equity_eligible = 0`) until LSEG enrichment runs
@@ -42,6 +43,7 @@ Run checks immediately after the merge:
 Recommended spot checks:
 - sample a few new names and verify `ticker`, `ric`, `exchange_name`, and any seed-carried identifiers
 - confirm the exported `data/reference/security_master_seed.csv` contains the new names
+- if `DATA_BACKEND=neon`, confirm the canonical rows are mirrored into Neon `security_master` before relying on cloud/app reads
 
 ## Step 3: Backfill Canonical Source Tables For New RICs Only
 
@@ -66,6 +68,7 @@ Check:
 - monthly fundamentals field coverage
 - monthly classification/TRBC coverage
 - presence in `security_master`
+- projection-only names have projected outputs current to the active core package date
 - presence in search/explore surfaces after serving refresh
 
 ## Step 5: Choose Refresh Depth

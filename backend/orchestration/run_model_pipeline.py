@@ -36,16 +36,49 @@ from backend.risk_model import (
 from backend.services.neon_mirror import run_neon_mirror_cycle
 from backend.services import neon_authority
 from backend.services.holdings_runtime_state import mark_refresh_finished
-from backend.scripts.backfill_pit_history_lseg import run_backfill as backfill_pit_history
-from backend.scripts.backfill_prices_range_lseg import backfill_prices
 from backend.universe import bootstrap_cuse4_source_tables, build_and_persist_estu_membership
-from backend.scripts.download_data_lseg import download_from_lseg
 from backend.trading_calendar import is_xnys_session, previous_or_same_xnys_session
 
 
 DATA_DB = Path(config.DATA_DB_PATH)
 CACHE_DB = Path(config.SQLITE_PATH)
 logger = logging.getLogger(__name__)
+
+
+def _download_from_lseg_impl(**kwargs):
+    from backend.scripts.download_data_lseg import download_from_lseg
+
+    return download_from_lseg(**kwargs)
+
+
+def _backfill_prices_impl(**kwargs):
+    from backend.scripts.backfill_prices_range_lseg import backfill_prices
+
+    return backfill_prices(**kwargs)
+
+
+def _backfill_pit_history_impl(**kwargs):
+    from backend.scripts.backfill_pit_history_lseg import run_backfill
+
+    return run_backfill(**kwargs)
+
+
+# Keep patch points stable for existing tests/callers while avoiding eager LSEG imports.
+def download_from_lseg(**kwargs):
+    return _download_from_lseg_impl(**kwargs)
+
+
+def backfill_prices(**kwargs):
+    return _backfill_prices_impl(**kwargs)
+
+
+def backfill_pit_history(**kwargs):
+    return _backfill_pit_history_impl(**kwargs)
+
+
+_download_from_lseg = download_from_lseg
+_backfill_prices = backfill_prices
+_backfill_pit_history = backfill_pit_history
 
 
 def _neon_primary_backend_selected() -> bool:

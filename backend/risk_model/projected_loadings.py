@@ -375,6 +375,40 @@ def load_persisted_projected_loadings(
     return out
 
 
+def latest_persisted_projection_asof(
+    *,
+    data_db: Path,
+    projection_rics: list[dict[str, str]],
+) -> str | None:
+    """Return the latest persisted projection date for the requested RICs."""
+    requested_rics = sorted(
+        {
+            str(row.get("ric") or "").strip().upper()
+            for row in projection_rics
+            if str(row.get("ric") or "").strip()
+        }
+    )
+    if not requested_rics:
+        return None
+
+    conn = sqlite3.connect(str(data_db))
+    try:
+        _ensure_schema(conn)
+        placeholders = ",".join("?" for _ in requested_rics)
+        row = conn.execute(
+            f"""
+            SELECT MAX(as_of_date)
+            FROM projected_instrument_meta
+            WHERE ric IN ({placeholders})
+            """,
+            requested_rics,
+        ).fetchone()
+    finally:
+        conn.close()
+    latest = str((row or [None])[0] or "").strip()
+    return latest or None
+
+
 def _persist_projected_loadings(
     data_db: Path,
     results: dict[str, ProjectedLoadingResult],

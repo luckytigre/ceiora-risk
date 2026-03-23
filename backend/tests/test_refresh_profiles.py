@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import importlib
+import sys
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,46 @@ from backend.services import refresh_manager
 
 _UNUSED_DATA_DB = Path("__unused_test_data__.db")
 _UNUSED_CACHE_DB = Path("__unused_test_cache__.db")
+
+
+def test_run_model_pipeline_import_does_not_require_lseg_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in [
+        "backend.orchestration.run_model_pipeline",
+        "backend.scripts.download_data_lseg",
+        "backend.scripts.backfill_prices_range_lseg",
+        "backend.scripts.backfill_pit_history_lseg",
+        "lseg",
+        "lseg.data",
+    ]:
+        sys.modules.pop(name, None)
+
+    imported = importlib.import_module("backend.orchestration.run_model_pipeline")
+
+    assert callable(imported._download_from_lseg)
+    assert callable(imported._backfill_prices)
+    assert callable(imported._backfill_pit_history)
+
+
+def test_refresh_manager_import_does_not_require_lseg_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in [
+        "backend.services.refresh_manager",
+        "backend.orchestration.run_model_pipeline",
+        "backend.scripts.download_data_lseg",
+        "backend.scripts.backfill_prices_range_lseg",
+        "backend.scripts.backfill_pit_history_lseg",
+        "lseg",
+        "lseg.data",
+    ]:
+        sys.modules.pop(name, None)
+
+    imported = importlib.import_module("backend.services.refresh_manager")
+
+    assert callable(imported.start_refresh)
+    assert callable(imported.get_refresh_status)
 
 
 def test_default_profile_is_local_daily_plus_core(monkeypatch: pytest.MonkeyPatch) -> None:

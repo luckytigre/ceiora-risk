@@ -1594,7 +1594,6 @@ ELV,ELV,US0367521038,New York Consolidated
 ELVN.OQ,ELVN,US29337E1029,Nasdaq Stock Exchange Global Select Market
 EMBC.OQ,EMBC,US29082K1051,Nasdaq Stock Exchange Global Select Market
 EMC.N,EMC,US37960A6441,New York Stock Exchange
-EMC.P,EMC,US37960A6441,NYSE Arca
 EMCI.OQ,EMCI,,
 EME.N,EME,US29084Q1004,New York Stock Exchange
 EML.OQ,EML,US2763171046,NASDAQ Stock Exchange Global Market
@@ -1941,7 +1940,6 @@ FSLR.OQ,FSLR,US3364331070,Nasdaq Stock Exchange Global Select Market
 FSLY.OQ,FSLY,US31188V1008,Nasdaq Stock Exchange Global Select Market
 FSNM.OQ,FSNM,,
 FSP.A,FSP,US35471R1068,American Stock Exchange
-FSP.P,FSP,US35471R1068,NYSE Arca
 FSR.N,FSR,US33813J1060,New York Stock Exchange
 FSS.N,FSS,US3138551086,New York Stock Exchange
 FST.N,FST,,
@@ -2360,7 +2358,7 @@ IBEX.O,IBEX,BMG4690M1010,NASDAQ National Market System
 IBI.C,IBI,,
 IBI.N,IBI,,
 IBKC.OQ,IBKC,,
-IBKR.O,IBKR,US45841N1072,Consolidated Issue Listed on Nasdaq Global Select Market
+IBKR.OQ,IBKR,US45841N1072,NASDAQ Stock Exchange Global Select Market
 IBM.N,IBM,US4592001014,New York Stock Exchange
 IBOC.OQ,IBOC,US4590441030,Nasdaq Stock Exchange Global Select Market
 IBP.N,IBP,US45780R1014,New York Stock Exchange
