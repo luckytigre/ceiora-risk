@@ -220,7 +220,6 @@ ALB.N,ALB,US0126531013,New York Stock Exchange
 ALCO.OQ,ALCO,US0162301040,Nasdaq Stock Exchange Global Select Market
 ALDX.OQ,ALDX,US01438T1060,NASDAQ Stock Exchange Capital Market
 ALEC.OQ,ALEC,US0144421072,Nasdaq Stock Exchange Global Select Market
-ALEX.K,ALEX,US0144911049,
 ALEX.N,ALEX,US0144911049,
 ALFA.OQ,ALFA,,
 ALG.N,ALG,US0113111076,New York Stock Exchange
@@ -761,7 +760,6 @@ BRO.N,BRO,US1152361010,New York Stock Exchange
 BROS.N,BROS,US26701L1008,New York Stock Exchange
 BRS.C,BRS,,
 BRSL.K,BRSL,GB00BVG7F061,New York Consolidated
-BRSL.N,BRSL,GB00BVG7F061,New York Stock Exchange
 BRSP.N,BRSP,US10949T1097,New York Stock Exchange
 BRT.N,BRT,US0556453035,New York Stock Exchange
 BRW.C,BRW,US78518H2022,The National Stock Exchange (formerly Cincinnati SE)
@@ -848,7 +846,6 @@ CAL.N,CAL,US1295001044,New York Stock Exchange
 CALM.OQ,CALM,US1280302027,Nasdaq Stock Exchange Global Select Market
 CALX.N,CALX,US13100M5094,New York Stock Exchange
 CALY.N,CALY,US1311931042,New York Stock Exchange
-CAM.MW,CAM,US00039J7726,Chicago Stock Exchange
 CAM.N,CAM,US00039J7726,New York Stock Exchange
 CAO.B,CAO,,
 CAPR.OQ,CAPR,US14070B3096,Nasdaq Stock Exchange Global Select Market
@@ -887,8 +884,6 @@ CBM.N,CBM,,
 CBNA.N,CBNA,US15746L1008,New York Stock Exchange
 CBNJ.OQ,CBNJ,,
 CBNK.OQ,CBNK,US1397371006,Nasdaq Stock Exchange Global Select Market
-CBOE.K,CBOE,US12503M1080,BATS Consolidated
-CBOE.Z,CBOE,US12503M1080,BATS SE when trading NYSE/AMEX
 CBON.OQ,CBON,,
 CBOU.OQ,CBOU,,
 CBR.II,CBR,,
@@ -908,8 +903,6 @@ CCBL.O,CCBL,,
 CCCC.OQ,CCCC,US12529R1077,Nasdaq Stock Exchange Global Select Market
 CCE.II,CCE,,
 CCE.N,CCE,,
-CCEP.OQ,CCEP,GB00BDCPN049,Nasdaq Stock Exchange Global Select Market
-CCEPC.AS,CCEP,GB00BDCPN049,Euronext Amsterdam
 CCG.N,CCG,KYG207071088,New York Stock Exchange
 CCI.N,CCI,US22822V1017,New York Stock Exchange
 CCIX.OQ,CCIX,KYG213011094,NASDAQ Stock Exchange Global Market
@@ -1511,7 +1504,6 @@ DY.N,DY,US2674751019,New York Stock Exchange
 DYAX.OQ,DYAX,,
 DYF1F.TBEA,DYF1F,US2681582019,Tradeweb APA
 DYN.MW,DYN,US26818M1080,Midwest SE when trading NASDAQ Global Market
-DYN.O,DYN,US26818M1080,Consolidated Issue Listed on Nasdaq Global Select Market
 DZSIQ.PK,DZSIQ,US2682111099,USA Pink Sheets
 EA.OQ,EA,US2855121099,Nasdaq Stock Exchange Global Select Market
 EAC.B,EAC,,
@@ -2004,7 +1996,6 @@ GBTN.BCU,GBTN,US37890U1088,BATS Europe
 GBX.N,GBX,US3936571013,New York Stock Exchange
 GCBC.OQ,GCBC,US3943571071,NASDAQ Stock Exchange Capital Market
 GCI.II,GCI,,
-GCI.N,TDAY,US36472T1097,New York Stock Exchange
 GCMG.OQ,GCMG,US36831E1082,NASDAQ Stock Exchange Global Market
 GCO.N,GCO,US3715321028,New York Stock Exchange
 GCOM.OQ,GCOM,,
@@ -2391,7 +2382,6 @@ IFF.N,IFF,US4595061015,New York Stock Exchange
 IFLO.O,IFLO,US92647X7562,NASDAQ National Market System
 IFOX.O,IFOX,,
 IGT.II,IGT,,
-IGT.N,BRSL,GB00BVG7F061,New York Stock Exchange
 IGTE.O,IGTE,,
 IGTE.OQ,IGTE,,
 IHRT.OQ,IHRT,US45174J5092,Nasdaq Stock Exchange Global Select Market
@@ -2990,7 +2980,6 @@ MDWD.OQ,MDWD,IL0011316309,NASDAQ Stock Exchange Global Market
 MDXG.OQ,MDXG,US6024961012,NASDAQ Stock Exchange Capital Market
 MDZA.TO,MDZA,,
 ME.N,ME,US90138Q3065,
-ME.PH,ME,US90138Q3065,
 MEA.A,MEA,,
 MEAS.O,MEAS,,
 MEAS.OQ,MEAS,,
@@ -3268,8 +3257,6 @@ NEOG.OQ,NEOG,US6404911066,Nasdaq Stock Exchange Global Select Market
 NEON.OQ,NEON,US64051M7092,NASDAQ Stock Exchange Capital Market
 NEOS.OQ,NEOS,,
 NERV.OQ,NERV,US6033802058,NASDAQ Stock Exchange Capital Market
-NESR.O,NESR,VGG6375R1073,Consolidated Issue listed on NASDAQ Capital Market
-NESR.OQ^D23,NESR,VGG6375R1073,NASDAQ Stock Exchange Capital Market
 NET.N,NET,US18915M1071,New York Stock Exchange
 NEU.N,NEU,US6515871076,New York Stock Exchange
 NEWP.O,NEWP,,
@@ -3286,8 +3273,6 @@ NFLX.OQ,NFLX,US64110L1061,Nasdaq Stock Exchange Global Select Market
 NFP.B,NFP,,
 NFP.N,NFP,,
 NFX^B19,NFX^B19,US6512901082,New York Consolidated
-NG.A,NG,CA66987E2069,American Stock Exchange
-NG.TO,NG,CA66987E2069,The Toronto Stock Exchange
 NGNE.OQ,NGNE,US64135M1053,NASDAQ Stock Exchange Global Market
 NGPC.OQ,NGPC,,
 NGS.N,NGS,US63886Q1094,New York Stock Exchange
@@ -3445,7 +3430,6 @@ OABC.OQ,OABC,,
 OABI.OQ,OABI,US68218J1034,NASDAQ Stock Exchange Global Market
 OATS.O,OATS,,
 OA^F18,OA,US68557N1037,New York Consolidated
-OB.N,TEAD,US69002R1032,New York Stock Exchange
 OBK.N,OBK,US68621T1025,New York Stock Exchange
 OBT.OQ,OBT,US68417L1070,NASDAQ Stock Exchange Capital Market
 OC.N,OC,US6907421019,New York Stock Exchange
@@ -3879,7 +3863,6 @@ PWER.OQ,PWER,,
 PWP.OQ,PWP,US71367G1022,Nasdaq Stock Exchange Global Select Market
 PWR.N,PWR,US74762E1029,New York Stock Exchange
 PX.II,PX,,
-PX.N,PX,US69376K1060,New York Stock Exchange
 PXED.N,PXED,US7189681007,New York Stock Exchange
 PXLW.OQ,PXLW,US72581M4042,NASDAQ Stock Exchange Capital Market
 PXP.N,PXP,,
@@ -4178,7 +4161,6 @@ SEA.PH,SEA,US26922B8651,NASDAQ OMX PSX  SE
 SEAB.OQ,SEAB,,
 SEAT.OQ,SEAT,US92854T2096,Nasdaq Stock Exchange Global Select Market
 SEB.A,SEB,US8115431079,American Stock Exchange
-SEB.MW,SEB,US8115431079,Chicago Stock Exchange
 SEE.II,SEE,,
 SEE.N,SEE,US81211K1007,New York Stock Exchange
 SEER.OQ,SEER,US81578P1066,Nasdaq Stock Exchange Global Select Market
@@ -4437,8 +4419,6 @@ STAG.N,STAG,US85254J1025,New York Stock Exchange
 STBA.OQ,STBA,US7838591011,Nasdaq Stock Exchange Global Select Market
 STC.N,STC,US8603721015,New York Stock Exchange
 STE.N,STE,IE00BFY8C754,New York Stock Exchange
-STEC.O,BVC,KYG4691A1141,Consolidated Issue listed on NASDAQ Capital Market
-STEC.OQ,BVC,KYG4691A1141,NASDAQ Stock Exchange Capital Market
 STEDE.INS,STEDE,,
 STEL.N,STEL,US8589271068,New York Stock Exchange
 STEL.OQ,STEL,,
@@ -4566,7 +4546,6 @@ TCOM.OQ,TCOM,US89677Q1076,Nasdaq Stock Exchange Global Select Market
 TCO^L20,TCO^L20,US8766641034,New York Consolidated
 TCPC.OQ,TCPC,US09259E1082,Nasdaq Stock Exchange Global Select Market
 TCX.OQ,TCX,US8986972060,NASDAQ Stock Exchange Capital Market
-TDAY.K,TDAY,US36472T1097,New York Consolidated
 TDAY.N,TDAY,US36472T1097,New York Stock Exchange
 TDC.N,TDC,US88076W1036,New York Stock Exchange
 TDG.N,TDG,US8936411003,New York Stock Exchange
@@ -4577,7 +4556,6 @@ TDW.N,TDW,US88642R1095,New York Stock Exchange
 TDY.N,TDY,US8793601050,New York Stock Exchange
 TE.II,TE,,
 TE.N,TE,US35834F1049,New York Stock Exchange
-TEAD.OQ,TEAD,US69002R1032,Nasdaq Stock Exchange Global Select Market
 TEAM.OQ,TEAM,US0494681010,Nasdaq Stock Exchange Global Select Market
 TECD.O^G20,TECD,US8782371061,Consolidated Issue Listed on Nasdaq Global Select Market
 TECH.OQ,TECH,US09073M1045,Nasdaq Stock Exchange Global Select Market
