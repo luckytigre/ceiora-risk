@@ -1,0 +1,2 @@
+bucket = "ceiora-risk-project-4e18de12-63a3-4206-aaa-tfstate"
+prefix = "envs/prod"

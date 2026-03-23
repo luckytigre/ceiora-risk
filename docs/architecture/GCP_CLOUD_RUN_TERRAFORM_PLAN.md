@@ -196,10 +196,7 @@ This remains a migration phase, not yet a completed implementation.
 
 - Use one environment named `prod` from day one, even though it is the only environment.
 - Prefer an east-coast GCP region to keep browser latency low for New York usage.
-- Do not finalize the region until Neon proximity is checked.
-- Initial candidates:
-  - `us-east5`
-  - `us-east4`
+- Primary region is frozen to `us-east4` after checking the live Neon host against AWS `us-east-1`.
 - All Terraform naming should assume a single-environment prefix pattern such as:
   - `ceiora-prod-frontend`
   - `ceiora-prod-serve`
@@ -351,24 +348,22 @@ Do not treat this as optional if the goal is a durable cloud-native runtime.
 
 ### Slice 2: Terraform Foundation
 
-- [ ] Add a dedicated Terraform root under a durable repo-owned path.
-- [ ] Freeze the bootstrap rule for remote Terraform state:
-  - either a tiny bootstrap root with local state creates the state bucket first,
-  - or a one-time manual bootstrap step is documented and accepted.
-- [ ] Record the now-fixed rollout project directly in Terraform inputs/examples:
+- [x] Add a dedicated Terraform root under a durable repo-owned path.
+- [x] Freeze the bootstrap rule for remote Terraform state:
+  - a tiny local-state bootstrap root under `infra/terraform/bootstrap` creates the state bucket first,
+  - the real environment root lives under `infra/terraform/envs/prod` and uses the GCS backend after bootstrap.
+- [x] Record the now-fixed rollout project directly in Terraform inputs/examples:
   - `project-4e18de12-63a3-4206-aaa`
-- [ ] Add provider/version pinning.
-- [ ] Add remote state guidance and backend configuration shape.
-- [ ] Add project-service enablement for the required GCP APIs.
-- [ ] Add Artifact Registry ownership.
-- [ ] Add Secret Manager ownership.
-- [ ] Add service-account and IAM ownership.
-- [ ] Add Cloudflare provider ownership for public DNS records.
-- [ ] Add the custom-domain routing foundation:
-  - global external HTTPS load balancer
-  - serverless NEGs
-  - certificate ownership
-  - DNS ownership boundary
+- [x] Add provider/version pinning.
+- [x] Add remote state guidance and backend configuration shape.
+- [x] Add project-service enablement for the required GCP APIs.
+- [x] Add Artifact Registry ownership.
+- [x] Add Secret Manager ownership.
+- [x] Add service-account and IAM ownership.
+- [x] Add Cloudflare provider ownership for public DNS records.
+- [x] Add the custom-domain routing ownership foundation:
+  - the Terraform roots and providers now explicitly reserve Google-owned ingress resources and Cloudflare-owned public DNS records,
+  - the actual load balancer, serverless NEGs, certificates, and DNS records remain a later slice so the foundation can validate without deployed services.
 
 ### Slice 3: Container Build And Runtime Contract Hardening
 
@@ -468,7 +463,7 @@ Additional validation by phase:
 
 ## Open Questions
 
-- Which east-coast region best matches Neon latency and Cloud Run feature support?
+- None currently blocking the prep-only implementation slices.
 
 ## Progress Notes
 
@@ -497,3 +492,9 @@ Additional validation by phase:
   - the cloud runbook now freezes `app.ceiora.com` / `api.ceiora.com` / `control.ceiora.com`,
   - `BACKEND_CONTROL_ORIGIN` fallback is now documented as local/single-origin compatibility only,
   - the cloud runbook now explicitly carries the source-of-truth gate and `NEON_AUTHORITATIVE_REBUILDS` steady-state vs rollback distinction.
+- 2026-03-23: Slice 2 foundation completed:
+  - added `infra/terraform/bootstrap` for local-state creation of the shared GCS backend bucket,
+  - added `infra/terraform/envs/prod` as the single live environment root with pinned Google, Google Beta, and Cloudflare providers,
+  - froze `us-east4` as the first-cut region after checking the live Neon host against AWS `us-east-1`,
+  - added repo-owned modules for project API enablement, Artifact Registry, service accounts, and Secret Manager secret containers,
+  - documented the out-of-band secret-version workflow and validated both Terraform roots with `terraform init -backend=false` and `terraform validate`.

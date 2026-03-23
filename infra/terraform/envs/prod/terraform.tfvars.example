@@ -1,0 +1,5 @@
+project_id                    = "project-4e18de12-63a3-4206-aaa"
+environment                   = "prod"
+region                        = "us-east4"
+artifact_registry_repository_id = "ceiora-images"
+cloudflare_zone_name          = "ceiora.com"

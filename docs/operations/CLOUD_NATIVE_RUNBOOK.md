@@ -172,8 +172,18 @@ Prepared but not deployed:
 - `backend/Dockerfile.control`
 - `frontend/Dockerfile`
 - `.dockerignore`
+- `infra/terraform/bootstrap`
+- `infra/terraform/envs/prod`
 
 These are baseline build assets only. Provider-specific deploy manifests remain out of scope.
+The Terraform foundation currently creates the substrate only:
+- remote-state bucket bootstrap
+- required project APIs
+- Artifact Registry
+- service accounts
+- Secret Manager secret containers and access bindings
+
+It does not yet create running Cloud Run services, Cloud Run Jobs, or final ingress resources.
 
 ## Remaining Out Of Scope
 

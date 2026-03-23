@@ -30,6 +30,18 @@ frontend/.next_devseed_*/
 frontend/.next_stale_*/
 .playwright-cli/
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
 # IDE
 .idea/
 .vscode/
