@@ -81,14 +81,6 @@ output "load_balancer_dns_records" {
   }
 }
 
-output "uptime_check_names" {
-  description = "Cloud Monitoring uptime checks created for the public app and serve surfaces."
-  value = {
-    frontend = google_monitoring_uptime_check_config.frontend.name
-    serve    = google_monitoring_uptime_check_config.serve.name
-  }
-}
-
 output "load_balancer_host_routing" {
   description = "Frozen host-based routing contract for the shared HTTPS load balancer."
   value = {

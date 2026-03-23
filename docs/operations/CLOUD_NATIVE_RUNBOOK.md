@@ -205,7 +205,7 @@ The Terraform foundation now owns:
   - Cloudflare DNS records
 - observability basics:
   - logging retention
-  - uptime checks for `app` and `api`
+  - no public uptime checks by default; operator/manual smoke is the health path
 
 Provider-specific deploy manifests outside this Terraform/Cloud Run path remain out of scope.
 
@@ -270,11 +270,11 @@ Current ingress prep:
 
 Current observability prep:
 - Terraform now manages `_Default` Cloud Logging retention for the rollout project
-- Terraform now defines Cloud Monitoring uptime checks for:
-  - `https://app.ceiora.com/`
-  - `https://api.ceiora.com/api/cpar/meta`
-- `control.ceiora.com` is intentionally not a public uptime target
-  - validate it with an operator-token smoke instead
+- public Cloud Monitoring uptime checks are intentionally removed to preserve scale-to-zero behavior
+- `control.ceiora.com` remains an operator-token smoke target
+- app and API validation now happen through:
+  - explicit rollout smoke
+  - operator/manual checks when needed
 
 ## Remaining Out Of Scope
 

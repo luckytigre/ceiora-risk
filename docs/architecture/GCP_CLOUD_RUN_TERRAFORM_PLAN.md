@@ -221,7 +221,7 @@ Terraform should own:
 - domain/DNS/load-balancer resources for custom domains
   - Google provider owns the load balancer, serverless NEGs, and certificates
   - Cloudflare provider owns public DNS records for `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com`
-- minimal logging/monitoring/uptime resources
+- minimal logging/monitoring resources that do not undermine scale-to-zero by default
 
 Terraform should not own:
 - the local LSEG machine
@@ -461,9 +461,10 @@ Do not treat this as optional if the goal is a durable cloud-native runtime.
 ### Slice 8: Observability And Operations
 
 - [x] Add log retention expectations.
-- [x] Add minimal uptime checks or equivalent health validation.
+- [x] Add minimal health validation while preserving scale-to-zero behavior.
 - [x] Freeze the control-plane observability rule:
   - `control.ceiora.com` remains an operator-token smoke target, not a public uptime probe.
+  - `app` / `api` should not have continuous public uptime probes if they materially interfere with scale-to-zero.
 - [x] Add operator runbook steps for cloud troubleshooting.
 - [x] Update docs so the local app and cloud app are both clearly supported paths.
 
@@ -560,7 +561,7 @@ Additional validation by phase:
   - explicitly preserved the public `run.app` smoke posture and froze the rule that final-domain cutover must use a frontend image built against `https://api.ceiora.com`.
 - 2026-03-23: Slice 8 observability/runbook prep completed:
   - added Terraform ownership for `_Default` Cloud Logging retention,
-  - added Cloud Monitoring uptime checks for `app.ceiora.com` and `api.ceiora.com`,
+  - initially added Cloud Monitoring uptime checks for `app.ceiora.com` and `api.ceiora.com`,
   - explicitly kept `control.ceiora.com` on an operator-token smoke path instead of a public uptime probe,
   - expanded the runbook with the exact secret-version, image-build, Terraform, smoke, and custom-domain sequencing needed for the first live rollout while preserving the local app as a first-class path.
 - 2026-03-23: Live rollout phase 1 completed:
@@ -635,3 +636,8 @@ Additional validation by phase:
   - a post-cutover `serve-refresh` dispatch completed successfully as Cloud Run execution `ceiora-prod-serve-refresh-q5n2f` and reconciled back into persisted runtime status,
   - Slice 6 control-route validation and Slice 7 custom-domain validation are now closed,
   - scale-to-zero behavior remains the last intentionally open cloud-runtime validation item.
+- 2026-03-23: Public uptime probes were removed from the live stack to preserve scale-to-zero behavior:
+  - the `app` and `api` Cloud Monitoring uptime checks were continuously waking Cloud Run and repeatedly hitting Neon-backed metadata reads,
+  - Terraform now keeps logging retention but removes those public uptime resources,
+  - operator/manual smoke remains the intended health-validation path,
+  - scale-to-zero validation should now be rechecked against the quieter runtime surface.
