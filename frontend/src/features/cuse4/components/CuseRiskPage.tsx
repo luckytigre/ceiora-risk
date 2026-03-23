@@ -17,7 +17,12 @@ import type { FactorDetail } from "@/lib/types/cuse4";
 import { exposureTier as exposureMethodTier, normalizeExposureOrigin } from "@/lib/exposureOrigin";
 import { factorDisplayName } from "@/lib/factorLabels";
 import { buildAnalyticsTruthCompactSummary, summarizeAnalyticsTruth } from "@/lib/cuse4Truth";
-import { deriveRawLoadingSharesFromRiskDetails } from "@/lib/riskDecompBars";
+import {
+  deriveRawLoadingSharesFromRiskDetails,
+  RAW_LOADING_SUBTITLE,
+  RISK_DECOMP_SECTION_TITLE,
+  VOL_SCALED_SUBTITLE,
+} from "@/lib/riskDecompBars";
 
 const MODES = [
   { key: "raw", label: "Exposure" },
@@ -42,8 +47,8 @@ export default function ExposuresPage() {
   const riskShares = riskData?.risk_shares ?? { market: 0, industry: 0, style: 0, idio: 100 };
   const volScaledShares = riskData?.vol_scaled_shares ?? riskShares;
   const rawLoadingShares = useMemo(
-    () => deriveRawLoadingSharesFromRiskDetails(riskDetails),
-    [riskDetails],
+    () => deriveRawLoadingSharesFromRiskDetails(riskDetails, positions),
+    [positions, riskDetails],
   );
   const cov = riskData?.cov_matrix
     ? {
@@ -177,21 +182,21 @@ export default function ExposuresPage() {
   return (
     <div>
       <div className="chart-card" style={{ marginBottom: 12 }}>
-        <h3>Raw Loadings</h3>
+        <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
         <div className="section-subtitle">
-          Absolute raw loading footprint split across market, industry, and style factors.
+          {RAW_LOADING_SUBTITLE}
         </div>
         {riskLoading ? (
           <AnalyticsLoadingViz message="Loading portfolio risk mix..." />
         ) : (
-          <RiskDecompChart shares={rawLoadingShares} showIdio={false} />
+          <RiskDecompChart shares={rawLoadingShares} />
         )}
       </div>
 
       <div className="chart-card" style={{ marginBottom: 12 }}>
-        <h3>Vol-Scaled Decomposition</h3>
+        <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
         <div className="section-subtitle">
-          Vol-scaled footprint split across market, industry, style, and idiosyncratic components.
+          {VOL_SCALED_SUBTITLE}
         </div>
         {riskLoading ? (
           <AnalyticsLoadingViz message="Loading portfolio risk mix..." />

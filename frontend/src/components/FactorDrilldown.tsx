@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FactorDrilldownItem } from "@/lib/types/cuse4";
 import TableRowToggle from "@/components/TableRowToggle";
 import FactorHistoryChart from "@/components/FactorHistoryChart";
@@ -21,6 +21,7 @@ interface FactorDrilldownProps {
 }
 const COLLAPSED_ROWS = 10;
 type SortKey = "ticker" | "method" | "weight" | "exposure" | "sensitivity" | "contribution";
+type ContributionSortMode = "signed" | "abs";
 
 export default function FactorDrilldown({
   factorId,
@@ -66,13 +67,20 @@ export default function FactorDrilldown({
             math: "wᵢ × xᵢ,ᶠ",
           },
   };
-  const [sortKey, setSortKey] = useState<SortKey>(
-    isSensitivity ? "sensitivity" : isRiskContribution ? "contribution" : "exposure",
-  );
+  const [sortKey, setSortKey] = useState<SortKey>("contribution");
   const [sortAsc, setSortAsc] = useState(false);
+  const [contributionSortMode, setContributionSortMode] = useState<ContributionSortMode>("signed");
   const [showAllRows, setShowAllRows] = useState(false);
   const { data: historyData, error: historyError, isLoading: historyLoading } = useFactorHistory(factorId, 5);
   const displayFactor = shortFactorLabel(factorId, factorCatalog);
+  const contributionValue = (item: FactorDrilldownItem) => item.contribution;
+
+  useEffect(() => {
+    setSortKey("contribution");
+    setSortAsc(false);
+    setContributionSortMode("signed");
+  }, [factorId, mode]);
+
   const sorted = [...items].sort((a, b) => {
     if (sortKey === "ticker") {
       return sortAsc
@@ -87,19 +95,57 @@ export default function FactorDrilldown({
       const labelB = exposureMethodDisplayLabel(b.exposure_origin, b.model_status);
       return sortAsc ? labelA.localeCompare(labelB) : labelB.localeCompare(labelA);
     }
+    if (sortKey === "contribution") {
+      const leftValue = contributionValue(a);
+      const rightValue = contributionValue(b);
+      const leftComparable = contributionSortMode === "abs" ? Math.abs(leftValue) : leftValue;
+      const rightComparable = contributionSortMode === "abs" ? Math.abs(rightValue) : rightValue;
+      return sortAsc ? leftComparable - rightComparable : rightComparable - leftComparable;
+    }
     const av = sortKey === "sensitivity" ? (a.sensitivity ?? 0) : a[sortKey];
     const bv = sortKey === "sensitivity" ? (b.sensitivity ?? 0) : b[sortKey];
     return sortAsc ? av - bv : bv - av;
   });
   const uniqueExposureCount = new Set(items.map((item) => item.exposure.toFixed(6))).size;
   const handleSort = (key: SortKey) => {
+    if (key === "contribution") {
+      if (sortKey !== "contribution") {
+        setSortKey("contribution");
+        setContributionSortMode("signed");
+        setSortAsc(false);
+        return;
+      }
+      if (contributionSortMode === "signed" && !sortAsc) {
+        setSortAsc(true);
+        return;
+      }
+      if (contributionSortMode === "signed" && sortAsc) {
+        setContributionSortMode("abs");
+        setSortAsc(false);
+        return;
+      }
+      if (contributionSortMode === "abs" && !sortAsc) {
+        setSortAsc(true);
+        return;
+      }
+      setContributionSortMode("signed");
+      setSortAsc(false);
+      return;
+    }
     if (key === sortKey) setSortAsc((prev) => !prev);
     else {
       setSortKey(key);
       setSortAsc(false);
     }
   };
-  const arrow = (key: SortKey) => (sortKey === key ? (sortAsc ? " ↑" : " ↓") : "");
+  const arrow = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    if (key === "contribution") {
+      const modeLabel = contributionSortMode === "abs" ? "abs" : "signed";
+      return sortAsc ? ` (${modeLabel}) ↑` : ` (${modeLabel}) ↓`;
+    }
+    return sortAsc ? " ↑" : " ↓";
+  };
   const visibleRows = showAllRows ? sorted : sorted.slice(0, COLLAPSED_ROWS);
   return (
     <div className="detail-panel">

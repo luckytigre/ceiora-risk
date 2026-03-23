@@ -17,6 +17,7 @@ import type { CparFactorChartRow, CparRiskExposureMode } from "@/lib/types/cpar"
 const COLLAPSED_ROWS = 8;
 
 type SortKey = "ticker" | "coverage" | "market_value" | "weight" | "beta" | "sensitivity" | "contribution";
+type ContributionSortMode = "signed" | "abs";
 
 export default function CparRiskFactorDrilldown({
   factor,
@@ -26,10 +27,9 @@ export default function CparRiskFactorDrilldown({
   mode: CparRiskExposureMode;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>(
-    mode === "risk_contribution" ? "contribution" : mode === "sensitivity" ? "sensitivity" : "beta",
-  );
+  const [sortKey, setSortKey] = useState<SortKey>("contribution");
   const [sortAsc, setSortAsc] = useState(false);
+  const [contributionSortMode, setContributionSortMode] = useState<ContributionSortMode>("signed");
   const {
     data: historyData,
     error: historyError,
@@ -39,6 +39,9 @@ export default function CparRiskFactorDrilldown({
 
   const isSensitivity = mode === "sensitivity";
   const isRiskContribution = mode === "risk_contribution";
+  const contributionValue = (row: CparFactorChartRow["drilldown"][number]) => (
+    isRiskContribution ? row.risk_contribution_pct : isSensitivity ? row.vol_scaled_contribution : row.contribution_beta
+  );
   const hints = {
     weight: {
       plain: "Signed position market value divided by gross portfolio market value.",
@@ -74,9 +77,10 @@ export default function CparRiskFactorDrilldown({
   };
 
   useEffect(() => {
-    setSortKey(mode === "risk_contribution" ? "contribution" : mode === "sensitivity" ? "sensitivity" : "beta");
+    setSortKey("contribution");
     setSortAsc(false);
-  }, [mode]);
+    setContributionSortMode("signed");
+  }, [factor.factor_id, mode]);
 
   const sortedRows = useMemo(() => {
     const rows = [...factor.drilldown];
@@ -93,20 +97,23 @@ export default function CparRiskFactorDrilldown({
         const rightCoverage = `Covered ${rightFit}`.trim();
         return sortAsc ? leftCoverage.localeCompare(rightCoverage) : rightCoverage.localeCompare(leftCoverage);
       }
+      if (sortKey === "contribution") {
+        const leftValue = contributionValue(left);
+        const rightValue = contributionValue(right);
+        const leftComparable = contributionSortMode === "abs" ? Math.abs(leftValue) : leftValue;
+        const rightComparable = contributionSortMode === "abs" ? Math.abs(rightValue) : rightValue;
+        return sortAsc ? leftComparable - rightComparable : rightComparable - leftComparable;
+      }
       const leftValue = sortKey === "sensitivity"
         ? (isRiskContribution ? left.covariance_adjusted_loading : left.vol_scaled_loading)
-        : sortKey === "contribution"
-          ? (isRiskContribution ? left.risk_contribution_pct : isSensitivity ? left.vol_scaled_contribution : left.contribution_beta)
-          : sortKey === "beta"
+        : sortKey === "beta"
             ? (left.factor_beta || 0)
             : sortKey === "weight"
               ? (left.portfolio_weight || 0)
               : (left.market_value || 0);
       const rightValue = sortKey === "sensitivity"
         ? (isRiskContribution ? right.covariance_adjusted_loading : right.vol_scaled_loading)
-        : sortKey === "contribution"
-          ? (isRiskContribution ? right.risk_contribution_pct : isSensitivity ? right.vol_scaled_contribution : right.contribution_beta)
-          : sortKey === "beta"
+        : sortKey === "beta"
             ? (right.factor_beta || 0)
             : sortKey === "weight"
               ? (right.portfolio_weight || 0)
@@ -114,10 +121,34 @@ export default function CparRiskFactorDrilldown({
       return sortAsc ? leftValue - rightValue : rightValue - leftValue;
     });
     return rows;
-  }, [factor.drilldown, isRiskContribution, isSensitivity, sortAsc, sortKey]);
+  }, [contributionSortMode, factor.drilldown, isRiskContribution, isSensitivity, sortAsc, sortKey]);
   const visibleRows = expanded ? sortedRows : sortedRows.slice(0, COLLAPSED_ROWS);
 
   const handleSort = (nextKey: SortKey) => {
+    if (nextKey === "contribution") {
+      if (sortKey !== "contribution") {
+        setSortKey("contribution");
+        setContributionSortMode("signed");
+        setSortAsc(false);
+        return;
+      }
+      if (contributionSortMode === "signed" && !sortAsc) {
+        setSortAsc(true);
+        return;
+      }
+      if (contributionSortMode === "signed" && sortAsc) {
+        setContributionSortMode("abs");
+        setSortAsc(false);
+        return;
+      }
+      if (contributionSortMode === "abs" && !sortAsc) {
+        setSortAsc(true);
+        return;
+      }
+      setContributionSortMode("signed");
+      setSortAsc(false);
+      return;
+    }
     if (sortKey === nextKey) {
       setSortAsc((current) => !current);
       return;
@@ -125,7 +156,14 @@ export default function CparRiskFactorDrilldown({
     setSortKey(nextKey);
     setSortAsc(false);
   };
-  const arrow = (key: SortKey) => (sortKey === key ? (sortAsc ? " ↑" : " ↓") : "");
+  const arrow = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    if (key === "contribution") {
+      const modeLabel = contributionSortMode === "abs" ? "abs" : "signed";
+      return sortAsc ? ` (${modeLabel}) ↑` : ` (${modeLabel}) ↓`;
+    }
+    return sortAsc ? " ↑" : " ↓";
+  };
   const title = isRiskContribution
     ? "Risk Contribution Breakdown"
     : isSensitivity

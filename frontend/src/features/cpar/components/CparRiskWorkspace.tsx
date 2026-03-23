@@ -13,7 +13,12 @@ import {
   readCparError,
   sameCparPackageIdentity,
 } from "@/lib/cparTruth";
-import { deriveRawLoadingSharesFromCparLoadings } from "@/lib/riskDecompBars";
+import {
+  deriveRawLoadingSharesFromCparLoadings,
+  RAW_LOADING_SUBTITLE,
+  RISK_DECOMP_SECTION_TITLE,
+  VOL_SCALED_SUBTITLE,
+} from "@/lib/riskDecompBars";
 
 function CparRiskWorkspaceInner() {
   const { data: meta, error: metaError, isLoading: metaLoading } = useCparMeta();
@@ -25,8 +30,12 @@ function CparRiskWorkspaceInner() {
   } = useCparRisk(Boolean(meta) && !metaState);
   const normalizedRisk = useMemo(() => normalizeCparRiskData(risk), [risk]);
   const rawLoadingShares = useMemo(
-    () => deriveRawLoadingSharesFromCparLoadings(normalizedRisk?.aggregate_display_loadings),
-    [normalizedRisk?.aggregate_display_loadings],
+    () => deriveRawLoadingSharesFromCparLoadings(
+      normalizedRisk?.aggregate_display_loadings,
+      normalizedRisk?.display_factor_chart,
+      normalizedRisk?.positions,
+    ),
+    [normalizedRisk?.aggregate_display_loadings, normalizedRisk?.display_factor_chart, normalizedRisk?.positions],
   );
   const volScaledShares = normalizedRisk?.vol_scaled_shares ?? normalizedRisk?.risk_shares ?? { market: 0, industry: 0, style: 0, idio: 100 };
   const riskState = riskError ? readCparError(riskError) : null;
@@ -76,16 +85,16 @@ function CparRiskWorkspaceInner() {
       ) : normalizedRisk ? (
         <>
           <div className="chart-card" style={{ marginBottom: 12 }}>
-            <h3>Raw Loadings</h3>
+            <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
             <div className="section-subtitle">
-              Absolute raw loading footprint split across market, industry, and style factors.
+              {RAW_LOADING_SUBTITLE}
             </div>
-            <CparRiskDecompChart shares={rawLoadingShares} showIdio={false} />
+            <CparRiskDecompChart shares={rawLoadingShares} />
           </div>
           <div className="chart-card" style={{ marginBottom: 12 }}>
-            <h3>Vol-Scaled Decomposition</h3>
+            <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
             <div className="section-subtitle">
-              Vol-scaled footprint split across market, industry, style, and idiosyncratic components.
+              {VOL_SCALED_SUBTITLE}
             </div>
             <CparRiskDecompChart shares={volScaledShares} />
           </div>
