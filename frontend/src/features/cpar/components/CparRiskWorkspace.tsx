@@ -13,6 +13,7 @@ import {
   readCparError,
   sameCparPackageIdentity,
 } from "@/lib/cparTruth";
+import { deriveRawLoadingSharesFromCparLoadings } from "@/lib/riskDecompBars";
 
 function CparRiskWorkspaceInner() {
   const { data: meta, error: metaError, isLoading: metaLoading } = useCparMeta();
@@ -23,6 +24,10 @@ function CparRiskWorkspaceInner() {
     isLoading: riskLoading,
   } = useCparRisk(Boolean(meta) && !metaState);
   const normalizedRisk = useMemo(() => normalizeCparRiskData(risk), [risk]);
+  const rawLoadingShares = useMemo(
+    () => deriveRawLoadingSharesFromCparLoadings(normalizedRisk?.aggregate_display_loadings),
+    [normalizedRisk?.aggregate_display_loadings],
+  );
   const volScaledShares = normalizedRisk?.vol_scaled_shares ?? normalizedRisk?.risk_shares ?? { market: 0, industry: 0, style: 0, idio: 100 };
   const riskState = riskError ? readCparError(riskError) : null;
   const packageMismatch = Boolean(meta && normalizedRisk && !sameCparPackageIdentity(meta, normalizedRisk));
@@ -71,7 +76,14 @@ function CparRiskWorkspaceInner() {
       ) : normalizedRisk ? (
         <>
           <div className="chart-card" style={{ marginBottom: 12 }}>
-            <h3>Risk Decomposition</h3>
+            <h3>Raw Loadings</h3>
+            <div className="section-subtitle">
+              Absolute raw loading footprint split across market, industry, and style factors.
+            </div>
+            <CparRiskDecompChart shares={rawLoadingShares} showIdio={false} />
+          </div>
+          <div className="chart-card" style={{ marginBottom: 12 }}>
+            <h3>Vol-Scaled Decomposition</h3>
             <div className="section-subtitle">
               Vol-scaled footprint split across market, industry, style, and idiosyncratic components.
             </div>
