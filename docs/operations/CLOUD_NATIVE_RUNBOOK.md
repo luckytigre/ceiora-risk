@@ -185,6 +185,24 @@ The Terraform foundation currently creates the substrate only:
 
 It does not yet create running Cloud Run services, Cloud Run Jobs, or final ingress resources.
 
+## Image Build Contract
+
+Operator build entrypoints:
+- `make cloud-images-build`
+- `make cloud-images-push`
+- `scripts/cloud/build_images.sh`
+- `scripts/cloud/build_and_push_images.sh`
+
+Build-time contract:
+- the frontend image reads `BACKEND_API_ORIGIN` at build time so the Next rewrite proxy is baked for the target serve API host
+- default frontend build target is `https://api.ceiora.com`
+- backend images do not copy repo-local `backend/.env` or the broad local backend tree into the image
+
+Runtime contract:
+- all three images honor Cloud Run's injected `PORT`
+- `BACKEND_CONTROL_ORIGIN`, `OPERATOR_API_TOKEN`, and `EDITOR_API_TOKEN` stay runtime env/secret inputs
+- runtime secrets are not baked into the images
+
 ## Remaining Out Of Scope
 
 - live cloud deployment

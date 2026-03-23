@@ -367,16 +367,16 @@ Do not treat this as optional if the goal is a durable cloud-native runtime.
 
 ### Slice 3: Container Build And Runtime Contract Hardening
 
-- [ ] Run and record successful local builds for:
+- [x] Run and record successful local builds for:
   - `backend/Dockerfile.serve`
   - `backend/Dockerfile.control`
   - `frontend/Dockerfile`
-- [ ] Tighten container/runtime env contracts so Cloud Run deployment is deterministic.
-- [ ] Implement and document the initial image build/publish path:
+- [x] Tighten container/runtime env contracts so Cloud Run deployment is deterministic.
+- [x] Implement and document the initial image build/publish path:
   - local Docker build
   - Artifact Registry push from the verified operator workstation
-- [ ] Defer CI/CD image publishing until after the first cloud rollout is stable.
-- [ ] Keep the local app path unchanged.
+- [x] Defer CI/CD image publishing until after the first cloud rollout is stable.
+- [x] Keep the local app path unchanged.
 
 ### Slice 4: Control-Plane Execution Migration
 
@@ -498,3 +498,10 @@ Additional validation by phase:
   - froze `us-east4` as the first-cut region after checking the live Neon host against AWS `us-east-1`,
   - added repo-owned modules for project API enablement, Artifact Registry, service accounts, and Secret Manager secret containers,
   - documented the out-of-band secret-version workflow and validated both Terraform roots with `terraform init -backend=false` and `terraform validate`.
+- 2026-03-23: Slice 3 container/runtime hardening completed:
+  - backend images now copy only the explicit backend package surface instead of the whole local `backend/` tree,
+  - `.dockerignore` now excludes repo-local env files, local virtualenvs, offline backups, runtime archives, and Terraform workdirs from image contexts,
+  - the frontend image now takes `BACKEND_API_ORIGIN` as a build-time input so the rewrite proxy no longer bakes `127.0.0.1` into cloud images,
+  - all three images now honor runtime `PORT`,
+  - added operator-owned build/push scripts and `make cloud-images-build` / `make cloud-images-push`,
+  - validated the full local image build path for frontend, serve, and control.

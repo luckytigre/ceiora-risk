@@ -1,4 +1,4 @@
-.PHONY: dev backend backend-prod backend-serve backend-control backend-serve-prod backend-control-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup doctor cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status
+.PHONY: dev backend backend-prod backend-serve backend-control backend-serve-prod backend-control-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup doctor cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status cloud-images-build cloud-images-push
 
 setup:
 	./scripts/setup_local_env.sh
@@ -92,3 +92,9 @@ clean-local:
 	find . -name ".DS_Store" -delete || true
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
 	find . -type f -name "*.pyc" -delete || true
+
+cloud-images-build:
+	./scripts/cloud/build_images.sh
+
+cloud-images-push:
+	./scripts/cloud/build_and_push_images.sh
