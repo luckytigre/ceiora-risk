@@ -1,4 +1,4 @@
-.PHONY: dev backend backend-prod backend-serve backend-control backend-serve-prod backend-control-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup doctor cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status cloud-images-build cloud-images-push
+.PHONY: dev backend backend-prod backend-serve backend-control backend-serve-prod backend-control-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup doctor cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status cloud-images-build cloud-images-push cloud-serve-deploy
 
 setup:
 	./scripts/setup_local_env.sh
@@ -98,3 +98,6 @@ cloud-images-build:
 
 cloud-images-push:
 	./scripts/cloud/build_and_push_images.sh
+
+cloud-serve-deploy:
+	./scripts/cloud/deploy_serve.sh

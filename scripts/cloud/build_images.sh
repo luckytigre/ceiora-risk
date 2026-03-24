@@ -13,6 +13,40 @@ CLOUD_RUN_PLATFORM="${CLOUD_RUN_PLATFORM:-linux/amd64}"
 BUILD_OUTPUT="${BUILD_OUTPUT:-load}"
 BUILD_TARGETS="${BUILD_TARGETS:-frontend serve control}"
 NORMALIZED_BUILD_TARGETS=" $(printf '%s' "${BUILD_TARGETS}" | tr ',' ' ') "
+BACKEND_CONTEXT_PATHS=(
+  "backend/pyproject.toml"
+  "backend/__init__.py"
+  "backend/app_factory.py"
+  "backend/config.py"
+  "backend/control_main.py"
+  "backend/main.py"
+  "backend/serve_main.py"
+  "backend/trading_calendar.py"
+  "backend/api"
+  "backend/analytics"
+  "backend/cpar"
+  "backend/data"
+  "backend/ops"
+  "backend/orchestration"
+  "backend/portfolio"
+  "backend/risk_model"
+  "backend/scripts"
+  "backend/services"
+  "backend/universe"
+  "backend/vendor"
+)
+
+declare -a TEMP_CONTEXT_DIRS=()
+PREPARED_CONTEXT_DIR=""
+cleanup_temp_contexts() {
+  [[ ${TEMP_CONTEXT_DIRS+x} != x ]] && return 0
+  [[ ${#TEMP_CONTEXT_DIRS[@]} -eq 0 ]] && return 0
+  local dir
+  for dir in "${TEMP_CONTEXT_DIRS[@]}"; do
+    [[ -n "${dir}" && -d "${dir}" ]] && rm -rf "${dir}"
+  done
+}
+trap cleanup_temp_contexts EXIT
 
 REGISTRY_BASE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}"
 FRONTEND_IMAGE="${FRONTEND_IMAGE:-${REGISTRY_BASE}/frontend:${IMAGE_TAG}}"
@@ -40,36 +74,76 @@ build_target() {
   esac
 }
 
-BUILT_IMAGES=()
+prepare_context_dir() {
+  local context_kind="$1"
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  TEMP_CONTEXT_DIRS+=("${tmpdir}")
+  case "${context_kind}" in
+    frontend)
+      tar -C "${ROOT_DIR}" -cf - frontend | tar -C "${tmpdir}" -xf -
+      ;;
+    backend)
+      tar -C "${ROOT_DIR}" -cf - "${BACKEND_CONTEXT_PATHS[@]}" | tar -C "${tmpdir}" -xf -
+      ;;
+    *)
+      echo "Unsupported context kind: ${context_kind}" >&2
+      exit 1
+      ;;
+  esac
+  PREPARED_CONTEXT_DIR="${tmpdir}"
+}
 
-if build_target frontend; then
+build_image() {
+  local context_dir="$1"
+  local dockerfile_path="$2"
+  local image_ref="$3"
+  shift 3
   docker buildx build \
     --platform "${CLOUD_RUN_PLATFORM}" \
     ${OUTPUT_FLAG} \
-    --build-arg "BACKEND_API_ORIGIN=${BACKEND_API_ORIGIN}" \
-    -f frontend/Dockerfile \
-    -t "${FRONTEND_IMAGE}" \
-    .
+    "$@" \
+    -f "${dockerfile_path}" \
+    -t "${image_ref}" \
+    "${context_dir}"
+}
+
+BUILT_IMAGES=()
+FRONTEND_CONTEXT_DIR=""
+BACKEND_CONTEXT_DIR=""
+
+if build_target frontend; then
+  prepare_context_dir frontend
+  FRONTEND_CONTEXT_DIR="${PREPARED_CONTEXT_DIR}"
+  build_image \
+    "${FRONTEND_CONTEXT_DIR}" \
+    "frontend/Dockerfile" \
+    "${FRONTEND_IMAGE}" \
+    --build-arg "BACKEND_API_ORIGIN=${BACKEND_API_ORIGIN}"
   BUILT_IMAGES+=("${FRONTEND_IMAGE}")
 fi
 
 if build_target serve; then
-  docker buildx build \
-    --platform "${CLOUD_RUN_PLATFORM}" \
-    ${OUTPUT_FLAG} \
-    -f backend/Dockerfile.serve \
-    -t "${SERVE_IMAGE}" \
-    .
+  if [[ -z "${BACKEND_CONTEXT_DIR}" ]]; then
+    prepare_context_dir backend
+    BACKEND_CONTEXT_DIR="${PREPARED_CONTEXT_DIR}"
+  fi
+  build_image \
+    "${BACKEND_CONTEXT_DIR}" \
+    "backend/Dockerfile.serve" \
+    "${SERVE_IMAGE}"
   BUILT_IMAGES+=("${SERVE_IMAGE}")
 fi
 
 if build_target control; then
-  docker buildx build \
-    --platform "${CLOUD_RUN_PLATFORM}" \
-    ${OUTPUT_FLAG} \
-    -f backend/Dockerfile.control \
-    -t "${CONTROL_IMAGE}" \
-    .
+  if [[ -z "${BACKEND_CONTEXT_DIR}" ]]; then
+    prepare_context_dir backend
+    BACKEND_CONTEXT_DIR="${PREPARED_CONTEXT_DIR}"
+  fi
+  build_image \
+    "${BACKEND_CONTEXT_DIR}" \
+    "backend/Dockerfile.control" \
+    "${CONTROL_IMAGE}"
   BUILT_IMAGES+=("${CONTROL_IMAGE}")
 fi
 
