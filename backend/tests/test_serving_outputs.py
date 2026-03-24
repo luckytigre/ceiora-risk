@@ -272,11 +272,6 @@ def test_load_current_payload_does_not_fallback_to_sqlite_when_neon_is_primary(t
         "_persist_current_payloads_neon",
         lambda rows, *, replace_all: (_ for _ in ()).throw(AssertionError("test should not hit real Neon writes")),
     )
-    monkeypatch.setattr(
-        serving_outputs,
-        "_load_current_payload_sqlite",
-        lambda payload_name: (_ for _ in ()).throw(AssertionError("sqlite fallback should be disabled when neon is primary")),
-    )
 
     serving_outputs.persist_current_payloads(
         data_db=data_db,
@@ -316,77 +311,6 @@ def test_load_current_payloads_reads_multiple_rows_in_one_surface(tmp_path: Path
         "risk": {"risk_shares": {"style": 50.0}},
         "missing": None,
     }
-
-
-def test_load_current_payloads_prefers_sqlite_mirror_when_neon_downgrades_projection_only(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    data_db = tmp_path / "data.db"
-    monkeypatch.setattr(serving_outputs, "DATA_DB", data_db)
-    monkeypatch.setattr(serving_outputs, "_use_neon_reads", lambda: True)
-    monkeypatch.setattr(serving_outputs.config, "serving_outputs_cache_fallback_enabled", lambda: False)
-    monkeypatch.setattr(
-        serving_outputs,
-        "_load_current_payloads_neon",
-        lambda names: {
-            "portfolio": {
-                "positions": [
-                    {
-                        "ticker": "SPY",
-                        "model_status": "ineligible",
-                        "exposure_origin": "native",
-                    }
-                ]
-            },
-            "universe_loadings": {
-                "by_ticker": {
-                    "SPY": {
-                        "ticker": "SPY",
-                        "model_status": "ineligible",
-                        "exposure_origin": "native",
-                    }
-                }
-            },
-            "risk": {"risk_shares": {"market": 100.0}},
-        },
-    )
-
-    serving_outputs.persist_current_payloads(
-        data_db=data_db,
-        run_id="run_1",
-        snapshot_id="snap_1",
-        refresh_mode="serve-refresh",
-        payloads={
-            "portfolio": {
-                "positions": [
-                    {
-                        "ticker": "SPY",
-                        "model_status": "projected_only",
-                        "exposure_origin": "projected",
-                    }
-                ]
-            },
-            "universe_loadings": {
-                "by_ticker": {
-                    "SPY": {
-                        "ticker": "SPY",
-                        "model_status": "projected_only",
-                        "exposure_origin": "projected",
-                    }
-                }
-            },
-        },
-        replace_all=True,
-    )
-
-    out = serving_outputs.load_current_payloads(("portfolio", "universe_loadings", "risk"))
-
-    assert out["portfolio"]["positions"][0]["model_status"] == "projected_only"
-    assert out["portfolio"]["positions"][0]["exposure_origin"] == "projected"
-    assert out["universe_loadings"]["by_ticker"]["SPY"]["model_status"] == "projected_only"
-    assert out["universe_loadings"]["by_ticker"]["SPY"]["exposure_origin"] == "projected"
-    assert out["risk"] == {"risk_shares": {"market": 100.0}}
 
 
 def test_load_runtime_payloads_only_calls_fallback_for_missing_keys(monkeypatch) -> None:

@@ -145,15 +145,6 @@ def load_current_payloads(payload_names: Iterable[str]) -> dict[str, Any | None]
         return {}
     if _use_neon_reads():
         payloads = _load_current_payloads_neon(clean_names)
-        mirror_needed = [name for name in clean_names if name in {"portfolio", "universe_loadings"}]
-        if mirror_needed:
-            sqlite_payloads = _load_current_payloads_sqlite(mirror_needed)
-            for name in _projection_downgraded_payload_names(
-                primary_payloads=payloads,
-                mirror_payloads=sqlite_payloads,
-            ):
-                if sqlite_payloads.get(name) is not None:
-                    payloads[name] = sqlite_payloads.get(name)
         if config.serving_outputs_cache_fallback_enabled():
             missing = [name for name in clean_names if payloads.get(name) is None]
             if missing:
@@ -163,10 +154,6 @@ def load_current_payloads(payload_names: Iterable[str]) -> dict[str, Any | None]
                         payloads[name] = sqlite_payloads.get(name)
         return payloads
     return _load_current_payloads_sqlite(clean_names)
-
-
-def _load_current_payload_sqlite(payload_name: str) -> dict[str, Any] | list[Any] | None:
-    return _load_current_payloads_sqlite((payload_name,)).get(payload_name)
 
 
 def _normalize_payload_names(payload_names: Iterable[str]) -> list[str]:
@@ -187,69 +174,6 @@ def _decode_payload_json(raw: Any) -> dict[str, Any] | list[Any] | None:
     if isinstance(raw, (dict, list)):
         return raw
     return json.loads(str(raw))
-
-
-def _projection_rows_by_ticker_from_payload(
-    payload_name: str,
-    payload: Any,
-) -> dict[str, tuple[str, str]]:
-    if not isinstance(payload, dict):
-        return {}
-    clean_name = str(payload_name or "").strip()
-    rows: dict[str, tuple[str, str]] = {}
-    if clean_name == "portfolio":
-        for row in payload.get("positions") or []:
-            if not isinstance(row, dict):
-                continue
-            ticker = str(row.get("ticker") or "").strip().upper()
-            if not ticker:
-                continue
-            rows[ticker] = (
-                str(row.get("model_status") or "").strip(),
-                str(row.get("exposure_origin") or "").strip(),
-            )
-        return rows
-    if clean_name == "universe_loadings":
-        by_ticker = payload.get("by_ticker")
-        if not isinstance(by_ticker, dict):
-            return {}
-        for ticker, row in by_ticker.items():
-            if not isinstance(row, dict):
-                continue
-            clean_ticker = str(ticker or row.get("ticker") or "").strip().upper()
-            if not clean_ticker:
-                continue
-            rows[clean_ticker] = (
-                str(row.get("model_status") or "").strip(),
-                str(row.get("exposure_origin") or "").strip(),
-            )
-    return rows
-
-
-def _projection_downgraded_payload_names(
-    *,
-    primary_payloads: dict[str, Any | None],
-    mirror_payloads: dict[str, Any | None],
-) -> list[str]:
-    degraded: list[str] = []
-    for payload_name in ("portfolio", "universe_loadings"):
-        primary_rows = _projection_rows_by_ticker_from_payload(
-            payload_name,
-            primary_payloads.get(payload_name),
-        )
-        mirror_rows = _projection_rows_by_ticker_from_payload(
-            payload_name,
-            mirror_payloads.get(payload_name),
-        )
-        if not primary_rows or not mirror_rows:
-            continue
-        for ticker, mirror_state in mirror_rows.items():
-            if mirror_state != ("projected_only", "projected"):
-                continue
-            if primary_rows.get(ticker) != ("projected_only", "projected"):
-                degraded.append(payload_name)
-                break
-    return sorted(set(degraded))
 
 
 def _load_current_payloads_sqlite(payload_names: Iterable[str]) -> dict[str, Any | None]:
@@ -289,7 +213,12 @@ def _load_current_payloads_neon(payload_names: Iterable[str]) -> dict[str, Any |
     if not clean_names:
         return {}
     try:
-        conn = connect(dsn=resolve_dsn(None), autocommit=True)
+        conn = connect(
+            dsn=resolve_dsn(None),
+            autocommit=True,
+            connect_timeout=5,
+            options={"options": "-c statement_timeout=8000"},
+        )
     except Exception:
         return {name: None for name in clean_names}
     try:
