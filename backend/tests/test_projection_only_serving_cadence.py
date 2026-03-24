@@ -477,3 +477,90 @@ def test_validate_projection_only_serving_outputs_raises_on_native_downgrade() -
                 }
             ],
         )
+
+
+def test_publish_only_refresh_fails_when_projection_only_ticker_is_downgraded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    cache_db = tmp_path / "cache.db"
+    payloads = {
+        "portfolio": {
+            "positions": [
+                {
+                    "ticker": "SPY",
+                    "model_status": "ineligible",
+                    "exposure_origin": "native",
+                }
+            ],
+            "position_count": 1,
+            "total_value": 100.0,
+        },
+        "risk": {
+            "risk_engine": {
+                "core_state_through_date": "2026-03-20",
+            }
+        },
+        "refresh_meta": {
+            "risk_engine": {
+                "core_state_through_date": "2026-03-20",
+            }
+        },
+        "health_diagnostics": {"diagnostics_refresh_state": "carried_forward"},
+        "universe_loadings": {
+            "by_ticker": {
+                "SPY": {
+                    "ticker": "SPY",
+                    "model_status": "ineligible",
+                    "exposure_origin": "native",
+                }
+            }
+        },
+    }
+
+    monkeypatch.setattr(
+        pipeline.publish_payloads,
+        "load_publishable_payloads",
+        lambda **kwargs: (dict(payloads), []),
+    )
+    monkeypatch.setattr(
+        pipeline.publish_payloads,
+        "restamp_publishable_payloads",
+        lambda payloads, **kwargs: dict(payloads),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "load_projection_only_universe_rows",
+        lambda _conn: [{"ric": "SPY.P", "ticker": "SPY"}],
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "load_persisted_projected_loadings",
+        lambda **kwargs: {
+            "SPY": ProjectedLoadingResult(
+                ric="SPY.P",
+                ticker="SPY",
+                exposures={"Market": 1.0},
+                specific_var=0.01,
+                specific_vol=0.1,
+                r_squared=0.95,
+                obs_count=252,
+                lookback_days=252,
+                projection_asof="2026-03-20",
+                status="ok",
+            )
+        },
+    )
+    monkeypatch.setattr(
+        pipeline.serving_outputs,
+        "persist_current_payloads",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("publish should fail before persistence")),
+    )
+
+    with pytest.raises(RuntimeError, match="Projection-only serving payload integrity failed"):
+        pipeline.run_refresh(
+            data_db=data_db,
+            cache_db=cache_db,
+            mode="publish",
+        )

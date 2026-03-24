@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -288,6 +289,60 @@ def _validate_projection_only_serving_outputs(
         )
 
 
+def _projection_core_state_through_date_from_payloads(payloads: dict[str, Any]) -> str | None:
+    refresh_meta = dict(payloads.get("refresh_meta") or {})
+    refresh_meta_risk = dict(refresh_meta.get("risk_engine") or {})
+    risk_payload = dict(payloads.get("risk") or {})
+    risk_payload_meta = dict(risk_payload.get("risk_engine") or {})
+    for value in (
+        refresh_meta_risk.get("core_state_through_date"),
+        risk_payload_meta.get("core_state_through_date"),
+        refresh_meta_risk.get("factor_returns_latest_date"),
+        risk_payload_meta.get("factor_returns_latest_date"),
+    ):
+        clean = str(value or "").strip()
+        if clean:
+            return clean
+    return None
+
+
+def _load_projection_ok_tickers_for_payloads(
+    *,
+    data_db: Path,
+    payloads: dict[str, Any],
+) -> set[str]:
+    core_state_through_date = _projection_core_state_through_date_from_payloads(payloads)
+    if not core_state_through_date:
+        return set()
+    conn = sqlite3.connect(str(data_db))
+    try:
+        projection_rows = load_projection_only_universe_rows(conn)
+    finally:
+        conn.close()
+    if not projection_rows:
+        return set()
+    projected_loadings_map = load_persisted_projected_loadings(
+        data_db=data_db,
+        projection_rics=projection_rows,
+        as_of_date=core_state_through_date,
+    )
+    return _projection_ok_tickers(projected_loadings_map)
+
+
+def _validate_projection_only_payloads(
+    *,
+    projection_ok_tickers: set[str],
+    payloads: dict[str, Any],
+) -> None:
+    universe_payload = dict(payloads.get("universe_loadings") or {})
+    portfolio_payload = dict(payloads.get("portfolio") or {})
+    _validate_projection_only_serving_outputs(
+        projection_ok_tickers=projection_ok_tickers,
+        universe_by_ticker=dict(universe_payload.get("by_ticker") or {}),
+        positions=list(portfolio_payload.get("positions") or []),
+    )
+
+
 def _load_latest_factor_coverage(
     cache_db: Path,
     *,
@@ -412,6 +467,13 @@ def run_refresh(
             run_id=run_id,
             snapshot_id=snapshot_id,
             refresh_started_at=refresh_started_at,
+        )
+        _validate_projection_only_payloads(
+            projection_ok_tickers=_load_projection_ok_tickers_for_payloads(
+                data_db=effective_data_db,
+                payloads=payloads,
+            ),
+            payloads=payloads,
         )
         refresh_meta = dict(payloads.get("refresh_meta") or {})
         risk_payload = dict(payloads.get("risk") or {})
@@ -1139,6 +1201,10 @@ def run_refresh(
     health_refreshed = bool(staged.get("health_refreshed", False))
     health_refresh_state = str(staged.get("health_refresh_state") or ("recomputed" if health_refreshed else "deferred"))
     persisted_payloads = dict(staged.get("persisted_payloads") or {})
+    _validate_projection_only_payloads(
+        projection_ok_tickers=_projection_ok_tickers(projected_loadings_map),
+        payloads=persisted_payloads,
+    )
 
     _emit_refresh_progress(
         progress_callback,
