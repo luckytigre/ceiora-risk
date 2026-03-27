@@ -505,7 +505,7 @@ def _apply_deletes(*, data_db: Path, dsn: str, delete_rics: list[str], seed_path
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-db", type=Path, default=Path("backend/runtime/data.db"))
-    parser.add_argument("--seed-path", type=Path, default=Path("data/reference/security_master_seed.csv"))
+    parser.add_argument("--seed-path", type=Path, default=Path("data/reference/security_registry_seed.csv"))
     parser.add_argument("--dsn", default=None, help="Neon DSN; defaults to NEON_DATABASE_URL")
     parser.add_argument(
         "--backup-base-dir",

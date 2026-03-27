@@ -109,14 +109,15 @@
   - During that run, `serving_refresh` must read the local/workspace source tables that just produced the rebuilt raw history; otherwise it can publish stale Neon factor-loadings metadata before the broad Neon mirror catches up.
   - During ordinary `serve-refresh`, the published weekly core-state should come from the latest durable `model_run_metadata` rather than a stale runtime cache key; otherwise a quick refresh can republish fresh loadings with regressed core metadata.
   - this lane also owns deep `health_diagnostics` recompute for structural rebuilds.
-- `universe-add`: finalization lane after explicit `security_master` merge and targeted source backfills for new names.
+- `universe-add`: finalization lane after explicit registry/policy merge and targeted source backfills for new names.
+  - if the add includes new projection-only / returns-projection instruments that do not yet have persisted projected outputs for the active core package date, do not stop at `serve-refresh`; run at least `core-weekly` so durable `projected_instrument_*` rows are produced before app refresh
 
 Rebuild-authority rule:
 - By default, `core-weekly` and `cold-core` rebuild from Neon after source sync whenever `DATA_BACKEND=neon` and a Neon DSN is configured.
 - Set `NEON_AUTHORITATIVE_REBUILDS=false` only if you intentionally need to roll those lanes back to local SQLite. In that rollback mode, run `source-daily` first if you need the latest local ingest reflected.
-- If Neon ever gets ahead of the intended `source-daily` target date because of a premature/invalid session stamp, rerunning `source-daily` now heals that state instead of refusing the publish.
+- If Neon ever gets ahead of the intended `source-daily` target date because of a premature or invalid session stamp, `source_sync` now fails closed rather than trying to heal across the newer-than-target boundary. Investigate the bad stamp or advance the intended target first.
 - In the default Neon-authoritative path, those rebuild lanes execute in this order:
-  - `source_sync`: publish source tables from local SQLite into Neon without downgrading newer Neon source dates
+  - `source_sync`: publish source tables from local SQLite into Neon only when Neon is not already newer than the allowed target boundary
   - `neon_readiness`: validate Neon table coverage/retention and materialize a scratch SQLite rebuild workspace from Neon
   - core stages run from that Neon-backed scratch workspace
   - final mirror publishes rebuilt analytics back into Neon
@@ -124,6 +125,10 @@ Rebuild-authority rule:
 - Rehearsal/cutover safety rule:
   - `neon_readiness` must surface a valid scratch workspace payload; malformed workspace metadata now fails the run closed instead of letting later stages guess paths
   - if syncing the rebuilt workspace derivatives back into the local mirror fails, the run also fails closed
+- Workspace retention rule:
+  - Neon rebuild workspaces under `backend/runtime/neon_rebuild_workspace/job_*` are scratch artifacts, not durable archives
+  - retain only a small recent set via `NEON_REBUILD_WORKSPACE_RETENTION` (default `2`)
+  - older `job_*` workspace directories are pruned automatically after runs; use a short-term retention override only when you intentionally need extra local forensics
 - In both cases, local SQLite remains the only direct LSEG ingress point.
 
 Runtime-role rule:
@@ -198,12 +203,12 @@ Parallel cPAR note:
   - `python3 -m backend.scripts.run_model_pipeline --profile source-daily-plus-core-if-due --resume-run-id <run_id>`
 - Refresh data from LSEG:
   - `.venv_local/bin/python -m backend.scripts.download_data_lseg --db-path backend/runtime/data.db`
-  - Explicit `--tickers`, `--rics`, and index-derived names only operate on instruments already present in `security_master`; the command now reports any requested names that were not seeded there.
+  - Explicit `--tickers`, `--rics`, and index-derived names only operate on instruments already present in the runtime ingest scope; the command reports any requested names that are not yet represented in the seeded registry/runtime surfaces.
 - When running those local-ingest commands directly, prefer `.venv_local/bin/python -m ...` so the process uses the same LSEG-capable environment as the local app scripts.
-- `make doctor` verifies `.venv_local`, core backend imports, whether `lseg.data` is available in that environment, and whether clean duplicate aliases are still present in the seed/local `security_master`.
+- `make doctor` verifies `.venv_local`, core backend imports, whether `lseg.data` is available in that environment, and whether clean duplicate aliases are still present in the primary registry seed plus the local compatibility surfaces when they exist.
 - Repair historical volume coverage only (writes `TR.Volume` into `security_prices_eod.volume`):
   - `python3 -m backend.scripts.backfill_prices_range_lseg --db-path backend/runtime/data.db --start-date 2012-01-03 --end-date 2026-03-04 --volume-only --only-null-volume`
-  - Explicit `--rics` repairs likewise only target seeded `security_master` rows and report unmatched requested RICs in the result payload.
+  - Explicit `--rics` repairs likewise only target names already present in the runtime ingest scope and report unmatched requested RICs in the result payload.
 - PIT history backfill (monthly/quarterly anchor dates for fundamentals/classification, with optional sparse anchor-date prices):
   - `python3 -m backend.scripts.backfill_pit_history_lseg --db-path backend/runtime/data.db --start-date 2018-01-01 --end-date 2026-03-04 --frequency monthly`
   - This is not a substitute for full daily price-history repair. Use `backfill_prices_range_lseg.py` when you need continuous daily `security_prices_eod` history for raw-history rebuilds or factor-return recompute coverage.
@@ -309,9 +314,9 @@ Parallel cPAR note:
 
 ## Validation Checklist
 - Verify refresh status + orchestrator state:
-  - `curl -s "http://localhost:8000/api/refresh/status" | jq`
+  - `curl -s "${BACKEND_CONTROL_ORIGIN:-http://localhost:8001}/api/refresh/status" | jq`
 - Verify operator lane matrix:
-  - `curl -s "http://localhost:8000/api/operator/status" | jq`
+  - `curl -s "${BACKEND_CONTROL_ORIGIN:-http://localhost:8001}/api/operator/status" | jq`
   - Confirm:
     - `.runtime.app_runtime_role`
     - `.runtime.allowed_profiles`
@@ -356,10 +361,13 @@ Parallel cPAR note:
 - Security master key policy:
   - `security_master` is physically keyed by `ric`.
   - deprecated `sid`/`permid` and dead instrument metadata were removed from the canonical schema.
+  - it is a compatibility mirror only; registry/policy/taxonomy/source-observation surfaces now define active universe behavior.
 - Price schema policy:
   - `security_prices_eod` canonical columns are `open/high/low/close/adj_close/volume/currency` (no `exchange` field).
 - Risk API readiness gate:
   - `/api/risk` now returns not-ready if covariance/specific-risk payload is incomplete.
+- Neon rebuild readiness gate:
+  - required model-output tables such as `model_factor_covariance_daily` and `model_run_metadata` must be present and non-empty; table existence alone is not sufficient to treat Neon as rebuild-ready.
 - Relational output quality gate:
   - Refresh fails if any required relational model-output table write is empty.
 

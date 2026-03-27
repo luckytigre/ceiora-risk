@@ -37,7 +37,7 @@ It does not add:
 - returns one active-package persisted cPAR fit plus source-context augmentation for the resolved ticker/ric
 - now exposes residualized explanatory fit semantics:
   - `display_loadings`
-  - `beta_market_step1`
+  - compatibility field `beta_market_step1` carrying the one-shot market coefficient
 - still preserves the explicit hedge-space market leg for hedge-specific consumers:
   - `beta_spy_trade`
   - `raw_loadings`

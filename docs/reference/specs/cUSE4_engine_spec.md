@@ -57,17 +57,19 @@ Data-model state:
 
 ### 3.1 Universe authority and maintenance policy
 
-`security_master` is the only authoritative universe table.
-- Universe updates are explicit (file-driven merge into the committed registry, then bootstrap-sync into `security_master`), not auto-regenerated from index constituent builders.
-- Identity keys and mappings live in `security_master`; they are not duplicated into separate persisted mapping tables.
-- The git-versioned universe artifact is `data/reference/security_master_seed.csv`; it is registry/bootstrap input only, while live identifiers and eligibility flags are runtime DB state.
+`security_registry` and `security_policy_current` are the authoritative universe-maintenance surfaces.
+- Universe updates are explicit: file-driven merge into the committed registry artifact, then bootstrap-sync into the authoritative registry/policy surfaces and the `security_master` compatibility mirror.
+- Identity keys and tracking state live in `security_registry`; current ingest/model path controls live in `security_policy_current`.
+- The git-versioned primary universe artifact is `data/reference/security_registry_seed.csv`.
+- `data/reference/security_master_seed.csv` remains a compatibility export only while legacy workflows still need it.
 
 ### 3.2 Equity-only ingest scope (all canonical time-series)
 
-Use centralized eligibility rules from `security_master` when ingesting/backfilling canonical tables:
-- `classification_ok = 1`
-- `is_equity_eligible = 1`
-- Exception: explicit subset ingests/backfills by `--rics` or requested ticker list may target pending names directly so LSEG enrichment can populate the live identifiers and derived eligibility flags.
+Use centralized selectors built from registry, policy, taxonomy, and source-readiness state when ingesting/backfilling canonical tables.
+- Price ingest follows the named price-ingest selector.
+- PIT fundamentals/classification ingest is only enabled for names whose active policy allows those PIT series.
+- Single-name equity classification comes from taxonomy/readiness state, not from treating `security_master` booleans as the primary contract.
+- Exception: explicit subset ingests/backfills by `--rics` or requested ticker list may still target pending names directly so LSEG enrichment can populate the live source state.
 
 ### 3.3 PIT and daily backfill policy
 

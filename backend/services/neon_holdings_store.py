@@ -11,6 +11,13 @@ from backend.services.neon_holdings_identifiers import QTY_SCALE, normalize_acco
 from backend.services.neon_stage2 import apply_sql_file
 
 
+_REGISTRY_TICKER_EXPR = "COALESCE(NULLIF(TRIM(p.ticker), ''), NULLIF(TRIM(reg.ticker), ''))"
+_REGISTRY_JOIN_SQL = """
+            LEFT JOIN security_registry reg
+              ON reg.ric = p.ric
+"""
+
+
 def ensure_holdings_schema(pg_conn, *, schema_sql_path: Path) -> dict[str, Any]:
     return apply_sql_file(pg_conn, sql_path=schema_sql_path)
 
@@ -93,14 +100,13 @@ def load_current_positions_for_ticker(pg_conn, *, account_id: str, ticker: str) 
             """
             SELECT
                 p.ric,
-                COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker,
+                """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
                 p.quantity,
                 p.source
             FROM holdings_positions_current p
-            LEFT JOIN security_master sm
-              ON sm.ric = p.ric
+            """ + _REGISTRY_JOIN_SQL + """
             WHERE p.account_id = %s
-              AND UPPER(COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker)) = %s
+              AND UPPER(""" + _REGISTRY_TICKER_EXPR + """) = %s
             ORDER BY p.ric
             """,
             (acct, tkr),
@@ -248,15 +254,14 @@ def list_holdings_positions(pg_conn, *, account_id: str | None = None) -> list[d
                 SELECT
                     p.account_id,
                     p.ric,
-                    COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker,
+                    """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
                     p.quantity,
                     p.source,
                     p.updated_at
                 FROM holdings_positions_current p
-                LEFT JOIN security_master sm
-                  ON sm.ric = p.ric
+                """ + _REGISTRY_JOIN_SQL + """
                 WHERE account_id = %s
-                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
+                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
                 """,
                 (acct,),
             )
@@ -266,14 +271,13 @@ def list_holdings_positions(pg_conn, *, account_id: str | None = None) -> list[d
                 SELECT
                     p.account_id,
                     p.ric,
-                    COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker,
+                    """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
                     p.quantity,
                     p.source,
                     p.updated_at
                 FROM holdings_positions_current p
-                LEFT JOIN security_master sm
-                  ON sm.ric = p.ric
-                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
+                """ + _REGISTRY_JOIN_SQL + """
+                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
                 """
             )
         rows = cur.fetchall()

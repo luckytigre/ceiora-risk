@@ -10,7 +10,7 @@ from typing import Any
 from psycopg.rows import dict_row
 
 from backend import config
-from backend.cpar.factor_registry import ordered_factor_ids
+from backend.cpar.factor_registry import build_cpar1_factor_registry, ordered_factor_ids
 from backend.data import cpar_queries, cpar_schema, cpar_writers, core_read_backend as core_backend
 from backend.data.neon import connect, resolve_dsn
 from backend.data.neon_primary_write import execute_neon_primary_write
@@ -189,6 +189,188 @@ def _normalize_child_rows(
     return normalized
 
 
+def _factor_basis_tickers() -> set[str]:
+    return {
+        str(spec.ticker).strip().upper()
+        for spec in build_cpar1_factor_registry()
+        if str(spec.ticker).strip()
+    }
+
+
+def _load_package_price_presence_by_ric(
+    *,
+    package_date: str,
+    rics: list[str],
+    data_db: Path | None = None,
+) -> dict[str, bool]:
+    clean_rics = sorted({str(ric or "").strip().upper() for ric in rics if str(ric or "").strip()})
+    if not clean_rics:
+        return {}
+    placeholders = ",".join("?" for _ in clean_rics)
+    try:
+        rows = _sqlite_fetch_rows(
+            f"""
+            WITH ranked AS (
+                SELECT
+                    ric,
+                    date,
+                    adj_close,
+                    close,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY UPPER(COALESCE(ric, ''))
+                        ORDER BY date DESC, updated_at DESC
+                    ) AS rn
+                FROM security_prices_eod
+                WHERE date <= ?
+                  AND UPPER(COALESCE(ric, '')) IN ({placeholders})
+            )
+            SELECT ric, adj_close, close
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY ric
+            """,
+            [str(package_date), *clean_rics],
+            data_db=data_db,
+        )
+    except Exception:
+        return {}
+    return {
+        str(row.get("ric") or "").strip().upper(): (
+            row.get("adj_close") is not None or row.get("close") is not None
+        )
+        for row in rows
+        if str(row.get("ric") or "").strip()
+    }
+
+
+def _fit_quality_status(fit_status: str) -> str:
+    clean_fit_status = str(fit_status or "").strip()
+    if clean_fit_status == "ok":
+        return "ok"
+    if clean_fit_status == "limited_history":
+        return "limited_history"
+    if clean_fit_status == "insufficient_history":
+        return "insufficient_history"
+    return "unknown"
+
+
+def _quality_label(*, fit_status: str, has_price: bool) -> str:
+    if not has_price:
+        return "missing_price"
+    clean_fit_status = str(fit_status or "").strip()
+    if clean_fit_status == "ok":
+        return "ok"
+    if clean_fit_status == "limited_history":
+        return "limited_history"
+    if clean_fit_status == "insufficient_history":
+        return "insufficient_history"
+    return "unknown"
+
+
+def _portfolio_use_status(*, fit_status: str, has_price: bool) -> str:
+    if not has_price:
+        return "missing_price"
+    if str(fit_status or "").strip() == "insufficient_history":
+        return "insufficient_history"
+    return "covered"
+
+
+def _hedge_use_status(*, fit_status: str, has_price: bool) -> str:
+    if not has_price:
+        return "missing_price"
+    if str(fit_status or "").strip() == "insufficient_history":
+        return "insufficient_history"
+    return "usable"
+
+
+def _reason_code(*, fit_status: str, has_price: bool, warnings: list[str]) -> str:
+    if not has_price:
+        return "missing_price_on_or_before_package_date"
+    clean_fit_status = str(fit_status or "").strip()
+    if clean_fit_status == "insufficient_history":
+        return "fit_status_insufficient_history"
+    if clean_fit_status == "limited_history":
+        return "fit_status_limited_history"
+    if warnings:
+        return str(warnings[0])
+    return "ok"
+
+
+def _derive_package_membership_rows(
+    *,
+    instrument_fits: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    factor_basis_tickers = _factor_basis_tickers()
+    rows: list[dict[str, Any]] = []
+    for fit in instrument_fits:
+        ticker = str(fit.get("ticker") or "").strip().upper() or None
+        hq_country = str(fit.get("hq_country_code") or "").strip().upper()
+        allow_cpar_core_target = int(fit.get("allow_cpar_core_target") or 0)
+        is_single_name_equity = int(fit.get("is_single_name_equity") or 0)
+        basis_role = "factor_proxy" if ticker and ticker in factor_basis_tickers else "instrument"
+        if basis_role == "factor_proxy":
+            universe_scope = "factor_basis_only"
+            target_scope = "factor_basis_only"
+            build_reason_code = "factor_basis_proxy"
+        elif hq_country == "US" and (allow_cpar_core_target == 1 or is_single_name_equity == 1):
+            universe_scope = "core_us_equity"
+            target_scope = "core_us_equity"
+            build_reason_code = "policy_core_us_equity"
+        else:
+            universe_scope = "extended_priced_instrument"
+            target_scope = "extended_priced_instrument"
+            build_reason_code = "extended_non_core_or_non_us"
+        rows.append(
+            {
+                "package_run_id": fit["package_run_id"],
+                "package_date": fit["package_date"],
+                "ric": fit["ric"],
+                "ticker": fit.get("ticker"),
+                "universe_scope": universe_scope,
+                "target_scope": target_scope,
+                "basis_role": basis_role,
+                "build_reason_code": build_reason_code,
+                "warnings": list(fit.get("warnings") or []),
+                "updated_at": fit["updated_at"],
+            }
+        )
+    return rows
+
+
+def _derive_runtime_coverage_rows(
+    *,
+    instrument_fits: list[dict[str, Any]],
+    price_presence_by_ric: dict[str, bool],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for fit in instrument_fits:
+        ric = str(fit.get("ric") or "").strip().upper()
+        fit_status = str(fit.get("fit_status") or "").strip()
+        warnings = list(fit.get("warnings") or [])
+        has_price = bool(price_presence_by_ric.get(ric))
+        rows.append(
+            {
+                "package_run_id": fit["package_run_id"],
+                "package_date": fit["package_date"],
+                "ric": fit["ric"],
+                "ticker": fit.get("ticker"),
+                "price_on_package_date_status": "present" if has_price else "missing",
+                "fit_row_status": "present",
+                "fit_quality_status": _fit_quality_status(fit_status),
+                "portfolio_use_status": _portfolio_use_status(fit_status=fit_status, has_price=has_price),
+                "ticker_detail_use_status": "available",
+                "hedge_use_status": _hedge_use_status(fit_status=fit_status, has_price=has_price),
+                "fit_family": "returns_regression_weekly",
+                "fit_status": fit_status,
+                "reason_code": _reason_code(fit_status=fit_status, has_price=has_price, warnings=warnings),
+                "quality_label": _quality_label(fit_status=fit_status, has_price=has_price),
+                "warnings": warnings,
+                "updated_at": fit["updated_at"],
+            }
+        )
+    return rows
+
+
 def _validate_package_completeness(
     *,
     package_run: dict[str, Any],
@@ -233,6 +415,16 @@ def persist_cpar_package(
     normalized_proxy_transforms = _normalize_child_rows(proxy_transforms, package_date=package_date, package_run_id=package_run_id, now_iso=now_iso)
     normalized_covariance = _normalize_child_rows(covariance_rows, package_date=package_date, package_run_id=package_run_id, now_iso=now_iso)
     normalized_instrument_fits = _normalize_child_rows(instrument_fits, package_date=package_date, package_run_id=package_run_id, now_iso=now_iso)
+    price_presence_by_ric = _load_package_price_presence_by_ric(
+        package_date=package_date,
+        rics=[str(row.get("ric") or "") for row in normalized_instrument_fits],
+        data_db=data_db,
+    )
+    normalized_package_membership = _derive_package_membership_rows(instrument_fits=normalized_instrument_fits)
+    normalized_runtime_coverage = _derive_runtime_coverage_rows(
+        instrument_fits=normalized_instrument_fits,
+        price_presence_by_ric=price_presence_by_ric,
+    )
     _validate_package_completeness(
         package_run=normalized_package_run_base,
         proxy_returns=normalized_proxy_returns,
@@ -246,6 +438,8 @@ def persist_cpar_package(
         cpar_schema.TABLE_PROXY_TRANSFORM: len(normalized_proxy_transforms),
         cpar_schema.TABLE_FACTOR_COVARIANCE: len(normalized_covariance),
         cpar_schema.TABLE_INSTRUMENT_FITS: len(normalized_instrument_fits),
+        cpar_schema.TABLE_PACKAGE_UNIVERSE_MEMBERSHIP: len(normalized_package_membership),
+        cpar_schema.TABLE_RUNTIME_COVERAGE: len(normalized_runtime_coverage),
     }
     neon_write_state: dict[str, Any] = {"status": "skipped"}
 
@@ -260,6 +454,8 @@ def persist_cpar_package(
                 proxy_transforms=normalized_proxy_transforms,
                 covariance_rows=normalized_covariance,
                 instrument_fits=normalized_instrument_fits,
+                package_membership=normalized_package_membership,
+                runtime_coverage=normalized_runtime_coverage,
             )
         finally:
             conn.close()
@@ -274,6 +470,8 @@ def persist_cpar_package(
                 proxy_transforms=normalized_proxy_transforms,
                 covariance_rows=normalized_covariance,
                 instrument_fits=normalized_instrument_fits,
+                package_membership=normalized_package_membership,
+                runtime_coverage=normalized_runtime_coverage,
             )
         except Exception:
             try:

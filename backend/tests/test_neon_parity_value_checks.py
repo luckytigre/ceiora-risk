@@ -96,6 +96,164 @@ def _create_sqlite_runtime(db_path: Path, cache_path: Path) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute("CREATE TABLE security_master (ric TEXT PRIMARY KEY)")
     conn.execute("INSERT INTO security_master (ric) VALUES ('ABC.N')")
+    conn.execute(
+        """
+        CREATE TABLE security_registry (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            tracking_status TEXT
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO security_registry (ric, ticker, tracking_status) VALUES ('ABC.N', 'ABC', 'active')"
+    )
+    conn.execute(
+        """
+        CREATE TABLE security_taxonomy_current (
+            ric TEXT PRIMARY KEY,
+            instrument_kind TEXT,
+            vehicle_structure TEXT,
+            model_home_market_scope TEXT,
+            is_single_name_equity INTEGER,
+            classification_ready INTEGER
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_taxonomy_current (
+            ric, instrument_kind, vehicle_structure, model_home_market_scope,
+            is_single_name_equity, classification_ready
+        ) VALUES ('ABC.N', 'single_name_equity', 'equity_security', 'us', 1, 1)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE security_policy_current (
+            ric TEXT PRIMARY KEY,
+            price_ingest_enabled INTEGER,
+            pit_fundamentals_enabled INTEGER,
+            pit_classification_enabled INTEGER,
+            allow_cuse_native_core INTEGER,
+            allow_cuse_fundamental_projection INTEGER,
+            allow_cuse_returns_projection INTEGER,
+            allow_cpar_core_target INTEGER,
+            allow_cpar_extended_target INTEGER
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_policy_current (
+            ric, price_ingest_enabled, pit_fundamentals_enabled, pit_classification_enabled,
+            allow_cuse_native_core, allow_cuse_fundamental_projection, allow_cuse_returns_projection,
+            allow_cpar_core_target, allow_cpar_extended_target
+        ) VALUES ('ABC.N', 1, 1, 1, 1, 0, 0, 1, 1)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE security_master_compat_current (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            isin TEXT,
+            exchange_name TEXT,
+            classification_ok INTEGER,
+            is_equity_eligible INTEGER,
+            coverage_role TEXT,
+            source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_master_compat_current (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, job_run_id, updated_at
+        ) VALUES ('ABC.N', 'ABC', 1, 1, 'native_equity', 'security_registry_seed', 'job-1', '2026-03-02T00:00:00+00:00')
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE security_source_observation_daily (
+            as_of_date TEXT,
+            ric TEXT,
+            classification_ready INTEGER,
+            is_equity_eligible INTEGER,
+            price_ingest_enabled INTEGER,
+            pit_fundamentals_enabled INTEGER,
+            pit_classification_enabled INTEGER,
+            has_price_history_as_of_date INTEGER,
+            has_fundamentals_history_as_of_date INTEGER,
+            has_classification_history_as_of_date INTEGER,
+            latest_price_date TEXT,
+            latest_fundamentals_as_of_date TEXT,
+            latest_classification_as_of_date TEXT,
+            source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_source_observation_daily (
+            as_of_date, ric, classification_ready, is_equity_eligible, price_ingest_enabled,
+            pit_fundamentals_enabled, pit_classification_enabled, has_price_history_as_of_date,
+            has_fundamentals_history_as_of_date, has_classification_history_as_of_date,
+            latest_price_date, latest_fundamentals_as_of_date, latest_classification_as_of_date,
+            source, job_run_id, updated_at
+        ) VALUES (
+            '2026-03-01', 'ABC.N', 1, 1, 1, 1, 1, 1, 1, 1,
+            '2026-03-01', '2026-03-01', '2026-03-01', 'security_registry_seed', 'job-1', '2026-03-02T00:00:00+00:00'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE security_ingest_runs (
+            job_run_id TEXT PRIMARY KEY,
+            source TEXT,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            status TEXT,
+            notes TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_ingest_runs (
+            job_run_id, source, started_at, finished_at, status, notes
+        ) VALUES (
+            'job-1', 'lseg', '2026-03-01T00:00:00+00:00', '2026-03-01T00:05:00+00:00', 'ok', 'runtime seed'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE security_ingest_audit (
+            job_run_id TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            artifact_name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            detail TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (job_run_id, ric, artifact_name)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_ingest_audit (
+            job_run_id, ric, artifact_name, status, detail, updated_at
+        ) VALUES (
+            'job-1', 'ABC.N', 'prices', 'ok', 'loaded', '2026-03-01T00:05:00+00:00'
+        )
+        """
+    )
     conn.execute("CREATE TABLE security_prices_eod (ric TEXT, date TEXT)")
     conn.execute("INSERT INTO security_prices_eod (ric, date) VALUES ('ABC.N', '2026-03-01')")
     conn.execute(
@@ -115,6 +273,18 @@ def _create_sqlite_runtime(db_path: Path, cache_path: Path) -> None:
     )
     conn.execute(
         "INSERT INTO barra_raw_cross_section_history (ric, as_of_date) VALUES ('ABC.N', '2026-03-01')"
+    )
+    conn.execute(
+        "CREATE TABLE estu_membership_daily (ric TEXT, date TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO estu_membership_daily (ric, date) VALUES ('ABC.N', '2026-03-01')"
+    )
+    conn.execute(
+        "CREATE TABLE universe_cross_section_snapshot (ric TEXT, as_of_date TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO universe_cross_section_snapshot (ric, as_of_date) VALUES ('ABC.N', '2026-03-01')"
     )
     conn.execute(
         """
@@ -256,6 +426,7 @@ def test_run_bounded_parity_audit_detects_factor_return_value_drift(
     monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
     monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_mirror, "_audit_source_sync_metadata", lambda **_kwargs: ({}, []))
     monkeypatch.setattr(
         neon_mirror,
         "_pg_columns",
@@ -295,6 +466,93 @@ def test_run_bounded_parity_audit_detects_factor_return_value_drift(
     assert any("Beta" in issue for issue in table_out["value_check_issues"])
 
 
+def test_run_bounded_parity_audit_includes_security_ingest_tracking_tables(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sqlite_path = tmp_path / "data.db"
+    cache_path = tmp_path / "cache.db"
+    _create_sqlite_runtime(sqlite_path, cache_path)
+
+    monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_mirror, "_audit_source_sync_metadata", lambda **_kwargs: ({}, []))
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_columns",
+        lambda _pg_conn, table: _fake_pg_columns(table),
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_count_window",
+        lambda _pg_conn, *, table, date_col, cutoff, distinct_col="ric": (
+            {
+                "row_count": 1,
+                "min_date": "2026-03-01T00:00:00+00:00",
+                "max_date": "2026-03-01T00:00:00+00:00",
+                "latest_distinct": None,
+            }
+            if table == "security_ingest_runs"
+            else {
+                "row_count": 1,
+                "min_date": "2026-03-01T00:05:00+00:00",
+                "max_date": "2026-03-01T00:05:00+00:00",
+                "latest_distinct": 1,
+            }
+            if table == "security_ingest_audit"
+            else {
+                "row_count": 1,
+                "min_date": "2026-03-01" if date_col else None,
+                "max_date": "2026-03-01" if date_col else None,
+                "latest_distinct": 1 if distinct_col else None,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_non_null_counts",
+        lambda _pg_conn, *, table, columns, date_col=None, cutoff=None: {col: 1 for col in columns},
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_group_count_by_date",
+        lambda _pg_conn, *, table, date_col, dates: {date: 1 for date in dates},
+    )
+    monkeypatch.setattr(neon_mirror, "_pg_duplicate_key_groups", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_pit_period_health",
+        lambda *_args, **_kwargs: {"periods_with_multiple_anchors": 0, "open_period_rows": 0},
+    )
+    monkeypatch.setattr(
+        neon_mirror,
+        "_sqlite_pit_period_health",
+        lambda *_args, **_kwargs: {"periods_with_multiple_anchors": 0, "open_period_rows": 0},
+    )
+    monkeypatch.setattr(neon_mirror, "_pit_latest_closed_anchor", lambda **_kwargs: "2026-02-27")
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_factor_return_values",
+        lambda _pg_conn, *, table, dates: {
+            ("2026-03-02", "Beta"): (0.01, 0.005, 2.0, 0.3, 0.2, 100.0, 95.0, 0.95),
+            ("2026-03-02", "Book-to-Price"): (-0.02, 0.010, -2.0, 0.3, 0.2, 100.0, 95.0, 0.95),
+        },
+    )
+
+    out = neon_mirror.run_bounded_parity_audit(
+        sqlite_path=sqlite_path,
+        cache_path=cache_path,
+        dsn="postgresql://example",
+        analytics_years=5,
+    )
+
+    assert "security_ingest_runs" in out["tables"]
+    assert "security_ingest_audit" in out["tables"]
+    assert out["tables"]["security_ingest_runs"]["status"] == "ok"
+    assert out["tables"]["security_ingest_audit"]["status"] == "ok"
+
+
 def test_run_bounded_parity_audit_reports_factor_return_inference_coverage(
     tmp_path: Path,
     monkeypatch,
@@ -321,6 +579,7 @@ def test_run_bounded_parity_audit_reports_factor_return_inference_coverage(
     monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
     monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_mirror, "_audit_source_sync_metadata", lambda **_kwargs: ({}, []))
     monkeypatch.setattr(
         neon_mirror,
         "_pg_columns",
@@ -415,6 +674,20 @@ def test_run_bounded_parity_audit_allows_target_history_superset_for_model_outpu
                 "max_date": "2026-03-02T00:05:00+00:00",
                 "latest_distinct": None,
             }
+        if table == "security_ingest_runs":
+            return {
+                "row_count": 1,
+                "min_date": "2026-03-01T00:00:00+00:00",
+                "max_date": "2026-03-01T00:00:00+00:00",
+                "latest_distinct": None,
+            }
+        if table == "security_ingest_audit":
+            return {
+                "row_count": 1,
+                "min_date": "2026-03-01T00:05:00+00:00",
+                "max_date": "2026-03-01T00:05:00+00:00",
+                "latest_distinct": 1,
+            }
         return {
             "row_count": 1,
             "min_date": "2026-03-01" if date_col else None,
@@ -432,6 +705,7 @@ def test_run_bounded_parity_audit_allows_target_history_superset_for_model_outpu
     monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
     monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_mirror, "_audit_source_sync_metadata", lambda **_kwargs: ({}, []))
     monkeypatch.setattr(neon_mirror, "_pg_columns", lambda _pg_conn, table: _fake_pg_columns(table))
     monkeypatch.setattr(neon_mirror, "_pg_count_window", _fake_pg_count_window)
     monkeypatch.setattr(neon_mirror, "_pg_non_null_counts", _fake_pg_non_null_counts)
@@ -491,7 +765,8 @@ def test_run_bounded_parity_audit_detects_open_period_pit_rows(
 
     monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
-    monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: False)
+    monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_mirror, "_audit_source_sync_metadata", lambda **_kwargs: ({}, []))
     monkeypatch.setattr(
         neon_mirror,
         "_pg_count_window",
@@ -562,7 +837,8 @@ def test_run_bounded_parity_audit_detects_multiple_monthly_pit_anchors(
 
     monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
-    monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: False)
+    monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_mirror, "_audit_source_sync_metadata", lambda **_kwargs: ({}, []))
     monkeypatch.setattr(
         neon_mirror,
         "_pg_count_window",
@@ -621,7 +897,8 @@ def test_run_bounded_parity_audit_detects_duplicate_price_keys(
 
     monkeypatch.setattr(neon_mirror, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_mirror, "resolve_dsn", lambda dsn: dsn)
-    monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: False)
+    monkeypatch.setattr(neon_mirror, "_pg_table_exists", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_mirror, "_audit_source_sync_metadata", lambda **_kwargs: ({}, []))
     monkeypatch.setattr(
         neon_mirror,
         "_pg_count_window",
@@ -633,6 +910,11 @@ def test_run_bounded_parity_audit_detects_duplicate_price_keys(
         },
     )
     monkeypatch.setattr(neon_mirror, "_pg_duplicate_key_groups", lambda *_args, **_kwargs: 1)
+    monkeypatch.setattr(
+        neon_mirror,
+        "_pg_non_null_counts",
+        lambda _pg_conn, *, table, columns, date_col=None, cutoff=None: {col: 1 for col in columns},
+    )
     monkeypatch.setattr(
         neon_mirror,
         "_pg_pit_period_health",
@@ -667,6 +949,7 @@ def test_run_bounded_parity_audit_detects_missing_neon_model_run_metadata(
         "_pg_table_exists",
         lambda _pg_conn, table: table != "model_run_metadata",
     )
+    monkeypatch.setattr(neon_mirror, "_audit_source_sync_metadata", lambda **_kwargs: ({}, []))
     monkeypatch.setattr(
         neon_mirror,
         "_pg_count_window",

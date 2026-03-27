@@ -12,10 +12,160 @@ import pandas as pd
 
 from backend.data.trbc_schema import ensure_trbc_naming
 from backend.trading_calendar import previous_or_same_xnys_session
+from backend.universe.runtime_rows import load_security_runtime_rows
 
 _LATEST_PRICES_TABLE = "security_prices_latest_cache"
 _LATEST_PRICES_META_TABLE = "security_prices_latest_cache_meta"
 logger = logging.getLogger(__name__)
+
+
+def _prefer_runtime_registry(
+    *,
+    missing_tables_fn: Callable[..., list[str]],
+    fetch_rows_fn: Callable[[str, list[Any] | None], list[dict[str, Any]]] | None = None,
+    tickers: list[str] | None = None,
+    require_taxonomy: bool,
+) -> bool:
+    required_tables = ["security_registry", "security_policy_current"]
+    if require_taxonomy:
+        required_tables.append("security_taxonomy_current")
+    if missing_tables_fn(*required_tables):
+        return False
+    if fetch_rows_fn is None:
+        return False
+    clean = [t.upper() for t in (tickers or []) if t.strip()]
+    ticker_filter = ""
+    params: list[Any] | None = None
+    if clean:
+        placeholders = ",".join("?" for _ in clean)
+        ticker_filter = f" AND UPPER(TRIM(COALESCE(reg.ticker, ''))) IN ({placeholders})"
+        params = list(clean)
+    taxonomy_join = ""
+    missing_companion_expr = "pol.ric IS NULL"
+    if require_taxonomy:
+        taxonomy_join = """
+        LEFT JOIN security_taxonomy_current tax
+          ON UPPER(TRIM(tax.ric)) = UPPER(TRIM(reg.ric))
+        """
+        missing_companion_expr = "pol.ric IS NULL OR tax.ric IS NULL"
+    try:
+        rows = fetch_rows_fn(
+            f"""
+            SELECT
+                COUNT(*) AS registry_row_count,
+                SUM(
+                    CASE
+                        WHEN COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') = 'active'
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS active_registry_row_count,
+                SUM(
+                    CASE
+                        WHEN COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') = 'active'
+                         AND ({missing_companion_expr})
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS active_missing_companion_count
+            FROM security_registry reg
+            LEFT JOIN security_policy_current pol
+              ON UPPER(TRIM(pol.ric)) = UPPER(TRIM(reg.ric))
+            {taxonomy_join}
+            WHERE reg.ric IS NOT NULL
+              AND TRIM(reg.ric) <> ''
+              {ticker_filter}
+            """,
+            params,
+        )
+    except Exception:
+        return False
+    if not rows:
+        return False
+    row = rows[0]
+    registry_row_count = int(row.get("registry_row_count") or 0)
+    active_registry_row_count = int(row.get("active_registry_row_count") or 0)
+    active_missing_companion_count = int(row.get("active_missing_companion_count") or 0)
+    if registry_row_count == 0:
+        return not clean
+    if active_registry_row_count == 0:
+        return not clean
+    return active_missing_companion_count == 0
+
+
+def _compat_current_available(
+    *,
+    missing_tables_fn: Callable[..., list[str]],
+    fetch_rows_fn: Callable[[str, list[Any] | None], list[dict[str, Any]]],
+) -> bool:
+    if missing_tables_fn("security_master_compat_current"):
+        return False
+    try:
+        rows = fetch_rows_fn(
+            """
+            SELECT 1 AS has_row
+            FROM security_master_compat_current
+            LIMIT 1
+            """,
+            None,
+        )
+    except Exception:
+        return False
+    return bool(rows)
+
+
+def _compat_identity_cte_sql(
+    *,
+    ticker_filter: str,
+) -> str:
+    compat_ticker_filter = ticker_filter.replace("WHERE ", "AND ", 1).replace("sm.ticker", "UPPER(TRIM(comp.ticker))")
+    return f"""
+        compat_identity AS (
+        SELECT
+            UPPER(TRIM(comp.ric)) AS ric,
+            UPPER(TRIM(COALESCE(comp.ticker, ''))) AS ticker
+        FROM security_master_compat_current comp
+        WHERE comp.ric IS NOT NULL
+          AND TRIM(comp.ric) <> ''
+          {compat_ticker_filter}
+        )
+    """
+
+
+def _compat_identity_params(
+    *,
+    clean: list[str],
+) -> list[Any]:
+    if not clean:
+        return []
+    return [*clean]
+
+
+def _load_runtime_identity_sqlite(
+    conn: sqlite3.Connection,
+    *,
+    tickers: list[str] | None,
+    require_price_ingest: bool = False,
+    require_pit_fundamentals: bool = False,
+) -> pd.DataFrame:
+    runtime_rows = load_security_runtime_rows(
+        conn,
+        tickers=tickers,
+        include_disabled=False,
+    )
+    runtime_df = pd.DataFrame(runtime_rows)
+    if runtime_df.empty:
+        return pd.DataFrame(columns=["ric", "ticker"])
+    runtime_df["ric"] = runtime_df["ric"].astype(str).str.upper()
+    runtime_df["ticker"] = runtime_df["ticker"].astype(str).str.upper()
+    if require_price_ingest and "price_ingest_enabled" in runtime_df.columns:
+        runtime_df = runtime_df[runtime_df["price_ingest_enabled"].astype(int).eq(1)]
+    if require_pit_fundamentals:
+        if "pit_fundamentals_enabled" in runtime_df.columns:
+            runtime_df = runtime_df[runtime_df["pit_fundamentals_enabled"].astype(int).eq(1)]
+        if "is_single_name_equity" in runtime_df.columns:
+            runtime_df = runtime_df[runtime_df["is_single_name_equity"].astype(int).eq(1)]
+    return runtime_df[["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
 
 
 def ensure_latest_prices_cache_schema(conn: sqlite3.Connection) -> None:
@@ -104,7 +254,7 @@ def load_latest_prices_sqlite(
     tickers: list[str] | None,
     missing_tables_fn: Callable[..., list[str]],
 ) -> pd.DataFrame:
-    missing = missing_tables_fn("security_master", "security_prices_eod")
+    missing = missing_tables_fn("security_prices_eod")
     if missing:
         raise RuntimeError(
             f"Missing required canonical table(s): {', '.join(sorted(missing))}"
@@ -119,29 +269,35 @@ def load_latest_prices_sqlite(
             refresh_latest_prices_cache(conn)
             conn.commit()
 
-        ticker_filter = ""
-        params: list[Any] = []
-        if clean:
-            placeholders = ",".join("?" for _ in clean)
-            ticker_filter = f" WHERE UPPER(sm.ticker) IN ({placeholders})"
-            params = clean
+        runtime_identity = _load_runtime_identity_sqlite(
+            conn,
+            tickers=tickers,
+            require_price_ingest=True,
+        )
+        if runtime_identity.empty:
+            return pd.DataFrame()
 
-        rows = conn.execute(
+        prices = pd.read_sql_query(
             f"""
             SELECT
-                UPPER(sm.ric) AS ric,
-                UPPER(sm.ticker) AS ticker,
+                UPPER(lp.ric) AS ric,
                 lp.date,
                 CAST(lp.close AS REAL) AS close
             FROM {_LATEST_PRICES_TABLE} lp
-            JOIN security_master sm
-              ON sm.ric = lp.ric
-            {ticker_filter}
-            ORDER BY sm.ric ASC
+            ORDER BY UPPER(lp.ric) ASC
             """,
-            params,
-        ).fetchall()
-        return pd.DataFrame([dict(row) for row in rows]) if rows else pd.DataFrame()
+            conn,
+        )
+        if prices.empty:
+            return prices
+        prices["ric"] = prices["ric"].astype(str).str.upper()
+        out = prices.merge(runtime_identity, on="ric", how="inner")
+        if out.empty:
+            return out
+        out["ticker"] = out["ticker"].astype(str).str.upper()
+        if clean:
+            out = out[out["ticker"].isin(clean)].copy()
+        return out[["ric", "ticker", "date", "close"]].sort_values(["ric", "date"]).reset_index(drop=True)
     finally:
         conn.close()
 
@@ -260,7 +416,6 @@ def load_latest_fundamentals(
     params_for_cls = [as_of, *params[1:]]
 
     missing = missing_tables_fn(
-        "security_master",
         "security_fundamentals_pit",
         "security_classification_pit",
     )
@@ -269,97 +424,240 @@ def load_latest_fundamentals(
             f"Missing required canonical table(s): {', '.join(sorted(missing))}"
         )
 
-    rows = fetch_rows_fn(
-        f"""
-        WITH latest_fund_ric AS (
-            SELECT f.ric, MAX(f.as_of_date) AS as_of_date
-            FROM security_fundamentals_pit f
-            JOIN security_master sm
-              ON sm.ric = f.ric
-            WHERE f.as_of_date <= ?
-              {ticker_filter}
-            GROUP BY f.ric
-        ),
-        latest_fund AS (
+    if _prefer_runtime_registry(
+        missing_tables_fn=missing_tables_fn,
+        fetch_rows_fn=fetch_rows_fn,
+        tickers=clean,
+        require_taxonomy=True,
+    ):
+        compat_available = not missing_tables_fn("security_master_compat_current")
+        compat_join = ""
+        compat_equity_expr = "0"
+        if compat_available:
+            compat_join = """
+                LEFT JOIN security_master_compat_current comp
+                  ON comp.ric = reg.ric
+            """
+            compat_equity_expr = "COALESCE(comp.is_equity_eligible, 0)"
+        runtime_params: list[Any] = []
+        if clean:
+            runtime_params.extend(clean)
+        runtime_params.extend([as_of, as_of])
+        rows = fetch_rows_fn(
+            f"""
+            WITH runtime_registry AS (
+                SELECT
+                    UPPER(reg.ric) AS ric,
+                    UPPER(TRIM(reg.ticker)) AS ticker
+                FROM security_registry reg
+                LEFT JOIN security_policy_current pol
+                  ON pol.ric = reg.ric
+                LEFT JOIN security_taxonomy_current tax
+                  ON tax.ric = reg.ric
+                {compat_join}
+                WHERE COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') <> 'disabled'
+                  AND reg.ticker IS NOT NULL
+                  AND TRIM(reg.ticker) <> ''
+                  AND COALESCE(
+                        pol.pit_fundamentals_enabled,
+                        CASE
+                            WHEN COALESCE(
+                                tax.is_single_name_equity,
+                                {compat_equity_expr},
+                                0
+                            ) = 1
+                            THEN 1
+                            ELSE 0
+                        END
+                  ) = 1
+                  AND COALESCE(
+                        tax.is_single_name_equity,
+                        {compat_equity_expr},
+                        0
+                  ) = 1
+                  {ticker_filter.replace("sm.ticker", "UPPER(TRIM(reg.ticker))")}
+            ),
+            latest_fund_ric AS (
+                SELECT f.ric, MAX(f.as_of_date) AS as_of_date
+                FROM security_fundamentals_pit f
+                JOIN runtime_registry rr
+                  ON rr.ric = UPPER(f.ric)
+                WHERE f.as_of_date <= ?
+                GROUP BY f.ric
+            ),
+            latest_fund AS (
+                SELECT
+                    f.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY f.ric, f.as_of_date
+                        ORDER BY f.stat_date DESC, f.updated_at DESC
+                    ) AS rn
+                FROM security_fundamentals_pit f
+                JOIN latest_fund_ric lf
+                  ON lf.ric = f.ric
+                 AND lf.as_of_date = f.as_of_date
+            ),
+            latest_cls_ric AS (
+                SELECT c.ric, MAX(c.as_of_date) AS as_of_date
+                FROM security_classification_pit c
+                JOIN runtime_registry rr
+                  ON rr.ric = UPPER(c.ric)
+                WHERE c.as_of_date <= ?
+                GROUP BY c.ric
+            ),
+            latest_cls AS (
+                SELECT
+                    c.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY c.ric, c.as_of_date
+                        ORDER BY c.updated_at DESC
+                    ) AS rn
+                FROM security_classification_pit c
+                JOIN latest_cls_ric lc
+                  ON lc.ric = c.ric
+                 AND lc.as_of_date = c.as_of_date
+            )
             SELECT
-                f.*,
-                ROW_NUMBER() OVER (
-                    PARTITION BY f.ric, f.as_of_date
-                    ORDER BY f.stat_date DESC, f.updated_at DESC
-                ) AS rn
-            FROM security_fundamentals_pit f
-            JOIN latest_fund_ric lf
-              ON lf.ric = f.ric
-             AND lf.as_of_date = f.as_of_date
-        ),
-        latest_cls_ric AS (
-            SELECT c.ric, MAX(c.as_of_date) AS as_of_date
-            FROM security_classification_pit c
-            JOIN security_master sm
-              ON sm.ric = c.ric
-            WHERE c.as_of_date <= ?
-              {ticker_filter}
-            GROUP BY c.ric
-        ),
-        latest_cls AS (
-            SELECT
-                c.*,
-                ROW_NUMBER() OVER (
-                    PARTITION BY c.ric, c.as_of_date
-                    ORDER BY c.updated_at DESC
-                ) AS rn
-            FROM security_classification_pit c
-            JOIN latest_cls_ric lc
-              ON lc.ric = c.ric
-             AND lc.as_of_date = c.as_of_date
+                rr.ric AS ric,
+                rr.ticker AS ticker,
+                f.as_of_date AS fetch_date,
+                CAST(f.market_cap AS REAL) AS market_cap,
+                CAST(f.shares_outstanding AS REAL) AS shares_outstanding,
+                CAST(f.dividend_yield AS REAL) AS dividend_yield,
+                f.common_name AS common_name,
+                CAST(f.book_value_per_share AS REAL) AS book_value,
+                CAST(f.forward_eps AS REAL) AS forward_eps,
+                CAST(f.trailing_eps AS REAL) AS trailing_eps,
+                CAST(f.total_debt AS REAL) AS total_debt,
+                CAST(f.cash_and_equivalents AS REAL) AS cash_and_equivalents,
+                CAST(f.long_term_debt AS REAL) AS long_term_debt,
+                CAST(f.operating_cashflow AS REAL) AS operating_cashflow,
+                CAST(f.capital_expenditures AS REAL) AS capital_expenditures,
+                CAST(f.revenue AS REAL) AS revenue,
+                CAST(f.ebitda AS REAL) AS ebitda,
+                CAST(f.ebit AS REAL) AS ebit,
+                CAST(f.total_assets AS REAL) AS total_assets,
+                CAST(f.roe_pct AS REAL) AS return_on_equity,
+                CAST(f.operating_margin_pct AS REAL) AS operating_margins,
+                f.period_end_date AS fundamental_period_end_date,
+                f.report_currency AS report_currency,
+                f.fiscal_year AS fiscal_year,
+                f.period_type AS period_type,
+                f.source AS source,
+                f.job_run_id AS job_run_id,
+                f.updated_at AS updated_at,
+                lc.trbc_business_sector AS trbc_business_sector,
+                lc.trbc_industry_group AS trbc_industry_group,
+                COALESCE(NULLIF(lc.trbc_economic_sector, ''), '') AS trbc_economic_sector_short,
+                lc.trbc_economic_sector AS trbc_economic_sector
+            FROM latest_fund f
+            JOIN runtime_registry rr
+              ON rr.ric = UPPER(f.ric)
+            LEFT JOIN latest_cls lc
+              ON lc.ric = f.ric
+             AND lc.rn = 1
+            WHERE f.rn = 1
+            ORDER BY rr.ric ASC
+            """,
+            runtime_params,
         )
-        SELECT
-            UPPER(sm.ric) AS ric,
-            UPPER(sm.ticker) AS ticker,
-            f.as_of_date AS fetch_date,
-            CAST(f.market_cap AS REAL) AS market_cap,
-            CAST(f.shares_outstanding AS REAL) AS shares_outstanding,
-            CAST(f.dividend_yield AS REAL) AS dividend_yield,
-            f.common_name AS common_name,
-            CAST(f.book_value_per_share AS REAL) AS book_value,
-            CAST(f.forward_eps AS REAL) AS forward_eps,
-            CAST(f.trailing_eps AS REAL) AS trailing_eps,
-            CAST(f.total_debt AS REAL) AS total_debt,
-            CAST(f.cash_and_equivalents AS REAL) AS cash_and_equivalents,
-            CAST(f.long_term_debt AS REAL) AS long_term_debt,
-            CAST(f.operating_cashflow AS REAL) AS operating_cashflow,
-            CAST(f.capital_expenditures AS REAL) AS capital_expenditures,
-            CAST(f.revenue AS REAL) AS revenue,
-            CAST(f.ebitda AS REAL) AS ebitda,
-            CAST(f.ebit AS REAL) AS ebit,
-            CAST(f.total_assets AS REAL) AS total_assets,
-            CAST(f.roe_pct AS REAL) AS return_on_equity,
-            CAST(f.operating_margin_pct AS REAL) AS operating_margins,
-            f.period_end_date AS fundamental_period_end_date,
-            f.report_currency AS report_currency,
-            f.fiscal_year AS fiscal_year,
-            f.period_type AS period_type,
-            f.source AS source,
-            f.job_run_id AS job_run_id,
-            f.updated_at AS updated_at,
-            lc.trbc_business_sector AS trbc_business_sector,
-            lc.trbc_industry_group AS trbc_industry_group,
-            COALESCE(
-                NULLIF(lc.trbc_economic_sector, ''),
-                ''
-            ) AS trbc_economic_sector_short,
-            lc.trbc_economic_sector AS trbc_economic_sector
-        FROM latest_fund f
-        JOIN security_master sm
-          ON sm.ric = f.ric
-        LEFT JOIN latest_cls lc
-          ON lc.ric = f.ric
-         AND lc.rn = 1
-        WHERE f.rn = 1
-        ORDER BY sm.ric ASC
-        """,
-        [*params, *params_for_cls],
-    )
+    elif _compat_current_available(missing_tables_fn=missing_tables_fn, fetch_rows_fn=fetch_rows_fn):
+        compat_params: list[Any] = [
+            *_compat_identity_params(clean=clean),
+            as_of,
+            as_of,
+        ]
+        rows = fetch_rows_fn(
+            f"""
+            WITH {_compat_identity_cte_sql(ticker_filter=ticker_filter)},
+            latest_fund_ric AS (
+                SELECT f.ric, MAX(f.as_of_date) AS as_of_date
+                FROM security_fundamentals_pit f
+                JOIN compat_identity comp
+                  ON comp.ric = f.ric
+                WHERE f.as_of_date <= ?
+                GROUP BY f.ric
+            ),
+            latest_fund AS (
+                SELECT
+                    f.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY f.ric, f.as_of_date
+                        ORDER BY f.stat_date DESC, f.updated_at DESC
+                    ) AS rn
+                FROM security_fundamentals_pit f
+                JOIN latest_fund_ric lf
+                  ON lf.ric = f.ric
+                 AND lf.as_of_date = f.as_of_date
+            ),
+            latest_cls_ric AS (
+                SELECT c.ric, MAX(c.as_of_date) AS as_of_date
+                FROM security_classification_pit c
+                JOIN compat_identity comp
+                  ON comp.ric = c.ric
+                WHERE c.as_of_date <= ?
+                GROUP BY c.ric
+            ),
+            latest_cls AS (
+                SELECT
+                    c.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY c.ric, c.as_of_date
+                        ORDER BY c.updated_at DESC
+                    ) AS rn
+                FROM security_classification_pit c
+                JOIN latest_cls_ric lc
+                  ON lc.ric = c.ric
+                 AND lc.as_of_date = c.as_of_date
+            )
+            SELECT
+                UPPER(comp.ric) AS ric,
+                UPPER(comp.ticker) AS ticker,
+                f.as_of_date AS fetch_date,
+                CAST(f.market_cap AS REAL) AS market_cap,
+                CAST(f.shares_outstanding AS REAL) AS shares_outstanding,
+                CAST(f.dividend_yield AS REAL) AS dividend_yield,
+                f.common_name AS common_name,
+                CAST(f.book_value_per_share AS REAL) AS book_value,
+                CAST(f.forward_eps AS REAL) AS forward_eps,
+                CAST(f.trailing_eps AS REAL) AS trailing_eps,
+                CAST(f.total_debt AS REAL) AS total_debt,
+                CAST(f.cash_and_equivalents AS REAL) AS cash_and_equivalents,
+                CAST(f.long_term_debt AS REAL) AS long_term_debt,
+                CAST(f.operating_cashflow AS REAL) AS operating_cashflow,
+                CAST(f.capital_expenditures AS REAL) AS capital_expenditures,
+                CAST(f.revenue AS REAL) AS revenue,
+                CAST(f.ebitda AS REAL) AS ebitda,
+                CAST(f.ebit AS REAL) AS ebit,
+                CAST(f.total_assets AS REAL) AS total_assets,
+                CAST(f.roe_pct AS REAL) AS return_on_equity,
+                CAST(f.operating_margin_pct AS REAL) AS operating_margins,
+                f.period_end_date AS fundamental_period_end_date,
+                f.report_currency AS report_currency,
+                f.fiscal_year AS fiscal_year,
+                f.period_type AS period_type,
+                f.source AS source,
+                f.job_run_id AS job_run_id,
+                f.updated_at AS updated_at,
+                lc.trbc_business_sector AS trbc_business_sector,
+                lc.trbc_industry_group AS trbc_industry_group,
+                COALESCE(NULLIF(lc.trbc_economic_sector, ''), '') AS trbc_economic_sector_short,
+                lc.trbc_economic_sector AS trbc_economic_sector
+            FROM latest_fund f
+            JOIN compat_identity comp
+              ON comp.ric = f.ric
+            LEFT JOIN latest_cls lc
+              ON lc.ric = f.ric
+             AND lc.rn = 1
+            WHERE f.rn = 1
+            ORDER BY UPPER(comp.ric) ASC
+            """,
+            compat_params,
+        )
+    else:
+        raise RuntimeError(
+            "Latest fundamentals require registry-first runtime tables or security_master_compat_current."
+        )
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
@@ -377,31 +675,76 @@ def load_latest_prices(
         ticker_filter = f" WHERE sm.ticker IN ({placeholders})"
         params = clean
 
-    missing = missing_tables_fn("security_master", "security_prices_eod")
+    missing = missing_tables_fn("security_prices_eod")
     if missing:
         raise RuntimeError(
             f"Missing required canonical table(s): {', '.join(sorted(missing))}"
         )
 
-    rows = fetch_rows_fn(
-        f"""
-        WITH latest AS (
-            SELECT p.ric, MAX(p.date) AS date
+    if _prefer_runtime_registry(
+        missing_tables_fn=missing_tables_fn,
+        fetch_rows_fn=fetch_rows_fn,
+        tickers=clean,
+        require_taxonomy=False,
+    ):
+        rows = fetch_rows_fn(
+            f"""
+            WITH runtime_registry AS (
+                SELECT
+                    UPPER(reg.ric) AS ric,
+                    UPPER(TRIM(reg.ticker)) AS ticker
+                FROM security_registry reg
+                LEFT JOIN security_policy_current pol
+                  ON pol.ric = reg.ric
+                WHERE COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') <> 'disabled'
+                  AND reg.ticker IS NOT NULL
+                  AND TRIM(reg.ticker) <> ''
+                  AND COALESCE(pol.price_ingest_enabled, 1) = 1
+                  {ticker_filter.replace("sm.ticker", "UPPER(TRIM(reg.ticker))")}
+            ),
+            latest AS (
+                SELECT p.ric, MAX(p.date) AS date
+                FROM security_prices_eod p
+                JOIN runtime_registry rr
+                  ON rr.ric = UPPER(p.ric)
+                GROUP BY p.ric
+            )
+            SELECT rr.ric AS ric, rr.ticker AS ticker, p.date, CAST(p.close AS REAL) AS close
             FROM security_prices_eod p
-            JOIN security_master sm
-              ON sm.ric = p.ric
-            {ticker_filter}
-            GROUP BY p.ric
+            JOIN latest l
+              ON p.ric = l.ric
+             AND p.date = l.date
+            JOIN runtime_registry rr
+              ON rr.ric = UPPER(p.ric)
+            ORDER BY rr.ric ASC
+            """,
+            params,
         )
-        SELECT UPPER(sm.ric) AS ric, UPPER(sm.ticker) AS ticker, p.date, CAST(p.close AS REAL) AS close
-        FROM security_prices_eod p
-        JOIN latest l
-          ON p.ric = l.ric
-         AND p.date = l.date
-        JOIN security_master sm
-          ON sm.ric = p.ric
-        ORDER BY sm.ric ASC
-        """,
-        params,
-    )
+    elif _compat_current_available(missing_tables_fn=missing_tables_fn, fetch_rows_fn=fetch_rows_fn):
+        compat_params = _compat_identity_params(clean=clean)
+        rows = fetch_rows_fn(
+            f"""
+            WITH {_compat_identity_cte_sql(ticker_filter=ticker_filter)},
+            latest AS (
+                SELECT p.ric, MAX(p.date) AS date
+                FROM security_prices_eod p
+                JOIN compat_identity comp
+                  ON comp.ric = p.ric
+                GROUP BY p.ric
+            )
+            SELECT UPPER(comp.ric) AS ric, UPPER(comp.ticker) AS ticker, p.date, CAST(p.close AS REAL) AS close
+            FROM security_prices_eod p
+            JOIN latest l
+              ON p.ric = l.ric
+             AND p.date = l.date
+            JOIN compat_identity comp
+              ON comp.ric = p.ric
+            ORDER BY UPPER(comp.ric) ASC
+            """,
+            compat_params,
+        )
+    else:
+        raise RuntimeError(
+            "Latest prices require registry-first runtime tables or security_master_compat_current."
+        )
     return pd.DataFrame(rows) if rows else pd.DataFrame()

@@ -99,6 +99,9 @@ def _instrument_fits(package_run_id: str, package_date: str, *, spy_beta: float)
             "longest_gap_weeks": 0,
             "price_field_used": "adj_close",
             "hq_country_code": "US",
+            "allow_cpar_core_target": 1,
+            "allow_cpar_extended_target": 1,
+            "is_single_name_equity": 1,
             "market_step_alpha": 0.01,
             "market_step_beta": 1.2,
             "block_alpha": 0.0,
@@ -145,6 +148,10 @@ def test_local_sqlite_persist_and_read_roundtrip(
     assert fit is not None
     assert fit["ric"] == "AAPL.OQ"
     assert fit["thresholded_loadings"] == {"SPY": 1.1}
+    assert fit["target_scope"] == "core_us_equity"
+    assert fit["portfolio_use_status"] == "missing_price"
+    assert fit["hedge_use_status"] == "missing_price"
+    assert fit["quality_label"] == "missing_price"
 
     cov_rows = cpar_outputs.load_active_package_covariance_rows(data_db=data_db)
     assert len(cov_rows) == len(ordered_factor_ids()) ** 2
@@ -157,6 +164,51 @@ def test_local_sqlite_persist_and_read_roundtrip(
         "package_run_id": "run_1",
         "updated_at": spy_row["updated_at"],
     }
+
+
+def test_package_membership_keeps_us_non_equity_in_extended_scope() -> None:
+    rows = cpar_outputs._derive_package_membership_rows(
+        instrument_fits=[
+            {
+                "package_run_id": "run_1",
+                "package_date": "2026-03-14",
+                "ric": "AAPL.OQ",
+                "ticker": "AAPL",
+                "hq_country_code": "US",
+                "allow_cpar_core_target": 1,
+                "is_single_name_equity": 1,
+                "warnings": [],
+                "updated_at": "2026-03-15T00:00:00Z",
+            },
+            {
+                "package_run_id": "run_1",
+                "package_date": "2026-03-14",
+                "ric": "SPY.P",
+                "ticker": "SPY",
+                "hq_country_code": "US",
+                "allow_cpar_core_target": 0,
+                "is_single_name_equity": 0,
+                "warnings": [],
+                "updated_at": "2026-03-15T00:00:00Z",
+            },
+            {
+                "package_run_id": "run_1",
+                "package_date": "2026-03-14",
+                "ric": "ARKK.P",
+                "ticker": "ARKK",
+                "hq_country_code": "US",
+                "allow_cpar_core_target": 0,
+                "is_single_name_equity": 0,
+                "warnings": [],
+                "updated_at": "2026-03-15T00:00:00Z",
+            },
+        ]
+    )
+
+    by_ticker = {row["ticker"]: row for row in rows}
+    assert by_ticker["AAPL"]["target_scope"] == "core_us_equity"
+    assert by_ticker["SPY"]["target_scope"] == "factor_basis_only"
+    assert by_ticker["ARKK"]["target_scope"] == "extended_priced_instrument"
 
 
 def test_persist_replaces_child_rows_for_same_package_date(
@@ -197,6 +249,59 @@ def test_persist_replaces_child_rows_for_same_package_date(
     spy_row = next(row for row in cov_rows if row["factor_id"] == "SPY" and row["factor_id_2"] == "SPY")
     assert spy_row["package_run_id"] == "run_2"
     assert spy_row["covariance"] == 1.5
+
+
+def test_persist_marks_us_fund_vehicle_as_extended_instead_of_core(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_db = tmp_path / "cpar.db"
+    monkeypatch.setattr(cpar_outputs.config, "APP_RUNTIME_ROLE", "local-ingest")
+    monkeypatch.setattr(cpar_outputs.config, "DATA_BACKEND", "sqlite")
+    monkeypatch.setattr(cpar_outputs.config, "neon_dsn", lambda: "")
+
+    instrument_fits = _instrument_fits("run_1", "2026-03-14", spy_beta=1.1) + [
+        {
+            "package_date": "2026-03-14",
+            "ric": "SPY.P",
+            "ticker": "SPY",
+            "display_name": "SPDR S&P 500 ETF Trust",
+            "fit_status": "ok",
+            "warnings": [],
+            "observed_weeks": 52,
+            "lookback_weeks": 52,
+            "longest_gap_weeks": 0,
+            "price_field_used": "adj_close",
+            "hq_country_code": "US",
+            "allow_cpar_core_target": 0,
+            "allow_cpar_extended_target": 1,
+            "is_single_name_equity": 0,
+            "market_step_alpha": 0.0,
+            "market_step_beta": 1.0,
+            "block_alpha": 0.0,
+            "spy_trade_beta_raw": 1.0,
+            "raw_loadings": {"SPY": 1.0},
+            "thresholded_loadings": {"SPY": 1.0},
+            "factor_variance_proxy": 0.2,
+            "factor_volatility_proxy": 0.4472135955,
+            "specific_variance_proxy": 0.05,
+            "specific_volatility_proxy": 0.2236067977,
+            "package_run_id": "run_1",
+        }
+    ]
+
+    cpar_outputs.persist_cpar_package(
+        data_db=data_db,
+        package_run=_package_run("run_1", "2026-03-14"),
+        proxy_returns=_proxy_returns("run_1", "2026-03-14"),
+        proxy_transforms=_proxy_transforms("run_1", "2026-03-14"),
+        covariance_rows=_covariance_rows("run_1", "2026-03-14", covariance=1.0),
+        instrument_fits=instrument_fits,
+    )
+
+    fit = cpar_outputs.load_active_package_instrument_fit("SPY", data_db=data_db)
+    assert fit is not None
+    assert fit["target_scope"] == "extended_priced_instrument"
 
 
 def test_same_date_failed_rerun_does_not_clobber_prior_successful_package(

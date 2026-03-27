@@ -203,6 +203,7 @@ def test_run_model_pipeline_reports_workspace_and_local_mirror_sync_for_neon_cor
     workspace_data_db.touch()
     workspace_cache_db.touch()
     captured: dict[str, object] = {}
+    prune_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(run_model_pipeline.sqlite, "cache_get_live_first", lambda _k: {})
     monkeypatch.setattr(run_model_pipeline.config, "APP_RUNTIME_ROLE", "local-ingest")
@@ -239,6 +240,11 @@ def test_run_model_pipeline_reports_workspace_and_local_mirror_sync_for_neon_cor
         "sync_workspace_derivatives_to_local_mirror",
         lambda **kwargs: captured.update(kwargs) or {"status": "ok", "copied_tables": 3},
     )
+    monkeypatch.setattr(
+        run_model_pipeline.neon_authority,
+        "prune_rebuild_workspaces",
+        lambda **kwargs: prune_calls.append(dict(kwargs)) or {"status": "ok", "removed": []},
+    )
 
     out = run_model_pipeline.run_model_pipeline(profile="core-weekly", force_core=True)
 
@@ -253,6 +259,9 @@ def test_run_model_pipeline_reports_workspace_and_local_mirror_sync_for_neon_cor
     assert captured["workspace_cache_db"] == workspace_cache_db.resolve()
     assert captured["local_data_db"] == run_model_pipeline.DATA_DB
     assert captured["local_cache_db"] == run_model_pipeline.CACHE_DB
+    assert out["workspace_prune"]["status"] == "ok"
+    assert prune_calls[0]["workspaces_root"] == workspace_root.resolve().parent
+    assert prune_calls[0]["preserve"] == workspace_root.resolve()
 
 
 def test_run_model_pipeline_fails_closed_when_workspace_local_mirror_sync_fails(

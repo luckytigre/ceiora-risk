@@ -20,6 +20,8 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
+from backend.universe.runtime_rows import load_security_runtime_rows
+
 from backend import config
 from backend.data.trbc_schema import pick_trbc_business_sector_column, pick_trbc_industry_column
 from backend.risk_model.eligibility import build_eligibility_context, structural_eligibility_for_date
@@ -180,19 +182,39 @@ def _load_prices_for_window(
         predicates.append("p.date <= ?")
         params.append(str(end_date))
     where_clause = f"WHERE {' AND '.join(predicates)}" if predicates else ""
+    runtime_rows = load_security_runtime_rows(
+        conn,
+        include_disabled=False,
+    )
+    runtime_df = pd.DataFrame(runtime_rows)
+    if runtime_df.empty:
+        conn.close()
+        return pd.DataFrame(columns=["ric", "ticker", "date", "close"])
+    runtime_df["ric"] = runtime_df["ric"].astype(str).str.upper()
+    runtime_df["ticker"] = runtime_df["ticker"].astype(str).str.upper()
+    runtime_df = runtime_df[
+        runtime_df["price_ingest_enabled"].astype(int).eq(1)
+    ][["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
+    if runtime_df.empty:
+        conn.close()
+        return pd.DataFrame(columns=["ric", "ticker", "date", "close"])
+    ric_filter = ",".join("?" for _ in runtime_df["ric"].tolist())
     df = pd.read_sql_query(
         f"""
-        SELECT UPPER(p.ric) AS ric, UPPER(sm.ticker) AS ticker, p.date, p.close, p.source, p.updated_at
+        SELECT UPPER(p.ric) AS ric, p.date, p.close, p.source, p.updated_at
         FROM security_prices_eod p
-        JOIN security_master sm
-          ON sm.ric = p.ric
-        {where_clause}
+        {where_clause if where_clause else 'WHERE 1=1'}
+          AND UPPER(p.ric) IN ({ric_filter})
         ORDER BY UPPER(p.ric), p.date
         """,
         conn,
-        params=params,
+        params=[*params, *runtime_df["ric"].tolist()],
     )
     conn.close()
+    if df.empty:
+        return pd.DataFrame(columns=["ric", "ticker", "date", "close"])
+    df["ric"] = df["ric"].astype(str).str.upper()
+    df = df.merge(runtime_df, on="ric", how="inner")
     df["ric"] = df["ric"].astype(str).str.upper()
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date.astype("string")

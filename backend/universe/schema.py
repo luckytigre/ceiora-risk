@@ -6,6 +6,13 @@ import sqlite3
 
 
 SECURITY_MASTER_TABLE = "security_master"
+SECURITY_REGISTRY_TABLE = "security_registry"
+SECURITY_TAXONOMY_CURRENT_TABLE = "security_taxonomy_current"
+SECURITY_POLICY_CURRENT_TABLE = "security_policy_current"
+SECURITY_SOURCE_OBSERVATION_DAILY_TABLE = "security_source_observation_daily"
+SECURITY_INGEST_RUNS_TABLE = "security_ingest_runs"
+SECURITY_INGEST_AUDIT_TABLE = "security_ingest_audit"
+SECURITY_MASTER_COMPAT_CURRENT_TABLE = "security_master_compat_current"
 FUNDAMENTALS_HISTORY_TABLE = "security_fundamentals_pit"
 TRBC_HISTORY_TABLE = "security_classification_pit"
 PRICES_TABLE = "security_prices_eod"
@@ -43,6 +50,11 @@ def _drop_index_if_exists(conn: sqlite3.Connection, index_name: str) -> None:
     conn.execute(f"DROP INDEX IF EXISTS {index_name}")
 
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    if column not in _table_columns(conn, table):
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 def _create_security_master_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         f"""
@@ -65,6 +77,188 @@ def _create_security_master_table(conn: sqlite3.Connection) -> None:
     )
     _drop_index_if_exists(conn, f"idx_{SECURITY_MASTER_TABLE}_permid")
     _drop_index_if_exists(conn, f"idx_{SECURITY_MASTER_TABLE}_sid")
+
+
+def _create_security_registry_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {SECURITY_REGISTRY_TABLE} (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            isin TEXT,
+            exchange_name TEXT,
+            tracking_status TEXT NOT NULL DEFAULT 'active',
+            source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{SECURITY_REGISTRY_TABLE}_ticker ON {SECURITY_REGISTRY_TABLE}(ticker)"
+    )
+
+
+def _create_security_taxonomy_current_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {SECURITY_TAXONOMY_CURRENT_TABLE} (
+            ric TEXT PRIMARY KEY,
+            instrument_kind TEXT,
+            vehicle_structure TEXT,
+            issuer_country_code TEXT,
+            listing_country_code TEXT,
+            model_home_market_scope TEXT,
+            is_single_name_equity INTEGER NOT NULL DEFAULT 0,
+            classification_ready INTEGER NOT NULL DEFAULT 0,
+            source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _create_security_policy_current_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {SECURITY_POLICY_CURRENT_TABLE} (
+            ric TEXT PRIMARY KEY,
+            price_ingest_enabled INTEGER NOT NULL DEFAULT 1,
+            pit_fundamentals_enabled INTEGER NOT NULL DEFAULT 0,
+            pit_classification_enabled INTEGER NOT NULL DEFAULT 0,
+            allow_cuse_native_core INTEGER NOT NULL DEFAULT 0,
+            allow_cuse_fundamental_projection INTEGER NOT NULL DEFAULT 0,
+            allow_cuse_returns_projection INTEGER NOT NULL DEFAULT 0,
+            allow_cpar_core_target INTEGER NOT NULL DEFAULT 0,
+            allow_cpar_extended_target INTEGER NOT NULL DEFAULT 0,
+            policy_source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _create_security_source_observation_daily_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {SECURITY_SOURCE_OBSERVATION_DAILY_TABLE} (
+            as_of_date TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            classification_ready INTEGER NOT NULL DEFAULT 0,
+            is_equity_eligible INTEGER NOT NULL DEFAULT 0,
+            price_ingest_enabled INTEGER NOT NULL DEFAULT 0,
+            pit_fundamentals_enabled INTEGER NOT NULL DEFAULT 0,
+            pit_classification_enabled INTEGER NOT NULL DEFAULT 0,
+            has_price_history_as_of_date INTEGER NOT NULL DEFAULT 0,
+            has_fundamentals_history_as_of_date INTEGER NOT NULL DEFAULT 0,
+            has_classification_history_as_of_date INTEGER NOT NULL DEFAULT 0,
+            latest_price_date TEXT,
+            latest_fundamentals_as_of_date TEXT,
+            latest_classification_as_of_date TEXT,
+            source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (as_of_date, ric)
+        )
+        """
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{SECURITY_SOURCE_OBSERVATION_DAILY_TABLE}_ric ON {SECURITY_SOURCE_OBSERVATION_DAILY_TABLE}(ric)"
+    )
+    _ensure_column(
+        conn,
+        SECURITY_SOURCE_OBSERVATION_DAILY_TABLE,
+        "has_price_history_as_of_date",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    _ensure_column(
+        conn,
+        SECURITY_SOURCE_OBSERVATION_DAILY_TABLE,
+        "has_fundamentals_history_as_of_date",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    _ensure_column(
+        conn,
+        SECURITY_SOURCE_OBSERVATION_DAILY_TABLE,
+        "has_classification_history_as_of_date",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    _ensure_column(
+        conn,
+        SECURITY_SOURCE_OBSERVATION_DAILY_TABLE,
+        "latest_price_date",
+        "TEXT",
+    )
+    _ensure_column(
+        conn,
+        SECURITY_SOURCE_OBSERVATION_DAILY_TABLE,
+        "latest_fundamentals_as_of_date",
+        "TEXT",
+    )
+    _ensure_column(
+        conn,
+        SECURITY_SOURCE_OBSERVATION_DAILY_TABLE,
+        "latest_classification_as_of_date",
+        "TEXT",
+    )
+
+
+def _create_security_ingest_runs_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {SECURITY_INGEST_RUNS_TABLE} (
+            job_run_id TEXT PRIMARY KEY,
+            source TEXT,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            status TEXT,
+            notes TEXT
+        )
+        """
+    )
+
+
+def _create_security_ingest_audit_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {SECURITY_INGEST_AUDIT_TABLE} (
+            job_run_id TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            artifact_name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            detail TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (job_run_id, ric, artifact_name)
+        )
+        """
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{SECURITY_INGEST_AUDIT_TABLE}_ric ON {SECURITY_INGEST_AUDIT_TABLE}(ric)"
+    )
+
+
+def _create_security_master_compat_current_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {SECURITY_MASTER_COMPAT_CURRENT_TABLE} (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            isin TEXT,
+            exchange_name TEXT,
+            classification_ok INTEGER NOT NULL DEFAULT 0,
+            is_equity_eligible INTEGER NOT NULL DEFAULT 0,
+            coverage_role TEXT NOT NULL DEFAULT 'native_equity',
+            source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{SECURITY_MASTER_COMPAT_CURRENT_TABLE}_ticker ON {SECURITY_MASTER_COMPAT_CURRENT_TABLE}(ticker)"
+    )
 
 
 def _ensure_security_master_schema(conn: sqlite3.Connection) -> None:
@@ -310,6 +504,13 @@ def _ensure_prices_schema(conn: sqlite3.Connection) -> None:
 
 def ensure_cuse4_schema(conn: sqlite3.Connection) -> dict[str, str]:
     _ensure_security_master_schema(conn)
+    _create_security_registry_table(conn)
+    _create_security_taxonomy_current_table(conn)
+    _create_security_policy_current_table(conn)
+    _create_security_source_observation_daily_table(conn)
+    _create_security_ingest_runs_table(conn)
+    _create_security_ingest_audit_table(conn)
+    _create_security_master_compat_current_table(conn)
 
     conn.execute(
         f"""
@@ -410,6 +611,13 @@ def ensure_cuse4_schema(conn: sqlite3.Connection) -> dict[str, str]:
 
     return {
         "security_master": SECURITY_MASTER_TABLE,
+        "security_registry": SECURITY_REGISTRY_TABLE,
+        "security_taxonomy_current": SECURITY_TAXONOMY_CURRENT_TABLE,
+        "security_policy_current": SECURITY_POLICY_CURRENT_TABLE,
+        "security_source_observation_daily": SECURITY_SOURCE_OBSERVATION_DAILY_TABLE,
+        "security_ingest_runs": SECURITY_INGEST_RUNS_TABLE,
+        "security_ingest_audit": SECURITY_INGEST_AUDIT_TABLE,
+        "security_master_compat_current": SECURITY_MASTER_COMPAT_CURRENT_TABLE,
         "security_fundamentals_pit": FUNDAMENTALS_HISTORY_TABLE,
         "security_classification_pit": TRBC_HISTORY_TABLE,
         "security_prices_eod": PRICES_TABLE,

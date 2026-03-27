@@ -27,9 +27,31 @@ def _parse_args() -> argparse.Namespace:
         help="Holdings schema SQL path",
     )
     p.add_argument(
+        "--cpar-schema",
+        type=Path,
+        default=Path("docs/reference/migrations/neon/NEON_CPAR_SCHEMA.sql"),
+        help="cPAR schema SQL path",
+    )
+    p.add_argument(
+        "--cleanup-schema",
+        type=Path,
+        default=Path("docs/reference/migrations/neon/NEON_REGISTRY_FIRST_CLEANUP.sql"),
+        help="Destructive cleanup SQL path",
+    )
+    p.add_argument(
+        "--include-cpar",
+        action="store_true",
+        help="Also apply cPAR schema after canonical schema",
+    )
+    p.add_argument(
         "--include-holdings",
         action="store_true",
         help="Also apply holdings schema after canonical schema",
+    )
+    p.add_argument(
+        "--include-cleanup",
+        action="store_true",
+        help="Also apply destructive registry-first cleanup SQL after all additive schema files",
     )
     p.add_argument("--json", action="store_true", help="Emit JSON output")
     return p.parse_args()
@@ -43,8 +65,12 @@ def main() -> int:
     conn = connect(dsn=dsn, autocommit=False)
     try:
         out["applied"].append(apply_sql_file(conn, sql_path=Path(args.canonical_schema)))
+        if bool(args.include_cpar):
+            out["applied"].append(apply_sql_file(conn, sql_path=Path(args.cpar_schema)))
         if bool(args.include_holdings):
             out["applied"].append(apply_sql_file(conn, sql_path=Path(args.holdings_schema)))
+        if bool(args.include_cleanup):
+            out["applied"].append(apply_sql_file(conn, sql_path=Path(args.cleanup_schema)))
     finally:
         conn.close()
 

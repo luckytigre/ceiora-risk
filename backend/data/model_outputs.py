@@ -17,6 +17,7 @@ from backend.data import (
     model_output_writers as writers,
 )
 from backend.data.neon import connect, resolve_dsn
+from backend.risk_model.cuse_membership import build_cuse_membership_payloads
 
 
 def _neon_model_output_writes_enabled() -> bool:
@@ -147,6 +148,7 @@ def persist_model_outputs(
     risk_engine_state: dict[str, Any],
     cov: pd.DataFrame,
     specific_risk_by_ticker: dict[str, dict[str, float | int | str]],
+    persisted_payloads: dict[str, Any] | None = None,
     error: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -222,10 +224,19 @@ def persist_model_outputs(
         run_id=run_id,
         updated_at=now_iso,
     )
+    cuse_membership_payload, cuse_stage_results_payload = build_cuse_membership_payloads(
+        data_db=data_db,
+        universe_payload=dict((persisted_payloads or {}).get("universe_loadings") or {}),
+        risk_engine_state=risk_engine_state,
+        run_id=run_id,
+        updated_at=now_iso,
+    )
     row_counts = {
         "model_factor_returns_daily": int(len(factor_returns_payload)),
         "model_factor_covariance_daily": int(len(covariance_payload)),
         "model_specific_risk_daily": int(len(specific_risk_payload)),
+        "cuse_security_membership_daily": int(len(cuse_membership_payload)),
+        "cuse_security_stage_results_daily": int(len(cuse_stage_results_payload)),
     }
     quality_errors = payloads.quality_gate_errors(
         status=str(status),
@@ -270,6 +281,8 @@ def persist_model_outputs(
                 covariance_factors=covariance_factors,
                 covariance_payload=covariance_payload,
                 specific_risk_payload=specific_risk_payload,
+                cuse_membership_payload=cuse_membership_payload,
+                cuse_stage_results_payload=cuse_stage_results_payload,
                 metadata_values=metadata_values,
                 as_of_date=as_of_date,
             )
@@ -307,6 +320,8 @@ def persist_model_outputs(
                     covariance_factors=covariance_factors,
                     covariance_payload=covariance_payload,
                     specific_risk_payload=specific_risk_payload,
+                    cuse_membership_payload=cuse_membership_payload,
+                    cuse_stage_results_payload=cuse_stage_results_payload,
                     metadata_values=metadata_values,
                     as_of_date=as_of_date,
                 )
@@ -333,6 +348,8 @@ def persist_model_outputs(
                 covariance_factors=covariance_factors,
                 covariance_payload=covariance_payload,
                 specific_risk_payload=specific_risk_payload,
+                cuse_membership_payload=cuse_membership_payload,
+                cuse_stage_results_payload=cuse_stage_results_payload,
                 metadata_values=metadata_values,
                 as_of_date=as_of_date,
             )

@@ -16,8 +16,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--db-path", default="backend/data.db", help="Path to SQLite data DB")
     parser.add_argument(
         "--seed-path",
-        default="data/reference/security_master_seed.csv",
-        help="Path to committed security_master seed CSV",
+        default="data/reference/security_registry_seed.csv",
+        help="Path to committed security registry seed CSV",
     )
     return parser.parse_args()
 

@@ -53,6 +53,33 @@ def _seed_query_db() -> sqlite3.Connection:
     )
     conn.executemany(
         """
+        INSERT INTO cpar_package_universe_membership (
+            package_run_id, package_date, ric, ticker, universe_scope, target_scope, basis_role,
+            build_reason_code, warnings_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ("run_old", "2026-03-07", "AAPL.OQ", "AAPL", "core_us_equity", "core_us_equity", "instrument", "hq_country_us", '["continuity_gap"]', "2026-03-08T00:01:00Z"),
+            ("run_new", "2026-03-14", "AAPL.OQ", "AAPL", "core_us_equity", "core_us_equity", "instrument", "hq_country_us", "[]", "2026-03-15T00:03:00Z"),
+            ("run_new", "2026-03-14", "AAPL.L", "AAPL", "extended_priced_instrument", "extended_priced_instrument", "instrument", "extended_non_us_or_unknown", '["ex_us_caution"]', "2026-03-15T00:03:00Z"),
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO cpar_instrument_runtime_coverage_weekly (
+            package_run_id, package_date, ric, ticker, price_on_package_date_status, fit_row_status,
+            fit_quality_status, portfolio_use_status, ticker_detail_use_status, hedge_use_status,
+            fit_family, fit_status, reason_code, quality_label, warnings_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ("run_old", "2026-03-07", "AAPL.OQ", "AAPL", "present", "present", "ok", "covered", "available", "usable", "returns_regression_weekly", "ok", "ok", "ok", '["continuity_gap"]', "2026-03-08T00:01:00Z"),
+            ("run_new", "2026-03-14", "AAPL.OQ", "AAPL", "present", "present", "ok", "covered", "available", "usable", "returns_regression_weekly", "ok", "ok", "ok", "[]", "2026-03-15T00:03:00Z"),
+            ("run_new", "2026-03-14", "AAPL.L", "AAPL", "present", "present", "limited_history", "covered", "available", "usable", "returns_regression_weekly", "limited_history", "fit_status_limited_history", "limited_history", '["ex_us_caution"]', "2026-03-15T00:03:00Z"),
+        ],
+    )
+    conn.executemany(
+        """
         INSERT INTO cpar_proxy_returns_weekly (
             package_run_id, package_date, week_end, factor_id, factor_group, proxy_ric, proxy_ticker,
             return_value, weight_value, price_field_used, updated_at
@@ -127,6 +154,9 @@ def test_active_package_instrument_fit_returns_decoded_payload_with_ric_disambig
     assert out["warnings"] == []
     assert out["raw_loadings"] == {"SPY": 1.2}
     assert out["specific_variance_proxy"] == pytest.approx(0.06)
+    assert out["target_scope"] == "core_us_equity"
+    assert out["portfolio_use_status"] == "covered"
+    assert out["fit_family"] == "returns_regression_weekly"
 
 
 def test_package_instrument_fits_for_rics_returns_matching_rows() -> None:
@@ -140,6 +170,8 @@ def test_package_instrument_fits_for_rics_returns_matching_rows() -> None:
 
     assert [row["ric"] for row in rows] == ["AAPL.L", "AAPL.OQ"]
     assert rows[0]["warnings"] == ["ex_us_caution"]
+    assert rows[0]["target_scope"] == "extended_priced_instrument"
+    assert rows[0]["fit_quality_status"] == "limited_history"
 
 
 def test_previous_successful_instrument_fit_returns_prior_successful_package() -> None:
@@ -242,6 +274,8 @@ def test_active_package_search_rows_returns_matching_rows_with_decoded_warnings(
 
     assert [row["ric"] for row in rows] == ["AAPL.L", "AAPL.OQ"]
     assert rows[0]["warnings"] == ["ex_us_caution"]
+    assert rows[0]["portfolio_use_status"] == "covered"
+    assert rows[0]["quality_label"] == "limited_history"
 
 
 def test_latest_successful_package_ignores_incomplete_success_rows() -> None:

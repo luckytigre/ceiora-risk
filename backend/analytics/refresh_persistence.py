@@ -52,6 +52,7 @@ def persist_refresh_outputs(
                 risk_engine_state=risk_engine_state,
                 cov=cov,
                 specific_risk_by_ticker=specific_risk_by_security,
+                persisted_payloads=persisted_payloads,
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to persist relational model outputs")

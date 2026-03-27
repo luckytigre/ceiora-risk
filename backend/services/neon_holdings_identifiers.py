@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
+from backend.universe.registry_sync import policy_defaults_for_legacy_coverage_role
+
 
 ACCOUNT_ID_RE = re.compile(r"^[a-z0-9_\-]{2,64}$")
 QTY_SCALE = Decimal("0.000001")
@@ -66,53 +68,195 @@ def parse_quantity(value: str | None) -> Decimal:
     return parsed.quantize(QTY_SCALE, rounding=ROUND_HALF_UP)
 
 
-def ric_exists(pg_conn, ric: str) -> tuple[bool, str | None]:
+def _pg_table_exists(pg_conn, table: str) -> bool:
     with pg_conn.cursor() as cur:
         cur.execute(
-            "SELECT ticker FROM security_master WHERE ric = %s LIMIT 1",
-            (ric,),
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = %s
+            LIMIT 1
+            """,
+            (str(table),),
         )
-        row = cur.fetchone()
-        if not row:
-            return False, None
-        return True, (str(row[0]).upper().strip() if row[0] is not None else None)
+        return cur.fetchone() is not None
 
 
-def resolve_ticker_to_ric_internal(pg_conn, ticker: str) -> tuple[str | None, list[str]]:
+def _lookup_active_registry_ticker_for_ric(pg_conn, clean_ric: str):
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT NULLIF(TRIM(reg.ticker), '') AS ticker
+            FROM security_registry reg
+            WHERE UPPER(reg.ric) = %s
+              AND COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') = 'active'
+            LIMIT 1
+            """,
+            (clean_ric,),
+        )
+        return cur.fetchone()
+
+
+def _lookup_compat_ticker_for_ric(pg_conn, clean_ric: str):
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            "SELECT ticker FROM security_master_compat_current WHERE UPPER(ric) = %s LIMIT 1",
+            (clean_ric,),
+        )
+        return cur.fetchone()
+
+
+def _fetch_registry_ticker_resolution_rows(pg_conn, ticker_norm: str):
+    has_policy = _pg_table_exists(pg_conn, "security_policy_current")
+    has_taxonomy = _pg_table_exists(pg_conn, "security_taxonomy_current")
+    policy_join = (
+        """
+            LEFT JOIN security_policy_current pol
+              ON pol.ric = reg.ric
+        """
+        if has_policy
+        else ""
+    )
+    taxonomy_join = (
+        """
+            LEFT JOIN security_taxonomy_current tax
+              ON tax.ric = reg.ric
+        """
+        if has_taxonomy
+        else ""
+    )
+    if has_policy and has_taxonomy:
+        allow_cuse_native_core = "COALESCE(pol.allow_cuse_native_core, CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 1 ELSE 0 END)"
+        allow_cpar_core_target = "COALESCE(pol.allow_cpar_core_target, CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 1 ELSE 0 END)"
+        allow_cuse_returns_projection = "COALESCE(pol.allow_cuse_returns_projection, CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 0 ELSE 1 END)"
+    elif has_policy:
+        allow_cuse_native_core = "COALESCE(pol.allow_cuse_native_core, 0)"
+        allow_cpar_core_target = "COALESCE(pol.allow_cpar_core_target, 0)"
+        allow_cuse_returns_projection = "COALESCE(pol.allow_cuse_returns_projection, 0)"
+    elif has_taxonomy:
+        allow_cuse_native_core = "CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 1 ELSE 0 END"
+        allow_cpar_core_target = "CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 1 ELSE 0 END"
+        allow_cuse_returns_projection = "CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 0 ELSE 1 END"
+    else:
+        allow_cuse_native_core = "0"
+        allow_cpar_core_target = "0"
+        allow_cuse_returns_projection = "1"
+    is_single_name_equity = "COALESCE(tax.is_single_name_equity, 0)" if has_taxonomy else "0"
+    classification_ready = "COALESCE(tax.classification_ready, 0)" if has_taxonomy else "0"
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT
+                reg.ric,
+                NULLIF(TRIM(reg.ticker), '') AS ticker,
+                {allow_cuse_native_core} AS allow_cuse_native_core,
+                {allow_cpar_core_target} AS allow_cpar_core_target,
+                {allow_cuse_returns_projection} AS allow_cuse_returns_projection,
+                {is_single_name_equity} AS is_single_name_equity,
+                {classification_ready} AS classification_ready
+            FROM security_registry reg
+            {policy_join}
+            {taxonomy_join}
+            WHERE UPPER(NULLIF(TRIM(reg.ticker), '')) = %s
+              AND COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') = 'active'
+            """,
+            (ticker_norm,),
+        )
+        return cur.fetchall()
+
+
+def _fetch_compat_ticker_resolution_rows(pg_conn, ticker_norm: str):
     with pg_conn.cursor() as cur:
         cur.execute(
             """
             SELECT
                 ric,
                 ticker,
-                COALESCE(classification_ok, 0) AS classification_ok,
-                COALESCE(is_equity_eligible, 0) AS is_equity_eligible
-            FROM security_master
+                COALESCE(NULLIF(TRIM(coverage_role), ''), 'native_equity') AS coverage_role,
+                CASE WHEN COALESCE(is_equity_eligible, 0) = 1 THEN 1 ELSE 0 END AS is_single_name_equity,
+                COALESCE(classification_ok, 0) AS classification_ready
+            FROM security_master_compat_current
             WHERE UPPER(ticker) = %s
             """,
-            (ticker,),
+            (ticker_norm,),
         )
-        rows = cur.fetchall()
+        return cur.fetchall()
+
+
+def ric_exists(pg_conn, ric: str) -> tuple[bool, str | None]:
+    clean_ric = normalize_ric(ric)
+    registry_available = _pg_table_exists(pg_conn, "security_registry")
+    compat_available = _pg_table_exists(pg_conn, "security_master_compat_current")
+    row = (
+        _lookup_active_registry_ticker_for_ric(pg_conn, clean_ric)
+        if registry_available
+        else (_lookup_compat_ticker_for_ric(pg_conn, clean_ric) if compat_available else None)
+    )
+    if registry_available:
+        if row:
+            return True, (str(row[0]).upper().strip() if row[0] is not None else None)
+        return False, None
+    if not row:
+        return False, None
+    return True, (str(row[0]).upper().strip() if row[0] is not None else None)
+
+
+def resolve_ticker_to_ric_internal(pg_conn, ticker: str) -> tuple[str | None, list[str]]:
+    ticker_norm = normalize_ticker(ticker)
+    registry_available = _pg_table_exists(pg_conn, "security_registry")
+    compat_available = _pg_table_exists(pg_conn, "security_master_compat_current")
+    rows = (
+        _fetch_registry_ticker_resolution_rows(pg_conn, ticker_norm)
+        if registry_available
+        else (_fetch_compat_ticker_resolution_rows(pg_conn, ticker_norm) if compat_available else [])
+    )
     if not rows:
         return None, []
 
     candidates: list[dict[str, object]] = []
-    for ric, tkr, c_ok, e_ok in rows:
+    for row in rows:
+        if registry_available:
+            (
+                ric,
+                tkr,
+                allow_cuse_native_core,
+                allow_cpar_core_target,
+                allow_cuse_returns_projection,
+                is_single_name_equity,
+                classification_ready,
+            ) = row
+        else:
+            ric, tkr, coverage_role, is_single_name_equity, classification_ready = row
+            legacy_policy = policy_defaults_for_legacy_coverage_role(coverage_role)
+            allow_cuse_native_core = legacy_policy["allow_cuse_native_core"]
+            allow_cpar_core_target = legacy_policy["allow_cpar_core_target"]
+            allow_cuse_returns_projection = legacy_policy["allow_cuse_returns_projection"]
         ric_txt = normalize_ric(ric)
         tkr_txt = normalize_ticker(tkr)
-        eligible = 0 if (int(c_ok or 0) == 1 and int(e_ok or 0) == 1) else 1
+        native_core_rank = 0 if (
+            int(allow_cuse_native_core or 0) == 1
+            and int(is_single_name_equity or 0) == 1
+            and int(classification_ready or 0) == 1
+        ) else 1
+        cpar_core_rank = 0 if int(allow_cpar_core_target or 0) == 1 else 1
+        returns_projection_rank = 0 if int(allow_cuse_returns_projection or 0) == 1 else 1
         candidates.append(
             {
                 "ric": ric_txt,
                 "ticker": tkr_txt,
-                "eligible_rank": eligible,
+                "native_core_rank": native_core_rank,
+                "cpar_core_rank": cpar_core_rank,
+                "returns_projection_rank": returns_projection_rank,
                 "suffix_rank": _suffix_rank(ric_txt),
             }
         )
 
     candidates.sort(
         key=lambda x: (
-            int(x["eligible_rank"]),
+            int(x["native_core_rank"]),
+            int(x["cpar_core_rank"]),
+            int(x["returns_projection_rank"]),
             int(x["suffix_rank"]),
             str(x["ric"]),
         )

@@ -21,7 +21,15 @@ import pandas as pd
 
 import lseg.data as rd
 
-from backend.universe.schema import PRICES_TABLE, SECURITY_MASTER_TABLE, ensure_cuse4_schema
+from backend.vendor.lseg_toolkit.client.session import (
+    close_managed_session,
+    open_managed_session,
+)
+from backend.universe.schema import (
+    PRICES_TABLE,
+    SECURITY_REGISTRY_TABLE,
+    ensure_cuse4_schema,
+)
 from backend.universe.security_master_sync import load_price_ingest_universe_rows
 from backend.trading_calendar import filter_xnys_sessions, previous_or_same_xnys_session
 
@@ -69,6 +77,44 @@ def _connect_db(db_path: Path) -> sqlite3.Connection:
 def _existing_cols(conn: sqlite3.Connection, table: str) -> list[str]:
     cur = conn.execute(f"PRAGMA table_info({table})")
     return [str(r[1]) for r in cur.fetchall()]
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type='table' AND name=?
+        LIMIT 1
+        """,
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def _resolve_requested_registry_rics(
+    conn: sqlite3.Connection,
+    *,
+    requested_rics: list[str],
+) -> list[str]:
+    if not requested_rics:
+        return []
+    placeholders = ",".join("?" for _ in requested_rics)
+    if _table_exists(conn, SECURITY_REGISTRY_TABLE):
+        rows = conn.execute(
+            f"""
+            SELECT UPPER(TRIM(ric)) AS ric
+            FROM {SECURITY_REGISTRY_TABLE}
+            WHERE ric IS NOT NULL
+              AND TRIM(ric) <> ''
+              AND UPPER(TRIM(ric)) IN ({placeholders})
+              AND COALESCE(NULLIF(TRIM(tracking_status), ''), 'active') <> 'disabled'
+            ORDER BY ric
+            """,
+            requested_rics,
+        ).fetchall()
+        return sorted({str(row[0]) for row in rows if row and row[0]})
+    return []
 
 
 def _insert_rows(conn: sqlite3.Connection, table: str, rows: list[dict[str, Any]], *, replace: bool) -> int:
@@ -184,24 +230,7 @@ def backfill_prices(
         requested_rics = [str(r).strip().upper() for r in str(rics_csv).split(",") if str(r).strip()] if rics_csv else []
         requested_ric_set = set(requested_rics)
         if requested_rics:
-            where = [
-                "ric IS NOT NULL",
-                "TRIM(ric) <> ''",
-            ]
-            params: list[Any] = []
-            placeholders = ",".join("?" for _ in requested_rics)
-            where.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
-            params.extend(requested_rics)
-            universe = conn.execute(
-                f"""
-                SELECT UPPER(TRIM(ric)) AS ric
-                FROM {SECURITY_MASTER_TABLE}
-                WHERE {' AND '.join(where)}
-                ORDER BY ric
-                """,
-                params,
-            ).fetchall()
-            rics = sorted({str(r[0]) for r in universe if r and r[0]})
+            rics = _resolve_requested_registry_rics(conn, requested_rics=requested_rics)
         else:
             universe_rows = load_price_ingest_universe_rows(conn, include_pending_seed=False)
             rics = sorted({str(row["ric"]).strip().upper() for row in universe_rows if row.get("ric")})
@@ -215,7 +244,7 @@ def backfill_prices(
                 "requested_ric_count": int(len(requested_ric_set)),
                 "matched_requested_ric_count": matched_requested_ric_count,
                 "missing_requested_rics": missing_requested_rics,
-                "requires_seeded_security_master": bool(requested_ric_set),
+                "requires_registry_match": bool(requested_ric_set),
             }
 
         windows = _iter_date_windows(start_date=start_date, end_date=end_date, days_per_window=days_per_window)
@@ -258,7 +287,7 @@ def backfill_prices(
             unique_dates = sorted({str(d) for d in missing_volume_df["date"].tolist() if str(d).strip()})
             windows = [(d, d) for d in unique_dates]
 
-        rd.open_session()
+        managed_session = open_managed_session()
         try:
             for w_start, w_end in windows:
                 window_pairs: set[tuple[str, str]] | None = None
@@ -442,7 +471,7 @@ def backfill_prices(
                 else:
                     print({"window_start": w_start, "window_end": w_end, "rows_upserted_so_far": rows_upserted}, flush=True)
         finally:
-            rd.close_session()
+            close_managed_session(managed_session)
 
         norm_end = previous_or_same_xnys_session(end_date)
 

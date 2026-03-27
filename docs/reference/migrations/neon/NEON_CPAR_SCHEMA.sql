@@ -123,3 +123,53 @@ CREATE INDEX IF NOT EXISTS idx_cpar_instrument_fits_weekly_ticker
     ON cpar_instrument_fits_weekly (ticker);
 CREATE INDEX IF NOT EXISTS idx_cpar_instrument_fits_weekly_status
     ON cpar_instrument_fits_weekly (fit_status);
+
+CREATE TABLE IF NOT EXISTS cpar_package_universe_membership (
+    package_run_id TEXT NOT NULL,
+    package_date DATE NOT NULL,
+    ric TEXT NOT NULL,
+    ticker TEXT,
+    universe_scope TEXT NOT NULL,
+    target_scope TEXT NOT NULL,
+    basis_role TEXT NOT NULL,
+    build_reason_code TEXT,
+    warnings_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (package_run_id, ric)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cpar_package_universe_membership_package_run
+    ON cpar_package_universe_membership (package_run_id);
+CREATE INDEX IF NOT EXISTS idx_cpar_package_universe_membership_package_date
+    ON cpar_package_universe_membership (package_date);
+CREATE INDEX IF NOT EXISTS idx_cpar_package_universe_membership_ticker
+    ON cpar_package_universe_membership (ticker);
+
+CREATE TABLE IF NOT EXISTS cpar_instrument_runtime_coverage_weekly (
+    package_run_id TEXT NOT NULL,
+    package_date DATE NOT NULL,
+    ric TEXT NOT NULL,
+    ticker TEXT,
+    price_on_package_date_status TEXT NOT NULL,
+    fit_row_status TEXT NOT NULL,
+    fit_quality_status TEXT NOT NULL,
+    portfolio_use_status TEXT NOT NULL,
+    ticker_detail_use_status TEXT NOT NULL,
+    hedge_use_status TEXT NOT NULL,
+    fit_family TEXT NOT NULL,
+    fit_status TEXT NOT NULL,
+    reason_code TEXT,
+    quality_label TEXT NOT NULL,
+    warnings_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (package_run_id, ric)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cpar_instrument_runtime_coverage_weekly_package_run
+    ON cpar_instrument_runtime_coverage_weekly (package_run_id);
+CREATE INDEX IF NOT EXISTS idx_cpar_instrument_runtime_coverage_weekly_package_date
+    ON cpar_instrument_runtime_coverage_weekly (package_date);
+CREATE INDEX IF NOT EXISTS idx_cpar_instrument_runtime_coverage_weekly_portfolio_use
+    ON cpar_instrument_runtime_coverage_weekly (portfolio_use_status);
+CREATE INDEX IF NOT EXISTS idx_cpar_instrument_runtime_coverage_weekly_ticker
+    ON cpar_instrument_runtime_coverage_weekly (ticker);

@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 
 from backend.data.cross_section_snapshot_schema import TABLE, table_columns, table_exists
+from backend.universe.runtime_rows import load_security_runtime_rows
 from backend.universe.security_master_sync import load_default_source_universe_rows
 
 
@@ -25,6 +26,24 @@ def load_base_cross_sections(
     if "ric" not in source_cols or "as_of_date" not in source_cols:
         return pd.DataFrame(columns=["ric", "ticker", "as_of_date"])
 
+    runtime_rows = load_security_runtime_rows(
+        conn,
+        tickers=tickers,
+        include_disabled=False,
+    )
+    runtime_df = pd.DataFrame(runtime_rows)
+    if runtime_df.empty:
+        return pd.DataFrame(columns=["ric", "ticker", "as_of_date"])
+    runtime_df["ric"] = runtime_df["ric"].astype(str).str.upper()
+    runtime_df["ticker"] = runtime_df["ticker"].astype(str).str.upper()
+    runtime_df = runtime_df[
+        runtime_df["allow_cuse_native_core"].astype(int).eq(1)
+        & runtime_df["is_single_name_equity"].astype(int).eq(1)
+        & runtime_df["classification_ready"].astype(int).eq(1)
+    ][["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
+    if runtime_df.empty:
+        return pd.DataFrame(columns=["ric", "ticker", "as_of_date"])
+
     clauses: list[str] = []
     params: list[Any] = []
     if start_date:
@@ -33,34 +52,19 @@ def load_base_cross_sections(
     if end_date:
         clauses.append("e.as_of_date <= ?")
         params.append(str(end_date))
-    if tickers:
-        clean = [str(t).upper().strip() for t in tickers if str(t).strip()]
-        if clean:
-            placeholders = ",".join("?" for _ in clean)
-            clauses.append(f"sm.ticker IN ({placeholders})")
-            params.extend(clean)
-
-    clauses.extend(
-        [
-            "sm.ric = e.ric",
-            "sm.classification_ok = 1",
-            "sm.is_equity_eligible = 1",
-            "sm.ric IS NOT NULL",
-            "TRIM(sm.ric) <> ''",
-            "sm.ticker IS NOT NULL",
-            "TRIM(sm.ticker) <> ''",
-        ]
-    )
+    allowed_rics = runtime_df["ric"].astype(str).tolist()
+    if allowed_rics:
+        placeholders = ",".join("?" for _ in allowed_rics)
+        clauses.append(f"UPPER(e.ric) IN ({placeholders})")
+        params.extend(allowed_rics)
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     if str(mode).strip().lower() == "full":
         df = pd.read_sql_query(
             f"""
-            SELECT DISTINCT UPPER(sm.ric) AS ric, UPPER(sm.ticker) AS ticker, e.as_of_date
+            SELECT DISTINCT UPPER(e.ric) AS ric, e.as_of_date
             FROM {source_table} e
-            JOIN security_master sm
-              ON sm.ric = e.ric
             {where_sql}
-            ORDER BY UPPER(sm.ric), e.as_of_date
+            ORDER BY UPPER(e.ric), e.as_of_date
             """,
             conn,
             params=params,
@@ -69,15 +73,12 @@ def load_base_cross_sections(
         df = pd.read_sql_query(
             f"""
             SELECT
-                UPPER(sm.ric) AS ric,
-                UPPER(sm.ticker) AS ticker,
+                UPPER(e.ric) AS ric,
                 MAX(e.as_of_date) AS as_of_date
             FROM {source_table} e
-            JOIN security_master sm
-              ON sm.ric = e.ric
             {where_sql}
-            GROUP BY UPPER(sm.ric), UPPER(sm.ticker)
-            ORDER BY UPPER(sm.ric), as_of_date
+            GROUP BY UPPER(e.ric)
+            ORDER BY UPPER(e.ric), as_of_date
             """,
             conn,
             params=params,
@@ -85,6 +86,9 @@ def load_base_cross_sections(
     if df.empty:
         return df
     df["ric"] = df["ric"].astype(str).str.upper()
+    df = df.merge(runtime_df, on="ric", how="inner")
+    if df.empty:
+        return df
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["as_of_date"] = df["as_of_date"].astype(str)
     source_universe_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
@@ -179,12 +183,10 @@ def build_snapshot_payload(
     max_asof = str(base["as_of_date"].max())
     base_tickers = sorted(set(base["ticker"].astype(str).str.upper().tolist()))
     base_rics = sorted(set(base["ric"].astype(str).str.upper().tolist()))
-    ric_clause = ""
-    ric_params: list[Any] = []
-    if base_rics:
-        placeholders = ",".join("?" for _ in base_rics)
-        ric_clause = f" AND sm.ric IN ({placeholders})"
-        ric_params = base_rics
+    if not base_rics:
+        return {"status": "no-op", "rows_upserted": 0, "table": TABLE}
+
+    identity = base[["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
 
     fundamental_cols = [
         "market_cap",
@@ -218,109 +220,6 @@ def build_snapshot_payload(
         "fiscal_year",
         "period_type",
     ]
-    fsel = ", ".join(
-        [
-            "UPPER(sm.ric) AS ric",
-            "UPPER(sm.ticker) AS ticker",
-            "f.as_of_date AS fetch_date",
-            "CAST(f.market_cap AS REAL) AS market_cap",
-            "CAST(f.shares_outstanding AS REAL) AS shares_outstanding",
-            "CAST(f.dividend_yield AS REAL) AS dividend_yield",
-            "f.common_name AS common_name",
-            "CAST(f.book_value_per_share AS REAL) AS book_value",
-            "CAST(f.forward_eps AS REAL) AS forward_eps",
-            "CAST(f.trailing_eps AS REAL) AS trailing_eps",
-            "CAST(f.total_debt AS REAL) AS total_debt",
-            "CAST(f.cash_and_equivalents AS REAL) AS cash_and_equivalents",
-            "CAST(f.long_term_debt AS REAL) AS long_term_debt",
-            "NULL AS free_cash_flow",
-            "NULL AS gross_profit",
-            "NULL AS net_income",
-            "CAST(f.operating_cashflow AS REAL) AS operating_cashflow",
-            "CAST(f.capital_expenditures AS REAL) AS capital_expenditures",
-            "NULL AS shares_basic",
-            "NULL AS shares_diluted",
-            "NULL AS free_float_shares",
-            "NULL AS free_float_percent",
-            "CAST(f.revenue AS REAL) AS revenue",
-            "CAST(f.ebitda AS REAL) AS ebitda",
-            "CAST(f.ebit AS REAL) AS ebit",
-            "CAST(f.total_assets AS REAL) AS total_assets",
-            "NULL AS total_liabilities",
-            "CAST(f.roe_pct AS REAL) AS return_on_equity",
-            "CAST(f.operating_margin_pct AS REAL) AS operating_margins",
-            "f.period_end_date AS fundamental_period_end_date",
-            "f.report_currency AS report_currency",
-            "f.fiscal_year AS fiscal_year",
-            "f.period_type AS period_type",
-            "f.source AS source",
-            "f.job_run_id AS job_run_id",
-            "f.updated_at AS updated_at",
-        ]
-    )
-    if mode_norm == "full":
-        fundamentals = pd.read_sql_query(
-            f"""
-            SELECT {fsel}
-            FROM security_fundamentals_pit f
-            JOIN security_master sm
-              ON sm.ric = f.ric
-            WHERE f.as_of_date <= ?
-              {ric_clause}
-            ORDER BY UPPER(sm.ric), f.as_of_date, f.updated_at
-            """,
-            conn,
-            params=[max_asof, *ric_params],
-        )
-    else:
-        fundamentals = pd.read_sql_query(
-            f"""
-            WITH latest_date AS (
-                SELECT ric, MAX(as_of_date) AS max_as_of_date
-                FROM security_fundamentals_pit
-                WHERE as_of_date <= ?
-                GROUP BY ric
-            ),
-            ranked AS (
-                SELECT
-                    {fsel},
-                    ROW_NUMBER() OVER (
-                        PARTITION BY UPPER(sm.ric)
-                        ORDER BY f.stat_date DESC, f.updated_at DESC
-                    ) AS rn
-                FROM security_fundamentals_pit f
-                JOIN latest_date ld
-                  ON ld.ric = f.ric
-                 AND ld.max_as_of_date = f.as_of_date
-                JOIN security_master sm
-                  ON sm.ric = f.ric
-                WHERE 1=1
-                  {ric_clause}
-            )
-            SELECT *
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY ric ASC
-            """,
-            conn,
-            params=[max_asof, *ric_params],
-        )
-    if not fundamentals.empty:
-        fundamentals["ric"] = fundamentals["ric"].astype(str).str.upper()
-        fundamentals["ticker"] = fundamentals["ticker"].astype(str).str.upper()
-        fundamentals["fetch_date_dt"] = pd.to_datetime(fundamentals["fetch_date"], errors="coerce")
-        fundamentals = fundamentals.dropna(subset=["fetch_date_dt"])
-        fundamentals = (
-            fundamentals.sort_values(["ric", "fetch_date", "updated_at"])
-            .drop_duplicates(subset=["ric", "fetch_date"], keep="last")
-        )
-        fundamentals = fundamentals.rename(
-            columns={
-                "source": "fundamental_source",
-                "job_run_id": "fundamental_job_run_id",
-            }
-        )
-
     trbc_cols = [
         "trbc_economic_sector",
         "trbc_business_sector",
@@ -328,32 +227,134 @@ def build_snapshot_payload(
         "trbc_industry",
         "trbc_activity",
     ]
-    hsel = ", ".join(
-        [
-            "UPPER(sm.ric) AS ric",
-            "UPPER(sm.ticker) AS ticker",
-            "h.as_of_date",
-            *[f"h.{c}" for c in trbc_cols],
-            "h.source AS source",
-            "h.job_run_id AS job_run_id",
-            "h.updated_at AS updated_at",
-        ]
-    )
+
+    fundamentals = pd.DataFrame()
+    if table_exists(conn, "security_fundamentals_pit"):
+        fundamental_placeholders = ",".join("?" for _ in base_rics)
+        fundamental_ric_clause = f" AND UPPER(f.ric) IN ({fundamental_placeholders})"
+        fundamental_params: list[Any] = [max_asof, *base_rics]
+        fundamental_select = ", ".join(
+            [
+                "UPPER(f.ric) AS ric",
+                "f.as_of_date AS fetch_date",
+                "CAST(f.market_cap AS REAL) AS market_cap",
+                "CAST(f.shares_outstanding AS REAL) AS shares_outstanding",
+                "CAST(f.dividend_yield AS REAL) AS dividend_yield",
+                "f.common_name AS common_name",
+                "CAST(f.book_value_per_share AS REAL) AS book_value",
+                "CAST(f.forward_eps AS REAL) AS forward_eps",
+                "CAST(f.trailing_eps AS REAL) AS trailing_eps",
+                "CAST(f.total_debt AS REAL) AS total_debt",
+                "CAST(f.cash_and_equivalents AS REAL) AS cash_and_equivalents",
+                "CAST(f.long_term_debt AS REAL) AS long_term_debt",
+                "NULL AS free_cash_flow",
+                "NULL AS gross_profit",
+                "NULL AS net_income",
+                "CAST(f.operating_cashflow AS REAL) AS operating_cashflow",
+                "CAST(f.capital_expenditures AS REAL) AS capital_expenditures",
+                "NULL AS shares_basic",
+                "NULL AS shares_diluted",
+                "NULL AS free_float_shares",
+                "NULL AS free_float_percent",
+                "CAST(f.revenue AS REAL) AS revenue",
+                "CAST(f.ebitda AS REAL) AS ebitda",
+                "CAST(f.ebit AS REAL) AS ebit",
+                "CAST(f.total_assets AS REAL) AS total_assets",
+                "NULL AS total_liabilities",
+                "CAST(f.roe_pct AS REAL) AS return_on_equity",
+                "CAST(f.operating_margin_pct AS REAL) AS operating_margins",
+                "f.period_end_date AS fundamental_period_end_date",
+                "f.report_currency AS report_currency",
+                "f.fiscal_year AS fiscal_year",
+                "f.period_type AS period_type",
+                "f.source AS source",
+                "f.job_run_id AS job_run_id",
+                "f.updated_at AS updated_at",
+            ]
+        )
+        if mode_norm == "full":
+            fundamentals = pd.read_sql_query(
+                f"""
+                SELECT {fundamental_select}
+                FROM security_fundamentals_pit f
+                WHERE f.as_of_date <= ?{fundamental_ric_clause}
+                ORDER BY UPPER(f.ric), f.as_of_date, f.updated_at
+                """,
+                conn,
+                params=fundamental_params,
+            )
+        else:
+            fundamentals = pd.read_sql_query(
+                f"""
+                WITH latest_date AS (
+                    SELECT ric, MAX(as_of_date) AS max_as_of_date
+                    FROM security_fundamentals_pit
+                    WHERE as_of_date <= ?
+                    GROUP BY ric
+                ),
+                ranked AS (
+                    SELECT
+                        {fundamental_select},
+                        ROW_NUMBER() OVER (
+                            PARTITION BY UPPER(f.ric)
+                            ORDER BY f.stat_date DESC, f.updated_at DESC
+                        ) AS rn
+                    FROM security_fundamentals_pit f
+                    JOIN latest_date ld
+                      ON ld.ric = f.ric
+                     AND ld.max_as_of_date = f.as_of_date
+                    WHERE 1=1{fundamental_ric_clause}
+                )
+                SELECT *
+                FROM ranked
+                WHERE rn = 1
+                ORDER BY ric ASC
+                """,
+                conn,
+                params=fundamental_params,
+            )
+        if not fundamentals.empty:
+            fundamentals["ric"] = fundamentals["ric"].astype(str).str.upper()
+            fundamentals = fundamentals.merge(identity, on="ric", how="left")
+            fundamentals["ticker"] = fundamentals["ticker"].astype(str).str.upper()
+            fundamentals["fetch_date_dt"] = pd.to_datetime(fundamentals["fetch_date"], errors="coerce")
+            fundamentals = fundamentals.dropna(subset=["fetch_date_dt"])
+            fundamentals = (
+                fundamentals.sort_values(["ric", "fetch_date", "updated_at"])
+                .drop_duplicates(subset=["ric", "fetch_date"], keep="last")
+            )
+            fundamentals = fundamentals.rename(
+                columns={
+                    "source": "fundamental_source",
+                    "job_run_id": "fundamental_job_run_id",
+                }
+            )
+
     trbc_hist = pd.DataFrame()
     if table_exists(conn, "security_classification_pit"):
+        trbc_placeholders = ",".join("?" for _ in base_rics)
+        trbc_ric_clause = f" AND UPPER(h.ric) IN ({trbc_placeholders})"
+        trbc_params: list[Any] = [max_asof, *base_rics]
+        trbc_select = ", ".join(
+            [
+                "UPPER(h.ric) AS ric",
+                "h.as_of_date",
+                *[f"h.{col}" for col in trbc_cols],
+                "h.source AS source",
+                "h.job_run_id AS job_run_id",
+                "h.updated_at AS updated_at",
+            ]
+        )
         if mode_norm == "full":
             trbc_hist = pd.read_sql_query(
                 f"""
-                SELECT {hsel}
+                SELECT {trbc_select}
                 FROM security_classification_pit h
-                JOIN security_master sm
-                  ON sm.ric = h.ric
-                WHERE h.as_of_date <= ?
-                  {ric_clause}
-                ORDER BY UPPER(sm.ric), h.as_of_date, h.updated_at
+                WHERE h.as_of_date <= ?{trbc_ric_clause}
+                ORDER BY UPPER(h.ric), h.as_of_date, h.updated_at
                 """,
                 conn,
-                params=[max_asof, *ric_params],
+                params=trbc_params,
             )
         else:
             trbc_hist = pd.read_sql_query(
@@ -366,19 +367,16 @@ def build_snapshot_payload(
                 ),
                 ranked AS (
                     SELECT
-                        {hsel},
+                        {trbc_select},
                         ROW_NUMBER() OVER (
-                            PARTITION BY UPPER(sm.ric)
+                            PARTITION BY UPPER(h.ric)
                             ORDER BY h.updated_at DESC
                         ) AS rn
                     FROM security_classification_pit h
                     JOIN latest_date ld
                       ON ld.ric = h.ric
                      AND ld.max_as_of_date = h.as_of_date
-                    JOIN security_master sm
-                      ON sm.ric = h.ric
-                    WHERE 1=1
-                      {ric_clause}
+                    WHERE 1=1{trbc_ric_clause}
                 )
                 SELECT *
                 FROM ranked
@@ -386,141 +384,143 @@ def build_snapshot_payload(
                 ORDER BY ric ASC
                 """,
                 conn,
-                params=[max_asof, *ric_params],
+                params=trbc_params,
             )
-    if not trbc_hist.empty:
-        trbc_hist["ric"] = trbc_hist["ric"].astype(str).str.upper()
-        trbc_hist["ticker"] = trbc_hist["ticker"].astype(str).str.upper()
-        trbc_hist["trbc_effective_date"] = trbc_hist["as_of_date"].astype(str)
-        trbc_hist["trbc_effective_date_dt"] = pd.to_datetime(trbc_hist["trbc_effective_date"], errors="coerce")
-        trbc_hist = trbc_hist.dropna(subset=["trbc_effective_date_dt"])
-        trbc_hist = (
-            trbc_hist.sort_values(["ric", "trbc_effective_date", "updated_at"])
-            .drop_duplicates(subset=["ric", "trbc_effective_date"], keep="last")
-        )
-        trbc_hist = trbc_hist.rename(
-            columns={
-                "source": "trbc_source",
-                "job_run_id": "trbc_job_run_id",
-            }
-        )
+        if not trbc_hist.empty:
+            trbc_hist["ric"] = trbc_hist["ric"].astype(str).str.upper()
+            trbc_hist = trbc_hist.merge(identity, on="ric", how="left")
+            trbc_hist["ticker"] = trbc_hist["ticker"].astype(str).str.upper()
+            trbc_hist["trbc_effective_date"] = trbc_hist["as_of_date"].astype(str)
+            trbc_hist["trbc_effective_date_dt"] = pd.to_datetime(
+                trbc_hist["trbc_effective_date"],
+                errors="coerce",
+            )
+            trbc_hist = trbc_hist.dropna(subset=["trbc_effective_date_dt"])
+            trbc_hist = (
+                trbc_hist.sort_values(["ric", "trbc_effective_date", "updated_at"])
+                .drop_duplicates(subset=["ric", "trbc_effective_date"], keep="last")
+            )
+            trbc_hist = trbc_hist.rename(
+                columns={
+                    "source": "trbc_source",
+                    "job_run_id": "trbc_job_run_id",
+                }
+            )
 
-    if mode_norm == "full":
-        prices = pd.read_sql_query(
-            f"""
-            SELECT
-                UPPER(sm.ric) AS ric,
-                UPPER(sm.ticker) AS ticker,
-                p.date,
-                p.close,
-                p.currency,
-                p.source,
-                p.updated_at
-            FROM security_prices_eod p
-            JOIN security_master sm
-              ON sm.ric = p.ric
-            WHERE p.date <= ?
-              {ric_clause}
-            ORDER BY UPPER(sm.ric), p.date
-            """,
-            conn,
-            params=[max_asof, *ric_params],
-        )
-    else:
-        prices = pd.read_sql_query(
-            f"""
-            WITH latest_date AS (
-                SELECT ric, MAX(date) AS max_date
-                FROM security_prices_eod
-                WHERE date <= ?
-                GROUP BY ric
-            ),
-            ranked AS (
+    prices = pd.DataFrame()
+    if table_exists(conn, "security_prices_eod"):
+        price_placeholders = ",".join("?" for _ in base_rics)
+        price_ric_clause = f" AND UPPER(p.ric) IN ({price_placeholders})"
+        price_params: list[Any] = [max_asof, *base_rics]
+        if mode_norm == "full":
+            prices = pd.read_sql_query(
+                f"""
                 SELECT
-                    UPPER(sm.ric) AS ric,
-                    UPPER(sm.ticker) AS ticker,
+                    UPPER(p.ric) AS ric,
                     p.date,
                     p.close,
                     p.currency,
                     p.source,
-                    p.updated_at,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY UPPER(sm.ric)
-                        ORDER BY p.updated_at DESC
-                    ) AS rn
+                    p.updated_at
                 FROM security_prices_eod p
-                JOIN latest_date ld
-                  ON ld.ric = p.ric
-                 AND ld.max_date = p.date
-                JOIN security_master sm
-                  ON sm.ric = p.ric
-                WHERE 1=1
-                  {ric_clause}
+                WHERE p.date <= ?{price_ric_clause}
+                ORDER BY UPPER(p.ric), p.date, p.updated_at
+                """,
+                conn,
+                params=price_params,
             )
-            SELECT ric, ticker, date, close, currency, source, updated_at
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY ric ASC
-            """,
-            conn,
-            params=[max_asof, *ric_params],
-        )
-    if not prices.empty:
-        prices["ric"] = prices["ric"].astype(str).str.upper()
-        prices["ticker"] = prices["ticker"].astype(str).str.upper()
-        prices["price_date"] = prices["date"].astype(str)
-        prices["price_date_dt"] = pd.to_datetime(prices["price_date"], errors="coerce")
-        prices = prices.dropna(subset=["price_date_dt"])
-        prices = (
-            prices.sort_values(["ric", "price_date", "updated_at"])
-            .drop_duplicates(subset=["ric", "price_date"], keep="last")
-        )
-        prices = prices.rename(
-            columns={
-                "close": "price_close",
-                "currency": "price_currency",
-                "source": "price_source",
-            }
-        )
+        else:
+            prices = pd.read_sql_query(
+                f"""
+                WITH latest_date AS (
+                    SELECT ric, MAX(date) AS max_date
+                    FROM security_prices_eod
+                    WHERE date <= ?
+                    GROUP BY ric
+                ),
+                ranked AS (
+                    SELECT
+                        UPPER(p.ric) AS ric,
+                        p.date,
+                        p.close,
+                        p.currency,
+                        p.source,
+                        p.updated_at,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY UPPER(p.ric)
+                            ORDER BY p.updated_at DESC
+                        ) AS rn
+                    FROM security_prices_eod p
+                    JOIN latest_date ld
+                      ON ld.ric = p.ric
+                     AND ld.max_date = p.date
+                    WHERE 1=1{price_ric_clause}
+                )
+                SELECT ric, date, close, currency, source, updated_at
+                FROM ranked
+                WHERE rn = 1
+                ORDER BY ric ASC
+                """,
+                conn,
+                params=price_params,
+            )
+        if not prices.empty:
+            prices["ric"] = prices["ric"].astype(str).str.upper()
+            prices = prices.merge(identity, on="ric", how="left")
+            prices["ticker"] = prices["ticker"].astype(str).str.upper()
+            prices["price_date"] = prices["date"].astype(str)
+            prices["price_date_dt"] = pd.to_datetime(prices["price_date"], errors="coerce")
+            prices = prices.dropna(subset=["price_date_dt"])
+            prices = (
+                prices.sort_values(["ric", "price_date", "updated_at"])
+                .drop_duplicates(subset=["ric", "price_date"], keep="last")
+            )
+            prices = prices.rename(
+                columns={
+                    "close": "price_close",
+                    "currency": "price_currency",
+                    "source": "price_source",
+                }
+            )
 
     out = base.copy()
     if not fundamentals.empty:
-        fmerge_cols = [
+        fundamental_merge_cols = [
             "ric",
             "ticker",
             "fetch_date",
             "fetch_date_dt",
-            *[c for c in fundamental_cols if c in fundamentals.columns],
+            *[col for col in fundamental_cols if col in fundamentals.columns],
             "fundamental_source",
             "fundamental_job_run_id",
         ]
         out = merge_asof_by_ric(
             out,
-            fundamentals[fmerge_cols],
+            fundamentals[fundamental_merge_cols],
             left_date_col="as_of_date_dt",
             right_date_col="fetch_date_dt",
         )
         out = out.rename(columns={"fetch_date": "fundamental_fetch_date"})
 
     if not trbc_hist.empty:
-        hmerge_cols = [
+        trbc_merge_cols = [
             "ric",
             "ticker",
             "trbc_effective_date",
             "trbc_effective_date_dt",
-            *[c for c in trbc_cols if c in trbc_hist.columns],
+            *[col for col in trbc_cols if col in trbc_hist.columns],
             "trbc_source",
             "trbc_job_run_id",
         ]
         out = merge_asof_by_ric(
             out,
-            trbc_hist[hmerge_cols],
+            trbc_hist[trbc_merge_cols],
             left_date_col="as_of_date_dt",
             right_date_col="trbc_effective_date_dt",
         )
 
     if not prices.empty:
-        pmerge_cols = [
+        price_merge_cols = [
             "ric",
             "ticker",
             "price_date",
@@ -531,18 +531,12 @@ def build_snapshot_payload(
         ]
         out = merge_asof_by_ric(
             out,
-            prices[pmerge_cols],
+            prices[price_merge_cols],
             left_date_col="as_of_date_dt",
             right_date_col="price_date_dt",
         )
 
-    for col in [
-        "trbc_economic_sector",
-        "trbc_business_sector",
-        "trbc_industry_group",
-        "trbc_industry",
-        "trbc_activity",
-    ]:
+    for col in trbc_cols:
         coalesce_columns(out, col, [f"{col}_y", col, f"{col}_x"])
 
     if "trbc_economic_sector_short" not in out.columns:
@@ -550,7 +544,9 @@ def build_snapshot_payload(
     if "trbc_sector" in out.columns:
         out["trbc_economic_sector_short"] = out["trbc_economic_sector_short"].fillna(out["trbc_sector"])
     if "trbc_economic_sector" in out.columns:
-        out["trbc_economic_sector_short"] = out["trbc_economic_sector_short"].fillna(out["trbc_economic_sector"])
+        out["trbc_economic_sector_short"] = out["trbc_economic_sector_short"].fillna(
+            out["trbc_economic_sector"]
+        )
 
     sanitize_num(
         out,

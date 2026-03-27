@@ -72,8 +72,10 @@ Integration-layer ownership remains in the repo's normal layers and is documente
   - a control app for refresh execution and operator/control diagnostics
 - In that split model, the serve app must not own refresh execution or reconcile process-local refresh-worker state.
 - The active cUSE model-history window is defined by retained `barra_raw_cross_section_history`, not by the deepest source archive.
-- `security_master` is the only universe authority.
-- The committed universe artifact is `data/reference/security_master_seed.csv`.
+- `security_registry` plus `security_policy_current` are the authoritative universe-maintenance surfaces.
+- `security_master` remains a compatibility mirror for legacy consumers and diagnostics.
+- The committed primary universe artifact is `data/reference/security_registry_seed.csv`.
+- `data/reference/security_master_seed.csv` remains only as a compatibility export artifact while legacy workflows still require it.
 - The three canonical source-of-truth tables are:
   - `security_prices_eod`
   - `security_fundamentals_pit`
@@ -98,19 +100,23 @@ Purpose:
 - Define which securities the platform cares about.
 
 Authority:
-- `security_master`
+- `security_registry` for identity and tracking state
+- `security_policy_current` for current ingest and model-path policy
+- `security_master` compatibility mirror only
 
 Key actions:
 - add new tickers/RICs
-- update registry identifiers
-- mark names in or out of the eligible universe
+- update registry identifiers and tracking state
+- update ingest/model policy for the active universe
 
 Rule:
 - Universe maintenance is explicit and file-driven.
-- The committed `security_master_seed.csv` is a registry/bootstrap input only; LSEG enrichment is the authority for live identifiers and the source for derived eligibility flags.
-- When `DATA_BACKEND=neon`, Neon `security_master` is the operating source of truth for app/runtime reads; local SQLite remains the ingest/archive/mirror surface that feeds or repairs Neon.
+- The committed `security_registry_seed.csv` is the primary registry/bootstrap input. `security_master_seed.csv` is a compatibility export only.
+- LSEG enrichment remains the authority for live identifiers and the source for derived readiness/taxonomy state.
+- When `DATA_BACKEND=neon`, Neon registry/policy/taxonomy/compat surfaces are the operating source of truth for app/runtime reads; local SQLite remains the ingest/archive/mirror surface that feeds or repairs Neon.
 - No separate universe-builder artifacts should be needed at runtime.
-- After approved universe changes, regenerate and commit `data/reference/security_master_seed.csv`.
+- After approved universe changes, regenerate and commit `data/reference/security_registry_seed.csv`.
+- Regenerate `data/reference/security_master_seed.csv` only while compatibility workflows or tests still require it.
 
 ### 2) Source Data Layer
 
@@ -165,6 +171,7 @@ Key rule:
   - local diagnostic readers inspect only the local SQLite archive and must not be treated as app-serving truth
 - When rebuild lanes use a workspace/local override, the orchestrator now passes explicit `data_db` / `cache_db` targets through execution instead of mutating process-wide runtime paths.
 - Neon-authoritative rebuild rehearsal must fail closed if `neon_readiness` cannot produce a valid scratch workspace or if the derived local mirror sync from that workspace fails.
+- Those scratch workspaces are not meant to accumulate indefinitely. Keep only a small recent set (default `NEON_REBUILD_WORKSPACE_RETENTION=2`) and prune older `job_*` workspaces automatically after runs.
 - The risk-model math window is narrower than retained model history:
   - covariance / specific risk use `LOOKBACK_DAYS` (currently ~2 trading years)
   - factor-return / raw cross-section history may be retained for longer (for example ~5 years)
@@ -182,8 +189,11 @@ Purpose:
 Rules:
 - Served exposure methodology is explicit:
   - `Core` = `model_status = core_estimated` with `exposure_origin = native`
-  - `Fundamental Projection` = `model_status = projected_only` with `exposure_origin = projected_fundamental` for single-name equities carried by descriptor/fundamental scoring outside the US core ESTU
-  - `Returns Projection` = `model_status = projected_only` with `exposure_origin = projected_returns` for ETFs/ETPs projected from returns regression onto core factor returns
+  - `Projected` = `model_status = projected_only` with `exposure_origin = projected`
+- Projection methodology can still differ internally:
+  - single-name equities may arrive through descriptor/fundamental-style projection outside the US core ESTU
+  - ETFs/ETPs and similar vehicles may arrive through returns-based projection onto core factor returns
+- Those methodology distinctions do not produce different served `exposure_origin` values anymore.
 - Projection-only instruments remain outside native factor-return, covariance, and specific-risk estimation.
 - Their projected outputs are derived from durable `model_factor_returns_daily`, not cache-era factor-return tables.
 - They refresh only on core lanes, persist once per active `core_state_through_date`, and are then read by serving as a durable surface.
@@ -326,7 +336,7 @@ Examples:
 - methodology change
 
 Should do:
-- update `security_master`
+- update the committed registry artifact and the resulting registry/policy surfaces
 - targeted or full source backfill as needed
 - rebuild raw-history over affected window
 - run `cold-core` if the change affects historical model inputs materially
@@ -424,7 +434,7 @@ Should show:
 
 The operating model is considered ready for full cloud usage when:
 - every update type maps to one named workflow
-- `security_master` update and source backfill procedure for new names is explicit
+- registry-first universe update and source backfill procedure for new names is explicit
 - holdings edits can refresh serving outputs without touching core model
 - daily source updates are clearly separated from weekly cUSE4 recompute
 - Neon pruning/parity is automatic and observable

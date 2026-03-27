@@ -24,6 +24,8 @@ def write_cpar_outputs_sqlite(
     proxy_transforms: list[dict[str, Any]],
     covariance_rows: list[dict[str, Any]],
     instrument_fits: list[dict[str, Any]],
+    package_membership: list[dict[str, Any]] | None = None,
+    runtime_coverage: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     cpar_schema.ensure_sqlite_schema(conn)
     package_run_id = str(package_run["package_run_id"])
@@ -31,6 +33,8 @@ def write_cpar_outputs_sqlite(
     conn.execute(f"DELETE FROM {cpar_schema.TABLE_PROXY_TRANSFORM} WHERE package_run_id = ?", (package_run_id,))
     conn.execute(f"DELETE FROM {cpar_schema.TABLE_FACTOR_COVARIANCE} WHERE package_run_id = ?", (package_run_id,))
     conn.execute(f"DELETE FROM {cpar_schema.TABLE_INSTRUMENT_FITS} WHERE package_run_id = ?", (package_run_id,))
+    conn.execute(f"DELETE FROM {cpar_schema.TABLE_PACKAGE_UNIVERSE_MEMBERSHIP} WHERE package_run_id = ?", (package_run_id,))
+    conn.execute(f"DELETE FROM {cpar_schema.TABLE_RUNTIME_COVERAGE} WHERE package_run_id = ?", (package_run_id,))
     conn.execute(
         f"""
         INSERT OR REPLACE INTO {cpar_schema.TABLE_PACKAGE_RUNS} (
@@ -173,6 +177,61 @@ def write_cpar_outputs_sqlite(
                 for row in instrument_fits
             ],
         )
+    if package_membership:
+        conn.executemany(
+            f"""
+            INSERT OR REPLACE INTO {cpar_schema.TABLE_PACKAGE_UNIVERSE_MEMBERSHIP} (
+                package_run_id, package_date, ric, ticker, universe_scope, target_scope, basis_role,
+                build_reason_code, warnings_json, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row["package_run_id"],
+                    row["package_date"],
+                    row["ric"],
+                    row.get("ticker"),
+                    row["universe_scope"],
+                    row["target_scope"],
+                    row["basis_role"],
+                    row.get("build_reason_code"),
+                    _json_text(row.get("warnings", [])),
+                    row["updated_at"],
+                )
+                for row in package_membership
+            ],
+        )
+    if runtime_coverage:
+        conn.executemany(
+            f"""
+            INSERT OR REPLACE INTO {cpar_schema.TABLE_RUNTIME_COVERAGE} (
+                package_run_id, package_date, ric, ticker, price_on_package_date_status, fit_row_status,
+                fit_quality_status, portfolio_use_status, ticker_detail_use_status, hedge_use_status, fit_family,
+                fit_status, reason_code, quality_label, warnings_json, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row["package_run_id"],
+                    row["package_date"],
+                    row["ric"],
+                    row.get("ticker"),
+                    row["price_on_package_date_status"],
+                    row["fit_row_status"],
+                    row["fit_quality_status"],
+                    row["portfolio_use_status"],
+                    row["ticker_detail_use_status"],
+                    row["hedge_use_status"],
+                    row["fit_family"],
+                    row["fit_status"],
+                    row.get("reason_code"),
+                    row["quality_label"],
+                    _json_text(row.get("warnings", [])),
+                    row["updated_at"],
+                )
+                for row in runtime_coverage
+            ],
+        )
     conn.commit()
     return {"status": "ok"}
 
@@ -185,6 +244,8 @@ def write_cpar_outputs_postgres(
     proxy_transforms: list[dict[str, Any]],
     covariance_rows: list[dict[str, Any]],
     instrument_fits: list[dict[str, Any]],
+    package_membership: list[dict[str, Any]] | None = None,
+    runtime_coverage: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     ensure_postgres_schema(pg_conn)
     package_run_id = str(package_run["package_run_id"])
@@ -193,6 +254,8 @@ def write_cpar_outputs_postgres(
         cur.execute(f"DELETE FROM {cpar_schema.TABLE_PROXY_TRANSFORM} WHERE package_run_id = %s", (package_run_id,))
         cur.execute(f"DELETE FROM {cpar_schema.TABLE_FACTOR_COVARIANCE} WHERE package_run_id = %s", (package_run_id,))
         cur.execute(f"DELETE FROM {cpar_schema.TABLE_INSTRUMENT_FITS} WHERE package_run_id = %s", (package_run_id,))
+        cur.execute(f"DELETE FROM {cpar_schema.TABLE_PACKAGE_UNIVERSE_MEMBERSHIP} WHERE package_run_id = %s", (package_run_id,))
+        cur.execute(f"DELETE FROM {cpar_schema.TABLE_RUNTIME_COVERAGE} WHERE package_run_id = %s", (package_run_id,))
         cur.execute(
             f"""
             INSERT INTO {cpar_schema.TABLE_PACKAGE_RUNS} (
@@ -399,6 +462,85 @@ def write_cpar_outputs_postgres(
                         row["updated_at"],
                     )
                     for row in instrument_fits
+                ],
+            )
+        if package_membership:
+            cur.executemany(
+                f"""
+                INSERT INTO {cpar_schema.TABLE_PACKAGE_UNIVERSE_MEMBERSHIP} (
+                    package_run_id, package_date, ric, ticker, universe_scope, target_scope, basis_role,
+                    build_reason_code, warnings_json, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (package_run_id, ric) DO UPDATE SET
+                    package_date = EXCLUDED.package_date,
+                    ticker = EXCLUDED.ticker,
+                    universe_scope = EXCLUDED.universe_scope,
+                    target_scope = EXCLUDED.target_scope,
+                    basis_role = EXCLUDED.basis_role,
+                    build_reason_code = EXCLUDED.build_reason_code,
+                    warnings_json = EXCLUDED.warnings_json,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                [
+                    (
+                        row["package_run_id"],
+                        row["package_date"],
+                        row["ric"],
+                        row.get("ticker"),
+                        row["universe_scope"],
+                        row["target_scope"],
+                        row["basis_role"],
+                        row.get("build_reason_code"),
+                        _json_text(row.get("warnings", [])),
+                        row["updated_at"],
+                    )
+                    for row in package_membership
+                ],
+            )
+        if runtime_coverage:
+            cur.executemany(
+                f"""
+                INSERT INTO {cpar_schema.TABLE_RUNTIME_COVERAGE} (
+                    package_run_id, package_date, ric, ticker, price_on_package_date_status, fit_row_status,
+                    fit_quality_status, portfolio_use_status, ticker_detail_use_status, hedge_use_status,
+                    fit_family, fit_status, reason_code, quality_label, warnings_json, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (package_run_id, ric) DO UPDATE SET
+                    package_date = EXCLUDED.package_date,
+                    ticker = EXCLUDED.ticker,
+                    price_on_package_date_status = EXCLUDED.price_on_package_date_status,
+                    fit_row_status = EXCLUDED.fit_row_status,
+                    fit_quality_status = EXCLUDED.fit_quality_status,
+                    portfolio_use_status = EXCLUDED.portfolio_use_status,
+                    ticker_detail_use_status = EXCLUDED.ticker_detail_use_status,
+                    hedge_use_status = EXCLUDED.hedge_use_status,
+                    fit_family = EXCLUDED.fit_family,
+                    fit_status = EXCLUDED.fit_status,
+                    reason_code = EXCLUDED.reason_code,
+                    quality_label = EXCLUDED.quality_label,
+                    warnings_json = EXCLUDED.warnings_json,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                [
+                    (
+                        row["package_run_id"],
+                        row["package_date"],
+                        row["ric"],
+                        row.get("ticker"),
+                        row["price_on_package_date_status"],
+                        row["fit_row_status"],
+                        row["fit_quality_status"],
+                        row["portfolio_use_status"],
+                        row["ticker_detail_use_status"],
+                        row["hedge_use_status"],
+                        row["fit_family"],
+                        row["fit_status"],
+                        row.get("reason_code"),
+                        row["quality_label"],
+                        _json_text(row.get("warnings", [])),
+                        row["updated_at"],
+                    )
+                    for row in runtime_coverage
                 ],
             )
     pg_conn.commit()

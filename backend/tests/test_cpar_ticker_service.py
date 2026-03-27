@@ -30,6 +30,16 @@ def _fit() -> dict[str, object]:
         "ric": "AAPL.OQ",
         "ticker": "AAPL",
         "display_name": "Apple Inc.",
+        "target_scope": "core_us_equity",
+        "fit_family": "returns_regression_weekly",
+        "price_on_package_date_status": "present",
+        "fit_row_status": "present",
+        "fit_quality_status": "ok",
+        "portfolio_use_status": "covered",
+        "ticker_detail_use_status": "available",
+        "hedge_use_status": "usable",
+        "reason_code": "ok",
+        "quality_label": "ok",
         "fit_status": "ok",
         "warnings": [],
         "observed_weeks": 52,
@@ -80,6 +90,10 @@ def test_cpar_ticker_service_builds_quote_payload(monkeypatch: pytest.MonkeyPatc
     assert payload["display_loadings"][0]["factor_id"] == "SPY"
     assert payload["display_loadings"][0]["beta"] == pytest.approx(0.98)
     assert payload["thresholded_loadings"][0]["factor_id"] == "SPY"
+    assert payload["target_scope"] == "core_us_equity"
+    assert payload["fit_family"] == "returns_regression_weekly"
+    assert payload["portfolio_use_status"] == "covered"
+    assert payload["ticker_detail_use_status"] == "available"
 
 
 def test_cpar_ticker_service_maps_source_failures_to_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

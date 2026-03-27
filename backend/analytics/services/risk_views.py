@@ -74,16 +74,21 @@ def build_positions_from_snapshot(
         gross_value += abs(mv)
         exposures = dict(base.get("exposures") or {})
         has_factor_exposures = bool(exposures)
+        has_persisted_membership_truth = any(
+            str(base.get(field) or "").strip()
+            for field in ("cuse_realized_role", "cuse_output_status", "cuse_reason_code")
+        )
         model_status = str(base.get("model_status") or "").strip() or derive_model_status(
             is_core_regression_member=False,
             is_projectable=bool(has_factor_exposures),
         )
         model_status_reason = str(
             base.get("model_status_reason")
+            or base.get("cuse_reason_code")
             or base.get("eligibility_reason")
             or ""
         )
-        if model_status != "ineligible" and not has_factor_exposures:
+        if not has_persisted_membership_truth and model_status != "ineligible" and not has_factor_exposures:
             model_status = "ineligible"
             if not model_status_reason:
                 model_status_reason = "missing_factor_exposures"
@@ -131,6 +136,14 @@ def build_positions_from_snapshot(
             "model_status_reason": model_status_reason,
             "eligibility_reason": model_status_reason,
             "exposure_origin": str(base.get("exposure_origin") or ""),
+            "cuse_realized_role": str(base.get("cuse_realized_role") or ""),
+            "cuse_output_status": str(base.get("cuse_output_status") or ""),
+            "cuse_reason_code": str(base.get("cuse_reason_code") or model_status_reason),
+            "quality_label": str(base.get("quality_label") or ""),
+            "projection_basis_status": str(base.get("projection_basis_status") or ""),
+            "projection_candidate_status": str(base.get("projection_candidate_status") or ""),
+            "projection_output_status": str(base.get("projection_output_status") or ""),
+            "served_exposure_available": bool(base.get("served_exposure_available", has_factor_exposures)),
         })
 
     for pos in positions:

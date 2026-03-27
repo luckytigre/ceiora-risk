@@ -27,6 +27,34 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         table="model_specific_risk_daily",
         required={"as_of_date", "ric", "ticker", "specific_var", "specific_vol", "obs", "trbc_business_sector", "run_id", "updated_at"},
     )
+    drop_if_columns_missing(
+        conn,
+        table="cuse_security_membership_daily",
+        required={
+            "as_of_date",
+            "ric",
+            "ticker",
+            "policy_path",
+            "realized_role",
+            "output_status",
+            "projection_candidate_status",
+            "projection_output_status",
+            "reason_code",
+            "quality_label",
+            "source_snapshot_status",
+            "projection_method",
+            "projection_basis_status",
+            "projection_source_package_date",
+            "served_exposure_available",
+            "run_id",
+            "updated_at",
+        },
+    )
+    drop_if_columns_missing(
+        conn,
+        table="cuse_security_stage_results_daily",
+        required={"as_of_date", "ric", "stage_name", "stage_state", "reason_code", "detail_json", "run_id", "updated_at"},
+    )
 
     conn.execute(
         """
@@ -96,6 +124,45 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cuse_security_membership_daily (
+            as_of_date TEXT NOT NULL,
+            ric TEXT,
+            ticker TEXT NOT NULL,
+            policy_path TEXT NOT NULL,
+            realized_role TEXT NOT NULL,
+            output_status TEXT NOT NULL,
+            projection_candidate_status TEXT NOT NULL,
+            projection_output_status TEXT NOT NULL,
+            reason_code TEXT,
+            quality_label TEXT NOT NULL,
+            source_snapshot_status TEXT NOT NULL,
+            projection_method TEXT,
+            projection_basis_status TEXT NOT NULL,
+            projection_source_package_date TEXT,
+            served_exposure_available INTEGER NOT NULL DEFAULT 0,
+            run_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (as_of_date, ticker)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cuse_security_stage_results_daily (
+            as_of_date TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            stage_name TEXT NOT NULL,
+            stage_state TEXT NOT NULL,
+            reason_code TEXT,
+            detail_json TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (as_of_date, ric, stage_name)
+        )
+        """
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_model_factor_returns_daily_date ON model_factor_returns_daily(date)"
     )
     conn.execute(
@@ -106,5 +173,17 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_model_run_metadata_completed ON model_run_metadata(completed_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cuse_security_membership_daily_date ON cuse_security_membership_daily(as_of_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cuse_security_membership_daily_ric ON cuse_security_membership_daily(ric, as_of_date)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cuse_security_stage_results_daily_date ON cuse_security_stage_results_daily(as_of_date, stage_name)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cuse_security_stage_results_daily_ric ON cuse_security_stage_results_daily(ric, as_of_date)"
     )
     conn.execute("DROP TABLE IF EXISTS model_specific_residuals_daily")

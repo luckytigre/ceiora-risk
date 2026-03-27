@@ -111,8 +111,12 @@ def test_load_holdings_positions_normalizes_request_and_shapes_rows(
     rows = holdings_reads.load_holdings_positions(account_id="  ACCT_MAIN  ")
 
     assert captured["params"] == ("acct_main",)
-    assert "COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker" in str(captured["sql"])
-    assert "ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric" in str(captured["sql"])
+    assert "NULLIF(TRIM(reg.ticker), '')" in str(captured["sql"])
+    assert "NULLIF(TRIM(comp.ticker), '')" in str(captured["sql"])
+    assert "LEFT JOIN security_registry reg" in str(captured["sql"])
+    assert "LEFT JOIN security_master_compat_current comp" in str(captured["sql"])
+    assert "LEFT JOIN security_master sm" not in str(captured["sql"])
+    assert "ORDER BY p.account_id, COALESCE(" in str(captured["sql"])
     assert rows == [
         {
             "account_id": "acct_main",
@@ -159,7 +163,10 @@ def test_load_all_holdings_positions_shapes_rows_without_account_filter(
     assert captured["params"] is None
     assert "FROM holdings_positions_current p" in str(captured["sql"])
     assert "WHERE p.account_id = %s" not in str(captured["sql"])
-    assert "ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric" in str(captured["sql"])
+    assert "LEFT JOIN security_registry reg" in str(captured["sql"])
+    assert "LEFT JOIN security_master_compat_current comp" in str(captured["sql"])
+    assert "LEFT JOIN security_master sm" not in str(captured["sql"])
+    assert "ORDER BY p.account_id, COALESCE(" in str(captured["sql"])
     assert rows == [
         {
             "account_id": "acct_alpha",

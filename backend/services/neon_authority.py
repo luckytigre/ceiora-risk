@@ -16,10 +16,17 @@ from backend.data.neon import connect, resolve_dsn
 from backend.trading_calendar import previous_or_same_xnys_session
 
 WORKSPACE_SOURCE_TABLES = (
-    "security_master",
+    "security_registry",
+    "security_taxonomy_current",
+    "security_policy_current",
+    "security_source_observation_daily",
+    "security_master_compat_current",
+    "security_source_status_current",
     "security_prices_eod",
     "security_fundamentals_pit",
     "security_classification_pit",
+    "estu_membership_daily",
+    "universe_cross_section_snapshot",
     "barra_raw_cross_section_history",
     "model_factor_returns_daily",
 )
@@ -292,7 +299,14 @@ def _assess_neon_rebuild_readiness(
     warnings: list[str] = []
     profile_key = str(profile or "").strip().lower()
     required_tables = [
-        "security_master",
+        "security_registry",
+        "security_taxonomy_current",
+        "security_policy_current",
+        "security_source_observation_daily",
+        "security_master_compat_current",
+        "security_source_status_current",
+        "source_sync_runs",
+        "source_sync_watermarks",
         "security_prices_eod",
         "security_fundamentals_pit",
         "security_classification_pit",
@@ -318,6 +332,9 @@ def _assess_neon_rebuild_readiness(
         stats = table_stats.get(table) or {}
         if not bool(stats.get("exists")):
             issues.append(f"missing_table:{table}")
+            continue
+        if int(stats.get("row_count") or 0) <= 0:
+            issues.append(f"empty_table:{table}")
 
     source_anchor = _latest_source_anchor(table_stats)
     if not source_anchor:
@@ -327,6 +344,9 @@ def _assess_neon_rebuild_readiness(
         table: str((table_stats.get(table) or {}).get("max_date") or "")
         for table in ("security_prices_eod", "security_fundamentals_pit", "security_classification_pit")
     }
+    source_observation_max = str(
+        (table_stats.get("security_source_observation_daily") or {}).get("max_date") or ""
+    ).strip()
     unique_latest_dates = {value for value in source_latest_dates.values() if value}
     if len(unique_latest_dates) > 1:
         expected_pit_lag, expected_pit_anchor = _expected_pit_lag_matches_source_dates(source_latest_dates)
@@ -336,6 +356,14 @@ def _assess_neon_rebuild_readiness(
             )
         else:
             issues.append("latest_date_mismatch:source_tables")
+    observation_required_date = str(source_latest_dates.get("security_prices_eod") or source_anchor or "").strip()
+    if not source_observation_max:
+        issues.append("missing_max_date:security_source_observation_daily")
+    elif observation_required_date and source_observation_max < observation_required_date:
+        issues.append(
+            "stale_table:security_source_observation_daily:"
+            f"{source_observation_max}<{observation_required_date}"
+        )
 
     analytics_cutoff = None
     history_anchor = _history_anchor_for_profile(
@@ -391,7 +419,14 @@ def validate_neon_rebuild_readiness(
     pg_conn = connect(dsn=resolve_dsn(dsn), autocommit=True)
     try:
         table_stats = {
-            "security_master": _pg_date_stats(pg_conn, table="security_master", date_col=None),
+            "security_registry": _pg_date_stats(pg_conn, table="security_registry", date_col=None),
+            "security_taxonomy_current": _pg_date_stats(pg_conn, table="security_taxonomy_current", date_col=None),
+            "security_policy_current": _pg_date_stats(pg_conn, table="security_policy_current", date_col=None),
+            "security_source_observation_daily": _pg_date_stats(pg_conn, table="security_source_observation_daily", date_col="as_of_date"),
+            "security_master_compat_current": _pg_date_stats(pg_conn, table="security_master_compat_current", date_col=None),
+            "security_source_status_current": _pg_date_stats(pg_conn, table="security_source_status_current", date_col="observation_as_of_date"),
+            "source_sync_runs": _pg_date_stats(pg_conn, table="source_sync_runs", date_col="completed_at"),
+            "source_sync_watermarks": _pg_date_stats(pg_conn, table="source_sync_watermarks", date_col=None),
             "security_prices_eod": _pg_date_stats(pg_conn, table="security_prices_eod", date_col="date"),
             "security_fundamentals_pit": _pg_date_stats(pg_conn, table="security_fundamentals_pit", date_col="as_of_date"),
             "security_classification_pit": _pg_date_stats(pg_conn, table="security_classification_pit", date_col="as_of_date"),
@@ -616,3 +651,51 @@ def cleanup_workspace(root_dir: Path) -> None:
     root = Path(root_dir).expanduser().resolve()
     if root.exists():
         shutil.rmtree(root)
+
+
+def prune_rebuild_workspaces(
+    *,
+    workspaces_root: Path,
+    keep: int,
+    preserve: Path | None = None,
+) -> dict[str, Any]:
+    root = Path(workspaces_root).expanduser().resolve()
+    keep_count = max(0, int(keep))
+    if keep_count <= 0:
+        return {"status": "skipped", "reason": "retention_disabled", "kept": [], "removed": []}
+    if not root.exists():
+        return {"status": "skipped", "reason": "missing_root", "kept": [], "removed": []}
+
+    preserve_path = Path(preserve).expanduser().resolve() if preserve is not None else None
+    candidates = sorted(
+        (
+            child.resolve()
+            for child in root.iterdir()
+            if child.is_dir() and child.name.startswith("job_")
+        ),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    kept: list[Path] = []
+    if preserve_path is not None and preserve_path in candidates:
+        kept.append(preserve_path)
+    for candidate in candidates:
+        if candidate in kept:
+            continue
+        if len(kept) >= keep_count:
+            break
+        kept.append(candidate)
+
+    removed: list[str] = []
+    for candidate in candidates:
+        if candidate in kept:
+            continue
+        shutil.rmtree(candidate)
+        removed.append(str(candidate))
+
+    return {
+        "status": "ok",
+        "keep_count": keep_count,
+        "kept": [str(path) for path in kept],
+        "removed": removed,
+    }

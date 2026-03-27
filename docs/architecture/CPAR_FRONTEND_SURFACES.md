@@ -52,7 +52,7 @@ It does not add:
   - one explanatory factor-exposure chart built from `display_loadings`
   - one preview-only scenario builder and before/after exposure comparison
   - explanatory single-name display must use residualized cPAR factor-space fields:
-  - `beta_market_step1`
+  - compatibility field `beta_market_step1` for the one-shot market coefficient
   - `display_loadings`
   - `raw_loadings`
   - `thresholded_loadings`
@@ -88,7 +88,7 @@ Shared shell behavior:
 
 `GET /api/cpar/ticker/{ticker}`
 - single-name persisted cPAR fit detail with source-context augmentation
-- explanatory display uses residualized cPAR factor-space loadings plus `beta_market_step1`
+- explanatory display uses residualized cPAR factor-space loadings plus compatibility field `beta_market_step1` for the one-shot market coefficient
 - hedge-space interpretation remains explicit through `beta_spy_trade`
 
 `GET /api/cpar/risk`

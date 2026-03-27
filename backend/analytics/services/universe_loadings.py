@@ -17,12 +17,14 @@ from backend.analytics.contracts import (
     UniverseTickerPayload,
 )
 from backend.analytics.refresh_metadata import finite_float as _finite_float
+from backend.data.cuse_membership_reads import load_cuse_membership_lookup
 from backend.analytics.trbc_economic_sector_short import abbreviate_trbc_economic_sector_short
 from backend.risk_model.descriptors import (
     FULL_STYLE_ORTH_RULES,
     apply_style_canonicalization,
     fit_and_apply_style_canonicalization,
 )
+from backend.risk_model.cuse_membership import membership_row_to_overlay
 from backend.risk_model.eligibility import build_eligibility_context, structural_eligibility_for_date
 from backend.risk_model.factor_catalog import (
     MARKET_FACTOR,
@@ -51,6 +53,40 @@ def _ric_priority_key(ric: str) -> tuple[int, str]:
         if ric_txt.endswith(suffix):
             return int(rank), ric_txt
     return 99, ric_txt
+
+
+def _overlay_persisted_cuse_membership(
+    *,
+    data_db: Path,
+    universe_by_ticker: dict[str, UniverseTickerPayload],
+) -> None:
+    relevant_dates = sorted(
+        {
+            str(row.get("as_of_date") or "").strip()
+            for row in universe_by_ticker.values()
+            if str(row.get("as_of_date") or "").strip()
+        }
+    )
+    if not relevant_dates:
+        return
+    membership_lookup = load_cuse_membership_lookup(
+        data_db=data_db,
+        as_of_dates=relevant_dates,
+    )
+    if not membership_lookup:
+        return
+
+    for ticker, row in universe_by_ticker.items():
+        as_of_date = str(row.get("as_of_date") or "").strip()
+        if not as_of_date:
+            continue
+        ric = str(row.get("ric") or "").strip().upper()
+        membership_row = membership_lookup.get((as_of_date, ticker))
+        if membership_row is None and ric:
+            membership_row = membership_lookup.get((as_of_date, ric))
+        if membership_row is None:
+            continue
+        row.update(membership_row_to_overlay(membership_row))
 
 
 def build_universe_ticker_loadings(
@@ -562,6 +598,11 @@ def build_universe_ticker_loadings(
                 "projection_asof": active_projection_asof,
             }
 
+    _overlay_persisted_cuse_membership(
+        data_db=data_db,
+        universe_by_ticker=universe_by_ticker,
+    )
+
     # Lightweight search index for instant lookup
     search_index = [
         {
@@ -580,6 +621,9 @@ def build_universe_ticker_loadings(
             "model_status": str(d.get("model_status") or "ineligible"),
             "model_status_reason": str(d.get("model_status_reason") or d.get("eligibility_reason") or ""),
             "eligibility_reason": str(d.get("model_status_reason") or d.get("eligibility_reason") or ""),
+            "cuse_realized_role": str(d.get("cuse_realized_role") or ""),
+            "cuse_output_status": str(d.get("cuse_output_status") or ""),
+            "cuse_reason_code": str(d.get("cuse_reason_code") or ""),
         }
         for t, d in universe_by_ticker.items()
     ]

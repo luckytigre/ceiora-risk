@@ -42,6 +42,16 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument("--batch-size", type=int, default=25_000, help="Batch size for transfer")
+    p.add_argument(
+        "--verify-source-integrity",
+        action="store_true",
+        help="Run source-integrity validation for selected SQLite source tables before marking sync success.",
+    )
+    p.add_argument(
+        "--run-sqlite-integrity-check",
+        action="store_true",
+        help="Also run PRAGMA quick_check/integrity_check during source-integrity validation.",
+    )
     p.add_argument("--json", action="store_true", help="Emit JSON output")
     return p.parse_args()
 
@@ -54,6 +64,8 @@ def main() -> int:
         tables=_parse_tables(args.tables),
         mode=str(args.mode),
         batch_size=max(1_000, int(args.batch_size)),
+        verify_source_integrity=bool(args.verify_source_integrity),
+        run_sqlite_integrity_check=bool(args.run_sqlite_integrity_check),
     )
     if args.json:
         print(json.dumps(out, indent=2))

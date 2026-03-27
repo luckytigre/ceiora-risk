@@ -15,7 +15,11 @@ def load_source_tables(
     include_expensive_checks: bool = False,
 ) -> dict[str, dict[str, Any] | None]:
     canonical_tables = {
-        "security_master": "security_master",
+        "security_registry": "security_registry",
+        "security_policy_current": "security_policy_current",
+        "security_taxonomy_current": "security_taxonomy_current",
+        "security_source_observation_daily": "security_source_observation_daily",
+        "security_master_compat_current": "security_master_compat_current",
         "security_fundamentals_pit": "security_fundamentals_pit",
         "security_classification_pit": "security_classification_pit",
         "security_prices_eod": "security_prices_eod",

@@ -22,6 +22,7 @@ from backend.risk_model.factor_catalog import (
 )
 from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
 from backend.data.sqlite import cache_get
+from backend.universe.runtime_rows import load_security_runtime_rows
 
 ANNUALIZATION = 252.0
 HEALTH_CORE_COUNTRY_CODES = {"US"}
@@ -613,29 +614,37 @@ def _load_prices(data_db: Path, tickers: list[str], lookback_days: int = 400) ->
     placeholders = ",".join("?" for _ in clean)
     conn = sqlite3.connect(str(data_db))
     try:
+        runtime_identity = _load_core_runtime_identity(conn)
+        if runtime_identity.empty:
+            return pd.DataFrame()
+        runtime_identity = runtime_identity[runtime_identity["ticker"].isin(clean)].copy()
+        if runtime_identity.empty:
+            return pd.DataFrame()
         latest_row = conn.execute("SELECT MAX(date) FROM security_prices_eod").fetchone()
         latest = str(latest_row[0]) if latest_row and latest_row[0] else None
         if latest is None:
             return pd.DataFrame()
         latest_dt = date.fromisoformat(latest)
         start = (latest_dt - timedelta(days=int(lookback_days * 1.8))).isoformat()
+        ric_list = runtime_identity["ric"].astype(str).tolist()
+        ric_placeholders = ",".join("?" for _ in ric_list)
         df = pd.read_sql_query(
             f"""
-            SELECT UPPER(sm.ticker) AS ticker, p.date, CAST(p.close AS REAL) AS close
+            SELECT UPPER(p.ric) AS ric, p.date, CAST(p.close AS REAL) AS close
             FROM security_prices_eod p
-            JOIN security_master sm
-              ON sm.ric = p.ric
-            WHERE UPPER(sm.ticker) IN ({placeholders})
+            WHERE UPPER(p.ric) IN ({ric_placeholders})
               AND p.date >= ?
-            ORDER BY p.date, UPPER(sm.ticker)
+            ORDER BY p.date, UPPER(p.ric)
             """,
             conn,
-            params=(*clean, start),
+            params=(*ric_list, start),
         )
     finally:
         conn.close()
     if df.empty:
         return df
+    df["ric"] = df["ric"].astype(str).str.upper()
+    df = df.merge(runtime_identity, on="ric", how="inner")
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
@@ -848,40 +857,57 @@ def _compute_table_field_coverage(
 
 
 def _load_equity_price_bounds(conn: sqlite3.Connection) -> pd.DataFrame:
+    runtime_identity = _load_core_runtime_identity(conn)
+    if runtime_identity.empty:
+        return pd.DataFrame(columns=["ticker", "min_date", "max_date"])
     try:
         bounds = pd.read_sql_query(
             """
-            SELECT UPPER(sm.ticker) AS ticker, MIN(p.date) AS min_date, MAX(p.date) AS max_date
+            SELECT UPPER(p.ric) AS ric, MIN(p.date) AS min_date, MAX(p.date) AS max_date
             FROM security_prices_eod p
-            JOIN security_master sm
-              ON sm.ric = p.ric
-            GROUP BY UPPER(sm.ticker)
+            GROUP BY UPPER(p.ric)
             """,
             conn,
         )
     except Exception:
         return pd.DataFrame(columns=["ticker", "min_date", "max_date"])
     if bounds.empty:
-        return bounds
-    bounds["ticker"] = bounds["ticker"].astype(str).str.upper()
+        return pd.DataFrame(columns=["ticker", "min_date", "max_date"])
+    bounds["ric"] = bounds["ric"].astype(str).str.upper()
+    bounds = bounds.merge(runtime_identity, on="ric", how="inner")
+    if bounds.empty:
+        return pd.DataFrame(columns=["ticker", "min_date", "max_date"])
     bounds["min_date"] = pd.to_datetime(bounds["min_date"], errors="coerce").dt.date.astype(str)
     bounds["max_date"] = pd.to_datetime(bounds["max_date"], errors="coerce").dt.date.astype(str)
-    return bounds.dropna(subset=["ticker", "min_date", "max_date"])
+    bounds = bounds.dropna(subset=["ticker", "min_date", "max_date"])
+    return (
+        bounds.groupby("ticker", as_index=False)
+        .agg(min_date=("min_date", "min"), max_date=("max_date", "max"))
+        .sort_values("ticker")
+        .reset_index(drop=True)
+    )
+
+
+def _load_core_runtime_identity(conn: sqlite3.Connection) -> pd.DataFrame:
+    runtime_rows = load_security_runtime_rows(conn, include_disabled=False)
+    runtime_df = pd.DataFrame(runtime_rows)
+    if runtime_df.empty:
+        return pd.DataFrame(columns=["ric", "ticker"])
+    runtime_df["ric"] = runtime_df["ric"].astype(str).str.upper()
+    runtime_df["ticker"] = runtime_df["ticker"].astype(str).str.upper()
+    runtime_df = runtime_df[
+        runtime_df["allow_cuse_native_core"].astype(int).eq(1)
+        & runtime_df["is_single_name_equity"].astype(int).eq(1)
+        & runtime_df["classification_ready"].astype(int).eq(1)
+    ][["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
+    return runtime_df.reset_index(drop=True)
 
 
 def _load_equity_tickers(conn: sqlite3.Connection) -> set[str]:
-    try:
-        rows = conn.execute(
-            """
-            SELECT UPPER(ticker)
-            FROM security_master
-            WHERE COALESCE(classification_ok, 0) = 1
-              AND COALESCE(is_equity_eligible, 0) = 1
-            """
-        ).fetchall()
-    except Exception:
+    runtime_identity = _load_core_runtime_identity(conn)
+    if runtime_identity.empty:
         return set()
-    return {str(r[0]).upper() for r in rows if r and r[0]}
+    return set(runtime_identity["ticker"].astype(str).str.upper().tolist())
 
 
 def _filter_active_equity_rows(
@@ -1232,6 +1258,7 @@ def compute_health_diagnostics(
     )
     conn = sqlite3.connect(str(data_db))
     try:
+        runtime_identity = _load_core_runtime_identity(conn)
         equity_tickers = _load_equity_tickers(conn)
         price_bounds = _load_equity_price_bounds(conn)
 
@@ -1239,17 +1266,13 @@ def compute_health_diagnostics(
             """
             WITH ranked AS (
                 SELECT
-                    UPPER(sm.ticker) AS ticker,
+                    UPPER(f.ric) AS ric,
                     f.*,
                     ROW_NUMBER() OVER (
                         PARTITION BY f.ric, f.as_of_date
                         ORDER BY f.stat_date DESC, f.updated_at DESC
                     ) AS rn
                 FROM security_fundamentals_pit f
-                JOIN security_master sm
-                  ON sm.ric = f.ric
-                WHERE COALESCE(sm.classification_ok, 0) = 1
-                  AND COALESCE(sm.is_equity_eligible, 0) = 1
             )
             SELECT *
             FROM ranked
@@ -1257,6 +1280,9 @@ def compute_health_diagnostics(
             """,
             conn,
         )
+        if not fundamentals_df.empty:
+            fundamentals_df["ric"] = fundamentals_df["ric"].astype(str).str.upper()
+            fundamentals_df = fundamentals_df.merge(runtime_identity, on="ric", how="inner")
         fundamentals_df = _filter_active_equity_rows(
             fundamentals_df,
             ticker_col="ticker",
@@ -1284,17 +1310,13 @@ def compute_health_diagnostics(
             """
             WITH ranked AS (
                 SELECT
-                    UPPER(sm.ticker) AS ticker,
+                    UPPER(c.ric) AS ric,
                     c.*,
                     ROW_NUMBER() OVER (
                         PARTITION BY c.ric, c.as_of_date
                         ORDER BY c.updated_at DESC
                     ) AS rn
                 FROM security_classification_pit c
-                JOIN security_master sm
-                  ON sm.ric = c.ric
-                WHERE COALESCE(sm.classification_ok, 0) = 1
-                  AND COALESCE(sm.is_equity_eligible, 0) = 1
             )
             SELECT *
             FROM ranked
@@ -1302,6 +1324,9 @@ def compute_health_diagnostics(
             """,
             conn,
         )
+        if not trbc_df.empty:
+            trbc_df["ric"] = trbc_df["ric"].astype(str).str.upper()
+            trbc_df = trbc_df.merge(runtime_identity, on="ric", how="inner")
         trbc_df = _filter_active_equity_rows(
             trbc_df,
             ticker_col="ticker",

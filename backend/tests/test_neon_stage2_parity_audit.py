@@ -40,7 +40,12 @@ def test_run_parity_audit_skips_orphan_check_for_tables_without_ric(
 
     monkeypatch.setattr(neon_stage2, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_stage2, "resolve_dsn", lambda dsn: dsn)
-    monkeypatch.setattr(neon_stage2, "_table_exists_pg", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(neon_stage2, "_resolve_orphan_anchor_pg", lambda _pg_conn: (None, None))
+    monkeypatch.setattr(
+        neon_stage2,
+        "_table_exists_pg",
+        lambda _pg_conn, table: table in {"serving_payload_current", "security_prices_eod", "security_registry"},
+    )
     monkeypatch.setattr(
         neon_stage2,
         "_profile_pg_table",
@@ -78,14 +83,23 @@ def test_run_parity_audit_treats_trimmed_neon_history_as_expected_retention_gap(
             ("AAA.OQ", "2016-03-18"),
         ],
     )
-    conn.execute("CREATE TABLE security_master (ric TEXT PRIMARY KEY)")
-    conn.execute("INSERT INTO security_master (ric) VALUES ('AAA.OQ')")
+    conn.execute("CREATE TABLE security_registry (ric TEXT PRIMARY KEY)")
+    conn.execute("INSERT INTO security_registry (ric) VALUES ('AAA.OQ')")
     conn.commit()
     conn.close()
 
     monkeypatch.setattr(neon_stage2, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_stage2, "resolve_dsn", lambda dsn: dsn)
-    monkeypatch.setattr(neon_stage2, "_table_exists_pg", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(
+        neon_stage2,
+        "_resolve_orphan_anchor_pg",
+        lambda _pg_conn: ("security_registry", "reg"),
+    )
+    monkeypatch.setattr(
+        neon_stage2,
+        "_table_exists_pg",
+        lambda _pg_conn, table: table in {"security_prices_eod", "security_master_compat_current"},
+    )
     monkeypatch.setattr(
         neon_stage2,
         "_profile_pg_table",
@@ -106,7 +120,7 @@ def test_run_parity_audit_treats_trimmed_neon_history_as_expected_retention_gap(
         "_pg_columns",
         lambda _pg_conn, table: ["ric", "date"] if table == "security_prices_eod" else ["ric"],
     )
-    monkeypatch.setattr(neon_stage2, "_orphan_ric_pg", lambda _pg_conn, _table: 0)
+    monkeypatch.setattr(neon_stage2, "_orphan_ric_pg", lambda _pg_conn, _table, anchor_table=None: 0)
 
     out = neon_stage2.run_parity_audit(
         sqlite_path=db_path,
@@ -126,6 +140,106 @@ def test_run_parity_audit_treats_trimmed_neon_history_as_expected_retention_gap(
         "source_rows_in_target_window": 1,
         "target_row_count": 1,
     }
+
+
+def test_run_parity_audit_uses_compat_anchor_when_registry_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE security_prices_eod (ric TEXT, date TEXT)")
+    conn.executemany(
+        "INSERT INTO security_prices_eod (ric, date) VALUES (?, ?)",
+        [
+            ("AAA.OQ", "2026-03-01"),
+            ("BBB.OQ", "2026-03-01"),
+        ],
+    )
+    conn.execute("CREATE TABLE security_master_compat_current (ric TEXT PRIMARY KEY)")
+    conn.execute("INSERT INTO security_master_compat_current (ric) VALUES ('AAA.OQ')")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(neon_stage2, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(neon_stage2, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(
+        neon_stage2,
+        "_resolve_orphan_anchor_pg",
+        lambda _pg_conn: ("security_master_compat_current", "compat"),
+    )
+    monkeypatch.setattr(neon_stage2, "_table_exists_pg", lambda _pg_conn, table: table == "security_prices_eod")
+    monkeypatch.setattr(
+        neon_stage2,
+        "_profile_pg_table",
+        lambda _pg_conn, cfg: (
+            {"row_count": 2, "min_date": "2026-03-01", "max_date": "2026-03-01", "latest_distinct_ric": 2}
+            if cfg.name == "security_prices_eod"
+            else {"row_count": 1}
+        ),
+    )
+    monkeypatch.setattr(neon_stage2, "_duplicate_group_count_pg", lambda _pg_conn, _cfg: 0)
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_columns",
+        lambda _pg_conn, table: ["ric", "date"] if table == "security_prices_eod" else ["ric"],
+    )
+    monkeypatch.setattr(neon_stage2, "_orphan_ric_pg", lambda _pg_conn, _table, anchor_table=None: 1)
+
+    out = neon_stage2.run_parity_audit(
+        sqlite_path=db_path,
+        dsn="postgresql://example",
+        tables=["security_prices_eod"],
+    )
+
+    assert out["status"] == "ok"
+    assert out["issues"] == []
+    assert out["tables"]["security_prices_eod"]["orphan_ric_rows"] == {"source": 1, "target": 1}
+
+
+def test_run_parity_audit_notes_when_no_anchor_tables_exist(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE security_prices_eod (ric TEXT, date TEXT)")
+    conn.execute("INSERT INTO security_prices_eod (ric, date) VALUES ('AAA.OQ', '2026-03-01')")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(neon_stage2, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(neon_stage2, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(neon_stage2, "_resolve_orphan_anchor_pg", lambda _pg_conn: (None, None))
+    monkeypatch.setattr(neon_stage2, "_table_exists_pg", lambda _pg_conn, _table: True)
+    monkeypatch.setattr(
+        neon_stage2,
+        "_profile_pg_table",
+        lambda _pg_conn, cfg: {
+            "row_count": 1,
+            "min_date": "2026-03-01",
+            "max_date": "2026-03-01",
+            "latest_distinct_ric": 1,
+        }
+        if cfg.name == "security_prices_eod"
+        else {"row_count": 1},
+    )
+    monkeypatch.setattr(neon_stage2, "_duplicate_group_count_pg", lambda _pg_conn, _cfg: 0)
+    monkeypatch.setattr(
+        neon_stage2,
+        "_pg_columns",
+        lambda _pg_conn, table: ["ric", "date"] if table == "security_prices_eod" else ["ric"],
+    )
+    monkeypatch.setattr(neon_stage2, "_orphan_ric_pg", lambda *_args, **_kwargs: 0)
+
+    out = neon_stage2.run_parity_audit(
+        sqlite_path=db_path,
+        dsn="postgresql://example",
+        tables=["security_prices_eod"],
+    )
+
+    assert out["status"] == "ok"
+    assert "orphan_checks_skipped:no_anchor_table" in out["notes"]
 
 
 def test_run_parity_audit_normalizes_timestamp_text_for_model_run_metadata(
@@ -153,6 +267,7 @@ def test_run_parity_audit_normalizes_timestamp_text_for_model_run_metadata(
 
     monkeypatch.setattr(neon_stage2, "connect", lambda **_kwargs: _DummyPgConn())
     monkeypatch.setattr(neon_stage2, "resolve_dsn", lambda dsn: dsn)
+    monkeypatch.setattr(neon_stage2, "_resolve_orphan_anchor_pg", lambda _pg_conn: (None, None))
     monkeypatch.setattr(neon_stage2, "_table_exists_pg", lambda _pg_conn, _table: True)
     monkeypatch.setattr(
         neon_stage2,

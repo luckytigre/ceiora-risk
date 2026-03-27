@@ -24,6 +24,21 @@ def _normalize_ticker(value: str | None) -> str | None:
     return clean or None
 
 
+_REGISTRY_TICKER_EXPR = (
+    "COALESCE("
+    "NULLIF(TRIM(p.ticker), ''), "
+    "NULLIF(TRIM(reg.ticker), ''), "
+    "NULLIF(TRIM(comp.ticker), '')"
+    ")"
+)
+_REGISTRY_JOIN_SQL = """
+                LEFT JOIN security_registry reg
+                  ON reg.ric = p.ric
+                LEFT JOIN security_master_compat_current comp
+                  ON comp.ric = p.ric
+"""
+
+
 def _shape_position_rows(rows: list[tuple[object, object, object, object, object, object]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for raw_account_id, ric, ticker, quantity, source, updated_at in rows:
@@ -96,15 +111,14 @@ def load_holdings_positions(*, account_id: str) -> list[dict[str, Any]]:
                 SELECT
                     p.account_id,
                     p.ric,
-                    COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker,
+                    """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
                     p.quantity,
                     p.source,
                     p.updated_at
                 FROM holdings_positions_current p
-                LEFT JOIN security_master sm
-                  ON sm.ric = p.ric
+                """ + _REGISTRY_JOIN_SQL + """
                 WHERE p.account_id = %s
-                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
+                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
                 """,
                 (account,),
             )
@@ -130,14 +144,13 @@ def load_all_holdings_positions() -> list[dict[str, Any]]:
                 SELECT
                     p.account_id,
                     p.ric,
-                    COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker) AS ticker,
+                    """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
                     p.quantity,
                     p.source,
                     p.updated_at
                 FROM holdings_positions_current p
-                LEFT JOIN security_master sm
-                  ON sm.ric = p.ric
-                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
+                """ + _REGISTRY_JOIN_SQL + """
+                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
                 """
             )
             rows = cur.fetchall()
@@ -209,16 +222,15 @@ def load_aggregate_holdings_positions() -> list[dict[str, Any]]:
                         p.ric,
                         (
                             ARRAY_AGG(
-                                COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker)
-                                ORDER BY p.account_id, COALESCE(NULLIF(TRIM(p.ticker), ''), sm.ticker), p.ric
+                                """ + _REGISTRY_TICKER_EXPR + """
+                                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
                             )
                         )[1] AS ticker,
                         SUM(CAST(p.quantity AS DOUBLE PRECISION)) AS quantity,
                         'aggregate' AS source,
                         MAX(p.updated_at) AS updated_at
                     FROM holdings_positions_current p
-                    LEFT JOIN security_master sm
-                      ON sm.ric = p.ric
+                    """ + _REGISTRY_JOIN_SQL + """
                     GROUP BY p.ric
                     HAVING ABS(SUM(CAST(p.quantity AS DOUBLE PRECISION))) > %s
                 ) agg

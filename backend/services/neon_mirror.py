@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -342,6 +343,8 @@ def prune_neon_history(
         ("security_classification_pit", "as_of_date"),
     ]
     analytics_specs = [
+        ("estu_membership_daily", "date"),
+        ("universe_cross_section_snapshot", "as_of_date"),
         ("barra_raw_cross_section_history", "as_of_date"),
         ("model_factor_returns_daily", "date"),
         ("model_factor_covariance_daily", "as_of_date"),
@@ -966,6 +969,175 @@ def _bounded_sqlite_to_pg_table_audit(
     return table_out, issues
 
 
+def _coerce_jsonish(value: Any, *, default: Any) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (list, dict)):
+        return value
+    txt = str(value).strip()
+    if not txt:
+        return default
+    try:
+        return json.loads(txt)
+    except Exception:
+        return default
+
+
+def _audit_source_sync_metadata(
+    *,
+    sqlite_conn: sqlite3.Connection,
+    pg_conn,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    out: dict[str, dict[str, Any]] = {}
+    issues: list[str] = []
+    required_tables = (
+        "source_sync_runs",
+        "source_sync_watermarks",
+        "security_source_status_current",
+    )
+    missing = [table for table in required_tables if not _pg_table_exists(pg_conn, table)]
+    for table in missing:
+        issues.append(f"missing_table:{table}")
+        out[table] = {
+            "status": "mismatch",
+            "reason": "missing_in_neon",
+        }
+    if missing:
+        return out, issues
+
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT sync_run_id, status, selected_tables_json, completed_at
+            FROM source_sync_runs
+            WHERE status = 'ok'
+            ORDER BY completed_at DESC NULLS LAST, updated_at DESC
+            LIMIT 1
+            """
+        )
+        latest_run = cur.fetchone()
+    if latest_run is None:
+        issues.append("missing_latest_sync_run:source_sync_runs")
+        out["source_sync_runs"] = {
+            "status": "mismatch",
+            "source": {"row_count": 1},
+            "target": {"row_count": 0},
+            "reason": "no_successful_sync_run",
+        }
+        return out, issues
+
+    latest_sync_run_id = str(latest_run[0] or "").strip()
+    selected_tables = [
+        str(item).strip()
+        for item in _coerce_jsonish(latest_run[2], default=[])
+        if str(item).strip()
+    ]
+    out["source_sync_runs"] = {
+        "status": "ok",
+        "source": {"row_count": 1},
+        "target": {
+            "row_count": 1,
+            "latest_sync_run_id": latest_sync_run_id,
+            "selected_table_count": len(selected_tables),
+            "completed_at": str(latest_run[3]) if latest_run[3] is not None else None,
+        },
+    }
+
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM source_sync_watermarks
+            WHERE sync_run_id = %s
+            """,
+            (latest_sync_run_id,),
+        )
+        watermark_row = cur.fetchone()
+    expected_watermark_count = 0
+    for table_name in selected_tables:
+        row = sqlite_conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type='table' AND name=?
+            LIMIT 1
+            """,
+            (table_name,),
+        ).fetchone()
+        if row is not None:
+            expected_watermark_count += 1
+    actual_watermark_count = int(watermark_row[0] or 0) if watermark_row else 0
+    watermark_status = "ok" if actual_watermark_count >= expected_watermark_count else "mismatch"
+    if watermark_status != "ok":
+        issues.append("mismatch:source_sync_watermarks")
+    out["source_sync_watermarks"] = {
+        "status": watermark_status,
+        "source": {
+            "row_count": expected_watermark_count,
+            "sync_run_id": latest_sync_run_id,
+        },
+        "target": {
+            "row_count": actual_watermark_count,
+            "sync_run_id": latest_sync_run_id,
+        },
+    }
+
+    active_registry_row = sqlite_conn.execute(
+        """
+        SELECT COUNT(DISTINCT UPPER(TRIM(ric)))
+        FROM security_registry
+        WHERE ric IS NOT NULL
+          AND TRIM(ric) <> ''
+          AND COALESCE(NULLIF(TRIM(tracking_status), ''), 'active') <> 'disabled'
+        """
+    ).fetchone()
+    source_status_row = sqlite_conn.execute(
+        """
+        SELECT MAX(as_of_date)
+        FROM security_source_observation_daily
+        WHERE as_of_date IS NOT NULL
+          AND TRIM(as_of_date) <> ''
+        """
+    ).fetchone()
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                COUNT(*),
+                MAX(observation_as_of_date),
+                COUNT(DISTINCT source_sync_run_id)
+            FROM security_source_status_current
+            """
+        )
+        status_row = cur.fetchone()
+    expected_status_count = int(active_registry_row[0] or 0) if active_registry_row else 0
+    actual_status_count = int(status_row[0] or 0) if status_row else 0
+    source_observation_max = str(source_status_row[0] or "").strip() or None
+    target_observation_max = str(status_row[1] or "").strip() or None if status_row else None
+    distinct_sync_runs = int(status_row[2] or 0) if status_row else 0
+    status_ok = (
+        actual_status_count == expected_status_count
+        and target_observation_max == source_observation_max
+        and distinct_sync_runs == 1
+    )
+    if not status_ok:
+        issues.append("mismatch:security_source_status_current")
+    out["security_source_status_current"] = {
+        "status": "ok" if status_ok else "mismatch",
+        "source": {
+            "row_count": expected_status_count,
+            "observation_max_date": source_observation_max,
+            "sync_run_id": latest_sync_run_id,
+        },
+        "target": {
+            "row_count": actual_status_count,
+            "observation_max_date": target_observation_max,
+            "distinct_sync_run_ids": distinct_sync_runs,
+        },
+    }
+    return out, issues
+
+
 def run_bounded_parity_audit(
     *,
     sqlite_path: Path,
@@ -978,7 +1150,19 @@ def run_bounded_parity_audit(
     analytics_cutoff = _cutoff_iso(years=analytics_years)
 
     data_specs = [
-        ("security_master", "security_master", None, None, None),
+        ("security_registry", "security_registry", None, None, None),
+        ("security_taxonomy_current", "security_taxonomy_current", None, None, None),
+        ("security_policy_current", "security_policy_current", None, None, None),
+        (
+            "security_source_observation_daily",
+            "security_source_observation_daily",
+            "as_of_date",
+            source_cutoff,
+            "ric",
+        ),
+        ("security_master_compat_current", "security_master_compat_current", None, None, None),
+        ("security_ingest_runs", "security_ingest_runs", "started_at", source_cutoff, None),
+        ("security_ingest_audit", "security_ingest_audit", "updated_at", source_cutoff, "ric"),
         ("security_prices_eod", "security_prices_eod", "date", source_cutoff, "ric"),
         (
             "security_fundamentals_pit",
@@ -992,6 +1176,20 @@ def run_bounded_parity_audit(
             "security_classification_pit",
             "as_of_date",
             source_cutoff,
+            "ric",
+        ),
+        (
+            "estu_membership_daily",
+            "estu_membership_daily",
+            "date",
+            analytics_cutoff,
+            "ric",
+        ),
+        (
+            "universe_cross_section_snapshot",
+            "universe_cross_section_snapshot",
+            "as_of_date",
+            analytics_cutoff,
             "ric",
         ),
         (
@@ -1249,6 +1447,13 @@ def run_bounded_parity_audit(
                     table_out["status"] = "mismatch"
                 table_out["value_check_status"] = "ok" if values_ok else "mismatch"
                 table_out["value_check_issues"] = value_issues[:20]
+
+        metadata_tables, metadata_issues = _audit_source_sync_metadata(
+            sqlite_conn=sqlite_conn,
+            pg_conn=pg_conn,
+        )
+        out["tables"].update(metadata_tables)
+        out["issues"].extend(metadata_issues)
 
         out["status"] = "ok" if not out["issues"] else "mismatch"
         return out

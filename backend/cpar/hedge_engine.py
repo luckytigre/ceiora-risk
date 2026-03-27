@@ -161,8 +161,20 @@ def build_market_neutral_hedge(
     covariance: Mapping[object, object],
     *,
     fit_status: str,
+    hedge_use_status: str | None = None,
     previous_hedge_weights: Mapping[str, float] | None = None,
 ) -> HedgePreview:
+    if str(hedge_use_status or "").strip() in {"missing_price", "insufficient_history"}:
+        return _build_preview(
+            mode="market_neutral",
+            status="hedge_unavailable",
+            reason=f"hedge_use_status_{str(hedge_use_status)}",
+            underlying_loadings=_sorted_loadings(thresholded_loadings),
+            hedge_weights={},
+            covariance=covariance,
+            previous_hedge_weights=previous_hedge_weights,
+            non_market_reduction_ratio=None,
+        )
     if str(fit_status) == "insufficient_history":
         return _build_preview(
             mode="market_neutral",
@@ -261,9 +273,21 @@ def build_factor_neutral_hedge(
     covariance: Mapping[object, object],
     *,
     fit_status: str,
+    hedge_use_status: str | None = None,
     previous_hedge_weights: Mapping[str, float] | None = None,
 ) -> HedgePreview:
     underlying = _sorted_loadings(thresholded_loadings)
+    if str(hedge_use_status or "").strip() in {"missing_price", "insufficient_history"}:
+        return _build_preview(
+            mode="factor_neutral",
+            status="hedge_unavailable",
+            reason=f"hedge_use_status_{str(hedge_use_status)}",
+            underlying_loadings=underlying,
+            hedge_weights={},
+            covariance=covariance,
+            previous_hedge_weights=previous_hedge_weights,
+            non_market_reduction_ratio=None,
+        )
     if str(fit_status) == "insufficient_history":
         return _build_preview(
             mode="factor_neutral",
@@ -326,6 +350,7 @@ def build_hedge_preview(
     thresholded_loadings: Mapping[str, float],
     covariance: Mapping[object, object],
     fit_status: str,
+    hedge_use_status: str | None = None,
     previous_hedge_weights: Mapping[str, float] | None = None,
 ) -> HedgePreview:
     clean_mode = str(mode or "").strip().lower()
@@ -334,6 +359,7 @@ def build_hedge_preview(
             thresholded_loadings,
             covariance,
             fit_status=fit_status,
+            hedge_use_status=hedge_use_status,
             previous_hedge_weights=previous_hedge_weights,
         )
     if clean_mode == "factor_neutral":
@@ -341,6 +367,7 @@ def build_hedge_preview(
             thresholded_loadings,
             covariance,
             fit_status=fit_status,
+            hedge_use_status=hedge_use_status,
             previous_hedge_weights=previous_hedge_weights,
         )
     raise ValueError(f"Unsupported hedge mode: {mode}")

@@ -30,6 +30,7 @@ def finalize_pipeline_run(
     serving_payload_neon_failure: dict[str, str] | None,
     run_neon_mirror_cycle_fn: Callable[..., dict[str, Any]],
     sync_workspace_derivatives_to_local_mirror_fn: Callable[..., dict[str, Any]],
+    prune_rebuild_workspaces_fn: Callable[..., dict[str, Any]],
     write_neon_mirror_artifact_fn: Callable[..., str],
     publish_neon_sync_health_fn: Callable[..., None],
     publish_neon_serving_write_health_fn: Callable[..., None],
@@ -38,6 +39,7 @@ def finalize_pipeline_run(
     config_module,
 ) -> dict[str, Any]:
     local_mirror_sync: dict[str, Any] = {"status": "skipped", "reason": "no_workspace"}
+    workspace_prune: dict[str, Any] = {"status": "skipped", "reason": "no_workspace"}
     neon_mirror: dict[str, Any] = {
         "status": "skipped",
         "reason": "NEON_AUTO_SYNC_ENABLED=false",
@@ -112,6 +114,24 @@ def finalize_pipeline_run(
             }
             overall_status = "failed"
 
+    if workspace_paths is not None:
+        retention = int(getattr(config_module, "NEON_REBUILD_WORKSPACE_RETENTION", 0) or 0)
+        if retention <= 0:
+            workspace_prune = {"status": "skipped", "reason": "retention_disabled"}
+        else:
+            try:
+                workspace_prune = prune_rebuild_workspaces_fn(
+                    workspaces_root=workspace_paths.root_dir.parent,
+                    keep=retention,
+                    preserve=workspace_paths.root_dir,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Failed to prune Neon rebuild workspaces")
+                workspace_prune = {
+                    "status": "error",
+                    "error": {"type": type(exc).__name__, "message": str(exc)},
+                }
+
     neon_artifact_path: str | None = None
     should_publish_neon_mirror_status = bool(
         str(neon_mirror.get("status") or "").strip().lower() not in {"skipped"}
@@ -171,4 +191,5 @@ def finalize_pipeline_run(
         "overall_status": overall_status,
         "neon_mirror": neon_mirror,
         "local_mirror_sync": local_mirror_sync,
+        "workspace_prune": workspace_prune,
     }

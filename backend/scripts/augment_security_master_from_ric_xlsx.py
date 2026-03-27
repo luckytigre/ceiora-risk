@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Augment security_master from an XLSX file containing a RIC list."""
+"""Legacy operator helper that seeds registry-first universe rows from an XLSX RIC list."""
 
 from __future__ import annotations
 
@@ -11,7 +11,18 @@ from pathlib import Path
 
 import pandas as pd
 
-from backend.universe.schema import SECURITY_MASTER_TABLE, ensure_cuse4_schema
+from backend.universe.registry_sync import (
+    policy_defaults_for_legacy_coverage_role,
+    reconcile_default_security_policy_rows,
+    upsert_security_policy_rows,
+    upsert_security_registry_rows,
+)
+from backend.universe.schema import SECURITY_MASTER_TABLE, SECURITY_REGISTRY_TABLE, ensure_cuse4_schema
+from backend.universe.source_observation import refresh_security_source_observation_daily
+from backend.universe.taxonomy_builder import (
+    materialize_security_master_compat_current,
+    refresh_security_taxonomy_current,
+)
 
 
 def _normalize_ric_series(series: pd.Series) -> pd.Series:
@@ -82,24 +93,66 @@ def run(
     try:
         existing = {
             str(r[0]).upper()
-            for r in conn.execute(f"SELECT UPPER(ric) FROM {SECURITY_MASTER_TABLE}")
+            for r in conn.execute(
+                f"""
+                SELECT UPPER(ric)
+                FROM {SECURITY_MASTER_TABLE}
+                UNION
+                SELECT UPPER(ric)
+                FROM {SECURITY_REGISTRY_TABLE}
+                """
+            )
             if r and r[0]
         }
         new_rics = [r for r in rics if r not in existing]
 
-        rows = [
+        new_rows = [
             {
                 "ric": ric,
                 "ticker": _to_ticker(ric),
                 "classification_ok": 0,
                 "is_equity_eligible": 0,
+                "tracking_status": "active",
                 "source": source,
                 "job_run_id": job_run_id,
                 "updated_at": now_iso,
             }
             for ric in new_rics
         ]
-        if rows:
+        if new_rows:
+            registry_rows = [
+                {
+                    "ric": row["ric"],
+                    "ticker": row["ticker"],
+                    "tracking_status": row["tracking_status"],
+                    "source": row["source"],
+                    "job_run_id": row["job_run_id"],
+                    "updated_at": row["updated_at"],
+                }
+                for row in new_rows
+            ]
+            native_defaults = policy_defaults_for_legacy_coverage_role("native_equity")
+            policy_rows = [
+                {
+                    "ric": row["ric"],
+                    **native_defaults,
+                }
+                for row in new_rows
+            ]
+            upsert_security_registry_rows(
+                conn,
+                registry_rows,
+                source=source,
+                job_run_id=job_run_id,
+                updated_at=now_iso,
+            )
+            upsert_security_policy_rows(
+                conn,
+                policy_rows,
+                policy_source=source,
+                job_run_id=job_run_id,
+                updated_at=now_iso,
+            )
             conn.executemany(
                 f"""
                 INSERT OR IGNORE INTO {SECURITY_MASTER_TABLE} (
@@ -116,16 +169,31 @@ def run(
                         row["job_run_id"],
                         row["updated_at"],
                     )
-                    for row in rows
+                    for row in new_rows
                 ],
             )
+            refresh_security_taxonomy_current(conn, rics=new_rics)
+            reconcile_default_security_policy_rows(conn, rics=new_rics)
+            refresh_security_source_observation_daily(conn, rics=new_rics)
+            materialize_security_master_compat_current(conn, rics=new_rics)
 
-        # Touch coverage registry metadata without forcing eligibility flags.
+        # Keep both registry and compatibility metadata stamped for this operator-initiated import.
         if rics:
             chunk = 500
             for i in range(0, len(rics), chunk):
                 part = rics[i : i + chunk]
                 placeholders = ",".join("?" for _ in part)
+                conn.execute(
+                    f"""
+                    UPDATE {SECURITY_REGISTRY_TABLE}
+                    SET
+                        updated_at = ?,
+                        source = COALESCE(source, ?),
+                        job_run_id = COALESCE(job_run_id, ?)
+                    WHERE UPPER(ric) IN ({placeholders})
+                    """,
+                    (now_iso, source, job_run_id, *part),
+                )
                 conn.execute(
                     f"""
                     UPDATE {SECURITY_MASTER_TABLE}
@@ -169,7 +237,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--db-path", type=Path, default=Path("backend/data.db"), help="Path to SQLite DB")
     p.add_argument("--xlsx-path", type=Path, required=True, help="Path to universe XLSX")
     p.add_argument("--sheet", default=None, help="Optional sheet name (defaults to first sheet)")
-    p.add_argument("--source", default="coverage_universe_xlsx", help="security_master.source value")
+    p.add_argument(
+        "--source",
+        default="coverage_universe_xlsx",
+        help="Operator provenance label written to registry/policy/compat surfaces",
+    )
     p.add_argument("--output-new-rics", type=Path, default=None, help="Optional output text file for newly inserted RICs")
     return p.parse_args()
 

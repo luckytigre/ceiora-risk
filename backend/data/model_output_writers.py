@@ -16,6 +16,77 @@ def ensure_postgres_schema(pg_conn) -> None:
     script = _CANONICAL_SCHEMA_SQL.read_text(encoding="utf-8")
     with pg_conn.cursor() as cur:
         cur.execute(script)
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cuse_security_membership_daily (
+                as_of_date date NOT NULL,
+                ric text,
+                ticker text NOT NULL,
+                policy_path text NOT NULL,
+                realized_role text NOT NULL,
+                output_status text NOT NULL,
+                projection_candidate_status text NOT NULL,
+                projection_output_status text NOT NULL,
+                reason_code text,
+                quality_label text NOT NULL,
+                source_snapshot_status text NOT NULL,
+                projection_method text,
+                projection_basis_status text NOT NULL,
+                projection_source_package_date date,
+                served_exposure_available integer NOT NULL DEFAULT 0,
+                run_id text NOT NULL,
+                updated_at timestamptz NOT NULL,
+                PRIMARY KEY (as_of_date, ticker)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cuse_security_stage_results_daily (
+                as_of_date date NOT NULL,
+                ric text NOT NULL,
+                stage_name text NOT NULL,
+                stage_state text NOT NULL,
+                reason_code text,
+                detail_json text NOT NULL,
+                run_id text NOT NULL,
+                updated_at timestamptz NOT NULL,
+                PRIMARY KEY (as_of_date, ric, stage_name)
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cuse_security_membership_daily_date ON cuse_security_membership_daily(as_of_date)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cuse_security_membership_daily_ric ON cuse_security_membership_daily(ric, as_of_date)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cuse_security_stage_results_daily_date ON cuse_security_stage_results_daily(as_of_date, stage_name)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cuse_security_stage_results_daily_ric ON cuse_security_stage_results_daily(ric, as_of_date)"
+        )
+
+
+def _delete_dates_sqlite(conn, *, table: str, dates: list[str]) -> None:
+    if not dates:
+        return
+    placeholders = ",".join("?" for _ in dates)
+    conn.execute(
+        f"DELETE FROM {table} WHERE as_of_date IN ({placeholders})",
+        dates,
+    )
+
+
+def _delete_dates_postgres(pg_conn, *, table: str, dates: list[str]) -> None:
+    if not dates:
+        return
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            f"DELETE FROM {table} WHERE as_of_date::text = ANY(%s)",
+            (dates,),
+        )
 
 
 def write_model_outputs_sqlite(
@@ -26,6 +97,8 @@ def write_model_outputs_sqlite(
     covariance_factors: list[str],
     covariance_payload: list[tuple[Any, ...]],
     specific_risk_payload: list[tuple[Any, ...]],
+    cuse_membership_payload: list[tuple[Any, ...]],
+    cuse_stage_results_payload: list[tuple[Any, ...]],
     metadata_values: tuple[Any, ...],
     as_of_date: str,
 ) -> dict[str, Any]:
@@ -74,6 +147,53 @@ def write_model_outputs_sqlite(
             specific_risk_payload,
         )
 
+    membership_dates = sorted({str(row[0]) for row in cuse_membership_payload if row and row[0] is not None})
+    if cuse_membership_payload:
+        _delete_dates_sqlite(conn, table="cuse_security_membership_daily", dates=membership_dates)
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO cuse_security_membership_daily (
+                as_of_date,
+                ric,
+                ticker,
+                policy_path,
+                realized_role,
+                output_status,
+                projection_candidate_status,
+                projection_output_status,
+                reason_code,
+                quality_label,
+                source_snapshot_status,
+                projection_method,
+                projection_basis_status,
+                projection_source_package_date,
+                served_exposure_available,
+                run_id,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            cuse_membership_payload,
+        )
+
+    stage_dates = sorted({str(row[0]) for row in cuse_stage_results_payload if row and row[0] is not None})
+    if cuse_stage_results_payload:
+        _delete_dates_sqlite(conn, table="cuse_security_stage_results_daily", dates=stage_dates)
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO cuse_security_stage_results_daily (
+                as_of_date,
+                ric,
+                stage_name,
+                stage_state,
+                reason_code,
+                detail_json,
+                run_id,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            cuse_stage_results_payload,
+        )
+
     conn.execute(
         """
         INSERT OR REPLACE INTO model_run_metadata (
@@ -106,6 +226,8 @@ def write_model_outputs_postgres(
     covariance_factors: list[str],
     covariance_payload: list[tuple[Any, ...]],
     specific_risk_payload: list[tuple[Any, ...]],
+    cuse_membership_payload: list[tuple[Any, ...]],
+    cuse_stage_results_payload: list[tuple[Any, ...]],
     metadata_values: tuple[Any, ...],
     as_of_date: str,
 ) -> dict[str, Any]:
@@ -175,6 +297,75 @@ def write_model_outputs_postgres(
                     updated_at = EXCLUDED.updated_at
                 """,
                 specific_risk_payload,
+            )
+
+        membership_dates = sorted({str(row[0]) for row in cuse_membership_payload if row and row[0] is not None})
+        if cuse_membership_payload:
+            _delete_dates_postgres(pg_conn, table="cuse_security_membership_daily", dates=membership_dates)
+            cur.executemany(
+                """
+                INSERT INTO cuse_security_membership_daily (
+                    as_of_date,
+                    ric,
+                    ticker,
+                    policy_path,
+                    realized_role,
+                    output_status,
+                    projection_candidate_status,
+                    projection_output_status,
+                    reason_code,
+                    quality_label,
+                    source_snapshot_status,
+                    projection_method,
+                    projection_basis_status,
+                    projection_source_package_date,
+                    served_exposure_available,
+                    run_id,
+                    updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (as_of_date, ticker) DO UPDATE SET
+                    ric = EXCLUDED.ric,
+                    policy_path = EXCLUDED.policy_path,
+                    realized_role = EXCLUDED.realized_role,
+                    output_status = EXCLUDED.output_status,
+                    projection_candidate_status = EXCLUDED.projection_candidate_status,
+                    projection_output_status = EXCLUDED.projection_output_status,
+                    reason_code = EXCLUDED.reason_code,
+                    quality_label = EXCLUDED.quality_label,
+                    source_snapshot_status = EXCLUDED.source_snapshot_status,
+                    projection_method = EXCLUDED.projection_method,
+                    projection_basis_status = EXCLUDED.projection_basis_status,
+                    projection_source_package_date = EXCLUDED.projection_source_package_date,
+                    served_exposure_available = EXCLUDED.served_exposure_available,
+                    run_id = EXCLUDED.run_id,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                cuse_membership_payload,
+            )
+
+        stage_dates = sorted({str(row[0]) for row in cuse_stage_results_payload if row and row[0] is not None})
+        if cuse_stage_results_payload:
+            _delete_dates_postgres(pg_conn, table="cuse_security_stage_results_daily", dates=stage_dates)
+            cur.executemany(
+                """
+                INSERT INTO cuse_security_stage_results_daily (
+                    as_of_date,
+                    ric,
+                    stage_name,
+                    stage_state,
+                    reason_code,
+                    detail_json,
+                    run_id,
+                    updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (as_of_date, ric, stage_name) DO UPDATE SET
+                    stage_state = EXCLUDED.stage_state,
+                    reason_code = EXCLUDED.reason_code,
+                    detail_json = EXCLUDED.detail_json,
+                    run_id = EXCLUDED.run_id,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                cuse_stage_results_payload,
             )
 
         cur.execute(

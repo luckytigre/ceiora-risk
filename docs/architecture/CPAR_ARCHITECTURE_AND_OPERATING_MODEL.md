@@ -213,7 +213,7 @@ Current display-vs-hedge rule:
 - explanatory cPAR pages must use display-loadings surfaces
 - hedge pages must use hedge-trade-space surfaces
 - single-name detail therefore distinguishes:
-  - `beta_market_step1`, `display_loadings`, `raw_loadings`, and `thresholded_loadings` for explanatory residualized display
+  - compatibility field `beta_market_step1` for the one-shot market coefficient, plus `display_loadings`, `raw_loadings`, and `thresholded_loadings` for explanatory residualized display
   - `beta_spy_trade` for hedge-space interpretation
 
 ## Current Deferred Limits

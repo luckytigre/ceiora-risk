@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from dataclasses import dataclass
@@ -29,10 +30,42 @@ class TableConfig:
 
 
 TABLE_CONFIGS: dict[str, TableConfig] = {
-    "security_master": TableConfig(
-        name="security_master",
+    "security_registry": TableConfig(
+        name="security_registry",
         pk_cols=("ric",),
+    ),
+    "security_taxonomy_current": TableConfig(
+        name="security_taxonomy_current",
+        pk_cols=("ric",),
+    ),
+    "security_policy_current": TableConfig(
+        name="security_policy_current",
+        pk_cols=("ric",),
+    ),
+    "security_source_observation_daily": TableConfig(
+        name="security_source_observation_daily",
+        pk_cols=("as_of_date", "ric"),
+        date_col="as_of_date",
+        entity_col="ric",
+        overlap_days=31,
+    ),
+    "security_ingest_runs": TableConfig(
+        name="security_ingest_runs",
+        pk_cols=("job_run_id",),
+        date_col="started_at",
+        overlap_days=31,
         sync_mode="upsert",
+    ),
+    "security_ingest_audit": TableConfig(
+        name="security_ingest_audit",
+        pk_cols=("job_run_id", "ric", "artifact_name"),
+        entity_col="ric",
+        overlap_days=31,
+        sync_mode="upsert",
+    ),
+    "security_master_compat_current": TableConfig(
+        name="security_master_compat_current",
+        pk_cols=("ric",),
     ),
     "security_prices_eod": TableConfig(
         name="security_prices_eod",
@@ -57,6 +90,20 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
         entity_col="ric",
         identifier_history_backfill=True,
         overlap_days=62,
+    ),
+    "estu_membership_daily": TableConfig(
+        name="estu_membership_daily",
+        pk_cols=("date", "ric"),
+        date_col="date",
+        entity_col="ric",
+        overlap_days=31,
+    ),
+    "universe_cross_section_snapshot": TableConfig(
+        name="universe_cross_section_snapshot",
+        pk_cols=("ric", "as_of_date"),
+        date_col="as_of_date",
+        entity_col="ric",
+        overlap_days=31,
     ),
     "barra_raw_cross_section_history": TableConfig(
         name="barra_raw_cross_section_history",
@@ -112,7 +159,28 @@ TABLE_CONFIGS: dict[str, TableConfig] = {
 
 
 def canonical_tables() -> list[str]:
-    return list(TABLE_CONFIGS.keys())
+    return [
+        "security_registry",
+        "security_taxonomy_current",
+        "security_policy_current",
+        "security_source_observation_daily",
+        "security_ingest_runs",
+        "security_ingest_audit",
+        "security_master_compat_current",
+        "security_prices_eod",
+        "security_fundamentals_pit",
+        "security_classification_pit",
+        "estu_membership_daily",
+        "universe_cross_section_snapshot",
+        "barra_raw_cross_section_history",
+        "model_factor_returns_daily",
+        "model_factor_covariance_daily",
+        "model_specific_risk_daily",
+        "model_run_metadata",
+        "projected_instrument_loadings",
+        "projected_instrument_meta",
+        "serving_payload_current",
+    ]
 
 
 def _sqlite_columns(conn: sqlite3.Connection, table: str) -> list[str]:
@@ -147,6 +215,61 @@ def _pg_columns(pg_conn, table: str) -> list[str]:
             (table,),
         )
         return [str(r[0]) for r in cur.fetchall()]
+
+
+def _cursor_fetchone(cur):
+    if hasattr(cur, "fetchone"):
+        return cur.fetchone()
+    if not hasattr(cur, "fetchall"):
+        return None
+    rows = cur.fetchall()
+    return rows[0] if rows else None
+
+
+def _pg_table_has_rows(pg_conn, table: str) -> bool:
+    if not _table_exists_pg(pg_conn, table):
+        return False
+    with pg_conn.cursor() as cur:
+        cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
+        row = _cursor_fetchone(cur)
+        return bool(row and int(row[0] or 0) > 0)
+
+
+def _sqlite_table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type='table' AND name=?
+        LIMIT 1
+        """,
+        (str(table),),
+    ).fetchone()
+    return row is not None
+
+
+def _sqlite_table_has_rows(conn: sqlite3.Connection, table: str) -> bool:
+    if not _sqlite_table_exists(conn, table):
+        return False
+    row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+    return bool(row and int(row[0] or 0) > 0)
+
+
+def _require_sqlite_tables(
+    sqlite_conn: sqlite3.Connection,
+    *,
+    required_tables: list[str] | tuple[str, ...],
+    required_nonempty_tables: list[str] | tuple[str, ...] = (),
+) -> None:
+    missing = [table for table in required_tables if not _sqlite_table_exists(sqlite_conn, str(table))]
+    empty = [table for table in required_nonempty_tables if not _sqlite_table_has_rows(sqlite_conn, str(table))]
+    if missing or empty:
+        parts: list[str] = []
+        if missing:
+            parts.append("missing SQLite source tables: " + ", ".join(sorted(str(table) for table in missing)))
+        if empty:
+            parts.append("empty required SQLite source tables: " + ", ".join(sorted(str(table) for table in empty)))
+        raise RuntimeError("; ".join(parts))
 
 
 def _sqlite_declared_type_to_pg(column_name: str, declared_type: str | None) -> str:
@@ -224,7 +347,283 @@ def _table_exists_pg(pg_conn, table: str) -> bool:
             """,
             (table,),
         )
-        return cur.fetchone() is not None
+        return _cursor_fetchone(cur) is not None
+
+
+def _record_source_sync_run_start(
+    pg_conn,
+    *,
+    sync_run_id: str,
+    mode: str,
+    sqlite_path: Path,
+    selected_tables: list[str],
+    started_at: str,
+) -> None:
+    if not _table_exists_pg(pg_conn, "source_sync_runs"):
+        return
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO source_sync_runs (
+                sync_run_id,
+                mode,
+                sqlite_path,
+                selected_tables_json,
+                table_results_json,
+                status,
+                started_at,
+                completed_at,
+                error_type,
+                error_message,
+                updated_at
+            ) VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, NULL, NULL, NULL, %s)
+            ON CONFLICT (sync_run_id) DO UPDATE SET
+                mode = EXCLUDED.mode,
+                sqlite_path = EXCLUDED.sqlite_path,
+                selected_tables_json = EXCLUDED.selected_tables_json,
+                table_results_json = EXCLUDED.table_results_json,
+                status = EXCLUDED.status,
+                started_at = EXCLUDED.started_at,
+                completed_at = EXCLUDED.completed_at,
+                error_type = EXCLUDED.error_type,
+                error_message = EXCLUDED.error_message,
+                updated_at = EXCLUDED.updated_at
+            """,
+            (
+                str(sync_run_id),
+                str(mode),
+                str(sqlite_path),
+                json.dumps(list(selected_tables), sort_keys=True),
+                json.dumps({}, sort_keys=True),
+                "running",
+                str(started_at),
+                str(started_at),
+            ),
+        )
+    pg_conn.commit()
+
+
+def _require_source_sync_metadata_tables(pg_conn) -> None:
+    required_tables = (
+        "source_sync_runs",
+        "source_sync_watermarks",
+        "security_source_status_current",
+    )
+    missing = [table for table in required_tables if not _table_exists_pg(pg_conn, table)]
+    if missing:
+        raise RuntimeError(
+            "Neon registry-first sync requires metadata tables to exist before publication: "
+            + ", ".join(sorted(missing))
+        )
+
+
+def _finalize_source_sync_run(
+    pg_conn,
+    *,
+    sync_run_id: str,
+    status: str,
+    table_results: dict[str, Any],
+    updated_at: str,
+    error_type: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    if not _table_exists_pg(pg_conn, "source_sync_runs"):
+        return
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE source_sync_runs
+            SET
+                table_results_json = %s::jsonb,
+                status = %s,
+                completed_at = %s,
+                error_type = %s,
+                error_message = %s,
+                updated_at = %s
+            WHERE sync_run_id = %s
+            """,
+            (
+                json.dumps(table_results, sort_keys=True),
+                str(status),
+                str(updated_at),
+                error_type,
+                error_message,
+                str(updated_at),
+                str(sync_run_id),
+            ),
+        )
+
+
+def _materialize_security_source_status_current_pg(
+    pg_conn,
+    *,
+    sync_run_id: str,
+    updated_at: str,
+) -> int:
+    if not _table_exists_pg(pg_conn, "security_source_status_current"):
+        return 0
+    with pg_conn.cursor() as cur:
+        cur.execute("TRUNCATE TABLE security_source_status_current")
+        cur.execute(
+            """
+            WITH latest_obs AS (
+                SELECT
+                    ric,
+                    as_of_date,
+                    classification_ready,
+                    has_price_history_as_of_date,
+                    has_fundamentals_history_as_of_date,
+                    has_classification_history_as_of_date,
+                    latest_price_date,
+                    latest_fundamentals_as_of_date,
+                    latest_classification_as_of_date
+                FROM (
+                    SELECT
+                        UPPER(TRIM(ric)) AS ric,
+                        as_of_date,
+                        classification_ready,
+                        has_price_history_as_of_date,
+                        has_fundamentals_history_as_of_date,
+                        has_classification_history_as_of_date,
+                        latest_price_date,
+                        latest_fundamentals_as_of_date,
+                        latest_classification_as_of_date,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY UPPER(TRIM(ric))
+                            ORDER BY as_of_date DESC, updated_at DESC
+                        ) AS rn
+                    FROM security_source_observation_daily
+                    WHERE ric IS NOT NULL
+                      AND TRIM(ric) <> ''
+                ) ranked
+                WHERE rn = 1
+            )
+            INSERT INTO security_source_status_current (
+                ric,
+                ticker,
+                tracking_status,
+                instrument_kind,
+                vehicle_structure,
+                model_home_market_scope,
+                is_single_name_equity,
+                classification_ready,
+                price_ingest_enabled,
+                pit_fundamentals_enabled,
+                pit_classification_enabled,
+                allow_cuse_native_core,
+                allow_cuse_fundamental_projection,
+                allow_cuse_returns_projection,
+                allow_cpar_core_target,
+                allow_cpar_extended_target,
+                observation_as_of_date,
+                has_price_history_as_of_date,
+                has_fundamentals_history_as_of_date,
+                has_classification_history_as_of_date,
+                latest_price_date,
+                latest_fundamentals_as_of_date,
+                latest_classification_as_of_date,
+                source_sync_run_id,
+                updated_at
+            )
+            SELECT
+                UPPER(TRIM(reg.ric)) AS ric,
+                UPPER(TRIM(COALESCE(reg.ticker, ''))) AS ticker,
+                COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') AS tracking_status,
+                tax.instrument_kind,
+                tax.vehicle_structure,
+                tax.model_home_market_scope,
+                COALESCE(tax.is_single_name_equity, 0) AS is_single_name_equity,
+                COALESCE(obs.classification_ready, tax.classification_ready, 0) AS classification_ready,
+                COALESCE(pol.price_ingest_enabled, 1) AS price_ingest_enabled,
+                COALESCE(pol.pit_fundamentals_enabled, 0) AS pit_fundamentals_enabled,
+                COALESCE(pol.pit_classification_enabled, 0) AS pit_classification_enabled,
+                COALESCE(pol.allow_cuse_native_core, 0) AS allow_cuse_native_core,
+                COALESCE(pol.allow_cuse_fundamental_projection, 0) AS allow_cuse_fundamental_projection,
+                COALESCE(pol.allow_cuse_returns_projection, 0) AS allow_cuse_returns_projection,
+                COALESCE(pol.allow_cpar_core_target, 0) AS allow_cpar_core_target,
+                COALESCE(pol.allow_cpar_extended_target, 0) AS allow_cpar_extended_target,
+                obs.as_of_date AS observation_as_of_date,
+                COALESCE(obs.has_price_history_as_of_date, 0) AS has_price_history_as_of_date,
+                COALESCE(obs.has_fundamentals_history_as_of_date, 0) AS has_fundamentals_history_as_of_date,
+                COALESCE(obs.has_classification_history_as_of_date, 0) AS has_classification_history_as_of_date,
+                obs.latest_price_date,
+                obs.latest_fundamentals_as_of_date,
+                obs.latest_classification_as_of_date,
+                %s AS source_sync_run_id,
+                %s AS updated_at
+            FROM security_registry reg
+            LEFT JOIN security_policy_current pol
+              ON UPPER(TRIM(pol.ric)) = UPPER(TRIM(reg.ric))
+            LEFT JOIN security_taxonomy_current tax
+              ON UPPER(TRIM(tax.ric)) = UPPER(TRIM(reg.ric))
+            LEFT JOIN latest_obs obs
+              ON obs.ric = UPPER(TRIM(reg.ric))
+            WHERE reg.ric IS NOT NULL
+              AND TRIM(reg.ric) <> ''
+              AND COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') <> 'disabled'
+            """,
+            (str(sync_run_id), str(updated_at)),
+        )
+        row_count = int(cur.rowcount or 0)
+    return row_count
+
+
+def _upsert_source_sync_watermarks(
+    sqlite_conn: sqlite3.Connection,
+    pg_conn,
+    *,
+    selected_cfgs: list[TableConfig],
+    table_results: dict[str, Any],
+    sync_run_id: str,
+    updated_at: str,
+) -> int:
+    if not _table_exists_pg(pg_conn, "source_sync_watermarks"):
+        return 0
+    rows_written = 0
+    with pg_conn.cursor() as cur:
+        for cfg in selected_cfgs:
+            table = cfg.name
+            result = table_results.get(table) or {}
+            if str(result.get("status") or "").startswith("skipped"):
+                continue
+            if not _sqlite_table_exists(sqlite_conn, table) or not _table_exists_pg(pg_conn, table):
+                continue
+            source = _profile_sqlite_table(sqlite_conn, cfg)
+            target = _profile_pg_table(pg_conn, cfg)
+            cur.execute(
+                """
+                INSERT INTO source_sync_watermarks (
+                    table_name,
+                    sync_run_id,
+                    source_min_value,
+                    source_max_value,
+                    target_min_value,
+                    target_max_value,
+                    row_count,
+                    updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (table_name) DO UPDATE SET
+                    sync_run_id = EXCLUDED.sync_run_id,
+                    source_min_value = EXCLUDED.source_min_value,
+                    source_max_value = EXCLUDED.source_max_value,
+                    target_min_value = EXCLUDED.target_min_value,
+                    target_max_value = EXCLUDED.target_max_value,
+                    row_count = EXCLUDED.row_count,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (
+                    str(table),
+                    str(sync_run_id),
+                    source.get("min_date"),
+                    source.get("max_date"),
+                    target.get("min_date"),
+                    target.get("max_date"),
+                    int(target.get("row_count") or 0),
+                    str(updated_at),
+                ),
+            )
+            rows_written += 1
+    return rows_written
 
 
 def _parse_iso_date(value: str | None) -> date | None:
@@ -266,6 +665,28 @@ def _canonical_temporal_text(value: Any) -> str | None:
 def _sqlite_count(conn: sqlite3.Connection, table: str, where_sql: str = "", params: tuple[Any, ...] = ()) -> int:
     row = conn.execute(f"SELECT COUNT(*) FROM {table} {where_sql}", params).fetchone()
     return int(row[0] or 0) if row else 0
+
+
+def _sqlite_iterated_row_count(
+    conn: sqlite3.Connection,
+    *,
+    table: str,
+    columns: list[str],
+    where_sql: str = "",
+    params: tuple[Any, ...] = (),
+    batch_size: int = 25_000,
+) -> int:
+    count = 0
+    for _row in _sqlite_select_rows(
+        conn,
+        table=table,
+        columns=columns,
+        where_sql=where_sql,
+        params=params,
+        batch_size=batch_size,
+    ):
+        count += 1
+    return count
 
 
 def _sqlite_select_rows(
@@ -342,6 +763,159 @@ def _sqlite_select_rows_for_entities_before_date(
         params=params,
         batch_size=batch_size,
     )
+
+
+def _inspect_security_prices_eod_source_integrity(
+    conn: sqlite3.Connection,
+    *,
+    run_sqlite_integrity_check: bool,
+    batch_size: int = 25_000,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "table": "security_prices_eod",
+        "status": "ok",
+        "issues": [],
+    }
+    if not _sqlite_table_exists(conn, "security_prices_eod"):
+        out["status"] = "skipped_missing_source"
+        out["issues"] = ["missing_table:security_prices_eod"]
+        return out
+
+    columns = _sqlite_columns(conn, "security_prices_eod")
+    count_all = _sqlite_count(conn, "security_prices_eod")
+    iterated_row_count = _sqlite_iterated_row_count(
+        conn,
+        table="security_prices_eod",
+        columns=columns,
+        batch_size=batch_size,
+    )
+    distinct_pk_row_count = _sqlite_count(
+        conn,
+        "(SELECT ric, date FROM security_prices_eod GROUP BY ric, date) AS deduped_prices",
+    )
+    out["count_all"] = int(count_all)
+    out["iterated_row_count"] = int(iterated_row_count)
+    out["distinct_pk_row_count"] = int(distinct_pk_row_count)
+    if int(count_all) != int(iterated_row_count):
+        out["issues"].append(
+            f"count_iter_mismatch:security_prices_eod:{count_all}!={iterated_row_count}"
+        )
+    if int(count_all) != int(distinct_pk_row_count):
+        out["issues"].append(
+            f"count_distinct_mismatch:security_prices_eod:{count_all}!={distinct_pk_row_count}"
+        )
+    if int(iterated_row_count) != int(distinct_pk_row_count):
+        out["issues"].append(
+            "iterated_distinct_mismatch:security_prices_eod"
+        )
+
+    if run_sqlite_integrity_check:
+        quick_check = str(conn.execute("PRAGMA quick_check").fetchone()[0])
+        integrity_check = str(conn.execute("PRAGMA integrity_check").fetchone()[0])
+        out["quick_check"] = quick_check
+        out["integrity_check"] = integrity_check
+        if quick_check != "ok":
+            out["issues"].append(f"quick_check_failed:security_prices_eod:{quick_check}")
+        if integrity_check != "ok":
+            out["issues"].append(f"integrity_check_failed:security_prices_eod:{integrity_check}")
+
+    if out["issues"]:
+        out["status"] = "failed"
+    return out
+
+
+def _inspect_sqlite_source_integrity(
+    conn: sqlite3.Connection,
+    *,
+    selected_tables: list[str],
+    run_sqlite_integrity_check: bool,
+    batch_size: int = 25_000,
+) -> dict[str, Any]:
+    checks: dict[str, Any] = {}
+    issues: list[str] = []
+    if "security_prices_eod" in set(selected_tables):
+        prices_check = _inspect_security_prices_eod_source_integrity(
+            conn,
+            run_sqlite_integrity_check=run_sqlite_integrity_check,
+            batch_size=batch_size,
+        )
+        checks["security_prices_eod"] = prices_check
+        issues.extend(list(prices_check.get("issues") or []))
+    return {
+        "status": "ok" if not issues else "failed",
+        "tables": checks,
+        "issues": issues,
+        "run_sqlite_integrity_check": bool(run_sqlite_integrity_check),
+    }
+
+
+def inspect_sqlite_source_integrity(
+    *,
+    sqlite_path: Path,
+    selected_tables: list[str] | None = None,
+    run_sqlite_integrity_check: bool = False,
+    batch_size: int = 25_000,
+) -> dict[str, Any]:
+    db = Path(sqlite_path).expanduser().resolve()
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    try:
+        out = _inspect_sqlite_source_integrity(
+            conn,
+            selected_tables=list(selected_tables or canonical_tables()),
+            run_sqlite_integrity_check=run_sqlite_integrity_check,
+            batch_size=batch_size,
+        )
+    finally:
+        conn.close()
+    out["sqlite_path"] = str(db)
+    return out
+
+
+def _pg_count_table(pg_conn, table: str) -> int:
+    with pg_conn.cursor() as cur:
+        cur.execute(sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table)))
+        row = cur.fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def _assert_post_load_row_counts(
+    pg_conn,
+    *,
+    table: str,
+    action: str,
+    target_rows_before: int,
+    deleted_overlap_rows: int,
+    identifier_backfill_deleted: int,
+    rows_loaded: int,
+) -> dict[str, Any]:
+    action_norm = str(action or "").strip()
+    expected_target_rows_after: int | None
+    if action_norm in {"truncate_and_reload", "target_empty_truncate_and_reload"}:
+        expected_target_rows_after = int(rows_loaded)
+    elif action_norm in {"incremental_overlap_reload", "incremental_overlap_plus_identifier_backfill"}:
+        expected_target_rows_after = int(
+            target_rows_before - deleted_overlap_rows - identifier_backfill_deleted + rows_loaded
+        )
+    else:
+        return {
+            "status": "skipped",
+            "reason": f"unsupported_action:{action_norm or 'unknown'}",
+        }
+    target_rows_after = _pg_count_table(pg_conn, table)
+    if int(target_rows_after) != int(expected_target_rows_after):
+        raise RuntimeError(
+            f"target row mismatch for {table}: expected {expected_target_rows_after} row(s) in Neon "
+            f"after {action_norm}, found {target_rows_after}"
+        )
+    return {
+        "status": "ok",
+        "target_rows_before": int(target_rows_before),
+        "target_rows_after": int(target_rows_after),
+        "expected_target_rows_after": int(expected_target_rows_after),
+        "deleted_overlap_rows": int(deleted_overlap_rows),
+        "identifier_backfill_deleted": int(identifier_backfill_deleted),
+    }
 
 
 def _pg_max_date(pg_conn, *, table: str, date_col: str) -> str | None:
@@ -512,33 +1086,38 @@ def _copy_into_postgres_idempotent(
     return copied
 
 
-def _upsert_security_master(
+def _upsert_table_on_pk(
     sqlite_conn: sqlite3.Connection,
     pg_conn,
     *,
     table: str,
     columns: list[str],
+    pk_cols: list[str],
     batch_size: int,
 ) -> int:
-    if "ric" not in columns:
-        raise ValueError("security_master upsert requires ric column")
+    missing_pk_cols = [col for col in pk_cols if col not in columns]
+    if missing_pk_cols:
+        raise ValueError(
+            f"{table} upsert requires declared pk column(s): {', '.join(missing_pk_cols)}"
+        )
 
-    non_key = [c for c in columns if c != "ric"]
-    insert_sql = sql.SQL(
-        """
-        INSERT INTO {} ({})
-        VALUES ({})
-        ON CONFLICT (ric) DO UPDATE SET {}
-        """
-    ).format(
+    non_key = [c for c in columns if c not in set(pk_cols)]
+    insert_sql = sql.SQL("INSERT INTO {} ({}) VALUES ({}) ").format(
         sql.Identifier(table),
         sql.SQL(", ").join(sql.Identifier(c) for c in columns),
         sql.SQL(", ").join(sql.Placeholder() for _ in columns),
-        sql.SQL(", ").join(
-            sql.SQL("{} = EXCLUDED.{}").format(sql.Identifier(c), sql.Identifier(c))
-            for c in non_key
-        ),
     )
+    pk_sql = sql.SQL(", ").join(sql.Identifier(c) for c in pk_cols)
+    if non_key:
+        insert_sql += sql.SQL("ON CONFLICT ({}) DO UPDATE SET {}").format(
+            pk_sql,
+            sql.SQL(", ").join(
+                sql.SQL("{} = EXCLUDED.{}").format(sql.Identifier(c), sql.Identifier(c))
+                for c in non_key
+            ),
+        )
+    else:
+        insert_sql += sql.SQL("ON CONFLICT ({}) DO NOTHING").format(pk_sql)
 
     src_rows = _sqlite_select_rows(
         sqlite_conn,
@@ -611,6 +1190,10 @@ def sync_from_sqlite_to_neon(
     tables: list[str] | None = None,
     mode: str = "incremental",
     batch_size: int = 25_000,
+    required_tables: list[str] | None = None,
+    required_nonempty_tables: list[str] | None = None,
+    verify_source_integrity: bool = False,
+    run_sqlite_integrity_check: bool = False,
 ) -> dict[str, Any]:
     db = Path(sqlite_path).expanduser().resolve()
     if not db.exists():
@@ -630,14 +1213,43 @@ def sync_from_sqlite_to_neon(
         "status": "ok",
         "mode": mode_norm,
         "sqlite_path": str(db),
+        "sync_run_id": f"source_sync_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}_{uuid4().hex[:8]}",
         "tables": {},
     }
+    sync_started_at = datetime.now(timezone.utc).isoformat()
 
     sqlite_conn = sqlite3.connect(str(db))
     sqlite_conn.row_factory = sqlite3.Row
     pg_conn = connect(dsn=resolve_dsn(dsn), autocommit=False)
 
     try:
+        if required_tables or required_nonempty_tables:
+            _require_sqlite_tables(
+                sqlite_conn,
+                required_tables=list(required_tables or []),
+                required_nonempty_tables=list(required_nonempty_tables or []),
+            )
+        _require_source_sync_metadata_tables(pg_conn)
+        _record_source_sync_run_start(
+            pg_conn,
+            sync_run_id=str(out["sync_run_id"]),
+            mode=mode_norm,
+            sqlite_path=db,
+            selected_tables=list(selected),
+            started_at=sync_started_at,
+        )
+        if verify_source_integrity:
+            out["source_integrity"] = _inspect_sqlite_source_integrity(
+                sqlite_conn,
+                selected_tables=list(selected),
+                run_sqlite_integrity_check=bool(run_sqlite_integrity_check),
+                batch_size=max(1_000, int(batch_size)),
+            )
+            if str(out["source_integrity"].get("status") or "") != "ok":
+                raise RuntimeError(
+                    "source integrity check failed: "
+                    + "; ".join(list(out["source_integrity"].get("issues") or []))
+                )
         for cfg in selected_cfgs:
             table = cfg.name
 
@@ -675,17 +1287,21 @@ def sync_from_sqlite_to_neon(
             identifier_backfill_deleted = 0
             identifier_backfill_rows = 0
             identifier_backfill_from_date: str | None = None
+            target_rows_before = _pg_count_table(pg_conn, table)
+            deleted_overlap_rows = 0
 
             if cfg.sync_mode == "upsert":
                 src_count = _sqlite_count(sqlite_conn, table)
-                copied = _upsert_security_master(
+                copied = _upsert_table_on_pk(
                     sqlite_conn,
                     pg_conn,
                     table=table,
                     columns=cols,
+                    pk_cols=list(cfg.pk_cols),
                     batch_size=max(500, int(batch_size)),
                 )
                 out["tables"][table] = {
+                    "status": "ok",
                     "action": "upsert",
                     "source_rows": int(src_count),
                     "rows_loaded": int(copied),
@@ -758,6 +1374,7 @@ def sync_from_sqlite_to_neon(
                             ),
                             (cutoff_txt,),
                         )
+                        deleted_overlap_rows = int(cur.rowcount or 0)
                     action = (
                         "incremental_overlap_plus_identifier_backfill"
                         if identifier_backfill_entities
@@ -830,12 +1447,27 @@ def sync_from_sqlite_to_neon(
                             batch_size=max(1_000, int(batch_size)),
                         ),
                     )
-            pg_conn.commit()
-
+            expected_rows_loaded = int(src_count + identifier_backfill_rows)
+            actual_rows_loaded = int(copied + identifier_backfill_rows)
+            if actual_rows_loaded != expected_rows_loaded:
+                raise RuntimeError(
+                    f"source row mismatch for {table}: expected {expected_rows_loaded} row(s) to load, "
+                    f"but copied {actual_rows_loaded}; source archive may be inconsistent"
+                )
+            target_row_validation = _assert_post_load_row_counts(
+                pg_conn,
+                table=table,
+                action=action,
+                target_rows_before=target_rows_before,
+                deleted_overlap_rows=deleted_overlap_rows,
+                identifier_backfill_deleted=identifier_backfill_deleted,
+                rows_loaded=actual_rows_loaded,
+            )
             out["tables"][table] = {
+                "status": "ok",
                 "action": action,
                 "source_rows": int(src_count),
-                "rows_loaded": int(copied + identifier_backfill_rows),
+                "rows_loaded": actual_rows_loaded,
                 "where_sql": where_sql or None,
                 "where_params": list(params),
                 "identifier_backfill": (
@@ -849,11 +1481,47 @@ def sync_from_sqlite_to_neon(
                     if identifier_backfill_entities
                     else None
                 ),
+                "target_row_validation": target_row_validation,
                 "schema_update": schema_update,
             }
+        metadata_updated_at = datetime.now(timezone.utc).isoformat()
+        out["watermark_rows_updated"] = _upsert_source_sync_watermarks(
+            sqlite_conn,
+            pg_conn,
+            selected_cfgs=selected_cfgs,
+            table_results=dict(out["tables"]),
+            sync_run_id=str(out["sync_run_id"]),
+            updated_at=metadata_updated_at,
+        )
+        out["security_source_status_current_rows"] = _materialize_security_source_status_current_pg(
+            pg_conn,
+            sync_run_id=str(out["sync_run_id"]),
+            updated_at=metadata_updated_at,
+        )
+        _finalize_source_sync_run(
+            pg_conn,
+            sync_run_id=str(out["sync_run_id"]),
+            status="ok",
+            table_results=dict(out["tables"]),
+            updated_at=metadata_updated_at,
+        )
         pg_conn.commit()
-    except Exception:
+    except Exception as exc:
         pg_conn.rollback()
+        try:
+            failed_at = datetime.now(timezone.utc).isoformat()
+            _finalize_source_sync_run(
+                pg_conn,
+                sync_run_id=str(out["sync_run_id"]),
+                status="failed",
+                table_results=dict(out["tables"]),
+                updated_at=failed_at,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            pg_conn.commit()
+        except Exception:
+            pg_conn.rollback()
         raise
     finally:
         sqlite_conn.close()
@@ -982,31 +1650,67 @@ def _expected_retention_gap(
     }
 
 
-def _orphan_ric_sqlite(conn: sqlite3.Connection, table: str) -> int:
+def _resolve_orphan_anchor_sqlite(conn: sqlite3.Connection) -> tuple[str | None, str | None]:
+    for table, alias in (
+        ("security_registry", "reg"),
+        ("security_master_compat_current", "compat"),
+    ):
+        if _sqlite_table_has_rows(conn, table):
+            return table, alias
+    return None, None
+
+
+def _resolve_orphan_anchor_pg(pg_conn) -> tuple[str | None, str | None]:
+    for table, alias in (
+        ("security_registry", "reg"),
+        ("security_master_compat_current", "compat"),
+    ):
+        if _pg_table_has_rows(pg_conn, table):
+            return table, alias
+    return None, None
+
+
+def _orphan_ric_sqlite(conn: sqlite3.Connection, table: str, *, anchor_table: str | None = None) -> int:
+    if not anchor_table:
+        anchor_table, _ = _resolve_orphan_anchor_sqlite(conn)
+    if not anchor_table:
+        return 0
+    anchor_alias = "reg" if anchor_table == "security_registry" else "compat"
     row = conn.execute(
         f"""
         SELECT COUNT(*)
         FROM {table} x
-        LEFT JOIN security_master sm
-          ON sm.ric = x.ric
-        WHERE sm.ric IS NULL
+        LEFT JOIN {anchor_table} {anchor_alias}
+          ON {anchor_alias}.ric = x.ric
+        WHERE {anchor_alias}.ric IS NULL
         """
     ).fetchone()
     return int(row[0] or 0) if row else 0
 
 
-def _orphan_ric_pg(pg_conn, table: str) -> int:
+def _orphan_ric_pg(pg_conn, table: str, *, anchor_table: str | None = None) -> int:
+    if not anchor_table:
+        anchor_table, _ = _resolve_orphan_anchor_pg(pg_conn)
+    if not anchor_table:
+        return 0
+    anchor_alias = sql.Identifier("reg" if anchor_table == "security_registry" else "compat")
     with pg_conn.cursor() as cur:
         cur.execute(
             sql.SQL(
                 """
                 SELECT COUNT(*)
                 FROM {} x
-                LEFT JOIN security_master sm
-                  ON sm.ric = x.ric
-                WHERE sm.ric IS NULL
+                LEFT JOIN {} {}
+                  ON {}.ric = x.ric
+                WHERE {}.ric IS NULL
                 """
-            ).format(sql.Identifier(table))
+            ).format(
+                sql.Identifier(table),
+                sql.Identifier(anchor_table),
+                anchor_alias,
+                anchor_alias,
+                anchor_alias,
+            )
         )
         row = cur.fetchone()
     return int(row[0] or 0) if row else 0
@@ -1047,6 +1751,9 @@ def run_parity_audit(
     sqlite_conn = sqlite3.connect(str(db))
     sqlite_conn.row_factory = sqlite3.Row
     pg_conn = connect(dsn=resolve_dsn(dsn), autocommit=False)
+    source_anchor_table, _ = _resolve_orphan_anchor_sqlite(sqlite_conn)
+    target_anchor_table, _ = _resolve_orphan_anchor_pg(pg_conn)
+    orphan_anchor_note_added = False
 
     try:
         for cfg in selected_cfgs:
@@ -1092,15 +1799,20 @@ def run_parity_audit(
                         f"expected_retention_gap:{cfg.name}:{retention_gap['source_archive_min_date']}->{retention_gap['target_retained_min_date']}"
                     )
 
-            if cfg.name != "security_master" and _has_ric_column_sqlite(sqlite_conn, cfg.name) and _has_ric_column_pg(pg_conn, cfg.name):
-                orphan_src = _orphan_ric_sqlite(sqlite_conn, cfg.name)
-                orphan_tgt = _orphan_ric_pg(pg_conn, cfg.name)
-                table_out["orphan_ric_rows"] = {
-                    "source": int(orphan_src),
-                    "target": int(orphan_tgt),
-                }
-                if orphan_src != orphan_tgt:
-                    out["issues"].append(f"orphan_mismatch:{cfg.name}:{orphan_src}!={orphan_tgt}")
+            if _has_ric_column_sqlite(sqlite_conn, cfg.name) and _has_ric_column_pg(pg_conn, cfg.name):
+                if not source_anchor_table or not target_anchor_table:
+                    if not orphan_anchor_note_added:
+                        out["notes"].append("orphan_checks_skipped:no_anchor_table")
+                        orphan_anchor_note_added = True
+                elif cfg.name != source_anchor_table and cfg.name != target_anchor_table:
+                    orphan_src = _orphan_ric_sqlite(sqlite_conn, cfg.name, anchor_table=source_anchor_table)
+                    orphan_tgt = _orphan_ric_pg(pg_conn, cfg.name, anchor_table=target_anchor_table)
+                    table_out["orphan_ric_rows"] = {
+                        "source": int(orphan_src),
+                        "target": int(orphan_tgt),
+                    }
+                    if orphan_src != orphan_tgt:
+                        out["issues"].append(f"orphan_mismatch:{cfg.name}:{orphan_src}!={orphan_tgt}")
 
             if int(src.get("row_count") or 0) != int(tgt.get("row_count") or 0) and not expected_retention_gap:
                 out["issues"].append(

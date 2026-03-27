@@ -82,6 +82,19 @@ def _normalize_fit_row(row: dict[str, Any]) -> dict[str, Any]:
         "factor_volatility_proxy": None if row.get("factor_volatility_proxy") is None else float(row.get("factor_volatility_proxy")),
         "specific_variance_proxy": None if row.get("specific_variance_proxy") is None else float(row.get("specific_variance_proxy")),
         "specific_volatility_proxy": None if row.get("specific_volatility_proxy") is None else float(row.get("specific_volatility_proxy")),
+        "universe_scope": str(row.get("universe_scope") or "") or None,
+        "target_scope": str(row.get("target_scope") or "") or None,
+        "basis_role": str(row.get("basis_role") or "") or None,
+        "build_reason_code": str(row.get("build_reason_code") or "") or None,
+        "price_on_package_date_status": str(row.get("price_on_package_date_status") or "") or None,
+        "fit_row_status": str(row.get("fit_row_status") or "") or None,
+        "fit_quality_status": str(row.get("fit_quality_status") or "") or None,
+        "portfolio_use_status": str(row.get("portfolio_use_status") or "") or None,
+        "ticker_detail_use_status": str(row.get("ticker_detail_use_status") or "") or None,
+        "hedge_use_status": str(row.get("hedge_use_status") or "") or None,
+        "fit_family": str(row.get("fit_family") or "") or None,
+        "reason_code": str(row.get("reason_code") or "") or None,
+        "quality_label": str(row.get("quality_label") or "") or None,
         "package_run_id": str(row.get("package_run_id") or ""),
         "updated_at": str(row.get("updated_at") or ""),
     }
@@ -97,6 +110,18 @@ def _normalize_search_row(row: dict[str, Any]) -> dict[str, Any]:
         "fit_status": str(row.get("fit_status") or ""),
         "warnings": _decode_json(row.get("warnings_json"), default=[]),
         "hq_country_code": str(row.get("hq_country_code") or "") or None,
+        "target_scope": str(row.get("target_scope") or "") or None,
+        "universe_scope": str(row.get("universe_scope") or "") or None,
+        "basis_role": str(row.get("basis_role") or "") or None,
+        "price_on_package_date_status": str(row.get("price_on_package_date_status") or "") or None,
+        "fit_row_status": str(row.get("fit_row_status") or "") or None,
+        "fit_quality_status": str(row.get("fit_quality_status") or "") or None,
+        "portfolio_use_status": str(row.get("portfolio_use_status") or "") or None,
+        "ticker_detail_use_status": str(row.get("ticker_detail_use_status") or "") or None,
+        "hedge_use_status": str(row.get("hedge_use_status") or "") or None,
+        "fit_family": str(row.get("fit_family") or "") or None,
+        "reason_code": str(row.get("reason_code") or "") or None,
+        "quality_label": str(row.get("quality_label") or "") or None,
         "updated_at": str(row.get("updated_at") or ""),
     }
 
@@ -303,16 +328,42 @@ def active_package_search_rows(
     like = f"%{clean_q}%"
     rows = fetch_rows(
         """
-        SELECT package_date, package_run_id, ric, ticker, display_name, fit_status, warnings_json,
-               hq_country_code, updated_at
-        FROM cpar_instrument_fits_weekly
-        WHERE package_run_id = ?
+        SELECT
+            f.package_date,
+            f.package_run_id,
+            f.ric,
+            f.ticker,
+            f.display_name,
+            f.fit_status,
+            f.warnings_json,
+            f.hq_country_code,
+            m.universe_scope,
+            m.target_scope,
+            m.basis_role,
+            rc.price_on_package_date_status,
+            rc.fit_row_status,
+            rc.fit_quality_status,
+            rc.portfolio_use_status,
+            rc.ticker_detail_use_status,
+            rc.hedge_use_status,
+            rc.fit_family,
+            rc.reason_code,
+            rc.quality_label,
+            f.updated_at
+        FROM cpar_instrument_fits_weekly f
+        LEFT JOIN cpar_package_universe_membership m
+          ON m.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(m.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        LEFT JOIN cpar_instrument_runtime_coverage_weekly rc
+          ON rc.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(rc.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        WHERE f.package_run_id = ?
           AND (
-              UPPER(COALESCE(ticker, '')) LIKE ?
-              OR UPPER(COALESCE(display_name, '')) LIKE ?
-              OR UPPER(COALESCE(ric, '')) LIKE ?
+              UPPER(COALESCE(f.ticker, '')) LIKE ?
+              OR UPPER(COALESCE(f.display_name, '')) LIKE ?
+              OR UPPER(COALESCE(f.ric, '')) LIKE ?
           )
-        ORDER BY UPPER(COALESCE(ticker, '')), ric
+        ORDER BY UPPER(COALESCE(f.ticker, '')), f.ric
         """,
         [str(package_run_id), like, like, like],
     )
@@ -331,15 +382,35 @@ def active_package_instrument_fit(
         raise ValueError("ticker is required")
     params: list[Any] = [str(package_run_id), clean_ticker]
     sql = """
-        SELECT *
-        FROM cpar_instrument_fits_weekly
-        WHERE package_run_id = ?
-          AND UPPER(COALESCE(ticker, '')) = ?
+        SELECT
+            f.*,
+            m.universe_scope,
+            m.target_scope,
+            m.basis_role,
+            m.build_reason_code,
+            rc.price_on_package_date_status,
+            rc.fit_row_status,
+            rc.fit_quality_status,
+            rc.portfolio_use_status,
+            rc.ticker_detail_use_status,
+            rc.hedge_use_status,
+            rc.fit_family,
+            rc.reason_code,
+            rc.quality_label
+        FROM cpar_instrument_fits_weekly f
+        LEFT JOIN cpar_package_universe_membership m
+          ON m.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(m.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        LEFT JOIN cpar_instrument_runtime_coverage_weekly rc
+          ON rc.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(rc.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        WHERE f.package_run_id = ?
+          AND UPPER(COALESCE(f.ticker, '')) = ?
     """
     if ric:
-        sql += " AND UPPER(COALESCE(ric, '')) = ?"
+        sql += " AND UPPER(COALESCE(f.ric, '')) = ?"
         params.append(str(ric).strip().upper())
-    sql += " ORDER BY ric"
+    sql += " ORDER BY f.ric"
     rows = fetch_rows(sql, params)
     if not rows:
         return None
@@ -360,11 +431,31 @@ def package_instrument_fits_for_rics(
     placeholders = ",".join("?" for _ in clean_rics)
     rows = fetch_rows(
         f"""
-        SELECT *
-        FROM cpar_instrument_fits_weekly
-        WHERE package_run_id = ?
-          AND UPPER(COALESCE(ric, '')) IN ({placeholders})
-        ORDER BY ric
+        SELECT
+            f.*,
+            m.universe_scope,
+            m.target_scope,
+            m.basis_role,
+            m.build_reason_code,
+            rc.price_on_package_date_status,
+            rc.fit_row_status,
+            rc.fit_quality_status,
+            rc.portfolio_use_status,
+            rc.ticker_detail_use_status,
+            rc.hedge_use_status,
+            rc.fit_family,
+            rc.reason_code,
+            rc.quality_label
+        FROM cpar_instrument_fits_weekly f
+        LEFT JOIN cpar_package_universe_membership m
+          ON m.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(m.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        LEFT JOIN cpar_instrument_runtime_coverage_weekly rc
+          ON rc.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(rc.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        WHERE f.package_run_id = ?
+          AND UPPER(COALESCE(f.ric, '')) IN ({placeholders})
+        ORDER BY f.ric
         """,
         [str(package_run_id), *clean_rics],
     )
@@ -382,10 +473,30 @@ def previous_successful_instrument_fit(
         raise ValueError("ric is required")
     rows = fetch_rows(
         f"""
-        SELECT f.*
+        SELECT
+            f.*,
+            m.universe_scope,
+            m.target_scope,
+            m.basis_role,
+            m.build_reason_code,
+            rc.price_on_package_date_status,
+            rc.fit_row_status,
+            rc.fit_quality_status,
+            rc.portfolio_use_status,
+            rc.ticker_detail_use_status,
+            rc.hedge_use_status,
+            rc.fit_family,
+            rc.reason_code,
+            rc.quality_label
         FROM cpar_instrument_fits_weekly f
         JOIN cpar_package_runs p
           ON p.package_run_id = f.package_run_id
+        LEFT JOIN cpar_package_universe_membership m
+          ON m.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(m.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        LEFT JOIN cpar_instrument_runtime_coverage_weekly rc
+          ON rc.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(rc.ric, '')) = UPPER(COALESCE(f.ric, ''))
         WHERE UPPER(COALESCE(f.ric, '')) = ?
           AND p.status = ?
           AND p.package_date < ?

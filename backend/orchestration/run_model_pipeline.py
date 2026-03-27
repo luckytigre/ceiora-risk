@@ -516,6 +516,7 @@ def run_model_pipeline(
         serving_payload_neon_failure=serving_payload_neon_failure,
         run_neon_mirror_cycle_fn=run_neon_mirror_cycle,
         sync_workspace_derivatives_to_local_mirror_fn=neon_authority.sync_workspace_derivatives_to_local_mirror,
+        prune_rebuild_workspaces_fn=neon_authority.prune_rebuild_workspaces,
         write_neon_mirror_artifact_fn=post_run_publish.write_neon_mirror_artifact,
         publish_neon_sync_health_fn=post_run_publish.publish_neon_sync_health,
         publish_neon_serving_write_health_fn=post_run_publish.publish_neon_serving_write_health,
@@ -552,6 +553,7 @@ def run_model_pipeline(
             else None
         ),
         "local_mirror_sync": local_mirror_sync,
+        "workspace_prune": dict(finalization["workspace_prune"]),
         "run_rows": job_runs.run_rows(db_path=DATA_DB, run_id=effective_run_id),
     }
 

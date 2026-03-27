@@ -136,6 +136,54 @@ def _coverage_reason(code: str) -> str | None:
     return None
 
 
+def _fit_runtime_fields(fit: dict[str, Any] | None) -> dict[str, Any]:
+    if not fit:
+        return {
+            "target_scope": None,
+            "fit_family": None,
+            "price_on_package_date_status": None,
+            "fit_row_status": None,
+            "fit_quality_status": None,
+            "portfolio_use_status": None,
+            "ticker_detail_use_status": None,
+            "hedge_use_status": None,
+            "reason_code": None,
+            "quality_label": None,
+        }
+    return {
+        "target_scope": fit.get("target_scope"),
+        "fit_family": fit.get("fit_family"),
+        "price_on_package_date_status": fit.get("price_on_package_date_status"),
+        "fit_row_status": fit.get("fit_row_status"),
+        "fit_quality_status": fit.get("fit_quality_status"),
+        "portfolio_use_status": fit.get("portfolio_use_status"),
+        "ticker_detail_use_status": fit.get("ticker_detail_use_status"),
+        "hedge_use_status": fit.get("hedge_use_status"),
+        "reason_code": fit.get("reason_code"),
+        "quality_label": fit.get("quality_label"),
+    }
+
+
+def _compat_coverage_label(
+    *,
+    fit: dict[str, Any] | None,
+    price_value: float | None,
+) -> str:
+    if fit is not None:
+        persisted = str(fit.get("portfolio_use_status") or "").strip()
+        if persisted == "covered":
+            return "covered"
+        if persisted in {"missing_price", "insufficient_history"}:
+            return persisted
+    if price_value is None:
+        return "missing_price"
+    if fit is None:
+        return "missing_cpar_fit"
+    if str(fit.get("fit_status") or "") == "insufficient_history":
+        return "insufficient_history"
+    return "covered"
+
+
 def _zero_coverage_bucket() -> dict[str, object]:
     return {
         "positions_count": 0,
@@ -174,19 +222,18 @@ def _build_position_rows(
     for position in positions:
         ric = str(position.get("ric") or "")
         fit = fit_by_ric.get(ric)
+        runtime_fields = _fit_runtime_fields(fit)
         price_row = price_by_ric.get(ric)
         classification_row = classification_by_ric.get(ric)
         price_value, price_field_used, price_date = _select_price(price_row)
+        if str(runtime_fields.get("price_on_package_date_status") or "") == "missing":
+            price_value = None
+            price_field_used = None
+            price_date = None
         quantity = float(position.get("quantity") or 0.0)
         market_value = None if price_value is None else quantity * price_value
         fit_status = str(fit.get("fit_status") or "") if fit else None
-        coverage = "covered"
-        if price_value is None:
-            coverage = "missing_price"
-        elif fit is None:
-            coverage = "missing_cpar_fit"
-        elif fit_status == "insufficient_history":
-            coverage = "insufficient_history"
+        coverage = _compat_coverage_label(fit=fit, price_value=price_value)
 
         rows.append(
             {
@@ -212,6 +259,7 @@ def _build_position_rows(
                 "specific_volatility_proxy": fit.get("specific_volatility_proxy") if fit else None,
                 "coverage": coverage,
                 "coverage_reason": _coverage_reason(coverage),
+                **runtime_fields,
             }
         )
     rows.sort(
@@ -1061,6 +1109,7 @@ def build_cpar_portfolio_hedge_snapshot(
             for row in covariance_rows
         },
         fit_status="ok",
+        hedge_use_status="usable",
     )
     payload.update(
         {

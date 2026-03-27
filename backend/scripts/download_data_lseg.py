@@ -24,16 +24,22 @@ import pandas as pd
 from backend.universe.schema import (
     FUNDAMENTALS_HISTORY_TABLE,
     PRICES_TABLE,
-    SECURITY_MASTER_TABLE,
     TRBC_HISTORY_TABLE,
     ensure_cuse4_schema,
 )
+from backend.universe.runtime_rows import load_security_runtime_map, load_security_runtime_rows
+from backend.universe.registry_sync import reconcile_default_security_policy_rows
+from backend.universe.source_observation import refresh_security_source_observation_daily
 from backend.universe.security_master_sync import (
     derive_security_master_flags,
     load_default_source_universe_rows,
-    load_projection_only_universe_rows,
+    load_price_ingest_universe_rows,
     ticker_from_ric,
     upsert_security_master_rows,
+)
+from backend.universe.taxonomy_builder import (
+    materialize_security_master_compat_current,
+    refresh_security_taxonomy_current,
 )
 from backend.trading_calendar import previous_or_same_xnys_session
 
@@ -290,49 +296,56 @@ def _to_local_ticker(ric: str) -> str:
     return base.split(".", 1)[0]
 
 
-def _load_universe_from_security_master(
+def _load_runtime_ingest_scope(
     conn: sqlite3.Connection,
     *,
     tickers: list[str] | None,
     rics: list[str] | None,
+    write_fundamentals: bool,
+    write_prices: bool,
+    write_classification: bool,
 ) -> list[dict[str, str]]:
     explicit_request = bool(tickers or rics)
-    where = [
-        "ric IS NOT NULL",
-        "TRIM(ric) <> ''",
-    ]
-    params: list[Any] = []
-    requested_filters: list[str] = []
-    if explicit_request:
-        if tickers:
-            placeholders = ",".join("?" for _ in tickers)
-            requested_filters.append(f"UPPER(TRIM(ticker)) IN ({placeholders})")
-            params.extend([str(t).strip().upper() for t in tickers])
-        if rics:
-            placeholders = ",".join("?" for _ in rics)
-            requested_filters.append(f"UPPER(TRIM(ric)) IN ({placeholders})")
-            params.extend([str(r).strip().upper() for r in rics])
-        if requested_filters:
-            where.append("(" + " OR ".join(requested_filters) + ")")
-    else:
-        return load_default_source_universe_rows(conn, include_pending_seed=True)
-
-    rows = conn.execute(
-        f"""
-        SELECT UPPER(TRIM(ticker)) AS ticker, UPPER(TRIM(ric)) AS ric
-        FROM {SECURITY_MASTER_TABLE}
-        WHERE {' AND '.join(where)}
-        ORDER BY ticker
-        """,
-        params,
-    ).fetchall()
+    if not explicit_request:
+        rows_by_ric: dict[str, dict[str, str]] = {}
+        if write_prices:
+            for row in load_price_ingest_universe_rows(conn, include_pending_seed=True):
+                ric = str(row.get("ric") or "").strip().upper()
+                ticker = str(row.get("ticker") or "").strip().upper()
+                if ric and ticker:
+                    rows_by_ric[ric] = {"ticker": ticker, "ric": ric}
+        if write_fundamentals or write_classification:
+            for row in load_default_source_universe_rows(conn, include_pending_seed=True):
+                ric = str(row.get("ric") or "").strip().upper()
+                ticker = str(row.get("ticker") or "").strip().upper()
+                if ric and ticker:
+                    rows_by_ric[ric] = {"ticker": ticker, "ric": ric}
+        return sorted(rows_by_ric.values(), key=lambda row: (row["ticker"], row["ric"]))
+    rows = load_security_runtime_rows(
+        conn,
+        tickers=[str(t).strip().upper() for t in (tickers or [])],
+        rics=[str(r).strip().upper() for r in (rics or [])],
+        include_disabled=False,
+    )
     out: list[dict[str, str]] = []
-    for row in rows:
-        if not row or not row[1]:
+    for row in sorted(rows, key=lambda row: (str(row.get("ticker") or ""), str(row.get("ric") or ""))):
+        ticker = str(row.get("ticker") or "").strip().upper()
+        ric = str(row.get("ric") or "").strip().upper()
+        if not ticker or not ric:
             continue
-        ric = str(row[1]).strip().upper()
-        ticker = str(row[0]).strip().upper() if row[0] else (ticker_from_ric(ric) or "")
-        if not ticker:
+        pending_seed_structural = (
+            int(row.get("classification_ready") or 0) == 0
+            and str(row.get("source") or "").strip().lower().endswith("_seed")
+            and int(row.get("allow_cuse_returns_projection") or 0) != 1
+        )
+        allow_price = int(row.get("price_ingest_enabled") or 0) == 1
+        allow_fundamentals = int(row.get("pit_fundamentals_enabled") or 0) == 1 or pending_seed_structural
+        allow_classification = int(row.get("pit_classification_enabled") or 0) == 1 or pending_seed_structural
+        if not (
+            (write_prices and allow_price)
+            or (write_fundamentals and allow_fundamentals)
+            or (write_classification and allow_classification)
+        ):
             continue
         out.append({"ticker": ticker, "ric": ric})
     return out
@@ -396,10 +409,13 @@ def download_from_lseg(
     )
     requested_ticker_set = set(requested_tickers or [])
     requested_ric_set = set(requested_rics or [])
-    universe_rows = _load_universe_from_security_master(
+    universe_rows = _load_runtime_ingest_scope(
         conn,
         tickers=requested_tickers,
         rics=requested_rics,
+        write_fundamentals=bool(write_fundamentals),
+        write_prices=bool(write_prices),
+        write_classification=bool(write_classification),
     )
     available_ticker_set = {str(row.get("ticker") or "").strip().upper() for row in universe_rows if row.get("ticker")}
     available_ric_set = {str(row.get("ric") or "").strip().upper() for row in universe_rows if row.get("ric")}
@@ -432,10 +448,17 @@ def download_from_lseg(
             "matched_requested_ric_count": int(len(matched_ric_set)),
             "missing_requested_tickers": missing_requested_tickers,
             "missing_requested_rics": missing_requested_rics,
+            "requires_seeded_runtime_universe": bool(requested_ticker_set or requested_ric_set),
             "requires_seeded_security_master": bool(requested_ticker_set or requested_ric_set),
         }
 
     ric_universe = sorted({r["ric"] for r in universe_rows})
+    runtime_policy_by_ric = load_security_runtime_map(
+        conn,
+        rics=ric_universe,
+        as_of_date=as_of,
+        include_disabled=True,
+    )
 
     print(f"Fetching LSEG data for {len(ric_universe)} instruments...")
     company_parts: list[pd.DataFrame] = []
@@ -547,7 +570,7 @@ def download_from_lseg(
     }
 
     job_run_id = f"lseg_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
-    security_master_rows: list[dict[str, Any]] = []
+    compat_rows: list[dict[str, Any]] = []
     fundamentals_rows: list[dict[str, Any]] = []
     prices_rows: list[dict[str, Any]] = []
     classification_rows: list[dict[str, Any]] = []
@@ -573,6 +596,16 @@ def download_from_lseg(
         ric = str(row.get(instrument_col) or "").strip().upper()
         if ric not in ric_universe:
             continue
+        runtime_row = runtime_policy_by_ric.get(ric, {})
+        pending_seed_structural = (
+            int(runtime_row.get("classification_ready") or 0) == 0
+            and str(runtime_row.get("source") or "").strip().lower().endswith("_seed")
+            and int(runtime_row.get("allow_cuse_returns_projection") or 0) != 1
+        )
+        allow_fundamentals = bool(int(runtime_row.get("pit_fundamentals_enabled") or 0) == 1 or pending_seed_structural)
+        allow_classification = bool(
+            int(runtime_row.get("pit_classification_enabled") or 0) == 1 or pending_seed_structural
+        )
         trbc_economic_sector = _txt(row.get(col["trbc_economic_sector"]) if col["trbc_economic_sector"] else None)
         trbc_business_sector = _txt(row.get(col["trbc_business_sector"]) if col["trbc_business_sector"] else None)
         trbc_industry_group = _txt(row.get(col["trbc_industry_group"]) if col["trbc_industry_group"] else None)
@@ -587,7 +620,7 @@ def download_from_lseg(
             trbc_activity=trbc_activity,
             hq_country_code=hq_country_code,
         )
-        security_master_rows.append(
+        compat_rows.append(
             {
                 "ric": ric,
                 "ticker": _txt(row.get(col["ticker_symbol"]) if col["ticker_symbol"] else None) or ticker_from_ric(ric),
@@ -607,38 +640,39 @@ def download_from_lseg(
         )
         stat_date = period_end_date or as_of
 
-        fundamentals_rows.append(
-            {
-                "ric": ric,
-                "as_of_date": as_of,
-                "stat_date": stat_date,
-                "period_end_date": period_end_date,
-                "fiscal_year": fiscal_year,
-                "period_type": period_type,
-                "report_currency": _txt(row.get(col["report_currency"]) if col["report_currency"] else None),
-                "market_cap": _float_or_none(row.get(col["market_cap"]) if col["market_cap"] else None),
-                "shares_outstanding": _float_or_none(row.get(col["shares_outstanding"]) if col["shares_outstanding"] else None),
-                "dividend_yield": _float_or_none(row.get(col["dividend_yield"]) if col["dividend_yield"] else None),
-                "book_value_per_share": _float_or_none(row.get(col["book_value"]) if col["book_value"] else None),
-                "total_assets": _float_or_none(row.get(col["total_assets"]) if col["total_assets"] else None),
-                "total_debt": _float_or_none(row.get(col["total_debt"]) if col["total_debt"] else None),
-                "cash_and_equivalents": _float_or_none(row.get(col["cash_and_equivalents"]) if col["cash_and_equivalents"] else None),
-                "long_term_debt": _float_or_none(row.get(col["long_term_debt"]) if col["long_term_debt"] else None),
-                "operating_cashflow": _float_or_none(row.get(col["operating_cashflow"]) if col["operating_cashflow"] else None),
-                "capital_expenditures": _float_or_none(row.get(col["capital_expenditures"]) if col["capital_expenditures"] else None),
-                "trailing_eps": _float_or_none(row.get(col["trailing_eps"]) if col["trailing_eps"] else None),
-                "forward_eps": _float_or_none(row.get(col["forward_eps"]) if col["forward_eps"] else None),
-                "revenue": _float_or_none(row.get(col["revenue"]) if col["revenue"] else None),
-                "ebitda": _float_or_none(row.get(col["ebitda"]) if col["ebitda"] else None),
-                "ebit": _float_or_none(row.get(col["ebit"]) if col["ebit"] else None),
-                "roe_pct": _float_or_none(row.get(col["return_on_equity"]) if col["return_on_equity"] else None),
-                "operating_margin_pct": _float_or_none(row.get(col["operating_margins"]) if col["operating_margins"] else None),
-                "common_name": _txt(row.get(col["common_name"]) if col["common_name"] else None),
-                "source": "lseg_toolkit",
-                "job_run_id": job_run_id,
-                "updated_at": updated_at,
-            }
-        )
+        if allow_fundamentals:
+            fundamentals_rows.append(
+                {
+                    "ric": ric,
+                    "as_of_date": as_of,
+                    "stat_date": stat_date,
+                    "period_end_date": period_end_date,
+                    "fiscal_year": fiscal_year,
+                    "period_type": period_type,
+                    "report_currency": _txt(row.get(col["report_currency"]) if col["report_currency"] else None),
+                    "market_cap": _float_or_none(row.get(col["market_cap"]) if col["market_cap"] else None),
+                    "shares_outstanding": _float_or_none(row.get(col["shares_outstanding"]) if col["shares_outstanding"] else None),
+                    "dividend_yield": _float_or_none(row.get(col["dividend_yield"]) if col["dividend_yield"] else None),
+                    "book_value_per_share": _float_or_none(row.get(col["book_value"]) if col["book_value"] else None),
+                    "total_assets": _float_or_none(row.get(col["total_assets"]) if col["total_assets"] else None),
+                    "total_debt": _float_or_none(row.get(col["total_debt"]) if col["total_debt"] else None),
+                    "cash_and_equivalents": _float_or_none(row.get(col["cash_and_equivalents"]) if col["cash_and_equivalents"] else None),
+                    "long_term_debt": _float_or_none(row.get(col["long_term_debt"]) if col["long_term_debt"] else None),
+                    "operating_cashflow": _float_or_none(row.get(col["operating_cashflow"]) if col["operating_cashflow"] else None),
+                    "capital_expenditures": _float_or_none(row.get(col["capital_expenditures"]) if col["capital_expenditures"] else None),
+                    "trailing_eps": _float_or_none(row.get(col["trailing_eps"]) if col["trailing_eps"] else None),
+                    "forward_eps": _float_or_none(row.get(col["forward_eps"]) if col["forward_eps"] else None),
+                    "revenue": _float_or_none(row.get(col["revenue"]) if col["revenue"] else None),
+                    "ebitda": _float_or_none(row.get(col["ebitda"]) if col["ebitda"] else None),
+                    "ebit": _float_or_none(row.get(col["ebit"]) if col["ebit"] else None),
+                    "roe_pct": _float_or_none(row.get(col["return_on_equity"]) if col["return_on_equity"] else None),
+                    "operating_margin_pct": _float_or_none(row.get(col["operating_margins"]) if col["operating_margins"] else None),
+                    "common_name": _txt(row.get(col["common_name"]) if col["common_name"] else None),
+                    "source": "lseg_toolkit",
+                    "job_run_id": job_run_id,
+                    "updated_at": updated_at,
+                }
+            )
 
         close = _float_or_none(row.get(col["price"]) if col["price"] else None)
         open_px = _float_or_none(row.get(col["price_open"]) if col["price_open"] else None)
@@ -666,28 +700,34 @@ def download_from_lseg(
                 }
             )
 
-        classification_rows.append(
-            {
-                "ric": ric,
-                "as_of_date": as_of,
-                "trbc_economic_sector": trbc_economic_sector,
-                "trbc_business_sector": trbc_business_sector,
-                "trbc_industry_group": trbc_industry_group,
-                "trbc_industry": trbc_industry,
-                "trbc_activity": trbc_activity,
-                "hq_country_code": hq_country_code,
-                "source": "lseg_toolkit",
-                "job_run_id": job_run_id,
-                "updated_at": updated_at,
-            }
-        )
+        if allow_classification:
+            classification_rows.append(
+                {
+                    "ric": ric,
+                    "as_of_date": as_of,
+                    "trbc_economic_sector": trbc_economic_sector,
+                    "trbc_business_sector": trbc_business_sector,
+                    "trbc_industry_group": trbc_industry_group,
+                    "trbc_industry": trbc_industry,
+                    "trbc_activity": trbc_activity,
+                    "hq_country_code": hq_country_code,
+                    "source": "lseg_toolkit",
+                    "job_run_id": job_run_id,
+                    "updated_at": updated_at,
+                }
+            )
 
     n_f = 0
     n_p = 0
     n_c = 0
-    n_sm = 0
+    n_compat = 0
+    touched_rics = sorted({str(row.get("ric") or "").strip().upper() for row in compat_rows if row.get("ric")})
     try:
-        n_sm = upsert_security_master_rows(conn, security_master_rows)
+        n_compat = upsert_security_master_rows(
+            conn,
+            compat_rows,
+            refresh_runtime_surfaces=False,
+        )
         conn.commit()
         if write_fundamentals:
             n_f = _insert_rows(conn, FUNDAMENTALS_HISTORY_TABLE, fundamentals_rows, replace=True)
@@ -698,35 +738,24 @@ def download_from_lseg(
         if write_classification:
             n_c = _insert_rows(conn, TRBC_HISTORY_TABLE, classification_rows, replace=True)
             conn.commit()
+        if touched_rics:
+            refresh_security_taxonomy_current(conn, rics=touched_rics)
+            reconcile_default_security_policy_rows(conn, rics=touched_rics)
+            refresh_security_source_observation_daily(conn, rics=touched_rics)
+            materialize_security_master_compat_current(conn, rics=touched_rics)
+            conn.commit()
     finally:
         conn.close()
 
-    # Second pass: projection-only instruments (prices only) when running default universe.
     projection_price_rows = 0
-    explicit_request = bool(requested_tickers or requested_rics)
-    if not explicit_request and write_prices:
-        conn2 = _connect_db(db_path)
-        try:
-            proj_rows = load_projection_only_universe_rows(conn2)
-        finally:
-            conn2.close()
-        if proj_rows:
-            proj_result = download_from_lseg(
-                db_path=db_path,
-                rics_csv=",".join(r["ric"] for r in proj_rows),
-                as_of_date=as_of,
-                write_fundamentals=False,
-                write_prices=True,
-                write_classification=False,
-            )
-            projection_price_rows = int(proj_result.get("price_rows_inserted", 0))
 
     out = {
         "status": "ok",
         "as_of": as_of,
         "universe": len(universe_rows),
         "price_volume_metric": PRICE_VOLUME_FIELD,
-        "security_master_rows_upserted": int(n_sm),
+        "compat_rows_upserted": int(n_compat),
+        "security_master_rows_upserted": int(n_compat),
         "fundamental_rows_inserted": int(n_f),
         "price_rows_inserted": int(n_p),
         "price_rows_skipped_missing_close": int(prices_rows_skipped_missing_close),
@@ -750,9 +779,9 @@ def download_from_lseg(
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Canonical LSEG ingest into RIC-keyed source-of-truth tables.")
     p.add_argument("--db-path", default=str(DEFAULT_DB), help="Path to target SQLite DB")
-    p.add_argument("--index", default=None, help="Index code (e.g. SPX, NDX). Constituents are filtered to security_master")
-    p.add_argument("--tickers", default=None, help="Comma-separated tickers to ingest (must exist in security_master)")
-    p.add_argument("--rics", default=None, help="Comma-separated RICs to ingest (must exist in security_master)")
+    p.add_argument("--index", default=None, help="Index code (e.g. SPX, NDX). Constituents are filtered to the runtime ingest scope")
+    p.add_argument("--tickers", default=None, help="Comma-separated tickers to ingest (must exist in the runtime ingest scope)")
+    p.add_argument("--rics", default=None, help="Comma-separated RICs to ingest (must exist in the runtime ingest scope)")
     p.add_argument("--as-of-date", default=None, help="Override as-of date (YYYY-MM-DD)")
     p.add_argument("--shard-count", type=int, default=1, help="Total number of ticker shards")
     p.add_argument("--shard-index", type=int, default=0, help="Zero-based shard index to process")

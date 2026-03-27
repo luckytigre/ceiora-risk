@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
+import sqlite3
 from typing import Any
 
 from backend import config
@@ -57,6 +58,203 @@ def _in_clause(values: list[str]) -> tuple[str, list[Any]]:
     return ",".join("?" for _ in values), list(values)
 
 
+def _sqlite_table_exists(data_db: Path, table: str) -> bool:
+    if core_backend.use_neon_core_reads():
+        return False
+    resolved = _resolve_data_db(data_db)
+    if not resolved.exists():
+        return False
+    conn = sqlite3.connect(str(resolved))
+    try:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type='table' AND name=?
+            LIMIT 1
+            """,
+            (table,),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def _pg_tables_exist(*, data_db: Path | None = None, tables: tuple[str, ...]) -> bool:
+    try:
+        rows = _fetch_rows(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = ANY(%s)
+            """,
+            [list(tables)],
+            data_db=data_db,
+        )
+    except CparSourceReadError:
+        return False
+    found = {str(row.get("table_name") or "").strip() for row in rows}
+    return all(table in found for table in tables)
+
+
+def _registry_query_tables_available(
+    *,
+    data_db: Path | None = None,
+    required_tables: tuple[str, ...],
+) -> bool:
+    if core_backend.use_neon_core_reads():
+        return _pg_tables_exist(data_db=data_db, tables=required_tables)
+    resolved = _resolve_data_db(data_db)
+    if not all(_sqlite_table_exists(resolved, table) for table in required_tables):
+        return False
+    return True
+
+
+def _compat_metadata_available(*, data_db: Path | None = None) -> bool:
+    return _registry_query_tables_available(
+        data_db=data_db,
+        required_tables=("security_master_compat_current",),
+    )
+
+
+def _load_registry_factor_proxy_rows(
+    *,
+    placeholders: str,
+    params: list[Any],
+    data_db: Path | None = None,
+) -> list[dict[str, Any]]:
+    compat_join = ""
+    equity_priority_expr = "0"
+    compat_select = (
+        "0 AS classification_ok,\n            0 AS is_equity_eligible,\n"
+        "            reg.source AS source,\n            reg.job_run_id AS job_run_id,\n            reg.updated_at AS updated_at"
+    )
+    if _compat_metadata_available(data_db=data_db):
+        compat_join = """
+        LEFT JOIN security_master_compat_current compat
+          ON UPPER(COALESCE(compat.ric, '')) = UPPER(COALESCE(reg.ric, ''))
+        """
+        compat_select = """
+            COALESCE(compat.classification_ok, 0) AS classification_ok,
+            COALESCE(compat.is_equity_eligible, 0) AS is_equity_eligible,
+            COALESCE(reg.source, compat.source) AS source,
+            COALESCE(reg.job_run_id, compat.job_run_id) AS job_run_id,
+            COALESCE(reg.updated_at, compat.updated_at) AS updated_at
+        """.strip()
+        equity_priority_expr = "COALESCE(compat.is_equity_eligible, 0)"
+    return _fetch_rows(
+        f"""
+        WITH ranked_candidates AS (
+            SELECT
+                reg.ric,
+                reg.ticker,
+                reg.isin,
+                reg.exchange_name,
+                {compat_select},
+                COALESCE(pol.allow_cpar_core_target, 0) AS allow_cpar_core_target,
+                COALESCE(pol.allow_cpar_extended_target, 0) AS allow_cpar_extended_target,
+                ROW_NUMBER() OVER (
+                    PARTITION BY UPPER(COALESCE(reg.ticker, ''))
+                    ORDER BY
+                        COALESCE(pol.allow_cpar_core_target, 0) DESC,
+                        COALESCE(pol.allow_cpar_extended_target, 0) DESC,
+                        {equity_priority_expr} DESC,
+                        CASE
+                            WHEN UPPER(COALESCE(reg.exchange_name, '')) LIKE '%%CONSOLIDATED%%' THEN 1
+                            ELSE 0
+                        END ASC,
+                        UPPER(COALESCE(reg.exchange_name, '')) ASC,
+                        reg.ric ASC
+                ) AS proxy_rank
+            FROM security_registry reg
+            LEFT JOIN security_policy_current pol
+              ON UPPER(COALESCE(pol.ric, '')) = UPPER(COALESCE(reg.ric, ''))
+            {compat_join}
+            WHERE UPPER(COALESCE(reg.ticker, '')) IN ({placeholders})
+              AND COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') = 'active'
+        )
+        SELECT
+            ric,
+            ticker,
+            isin,
+            exchange_name,
+            classification_ok,
+            is_equity_eligible,
+            source,
+            job_run_id,
+            updated_at
+        FROM ranked_candidates
+        WHERE proxy_rank = 1
+        ORDER BY UPPER(COALESCE(ticker, '')), ric
+        """,
+        params,
+        data_db=data_db,
+    )
+
+
+def _load_registry_build_universe_rows(*, data_db: Path | None = None) -> list[dict[str, Any]]:
+    compat_join = ""
+    compat_select = (
+        "0 AS classification_ok,\n            0 AS is_equity_eligible,\n"
+        "            reg.source AS source,\n            reg.job_run_id AS job_run_id,\n            reg.updated_at AS updated_at"
+    )
+    core_target_expr = "COALESCE(pol.allow_cpar_core_target, 0)"
+    extended_target_expr = "COALESCE(pol.allow_cpar_extended_target, 0)"
+    single_name_expr = "0"
+    if _compat_metadata_available(data_db=data_db):
+        compat_join = """
+        LEFT JOIN security_master_compat_current compat
+          ON UPPER(COALESCE(compat.ric, '')) = UPPER(COALESCE(reg.ric, ''))
+        """
+        compat_select = """
+            COALESCE(compat.classification_ok, 0) AS classification_ok,
+            COALESCE(compat.is_equity_eligible, 0) AS is_equity_eligible,
+            COALESCE(reg.source, compat.source) AS source,
+            COALESCE(reg.job_run_id, compat.job_run_id) AS job_run_id,
+            COALESCE(reg.updated_at, compat.updated_at) AS updated_at
+        """.strip()
+        single_name_expr = "CASE WHEN COALESCE(compat.is_equity_eligible, 0) = 1 THEN 1 ELSE 0 END"
+    return _fetch_rows(
+        """
+        SELECT
+            reg.ric,
+            reg.ticker,
+            reg.isin,
+            reg.exchange_name,
+            """
+        + core_target_expr
+        + """ AS allow_cpar_core_target,
+            """
+        + extended_target_expr
+        + """ AS allow_cpar_extended_target,
+            """
+        + single_name_expr
+        + """ AS is_single_name_equity,
+            """
+        + compat_select
+        + """
+        FROM security_registry reg
+        LEFT JOIN security_policy_current pol
+          ON UPPER(COALESCE(pol.ric, '')) = UPPER(COALESCE(reg.ric, ''))
+        """
+        + compat_join
+        + """
+        WHERE TRIM(COALESCE(reg.ticker, '')) <> ''
+          AND COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') = 'active'
+          AND (
+            """
+        + core_target_expr
+        + """ = 1
+            OR """
+        + extended_target_expr
+        + """ = 1
+          )
+        ORDER BY UPPER(COALESCE(reg.ticker, '')), reg.ric
+        """,
+        data_db=data_db,
+    )
+
 def resolve_factor_proxy_rows(
     factor_tickers: Iterable[str],
     *,
@@ -66,28 +264,26 @@ def resolve_factor_proxy_rows(
     if not clean:
         return []
     placeholders, params = _in_clause(clean)
-    return _fetch_rows(
-        f"""
-        SELECT ric, ticker, isin, exchange_name, classification_ok, is_equity_eligible, source, job_run_id, updated_at
-        FROM security_master
-        WHERE UPPER(COALESCE(ticker, '')) IN ({placeholders})
-        ORDER BY UPPER(COALESCE(ticker, '')), ric
-        """,
-        params,
+    if not _registry_query_tables_available(data_db=data_db, required_tables=("security_registry",)):
+        raise CparSourceReadError(
+            "Shared cPAR factor-proxy read requires security_registry to be present."
+        )
+    return _load_registry_factor_proxy_rows(
+        placeholders=placeholders,
+        params=params,
         data_db=data_db,
     )
 
 
 def load_build_universe_rows(*, data_db: Path | None = None) -> list[dict[str, Any]]:
-    return _fetch_rows(
-        """
-        SELECT ric, ticker, isin, exchange_name, classification_ok, is_equity_eligible, source, job_run_id, updated_at
-        FROM security_master
-        WHERE TRIM(COALESCE(ticker, '')) <> ''
-        ORDER BY UPPER(COALESCE(ticker, '')), ric
-        """,
+    if not _registry_query_tables_available(
         data_db=data_db,
-    )
+        required_tables=("security_registry", "security_policy_current"),
+    ):
+        raise CparSourceReadError(
+            "Shared cPAR build-universe read requires security_registry and security_policy_current."
+        )
+    return _load_registry_build_universe_rows(data_db=data_db)
 
 
 def load_price_rows_for_rics(

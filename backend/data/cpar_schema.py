@@ -10,12 +10,16 @@ TABLE_PROXY_RETURNS = "cpar_proxy_returns_weekly"
 TABLE_PROXY_TRANSFORM = "cpar_proxy_transform_weekly"
 TABLE_FACTOR_COVARIANCE = "cpar_factor_covariance_weekly"
 TABLE_INSTRUMENT_FITS = "cpar_instrument_fits_weekly"
+TABLE_PACKAGE_UNIVERSE_MEMBERSHIP = "cpar_package_universe_membership"
+TABLE_RUNTIME_COVERAGE = "cpar_instrument_runtime_coverage_weekly"
 TABLES = (
     TABLE_PACKAGE_RUNS,
     TABLE_PROXY_RETURNS,
     TABLE_PROXY_TRANSFORM,
     TABLE_FACTOR_COVARIANCE,
     TABLE_INSTRUMENT_FITS,
+    TABLE_PACKAGE_UNIVERSE_MEMBERSHIP,
+    TABLE_RUNTIME_COVERAGE,
 )
 
 _POSTGRES_SCHEMA_SQL = (
@@ -162,6 +166,46 @@ def ensure_sqlite_schema(conn: sqlite3.Connection) -> None:
         },
         required_primary_key=("package_run_id", "ric"),
     )
+    drop_if_schema_mismatch(
+        conn,
+        table=TABLE_PACKAGE_UNIVERSE_MEMBERSHIP,
+        required_columns={
+            "package_run_id",
+            "package_date",
+            "ric",
+            "ticker",
+            "universe_scope",
+            "target_scope",
+            "basis_role",
+            "build_reason_code",
+            "warnings_json",
+            "updated_at",
+        },
+        required_primary_key=("package_run_id", "ric"),
+    )
+    drop_if_schema_mismatch(
+        conn,
+        table=TABLE_RUNTIME_COVERAGE,
+        required_columns={
+            "package_run_id",
+            "package_date",
+            "ric",
+            "ticker",
+            "price_on_package_date_status",
+            "fit_row_status",
+            "fit_quality_status",
+            "portfolio_use_status",
+            "ticker_detail_use_status",
+            "hedge_use_status",
+            "fit_family",
+            "fit_status",
+            "reason_code",
+            "quality_label",
+            "warnings_json",
+            "updated_at",
+        },
+        required_primary_key=("package_run_id", "ric"),
+    )
 
     conn.execute(
         f"""
@@ -270,6 +314,46 @@ def ensure_sqlite_schema(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {TABLE_PACKAGE_UNIVERSE_MEMBERSHIP} (
+            package_run_id TEXT NOT NULL,
+            package_date TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            ticker TEXT,
+            universe_scope TEXT NOT NULL,
+            target_scope TEXT NOT NULL,
+            basis_role TEXT NOT NULL,
+            build_reason_code TEXT,
+            warnings_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (package_run_id, ric)
+        )
+        """
+    )
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {TABLE_RUNTIME_COVERAGE} (
+            package_run_id TEXT NOT NULL,
+            package_date TEXT NOT NULL,
+            ric TEXT NOT NULL,
+            ticker TEXT,
+            price_on_package_date_status TEXT NOT NULL,
+            fit_row_status TEXT NOT NULL,
+            fit_quality_status TEXT NOT NULL,
+            portfolio_use_status TEXT NOT NULL,
+            ticker_detail_use_status TEXT NOT NULL,
+            hedge_use_status TEXT NOT NULL,
+            fit_family TEXT NOT NULL,
+            fit_status TEXT NOT NULL,
+            reason_code TEXT,
+            quality_label TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (package_run_id, ric)
+        )
+        """
+    )
+    conn.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{TABLE_PACKAGE_RUNS}_date_status ON {TABLE_PACKAGE_RUNS}(package_date, status)"
     )
     conn.execute(
@@ -311,10 +395,92 @@ def ensure_sqlite_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{TABLE_INSTRUMENT_FITS}_status ON {TABLE_INSTRUMENT_FITS}(fit_status)"
     )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}_package_run "
+        f"ON {TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}(package_run_id)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}_package_date "
+        f"ON {TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}(package_date)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}_ticker "
+        f"ON {TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}(ticker)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_RUNTIME_COVERAGE}_package_run "
+        f"ON {TABLE_RUNTIME_COVERAGE}(package_run_id)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_RUNTIME_COVERAGE}_package_date "
+        f"ON {TABLE_RUNTIME_COVERAGE}(package_date)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_RUNTIME_COVERAGE}_portfolio_use "
+        f"ON {TABLE_RUNTIME_COVERAGE}(portfolio_use_status)"
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_RUNTIME_COVERAGE}_ticker "
+        f"ON {TABLE_RUNTIME_COVERAGE}(ticker)"
+    )
 
 
 def postgres_schema_sql() -> str:
-    return _POSTGRES_SCHEMA_SQL.read_text(encoding="utf-8")
+    return _POSTGRES_SCHEMA_SQL.read_text(encoding="utf-8") + "\n" + _additional_postgres_schema_sql()
+
+
+def _additional_postgres_schema_sql() -> str:
+    return f"""
+CREATE TABLE IF NOT EXISTS {TABLE_PACKAGE_UNIVERSE_MEMBERSHIP} (
+    package_run_id TEXT NOT NULL,
+    package_date DATE NOT NULL,
+    ric TEXT NOT NULL,
+    ticker TEXT,
+    universe_scope TEXT NOT NULL,
+    target_scope TEXT NOT NULL,
+    basis_role TEXT NOT NULL,
+    build_reason_code TEXT,
+    warnings_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (package_run_id, ric)
+);
+
+CREATE INDEX IF NOT EXISTS idx_{TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}_package_run
+ON {TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}(package_run_id);
+CREATE INDEX IF NOT EXISTS idx_{TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}_package_date
+ON {TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}(package_date);
+CREATE INDEX IF NOT EXISTS idx_{TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}_ticker
+ON {TABLE_PACKAGE_UNIVERSE_MEMBERSHIP}(ticker);
+
+CREATE TABLE IF NOT EXISTS {TABLE_RUNTIME_COVERAGE} (
+    package_run_id TEXT NOT NULL,
+    package_date DATE NOT NULL,
+    ric TEXT NOT NULL,
+    ticker TEXT,
+    price_on_package_date_status TEXT NOT NULL,
+    fit_row_status TEXT NOT NULL,
+    fit_quality_status TEXT NOT NULL,
+    portfolio_use_status TEXT NOT NULL,
+    ticker_detail_use_status TEXT NOT NULL,
+    hedge_use_status TEXT NOT NULL,
+    fit_family TEXT NOT NULL,
+    fit_status TEXT NOT NULL,
+    reason_code TEXT,
+    quality_label TEXT NOT NULL,
+    warnings_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (package_run_id, ric)
+);
+
+CREATE INDEX IF NOT EXISTS idx_{TABLE_RUNTIME_COVERAGE}_package_run
+ON {TABLE_RUNTIME_COVERAGE}(package_run_id);
+CREATE INDEX IF NOT EXISTS idx_{TABLE_RUNTIME_COVERAGE}_package_date
+ON {TABLE_RUNTIME_COVERAGE}(package_date);
+CREATE INDEX IF NOT EXISTS idx_{TABLE_RUNTIME_COVERAGE}_portfolio_use
+ON {TABLE_RUNTIME_COVERAGE}(portfolio_use_status);
+CREATE INDEX IF NOT EXISTS idx_{TABLE_RUNTIME_COVERAGE}_ticker
+ON {TABLE_RUNTIME_COVERAGE}(ticker);
+"""
 
 
 def ensure_postgres_schema(pg_conn) -> None:

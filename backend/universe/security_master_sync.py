@@ -2,16 +2,40 @@
 
 from __future__ import annotations
 
-import csv
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from backend.universe.normalize import (
+    normalize_optional_text,
+    normalize_ric,
+    normalize_ticker,
+    ticker_from_ric,
+)
+from backend.universe.registry_sync import (
+    DEFAULT_SECURITY_REGISTRY_SEED_PATH,
+    LEGACY_SECURITY_MASTER_SEED_PATH,
+    ensure_registry_rows_from_master_rows,
+    legacy_coverage_role_from_policy_flags,
+    load_security_registry_seed_rows,
+    reconcile_default_security_policy_rows,
+    sync_security_registry_seed,
+)
+from backend.universe.selectors import (
+    load_cuse_returns_projection_scope_rows,
+    load_pit_ingest_scope_rows,
+    load_price_ingest_scope_rows,
+)
 from backend.universe.schema import SECURITY_MASTER_TABLE
+from backend.universe.source_observation import refresh_security_source_observation_daily
+from backend.universe.taxonomy_builder import (
+    materialize_security_master_compat_current,
+    refresh_security_taxonomy_current,
+)
 
 
-DEFAULT_SECURITY_MASTER_SEED_PATH = Path(__file__).resolve().parents[2] / "data/reference/security_master_seed.csv"
+DEFAULT_SECURITY_MASTER_SEED_PATH = DEFAULT_SECURITY_REGISTRY_SEED_PATH
 _PRIMARY_SUFFIX_RANK = {
     ".N": 0,
     ".OQ": 1,
@@ -21,28 +45,13 @@ _PRIMARY_SUFFIX_RANK = {
 }
 
 
-def normalize_ric(value: str | None) -> str:
-    return str(value or "").strip().upper()
-
-
-def normalize_ticker(value: str | None) -> str | None:
-    text = str(value or "").strip().upper()
-    return text or None
-
-
-def normalize_optional_text(value: str | None) -> str | None:
-    text = str(value or "").strip()
-    if not text or text.lower() in {"nan", "none"}:
-        return None
-    return text
-
-
-def ticker_from_ric(ric: str | None) -> str | None:
-    text = normalize_ric(ric)
-    if not text:
-        return None
-    return text.split(".", 1)[0]
-
+def _seed_source_label(seed_path: Path) -> str:
+    name = Path(seed_path).name.strip().lower()
+    if name == LEGACY_SECURITY_MASTER_SEED_PATH.name.lower():
+        return "security_master_seed"
+    if name == DEFAULT_SECURITY_REGISTRY_SEED_PATH.name.lower():
+        return "security_registry_seed"
+    return "security_registry_seed"
 
 def _source_suffix_rank(ric: str | None) -> int:
     text = normalize_ric(ric)
@@ -127,86 +136,18 @@ def load_default_source_universe_rows(
     include_pending_seed: bool = True,
     recent_sessions: int = 8,
 ) -> list[dict[str, str]]:
-    degraded_recent = _recent_degraded_price_rics(conn, recent_sessions=recent_sessions)
-    rows = conn.execute(
-        f"""
-        SELECT
-            UPPER(TRIM(ric)) AS ric,
-            UPPER(TRIM(ticker)) AS ticker,
-            exchange_name,
-            COALESCE(classification_ok, 0) AS classification_ok,
-            COALESCE(is_equity_eligible, 0) AS is_equity_eligible,
-            COALESCE(source, '') AS source
-        FROM {SECURITY_MASTER_TABLE}
-        WHERE ric IS NOT NULL
-          AND TRIM(ric) <> ''
-          AND ticker IS NOT NULL
-          AND TRIM(ticker) <> ''
-        ORDER BY ticker, ric
-        """
-    ).fetchall()
-    pending_rows: list[dict[str, str]] = []
-    current_by_ticker: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        if not row:
-            continue
-        ric = normalize_ric(row[0])
-        ticker = normalize_ticker(row[1]) or ticker_from_ric(ric)
-        exchange_name = normalize_optional_text(row[2])
-        classification_ok = int(row[3] or 0)
-        is_equity_eligible = int(row[4] or 0)
-        source = normalize_optional_text(row[5]) or ""
-        if not ric or not ticker:
-            continue
-        if include_pending_seed and classification_ok == 0 and is_equity_eligible == 0 and source == "security_master_seed":
-            pending_rows.append({"ticker": ticker, "ric": ric})
-            continue
-        if classification_ok != 1 or is_equity_eligible != 1:
-            continue
-        if ric in degraded_recent:
-            continue
-        if _source_quality_exclusion_reason(ric=ric, ticker=ticker, exchange_name=exchange_name):
-            continue
-        candidate = {
-            "ticker": ticker,
-            "ric": ric,
-            "suffix_rank": _source_suffix_rank(ric),
-        }
-        existing = current_by_ticker.get(ticker)
-        if existing is None or (
-            int(candidate["suffix_rank"]),
-            str(candidate["ric"]),
-        ) < (
-            int(existing["suffix_rank"]),
-            str(existing["ric"]),
-        ):
-            current_by_ticker[ticker] = candidate
-    out = pending_rows + [
-        {"ticker": str(row["ticker"]), "ric": str(row["ric"])}
-        for _, row in sorted(current_by_ticker.items(), key=lambda item: item[0])
-    ]
-    return out
+    return load_pit_ingest_scope_rows(
+        conn,
+        include_pending_seed=include_pending_seed,
+        recent_sessions=recent_sessions,
+    )
 
 
 def load_projection_only_universe_rows(
     conn: sqlite3.Connection,
 ) -> list[dict[str, str]]:
-    """Load projection-only instruments (e.g. ETFs) from security_master."""
-    rows = conn.execute(
-        f"""
-        SELECT UPPER(TRIM(ric)) AS ric, UPPER(TRIM(ticker)) AS ticker
-        FROM {SECURITY_MASTER_TABLE}
-        WHERE coverage_role = 'projection_only'
-          AND ric IS NOT NULL AND TRIM(ric) <> ''
-          AND ticker IS NOT NULL AND TRIM(ticker) <> ''
-        ORDER BY ticker
-        """
-    ).fetchall()
-    return [
-        {"ticker": str(row[1]), "ric": str(row[0])}
-        for row in rows
-        if row and row[0] and row[1]
-    ]
+    """Compatibility wrapper around the named returns-projection selector."""
+    return load_cuse_returns_projection_scope_rows(conn)
 
 
 def load_price_ingest_universe_rows(
@@ -215,19 +156,12 @@ def load_price_ingest_universe_rows(
     include_pending_seed: bool = True,
     recent_sessions: int = 8,
 ) -> list[dict[str, str]]:
-    """Union of default source universe + projection-only instruments for price ingestion."""
-    default_rows = load_default_source_universe_rows(
+    """Compatibility wrapper around the named price-ingest selector."""
+    return load_price_ingest_scope_rows(
         conn,
         include_pending_seed=include_pending_seed,
         recent_sessions=recent_sessions,
     )
-    projection_rows = load_projection_only_universe_rows(conn)
-    seen = {row["ric"] for row in default_rows}
-    for row in projection_rows:
-        if row["ric"] not in seen:
-            default_rows.append(row)
-            seen.add(row["ric"])
-    return default_rows
 
 
 def derive_security_master_flags(
@@ -261,6 +195,8 @@ def derive_security_master_flags(
 def upsert_security_master_rows(
     conn: sqlite3.Connection,
     rows: list[dict[str, Any]],
+    *,
+    refresh_runtime_surfaces: bool = True,
 ) -> int:
     if not rows:
         return 0
@@ -313,38 +249,42 @@ def upsert_security_master_rows(
     if not payload:
         return 0
     conn.executemany(sql, payload)
+    touched_rics = [str(item[0]) for item in payload if item and item[0]]
+    ensure_registry_rows_from_master_rows(conn, rows)
+    if refresh_runtime_surfaces:
+        refresh_security_taxonomy_current(conn, rics=touched_rics)
+        reconcile_default_security_policy_rows(conn, rics=touched_rics)
+        refresh_security_source_observation_daily(conn, rics=touched_rics)
+        materialize_security_master_compat_current(conn, rics=touched_rics)
     return len(payload)
 
 
 def load_security_master_seed_rows(seed_path: Path) -> list[dict[str, Any]]:
-    path = Path(seed_path).expanduser().resolve()
-    if not path.exists():
-        return []
-
-    rows_by_ric: dict[str, dict[str, Any]] = {}
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for raw in reader:
-            ric = normalize_ric(raw.get("ric"))
-            if not ric:
-                continue
-            coverage_role = normalize_optional_text(raw.get("coverage_role")) or "native_equity"
-            rows_by_ric[ric] = {
-                "ric": ric,
-                "ticker": normalize_ticker(raw.get("ticker")) or ticker_from_ric(ric),
-                "isin": normalize_optional_text(raw.get("isin")),
-                "exchange_name": normalize_optional_text(raw.get("exchange_name")),
-                "coverage_role": coverage_role,
-            }
-    return [rows_by_ric[ric] for ric in sorted(rows_by_ric)]
+    return [
+        {
+            "ric": row["ric"],
+            "ticker": row.get("ticker"),
+            "isin": row.get("isin"),
+            "exchange_name": row.get("exchange_name"),
+            "coverage_role": row.get("legacy_coverage_role")
+            or legacy_coverage_role_from_policy_flags(
+                allow_cuse_returns_projection=row.get("allow_cuse_returns_projection"),
+                pit_fundamentals_enabled=row.get("pit_fundamentals_enabled"),
+                pit_classification_enabled=row.get("pit_classification_enabled"),
+            ),
+        }
+        for row in load_security_registry_seed_rows(seed_path)
+    ]
 
 
 def sync_security_master_seed(
     conn: sqlite3.Connection,
     *,
     seed_path: Path = DEFAULT_SECURITY_MASTER_SEED_PATH,
-    source: str = "security_master_seed",
+    source: str | None = None,
 ) -> dict[str, Any]:
+    seed_source = normalize_optional_text(source) or _seed_source_label(seed_path)
+    registry_sync = sync_security_registry_seed(conn, seed_path=seed_path, source=seed_source)
     seed_rows = load_security_master_seed_rows(seed_path)
     if not seed_rows:
         return {
@@ -352,10 +292,11 @@ def sync_security_master_seed(
             "seed_path": str(Path(seed_path).expanduser().resolve()),
             "seed_rows": 0,
             "rows_upserted": 0,
+            "registry_sync": registry_sync,
         }
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    job_run_id = f"security_master_seed_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    job_run_id = f"{seed_source}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     insert_sql = f"""
         INSERT OR IGNORE INTO {SECURITY_MASTER_TABLE} (
             ric,
@@ -394,7 +335,7 @@ def sync_security_master_seed(
                 0,
                 0,
                 normalize_optional_text(row.get("coverage_role")) or "native_equity",
-                source,
+                seed_source,
                 job_run_id,
                 now_iso,
             )
@@ -410,7 +351,7 @@ def sync_security_master_seed(
                 normalize_optional_text(row.get("isin")),
                 normalize_optional_text(row.get("exchange_name")),
                 normalize_optional_text(row.get("coverage_role")) or "",
-                source,
+                seed_source,
                 job_run_id,
                 now_iso,
                 normalize_ric(row.get("ric")),
@@ -420,11 +361,17 @@ def sync_security_master_seed(
         ],
     )
     rows_upserted = int(conn.total_changes - before)
+    touched_rics = [normalize_ric(row.get("ric")) for row in seed_rows if normalize_ric(row.get("ric"))]
+    refresh_security_taxonomy_current(conn, rics=touched_rics)
+    reconcile_default_security_policy_rows(conn, rics=touched_rics)
+    refresh_security_source_observation_daily(conn, rics=touched_rics)
+    materialize_security_master_compat_current(conn, rics=touched_rics)
     return {
         "status": "ok",
         "seed_path": str(Path(seed_path).expanduser().resolve()),
         "seed_rows": len(seed_rows),
         "rows_upserted": rows_upserted,
+        "registry_sync": registry_sync,
         "job_run_id": job_run_id,
         "updated_at": now_iso,
     }

@@ -58,6 +58,28 @@ def test_ensure_sqlite_schema_creates_expected_tables_and_columns() -> None:
         "specific_variance_proxy",
         "specific_volatility_proxy",
     }
+    assert cpar_schema.table_columns(conn, cpar_schema.TABLE_PACKAGE_UNIVERSE_MEMBERSHIP) >= {
+        "package_run_id",
+        "package_date",
+        "ric",
+        "universe_scope",
+        "target_scope",
+        "basis_role",
+        "warnings_json",
+    }
+    assert cpar_schema.table_columns(conn, cpar_schema.TABLE_RUNTIME_COVERAGE) >= {
+        "package_run_id",
+        "package_date",
+        "ric",
+        "price_on_package_date_status",
+        "fit_row_status",
+        "fit_quality_status",
+        "portfolio_use_status",
+        "ticker_detail_use_status",
+        "hedge_use_status",
+        "fit_family",
+        "quality_label",
+    }
     assert cpar_schema.table_primary_key_columns(conn, cpar_schema.TABLE_PROXY_RETURNS) == (
         "package_run_id",
         "week_end",
@@ -73,6 +95,14 @@ def test_ensure_sqlite_schema_creates_expected_tables_and_columns() -> None:
         "factor_id_2",
     )
     assert cpar_schema.table_primary_key_columns(conn, cpar_schema.TABLE_INSTRUMENT_FITS) == (
+        "package_run_id",
+        "ric",
+    )
+    assert cpar_schema.table_primary_key_columns(conn, cpar_schema.TABLE_PACKAGE_UNIVERSE_MEMBERSHIP) == (
+        "package_run_id",
+        "ric",
+    )
+    assert cpar_schema.table_primary_key_columns(conn, cpar_schema.TABLE_RUNTIME_COVERAGE) == (
         "package_run_id",
         "ric",
     )

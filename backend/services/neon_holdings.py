@@ -108,7 +108,7 @@ def parse_holdings_csv(
                         {
                             "row_number": idx,
                             "reason_code": "unknown_ric",
-                            "message": f"RIC not found in security_master: {ric}",
+                            "message": f"RIC not found in security registry: {ric}",
                         }
                     )
                     continue
@@ -121,7 +121,7 @@ def parse_holdings_csv(
                         {
                             "row_number": idx,
                             "reason_code": "unknown_ticker",
-                            "message": f"Ticker not found in security_master: {ticker}",
+                            "message": f"Ticker not found in security registry: {ticker}",
                         }
                     )
                     continue
@@ -427,7 +427,7 @@ def apply_ticker_bucket_scenario(
                 {
                     "row_number": idx,
                     "reason_code": "unknown_ticker",
-                    "message": f"Ticker not found in security_master: {ticker}",
+                    "message": f"Ticker not found in security registry: {ticker}",
                 }
             )
             continue
@@ -635,7 +635,7 @@ def parse_holdings_rows(
                     {
                         "row_number": idx,
                         "reason_code": "unknown_ric",
-                        "message": f"RIC not found in security_master: {ric}",
+                        "message": f"RIC not found in security registry: {ric}",
                     }
                 )
                 continue
@@ -648,7 +648,7 @@ def parse_holdings_rows(
                     {
                         "row_number": idx,
                         "reason_code": "unknown_ticker",
-                        "message": f"Ticker not found in security_master: {ticker}",
+                        "message": f"Ticker not found in security registry: {ticker}",
                     }
                 )
                 continue

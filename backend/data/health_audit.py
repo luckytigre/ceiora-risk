@@ -8,9 +8,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from backend.universe.runtime_rows import load_security_runtime_rows
+
 
 CORE_TABLES = [
-    "security_master",
+    "security_registry",
+    "security_policy_current",
+    "security_taxonomy_current",
+    "security_source_observation_daily",
+    "security_master_compat_current",
     "security_prices_eod",
     "security_fundamentals_pit",
     "security_classification_pit",
@@ -20,6 +26,10 @@ CORE_TABLES = [
     "model_factor_returns_daily",
     "model_factor_covariance_daily",
     "model_specific_risk_daily",
+]
+
+OPTIONAL_COMPAT_TABLES = [
+    "security_master",
 ]
 
 
@@ -34,6 +44,59 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type='table' AND name=?
+        LIMIT 1
+        """,
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def _table_has_rows(conn: sqlite3.Connection, table: str) -> bool:
+    if not _table_exists(conn, table):
+        return False
+    row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    return bool(row and int(row[0] or 0) > 0)
+
+
+def _preferred_registry_anchor(conn: sqlite3.Connection) -> tuple[str | None, str | None]:
+    for table, alias in (
+        ("security_registry", "reg"),
+        ("security_master_compat_current", "compat"),
+        ("security_master", "sm"),
+    ):
+        if _table_has_rows(conn, table):
+            return table, alias
+    return None, None
+
+
+def _runtime_core_identity(conn: sqlite3.Connection) -> tuple[set[str], set[str]]:
+    rows = load_security_runtime_rows(conn, include_disabled=False)
+    if not rows:
+        return set(), set()
+    core_rics: set[str] = set()
+    core_tickers: set[str] = set()
+    for row in rows:
+        if int(row.get("allow_cuse_native_core") or 0) != 1:
+            continue
+        if int(row.get("is_single_name_equity") or 0) != 1:
+            continue
+        if int(row.get("classification_ready") or 0) != 1:
+            continue
+        ric = str(row.get("ric") or "").strip().upper()
+        ticker = str(row.get("ticker") or "").strip().upper()
+        if ric:
+            core_rics.add(ric)
+        if ticker:
+            core_tickers.add(ticker)
+    return core_rics, core_tickers
 
 
 def run_sqlite_health_audit(
@@ -56,8 +119,12 @@ def run_sqlite_health_audit(
 
         row_counts: dict[str, int] = {}
         for table in CORE_TABLES:
-            row_counts[table] = _count(conn, f"SELECT COUNT(*) FROM {table}")
+            row_counts[table] = _count(conn, f"SELECT COUNT(*) FROM {table}") if _table_exists(conn, table) else 0
         checks["row_counts"] = row_counts
+        checks["compat_row_counts"] = {
+            table: _count(conn, f"SELECT COUNT(*) FROM {table}") if _table_exists(conn, table) else 0
+            for table in OPTIONAL_COMPAT_TABLES
+        }
 
         date_validity: dict[str, dict[str, Any]] = {}
         date_fields = [
@@ -83,10 +150,18 @@ def run_sqlite_health_audit(
         checks["date_validity"] = date_validity
 
         duplicate_key_groups = {
+            "security_registry.ric": _count(
+                conn,
+                "SELECT COUNT(*) FROM (SELECT ric, COUNT(*) c FROM security_registry GROUP BY ric HAVING c > 1)",
+            ) if _table_exists(conn, "security_registry") else 0,
+            "security_master_compat_current.ric": _count(
+                conn,
+                "SELECT COUNT(*) FROM (SELECT ric, COUNT(*) c FROM security_master_compat_current GROUP BY ric HAVING c > 1)",
+            ) if _table_exists(conn, "security_master_compat_current") else 0,
             "security_master.ric": _count(
                 conn,
                 "SELECT COUNT(*) FROM (SELECT ric, COUNT(*) c FROM security_master GROUP BY ric HAVING c > 1)",
-            ),
+            ) if _table_exists(conn, "security_master") else 0,
             "security_prices_eod.(ric,date)": _count(
                 conn,
                 "SELECT COUNT(*) FROM (SELECT ric, date, COUNT(*) c FROM security_prices_eod GROUP BY ric, date HAVING c > 1)",
@@ -106,24 +181,35 @@ def run_sqlite_health_audit(
         }
         checks["duplicate_key_groups"] = duplicate_key_groups
 
+        registry_anchor, registry_anchor_alias = _preferred_registry_anchor(conn)
         orphan_ric_rows: dict[str, int] = {}
-        for table in [
-            "security_prices_eod",
-            "security_fundamentals_pit",
-            "security_classification_pit",
-            "barra_raw_cross_section_history",
-        ]:
-            orphan_ric_rows[table] = _count(
-                conn,
-                f"""
-                SELECT COUNT(*)
-                FROM {table} x
-                LEFT JOIN security_master sm
-                  ON sm.ric = x.ric
-                WHERE sm.ric IS NULL
-                """,
-            )
+        if registry_anchor and registry_anchor_alias:
+            for table in [
+                "security_prices_eod",
+                "security_fundamentals_pit",
+                "security_classification_pit",
+                "barra_raw_cross_section_history",
+            ]:
+                orphan_ric_rows[table] = _count(
+                    conn,
+                    f"""
+                    SELECT COUNT(*)
+                    FROM {table} x
+                    LEFT JOIN {registry_anchor} {registry_anchor_alias}
+                      ON {registry_anchor_alias}.ric = x.ric
+                    WHERE {registry_anchor_alias}.ric IS NULL
+                    """,
+                )
+        else:
+            for table in [
+                "security_prices_eod",
+                "security_fundamentals_pit",
+                "security_classification_pit",
+                "barra_raw_cross_section_history",
+            ]:
+                orphan_ric_rows[table] = 0
         checks["orphan_ric_rows"] = orphan_ric_rows
+        checks["orphan_anchor"] = registry_anchor
 
         latest_dates = {
             "prices": conn.execute("SELECT MAX(date) FROM security_prices_eod").fetchone()[0],
@@ -153,17 +239,10 @@ def run_sqlite_health_audit(
                 (str(latest_dates["barra_raw"] or ""),),
             ),
         }
-        eligible_universe_n = _count(
-            conn,
-            """
-            SELECT COUNT(*)
-            FROM security_master
-            WHERE COALESCE(classification_ok, 0) = 1
-              AND COALESCE(is_equity_eligible, 0) = 1
-            """,
-        )
+        core_rics, _core_tickers = _runtime_core_identity(conn)
+        eligible_universe_n = int(len(core_rics))
         checks["latest_coverage"] = {
-            "eligible_security_master": int(eligible_universe_n),
+            "cuse_native_core_runtime": int(eligible_universe_n),
             "latest_dates": latest_dates,
             "latest_distinct_ric_counts": latest_counts,
         }
@@ -196,14 +275,22 @@ def run_sqlite_health_audit(
         checks["near_full_dates_95pct"] = near_full_dates
 
         checks["nulls"] = {
-            "security_master.ric_null_or_blank": _count(
+            "security_registry.ric_null_or_blank": _count(
                 conn,
-                "SELECT COUNT(*) FROM security_master WHERE ric IS NULL OR TRIM(ric) = ''",
-            ),
-            "security_master.ticker_null_or_blank": _count(
+                "SELECT COUNT(*) FROM security_registry WHERE ric IS NULL OR TRIM(ric) = ''",
+            ) if _table_exists(conn, "security_registry") else 0,
+            "security_registry.ticker_null_or_blank": _count(
                 conn,
-                "SELECT COUNT(*) FROM security_master WHERE ticker IS NULL OR TRIM(ticker) = ''",
-            ),
+                "SELECT COUNT(*) FROM security_registry WHERE ticker IS NULL OR TRIM(ticker) = ''",
+            ) if _table_exists(conn, "security_registry") else 0,
+            "security_master_compat_current.ric_null_or_blank": _count(
+                conn,
+                "SELECT COUNT(*) FROM security_master_compat_current WHERE ric IS NULL OR TRIM(ric) = ''",
+            ) if _table_exists(conn, "security_master_compat_current") else 0,
+            "security_master_compat_current.ticker_null_or_blank": _count(
+                conn,
+                "SELECT COUNT(*) FROM security_master_compat_current WHERE ticker IS NULL OR TRIM(ticker) = ''",
+            ) if _table_exists(conn, "security_master_compat_current") else 0,
             "security_prices_eod.close_null": _count(
                 conn,
                 "SELECT COUNT(*) FROM security_prices_eod WHERE close IS NULL",
@@ -225,4 +312,3 @@ def run_sqlite_health_audit(
         }
     finally:
         conn.close()
-

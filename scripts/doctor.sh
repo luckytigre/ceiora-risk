@@ -42,7 +42,8 @@ if failed:
     sys.exit(1)
 
 ROOT = Path.cwd()
-SEED_PATH = ROOT / "data" / "reference" / "security_master_seed.csv"
+REGISTRY_SEED_PATH = ROOT / "data" / "reference" / "security_registry_seed.csv"
+COMPAT_SEED_PATH = ROOT / "data" / "reference" / "security_master_seed.csv"
 DATA_DB = ROOT / "backend" / "runtime" / "data.db"
 PRIMARY_SUFFIXES = (".N", ".OQ", ".A")
 SECONDARY_SUFFIXES = ("", ".O", ".K", ".P", ".PH", ".B", ".TH", ".C", ".DG")
@@ -87,41 +88,70 @@ def _clean_alias_offenders(rows):
     return offenders
 
 
-if SEED_PATH.exists():
-    with SEED_PATH.open("r", encoding="utf-8") as handle:
+if REGISTRY_SEED_PATH.exists():
+    with REGISTRY_SEED_PATH.open("r", encoding="utf-8") as handle:
         seed_offenders = _clean_alias_offenders(list(csv.DictReader(handle)))
     if seed_offenders:
-        print("error: clean alias duplicates remain in security_master_seed.csv")
+        print("error: clean alias duplicates remain in security_registry_seed.csv")
         for item in seed_offenders[:10]:
             print(f"  - {item}")
         failed = True
     else:
-        print("ok: security_master_seed clean alias audit")
+        print("ok: security_registry_seed clean alias audit")
+else:
+    print("error: missing data/reference/security_registry_seed.csv")
+    failed = True
+
+if COMPAT_SEED_PATH.exists():
+    with COMPAT_SEED_PATH.open("r", encoding="utf-8") as handle:
+        compat_offenders = _clean_alias_offenders(list(csv.DictReader(handle)))
+    if compat_offenders:
+        print("error: clean alias duplicates remain in security_master_seed.csv compatibility artifact")
+        for item in compat_offenders[:10]:
+            print(f"  - {item}")
+        failed = True
+    else:
+        print("ok: security_master_seed compatibility clean alias audit")
 
 if DATA_DB.exists():
     conn = sqlite3.connect(str(DATA_DB))
     conn.row_factory = sqlite3.Row
+    runtime_rows = None
+    runtime_label = ""
     try:
         runtime_rows = [
             dict(row)
             for row in conn.execute(
                 """
                 SELECT ric, ticker, isin, exchange_name
-                FROM security_master
+                FROM security_registry
                 """
             ).fetchall()
         ]
+        runtime_label = "local security_registry"
     except sqlite3.OperationalError as exc:
-        print(f"warning: unable to audit local security_master: {exc}")
-    else:
+        try:
+            runtime_rows = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT ric, ticker, isin, exchange_name
+                    FROM security_master
+                    """
+                ).fetchall()
+            ]
+            runtime_label = "local security_master compatibility mirror"
+        except sqlite3.OperationalError:
+            print(f"warning: unable to audit local universe tables: {exc}")
+    if runtime_rows is not None:
         runtime_offenders = _clean_alias_offenders(runtime_rows)
         if runtime_offenders:
-            print("error: clean alias duplicates remain in local security_master")
+            print(f"error: clean alias duplicates remain in {runtime_label}")
             for item in runtime_offenders[:10]:
                 print(f"  - {item}")
             failed = True
         else:
-            print("ok: local security_master clean alias audit")
+            print(f"ok: {runtime_label} clean alias audit")
     finally:
         conn.close()
 

@@ -184,7 +184,7 @@ If `/cpar/risk` shows unexpected exclusions or coverage drift:
 
 If cPAR explanatory charts look like hedge vectors:
 - `/cpar/risk` and `/cpar/explore` should read display-basis fields, not hedge-trade-space fields
-- single-name explanatory display should use `beta_market_step1` plus residualized factor-space loadings
+- single-name explanatory display should use compatibility field `beta_market_step1` for the one-shot market coefficient plus residualized factor-space loadings
 - aggregate explanatory display should use `aggregate_display_loadings`, `display_factor_chart`, and `positions[].display_contributions`
 - hedge-specific interpretation should stay tied to `beta_spy_trade` and hedge-preview outputs, not to the explanatory risk/read payloads
 

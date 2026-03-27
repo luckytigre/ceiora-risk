@@ -1,15 +1,148 @@
--- Neon canonical source-of-truth schema (Stage 2)
--- Source parity target: backend/runtime/data.db canonical tables
+-- Neon canonical registry-first schema
+-- Source parity target: backend/runtime/data.db canonical tables plus Neon-authored sync state.
 
-CREATE TABLE IF NOT EXISTS security_master (
+CREATE TABLE IF NOT EXISTS security_registry (
+    ric TEXT PRIMARY KEY,
+    ticker TEXT,
+    isin TEXT,
+    exchange_name TEXT,
+    tracking_status TEXT NOT NULL DEFAULT 'active',
+    source TEXT,
+    job_run_id TEXT,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS security_taxonomy_current (
+    ric TEXT PRIMARY KEY,
+    instrument_kind TEXT,
+    vehicle_structure TEXT,
+    issuer_country_code TEXT,
+    listing_country_code TEXT,
+    model_home_market_scope TEXT,
+    is_single_name_equity SMALLINT NOT NULL DEFAULT 0 CHECK (is_single_name_equity IN (0, 1)),
+    classification_ready SMALLINT NOT NULL DEFAULT 0 CHECK (classification_ready IN (0, 1)),
+    source TEXT,
+    job_run_id TEXT,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS security_policy_current (
+    ric TEXT PRIMARY KEY,
+    price_ingest_enabled SMALLINT NOT NULL DEFAULT 1 CHECK (price_ingest_enabled IN (0, 1)),
+    pit_fundamentals_enabled SMALLINT NOT NULL DEFAULT 0 CHECK (pit_fundamentals_enabled IN (0, 1)),
+    pit_classification_enabled SMALLINT NOT NULL DEFAULT 0 CHECK (pit_classification_enabled IN (0, 1)),
+    allow_cuse_native_core SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cuse_native_core IN (0, 1)),
+    allow_cuse_fundamental_projection SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cuse_fundamental_projection IN (0, 1)),
+    allow_cuse_returns_projection SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cuse_returns_projection IN (0, 1)),
+    allow_cpar_core_target SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cpar_core_target IN (0, 1)),
+    allow_cpar_extended_target SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cpar_extended_target IN (0, 1)),
+    policy_source TEXT,
+    job_run_id TEXT,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS security_source_observation_daily (
+    as_of_date DATE NOT NULL,
+    ric TEXT NOT NULL,
+    classification_ready SMALLINT NOT NULL DEFAULT 0 CHECK (classification_ready IN (0, 1)),
+    is_equity_eligible SMALLINT NOT NULL DEFAULT 0 CHECK (is_equity_eligible IN (0, 1)),
+    price_ingest_enabled SMALLINT NOT NULL DEFAULT 0 CHECK (price_ingest_enabled IN (0, 1)),
+    pit_fundamentals_enabled SMALLINT NOT NULL DEFAULT 0 CHECK (pit_fundamentals_enabled IN (0, 1)),
+    pit_classification_enabled SMALLINT NOT NULL DEFAULT 0 CHECK (pit_classification_enabled IN (0, 1)),
+    has_price_history_as_of_date SMALLINT NOT NULL DEFAULT 0 CHECK (has_price_history_as_of_date IN (0, 1)),
+    has_fundamentals_history_as_of_date SMALLINT NOT NULL DEFAULT 0 CHECK (has_fundamentals_history_as_of_date IN (0, 1)),
+    has_classification_history_as_of_date SMALLINT NOT NULL DEFAULT 0 CHECK (has_classification_history_as_of_date IN (0, 1)),
+    latest_price_date DATE,
+    latest_fundamentals_as_of_date DATE,
+    latest_classification_as_of_date DATE,
+    source TEXT,
+    job_run_id TEXT,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (as_of_date, ric)
+);
+
+CREATE TABLE IF NOT EXISTS security_ingest_runs (
+    job_run_id TEXT PRIMARY KEY,
+    source TEXT,
+    started_at TIMESTAMPTZ NOT NULL,
+    finished_at TIMESTAMPTZ,
+    status TEXT,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS security_ingest_audit (
+    job_run_id TEXT NOT NULL,
+    ric TEXT NOT NULL,
+    artifact_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    detail TEXT,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (job_run_id, ric, artifact_name)
+);
+
+CREATE TABLE IF NOT EXISTS security_master_compat_current (
     ric TEXT PRIMARY KEY,
     ticker TEXT,
     isin TEXT,
     exchange_name TEXT,
     classification_ok SMALLINT NOT NULL DEFAULT 0 CHECK (classification_ok IN (0, 1)),
     is_equity_eligible SMALLINT NOT NULL DEFAULT 0 CHECK (is_equity_eligible IN (0, 1)),
+    coverage_role TEXT NOT NULL DEFAULT 'native_equity',
     source TEXT,
     job_run_id TEXT,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS source_sync_runs (
+    sync_run_id TEXT PRIMARY KEY,
+    mode TEXT NOT NULL,
+    sqlite_path TEXT,
+    selected_tables_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    table_results_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,
+    error_type TEXT,
+    error_message TEXT,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS source_sync_watermarks (
+    table_name TEXT PRIMARY KEY,
+    sync_run_id TEXT NOT NULL,
+    source_min_value TEXT,
+    source_max_value TEXT,
+    target_min_value TEXT,
+    target_max_value TEXT,
+    row_count BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS security_source_status_current (
+    ric TEXT PRIMARY KEY,
+    ticker TEXT,
+    tracking_status TEXT NOT NULL,
+    instrument_kind TEXT,
+    vehicle_structure TEXT,
+    model_home_market_scope TEXT,
+    is_single_name_equity SMALLINT NOT NULL DEFAULT 0 CHECK (is_single_name_equity IN (0, 1)),
+    classification_ready SMALLINT NOT NULL DEFAULT 0 CHECK (classification_ready IN (0, 1)),
+    price_ingest_enabled SMALLINT NOT NULL DEFAULT 0 CHECK (price_ingest_enabled IN (0, 1)),
+    pit_fundamentals_enabled SMALLINT NOT NULL DEFAULT 0 CHECK (pit_fundamentals_enabled IN (0, 1)),
+    pit_classification_enabled SMALLINT NOT NULL DEFAULT 0 CHECK (pit_classification_enabled IN (0, 1)),
+    allow_cuse_native_core SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cuse_native_core IN (0, 1)),
+    allow_cuse_fundamental_projection SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cuse_fundamental_projection IN (0, 1)),
+    allow_cuse_returns_projection SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cuse_returns_projection IN (0, 1)),
+    allow_cpar_core_target SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cpar_core_target IN (0, 1)),
+    allow_cpar_extended_target SMALLINT NOT NULL DEFAULT 0 CHECK (allow_cpar_extended_target IN (0, 1)),
+    observation_as_of_date DATE,
+    has_price_history_as_of_date SMALLINT NOT NULL DEFAULT 0 CHECK (has_price_history_as_of_date IN (0, 1)),
+    has_fundamentals_history_as_of_date SMALLINT NOT NULL DEFAULT 0 CHECK (has_fundamentals_history_as_of_date IN (0, 1)),
+    has_classification_history_as_of_date SMALLINT NOT NULL DEFAULT 0 CHECK (has_classification_history_as_of_date IN (0, 1)),
+    latest_price_date DATE,
+    latest_fundamentals_as_of_date DATE,
+    latest_classification_as_of_date DATE,
+    source_sync_run_id TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
 );
 
@@ -72,6 +205,79 @@ CREATE TABLE IF NOT EXISTS security_classification_pit (
     source TEXT,
     job_run_id TEXT,
     updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (ric, as_of_date)
+);
+
+CREATE TABLE IF NOT EXISTS estu_membership_daily (
+    date DATE NOT NULL,
+    ric TEXT NOT NULL,
+    estu_flag INTEGER NOT NULL DEFAULT 0,
+    drop_reason TEXT,
+    drop_reason_detail TEXT,
+    mcap DOUBLE PRECISION,
+    price_close DOUBLE PRECISION,
+    adv_20d DOUBLE PRECISION,
+    has_required_price_history INTEGER NOT NULL DEFAULT 0,
+    has_required_fundamentals INTEGER NOT NULL DEFAULT 0,
+    has_required_trbc INTEGER NOT NULL DEFAULT 0,
+    source TEXT,
+    job_run_id TEXT,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (date, ric)
+);
+
+CREATE TABLE IF NOT EXISTS universe_cross_section_snapshot (
+    ric TEXT NOT NULL,
+    ticker TEXT,
+    as_of_date DATE NOT NULL,
+    fundamental_fetch_date DATE,
+    fundamental_period_end_date DATE,
+    market_cap DOUBLE PRECISION,
+    shares_outstanding DOUBLE PRECISION,
+    dividend_yield DOUBLE PRECISION,
+    common_name TEXT,
+    book_value DOUBLE PRECISION,
+    forward_eps DOUBLE PRECISION,
+    trailing_eps DOUBLE PRECISION,
+    total_debt DOUBLE PRECISION,
+    cash_and_equivalents DOUBLE PRECISION,
+    long_term_debt DOUBLE PRECISION,
+    free_cash_flow DOUBLE PRECISION,
+    gross_profit DOUBLE PRECISION,
+    net_income DOUBLE PRECISION,
+    operating_cashflow DOUBLE PRECISION,
+    capital_expenditures DOUBLE PRECISION,
+    shares_basic DOUBLE PRECISION,
+    shares_diluted DOUBLE PRECISION,
+    free_float_shares DOUBLE PRECISION,
+    free_float_percent DOUBLE PRECISION,
+    revenue DOUBLE PRECISION,
+    ebitda DOUBLE PRECISION,
+    ebit DOUBLE PRECISION,
+    total_assets DOUBLE PRECISION,
+    total_liabilities DOUBLE PRECISION,
+    return_on_equity DOUBLE PRECISION,
+    operating_margins DOUBLE PRECISION,
+    report_currency TEXT,
+    fiscal_year INTEGER,
+    period_type TEXT,
+    trbc_economic_sector_short TEXT,
+    trbc_economic_sector TEXT,
+    trbc_business_sector TEXT,
+    trbc_industry_group TEXT,
+    trbc_industry TEXT,
+    trbc_activity TEXT,
+    trbc_effective_date DATE,
+    price_date DATE,
+    price_close DOUBLE PRECISION,
+    price_currency TEXT,
+    fundamental_source TEXT,
+    trbc_source TEXT,
+    price_source TEXT,
+    fundamental_job_run_id TEXT,
+    trbc_job_run_id TEXT,
+    snapshot_job_run_id TEXT,
+    updated_at TIMESTAMPTZ,
     PRIMARY KEY (ric, as_of_date)
 );
 
@@ -214,6 +420,39 @@ CREATE TABLE IF NOT EXISTS projected_instrument_meta (
     PRIMARY KEY (ric, as_of_date)
 );
 
+CREATE TABLE IF NOT EXISTS cuse_security_membership_daily (
+    as_of_date DATE NOT NULL,
+    ric TEXT,
+    ticker TEXT NOT NULL,
+    policy_path TEXT NOT NULL,
+    realized_role TEXT NOT NULL,
+    output_status TEXT NOT NULL,
+    projection_candidate_status TEXT NOT NULL,
+    projection_output_status TEXT NOT NULL,
+    reason_code TEXT,
+    quality_label TEXT NOT NULL,
+    source_snapshot_status TEXT NOT NULL,
+    projection_method TEXT,
+    projection_basis_status TEXT NOT NULL,
+    projection_source_package_date DATE,
+    served_exposure_available INTEGER NOT NULL DEFAULT 0,
+    run_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (as_of_date, ticker)
+);
+
+CREATE TABLE IF NOT EXISTS cuse_security_stage_results_daily (
+    as_of_date DATE NOT NULL,
+    ric TEXT NOT NULL,
+    stage_name TEXT NOT NULL,
+    stage_state TEXT NOT NULL,
+    reason_code TEXT,
+    detail_json TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (as_of_date, ric, stage_name)
+);
+
 CREATE TABLE IF NOT EXISTS serving_payload_current (
     payload_name TEXT PRIMARY KEY,
     snapshot_id TEXT NOT NULL,
@@ -229,11 +468,22 @@ CREATE TABLE IF NOT EXISTS runtime_state_current (
     updated_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_security_master_ticker ON security_master (ticker);
-
+CREATE INDEX IF NOT EXISTS idx_security_registry_ticker ON security_registry (ticker);
+CREATE INDEX IF NOT EXISTS idx_security_source_observation_daily_ric ON security_source_observation_daily (ric);
+CREATE INDEX IF NOT EXISTS idx_security_ingest_audit_ric ON security_ingest_audit (ric);
+CREATE INDEX IF NOT EXISTS idx_security_master_compat_current_ticker ON security_master_compat_current (ticker);
+CREATE INDEX IF NOT EXISTS idx_source_sync_runs_started ON source_sync_runs (started_at);
+CREATE INDEX IF NOT EXISTS idx_source_sync_runs_status ON source_sync_runs (status);
+CREATE INDEX IF NOT EXISTS idx_source_sync_watermarks_updated ON source_sync_watermarks (updated_at);
+CREATE INDEX IF NOT EXISTS idx_security_source_status_current_tracking ON security_source_status_current (tracking_status);
+CREATE INDEX IF NOT EXISTS idx_security_source_status_current_observation ON security_source_status_current (observation_as_of_date);
 CREATE INDEX IF NOT EXISTS idx_security_prices_eod_date ON security_prices_eod (date);
 CREATE INDEX IF NOT EXISTS idx_security_fundamentals_pit_asof ON security_fundamentals_pit (as_of_date);
 CREATE INDEX IF NOT EXISTS idx_security_classification_pit_asof ON security_classification_pit (as_of_date);
+CREATE INDEX IF NOT EXISTS idx_estu_membership_daily_date_flag ON estu_membership_daily (date, estu_flag);
+CREATE INDEX IF NOT EXISTS idx_estu_membership_daily_ric_date ON estu_membership_daily (ric, date);
+CREATE INDEX IF NOT EXISTS idx_universe_cross_section_snapshot_asof ON universe_cross_section_snapshot (as_of_date);
+CREATE INDEX IF NOT EXISTS idx_universe_cross_section_snapshot_ticker ON universe_cross_section_snapshot (ticker);
 CREATE INDEX IF NOT EXISTS idx_barra_raw_cross_section_history_asof ON barra_raw_cross_section_history (as_of_date);
 CREATE INDEX IF NOT EXISTS idx_barra_raw_cross_section_history_ticker ON barra_raw_cross_section_history (ticker);
 CREATE INDEX IF NOT EXISTS idx_model_factor_returns_daily_date ON model_factor_returns_daily (date);
@@ -247,5 +497,9 @@ CREATE INDEX IF NOT EXISTS idx_model_run_metadata_status ON model_run_metadata (
 CREATE INDEX IF NOT EXISTS idx_projected_instrument_loadings_asof ON projected_instrument_loadings (as_of_date);
 CREATE INDEX IF NOT EXISTS idx_projected_instrument_loadings_factor ON projected_instrument_loadings (factor_name);
 CREATE INDEX IF NOT EXISTS idx_projected_instrument_meta_asof ON projected_instrument_meta (as_of_date);
+CREATE INDEX IF NOT EXISTS idx_cuse_security_membership_daily_date ON cuse_security_membership_daily (as_of_date);
+CREATE INDEX IF NOT EXISTS idx_cuse_security_membership_daily_ric ON cuse_security_membership_daily (ric, as_of_date);
+CREATE INDEX IF NOT EXISTS idx_cuse_security_stage_results_daily_date ON cuse_security_stage_results_daily (as_of_date, stage_name);
+CREATE INDEX IF NOT EXISTS idx_cuse_security_stage_results_daily_ric ON cuse_security_stage_results_daily (ric, as_of_date);
 CREATE INDEX IF NOT EXISTS idx_serving_payload_current_updated ON serving_payload_current (updated_at);
 CREATE INDEX IF NOT EXISTS idx_runtime_state_current_updated ON runtime_state_current (updated_at);

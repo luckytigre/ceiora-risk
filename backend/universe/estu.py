@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from backend.universe.runtime_rows import load_security_runtime_rows
 from backend.universe.schema import (
     ESTU_MEMBERSHIP_TABLE,
     FUNDAMENTALS_HISTORY_TABLE,
@@ -54,27 +55,17 @@ def _infer_country_from_ric(ric: str) -> str:
 
 
 def _load_security_frame(conn: sqlite3.Connection) -> pd.DataFrame:
-    if not _table_exists(conn, SECURITY_MASTER_TABLE):
+    rows = load_security_runtime_rows(conn, include_disabled=False)
+    if not rows:
         return pd.DataFrame()
-    df = pd.read_sql_query(
-        f"""
-        SELECT
-            UPPER(TRIM(ric)) AS ric,
-            UPPER(TRIM(ticker)) AS ticker,
-            COALESCE(classification_ok, 0) AS classification_ok,
-            COALESCE(is_equity_eligible, 0) AS is_equity_eligible
-        FROM {SECURITY_MASTER_TABLE}
-        WHERE ric IS NOT NULL
-          AND TRIM(ric) <> ''
-        """,
-        conn,
-    )
+    df = pd.DataFrame(rows)
     if df.empty:
         return df
     df["ric"] = df["ric"].astype(str).str.upper()
     df["ticker"] = df["ticker"].astype(str).str.upper()
-    df["classification_ok"] = pd.to_numeric(df["classification_ok"], errors="coerce").fillna(0).astype(int)
-    df["is_equity_eligible"] = pd.to_numeric(df["is_equity_eligible"], errors="coerce").fillna(0).astype(int)
+    df["classification_ready"] = pd.to_numeric(df["classification_ready"], errors="coerce").fillna(0).astype(int)
+    df["is_single_name_equity"] = pd.to_numeric(df["is_single_name_equity"], errors="coerce").fillna(0).astype(int)
+    df["allow_cuse_native_core"] = pd.to_numeric(df["allow_cuse_native_core"], errors="coerce").fillna(0).astype(int)
     return df.drop_duplicates(subset=["ric"], keep="last")
 
 
@@ -208,8 +199,12 @@ def _load_latest_trbc(conn: sqlite3.Connection, *, as_of_date: str) -> pd.DataFr
 
 
 def _drop_reason(row: pd.Series) -> tuple[str, str]:
-    if not bool(row.get("is_equity_eligible", False)):
-        return "not_equity_eligible", "security_master.is_equity_eligible != 1"
+    if not bool(row.get("allow_cuse_native_core", False)):
+        return "not_native_core_candidate", "security_policy_current.allow_cuse_native_core != 1"
+    if not bool(row.get("is_single_name_equity", False)):
+        return "not_single_name_equity", "security_taxonomy_current.is_single_name_equity != 1"
+    if not bool(row.get("classification_ready", False)):
+        return "missing_classification", "security_taxonomy_current.classification_ready != 1"
     if not bool(row.get("has_required_price_history", False)):
         return "missing_price_history", "insufficient trailing price observations"
     if not bool(row.get("has_required_fundamentals", False)):
@@ -290,11 +285,10 @@ def build_and_persist_estu_membership(
         frame["passes_microcap_guard"] = frame["market_cap"].fillna(-np.inf) >= float(estu_policy.min_market_cap)
         frame["passes_liquidity_guard"] = frame["adv_20d"].fillna(-np.inf) >= float(estu_policy.min_adv_20d)
 
-        # NOTE: is_equity_eligible=1 requirement excludes projection-only instruments
-        # (coverage_role='projection_only') which have is_equity_eligible=0.
-        # This ensures ETFs never enter the estimation universe.
         eligibility_conditions = (
-            frame["is_equity_eligible"].astype(int).eq(1)
+            frame["allow_cuse_native_core"].astype(int).eq(1)
+            & frame["is_single_name_equity"].astype(int).eq(1)
+            & frame["classification_ready"].astype(int).eq(1)
             & frame["has_required_price_history"].astype(bool)
             & frame["has_required_fundamentals"].astype(bool)
             & frame["has_required_trbc"].astype(bool)

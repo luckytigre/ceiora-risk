@@ -12,10 +12,19 @@ import pandas as pd
 import pytest
 
 run_model_pipeline = importlib.import_module("backend.orchestration.run_model_pipeline")
+stage_source = importlib.import_module("backend.orchestration.stage_source")
 from backend.services import refresh_manager
 
 _UNUSED_DATA_DB = Path("__unused_test_data__.db")
 _UNUSED_CACHE_DB = Path("__unused_test_cache__.db")
+
+
+def _allow_current_state_sync_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        stage_source,
+        "_validate_local_current_state_sync_surfaces",
+        lambda **_kwargs: {"status": "ok"},
+    )
 
 
 def test_run_model_pipeline_import_does_not_require_lseg_runtime(
@@ -169,6 +178,8 @@ def test_orchestrator_ingest_stage_runs_single_full_universe_pass(monkeypatch: p
         "bootstrap_cuse4_source_tables",
         lambda **_kwargs: {"status": "ok"},
     )
+    monkeypatch.setattr(run_model_pipeline, "_repair_price_gap", lambda **_kwargs: {"status": "skipped"})
+    monkeypatch.setattr(run_model_pipeline, "_repair_pit_gap", lambda **_kwargs: {"status": "skipped"})
 
     def _fake_download(**kwargs):
         captured.append(dict(kwargs))
@@ -524,17 +535,25 @@ def test_planned_stages_insert_source_sync_for_source_daily_when_neon_is_primary
 
 def test_source_sync_stage_pushes_source_tables_only(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
+    _allow_current_state_sync_preflight(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
     monkeypatch.setattr(
         run_model_pipeline.core_reads,
         "load_source_dates",
-        lambda: {"prices_asof": "2026-03-14", "fundamentals_asof": "2026-03-14", "classification_asof": "2026-03-14"},
+        lambda **_kwargs: {"prices_asof": "2026-03-14", "fundamentals_asof": "2026-02-27", "classification_asof": "2026-02-27"},
     )
 
     def _fake_mirror(**kwargs):
         captured.update(kwargs)
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            "sync": {
+                "sync_run_id": "source_sync_test",
+                "watermark_rows_updated": 12,
+                "security_source_status_current_rows": 1,
+            },
+        }
 
     monkeypatch.setattr(run_model_pipeline, "run_neon_mirror_cycle", _fake_mirror)
 
@@ -551,27 +570,91 @@ def test_source_sync_stage_pushes_source_tables_only(monkeypatch: pytest.MonkeyP
     )
 
     assert out["status"] == "ok"
+    assert str(out["snapshot_path"]).endswith(".db")
+    assert Path(str(captured["sqlite_path"])).name != _UNUSED_DATA_DB.name
     assert captured["tables"] == [
-        "security_master",
+        "security_registry",
+        "security_taxonomy_current",
+        "security_policy_current",
+        "security_source_observation_daily",
+        "security_master_compat_current",
+        "security_ingest_runs",
+        "security_ingest_audit",
         "security_prices_eod",
         "security_fundamentals_pit",
         "security_classification_pit",
+        "estu_membership_daily",
+        "universe_cross_section_snapshot",
     ]
 
 
+def test_source_sync_stage_fails_closed_when_source_dates_cannot_be_loaded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _allow_current_state_sync_preflight(monkeypatch)
+    monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
+
+    def _boom(**_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(run_model_pipeline.core_reads, "load_source_dates", _boom)
+
+    with pytest.raises(RuntimeError, match="source_sync could not load source dates"):
+        run_model_pipeline._run_stage(
+            profile="source-daily",
+            stage="source_sync",
+            as_of_date="2026-03-14",
+            should_run_core=False,
+            serving_mode="light",
+            force_core=False,
+            core_reason="test",
+            data_db=_UNUSED_DATA_DB,
+            cache_db=_UNUSED_CACHE_DB,
+        )
+
+
+def test_source_sync_stage_requires_non_empty_local_source_dates(monkeypatch: pytest.MonkeyPatch) -> None:
+    _allow_current_state_sync_preflight(monkeypatch)
+    monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
+
+    def _load_source_dates(**_kwargs):
+        backend = run_model_pipeline.core_reads.core_read_backend_name()
+        if backend == "local":
+            return {"prices_asof": "", "fundamentals_asof": "", "classification_asof": ""}
+        return {"prices_asof": "2026-03-14", "fundamentals_asof": "2026-02-27", "classification_asof": "2026-02-27"}
+
+    monkeypatch.setattr(run_model_pipeline.core_reads, "load_source_dates", _load_source_dates)
+
+    with pytest.raises(RuntimeError, match="source_sync requires non-empty local source dates before syncing Neon"):
+        run_model_pipeline._run_stage(
+            profile="source-daily",
+            stage="source_sync",
+            as_of_date="2026-03-14",
+            should_run_core=False,
+            serving_mode="light",
+            force_core=False,
+            core_reason="test",
+            data_db=_UNUSED_DATA_DB,
+            cache_db=_UNUSED_CACHE_DB,
+        )
+
+
 def test_source_sync_stage_refuses_to_downgrade_neon_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    _allow_current_state_sync_preflight(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
 
     def _load_source_dates(**kwargs):
         backend = run_model_pipeline.core_reads.core_read_backend_name()
         if backend == "local":
-            return {"prices_asof": "2026-03-13", "fundamentals_asof": "2026-03-13", "classification_asof": "2026-03-13"}
-        return {"prices_asof": "2026-03-14", "fundamentals_asof": "2026-03-14", "classification_asof": "2026-03-14"}
+            return {"prices_asof": "2026-03-13", "fundamentals_asof": "2026-02-26", "classification_asof": "2026-02-26"}
+        return {"prices_asof": "2026-03-14", "fundamentals_asof": "2026-02-27", "classification_asof": "2026-02-27"}
 
     monkeypatch.setattr(run_model_pipeline.core_reads, "load_source_dates", _load_source_dates)
 
-    with pytest.raises(RuntimeError, match="source_sync refused to overwrite newer Neon source tables"):
+    with pytest.raises(RuntimeError, match="source_sync refused to overwrite newer Neon source tables from an older local archive"):
         run_model_pipeline._run_stage(
             profile="core-weekly",
             stage="source_sync",
@@ -585,8 +668,8 @@ def test_source_sync_stage_refuses_to_downgrade_neon_sources(monkeypatch: pytest
         )
 
 
-def test_source_sync_stage_allows_healing_neon_dates_newer_than_target(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict[str, object] = {}
+def test_source_sync_stage_refuses_newer_than_target_neon_dates(monkeypatch: pytest.MonkeyPatch) -> None:
+    _allow_current_state_sync_preflight(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
 
@@ -596,41 +679,23 @@ def test_source_sync_stage_allows_healing_neon_dates_newer_than_target(monkeypat
             return {"prices_asof": "2026-03-13", "fundamentals_asof": "2026-03-04", "classification_asof": "2026-03-04"}
         return {"prices_asof": "2026-03-16", "fundamentals_asof": "2026-03-04", "classification_asof": "2026-03-04"}
 
-    def _fake_mirror(**kwargs):
-        captured.update(kwargs)
-        return {"status": "ok"}
-
     monkeypatch.setattr(run_model_pipeline.core_reads, "load_source_dates", _load_source_dates)
-    monkeypatch.setattr(run_model_pipeline, "run_neon_mirror_cycle", _fake_mirror)
-
-    out = run_model_pipeline._run_stage(
-        profile="source-daily",
-        stage="source_sync",
-        as_of_date="2026-03-13",
-        should_run_core=False,
-        serving_mode="light",
-        force_core=False,
-        core_reason="within_interval",
-        data_db=_UNUSED_DATA_DB,
-        cache_db=_UNUSED_CACHE_DB,
-    )
-
-    assert out["status"] == "ok"
-    assert sorted(out["ignored_newer_than_target"]) == [
-        "classification_asof",
-        "fundamentals_asof",
-        "prices_asof",
-    ]
-    assert captured["tables"] == [
-        "security_master",
-        "security_prices_eod",
-        "security_fundamentals_pit",
-        "security_classification_pit",
-    ]
+    with pytest.raises(RuntimeError, match="source_sync refused to overwrite newer-than-target Neon source tables"):
+        run_model_pipeline._run_stage(
+            profile="source-daily",
+            stage="source_sync",
+            as_of_date="2026-03-13",
+            should_run_core=False,
+            serving_mode="light",
+            force_core=False,
+            core_reason="within_interval",
+            data_db=_UNUSED_DATA_DB,
+            cache_db=_UNUSED_CACHE_DB,
+        )
 
 
-def test_source_sync_stage_allows_healing_open_period_pit_dates(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict[str, object] = {}
+def test_source_sync_stage_refuses_open_period_pit_dates_in_neon(monkeypatch: pytest.MonkeyPatch) -> None:
+    _allow_current_state_sync_preflight(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
     monkeypatch.setattr(run_model_pipeline.config, "SOURCE_DAILY_PIT_FREQUENCY", "monthly")
@@ -641,33 +706,83 @@ def test_source_sync_stage_allows_healing_open_period_pit_dates(monkeypatch: pyt
             return {"prices_asof": "2026-03-13", "fundamentals_asof": "2026-02-27", "classification_asof": "2026-02-27"}
         return {"prices_asof": "2026-03-13", "fundamentals_asof": "2026-03-04", "classification_asof": "2026-03-04"}
 
-    def _fake_mirror(**kwargs):
-        captured.update(kwargs)
-        return {"status": "ok"}
-
     monkeypatch.setattr(run_model_pipeline.core_reads, "load_source_dates", _load_source_dates)
-    monkeypatch.setattr(run_model_pipeline, "run_neon_mirror_cycle", _fake_mirror)
+    with pytest.raises(RuntimeError, match="source_sync refused to overwrite newer-than-target Neon source tables"):
+        run_model_pipeline._run_stage(
+            profile="source-daily",
+            stage="source_sync",
+            as_of_date="2026-03-13",
+            should_run_core=False,
+            serving_mode="light",
+            force_core=False,
+            core_reason="within_interval",
+            data_db=_UNUSED_DATA_DB,
+            cache_db=_UNUSED_CACHE_DB,
+        )
 
-    out = run_model_pipeline._run_stage(
-        profile="source-daily",
-        stage="source_sync",
-        as_of_date="2026-03-13",
-        should_run_core=False,
-        serving_mode="light",
-        force_core=False,
-        core_reason="within_interval",
-        data_db=_UNUSED_DATA_DB,
-        cache_db=_UNUSED_CACHE_DB,
+
+def test_source_sync_stage_refuses_partial_local_current_state_surfaces(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "data.db"
+    cache_db = tmp_path / "cache.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        """
+        CREATE TABLE security_registry (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            tracking_status TEXT
+        )
+        """
+    )
+    conn.execute("CREATE TABLE security_policy_current (ric TEXT PRIMARY KEY)")
+    conn.execute("CREATE TABLE security_taxonomy_current (ric TEXT PRIMARY KEY)")
+    conn.execute("CREATE TABLE security_master_compat_current (ric TEXT PRIMARY KEY)")
+    conn.execute(
+        """
+        CREATE TABLE security_source_observation_daily (
+            as_of_date TEXT,
+            ric TEXT
+        )
+        """
+    )
+    conn.execute("INSERT INTO security_registry (ric, ticker, tracking_status) VALUES ('AAPL.OQ', 'AAPL', 'active')")
+    conn.execute("INSERT INTO security_taxonomy_current (ric) VALUES ('AAPL.OQ')")
+    conn.execute("INSERT INTO security_master_compat_current (ric) VALUES ('AAPL.OQ')")
+    conn.execute("INSERT INTO security_source_observation_daily (as_of_date, ric) VALUES ('2026-03-14', 'AAPL.OQ')")
+    conn.commit()
+    conn.close()
+    cache_db.touch()
+
+    monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
+    monkeypatch.setattr(
+        run_model_pipeline.core_reads,
+        "load_source_dates",
+        lambda **_kwargs: {
+            "prices_asof": "2026-03-14",
+            "fundamentals_asof": "2026-02-27",
+            "classification_asof": "2026-02-27",
+        },
     )
 
-    assert out["status"] == "ok"
-    assert sorted(out["ignored_newer_than_target"]) == ["classification_asof", "fundamentals_asof"]
-    assert captured["tables"] == [
-        "security_master",
-        "security_prices_eod",
-        "security_fundamentals_pit",
-        "security_classification_pit",
-    ]
+    with pytest.raises(
+        RuntimeError,
+        match="source_sync refused to replace Neon current-state tables because local current-state surfaces are incomplete: incomplete_table:security_policy_current:0/1",
+    ):
+        run_model_pipeline._run_stage(
+            profile="source-daily",
+            stage="source_sync",
+            as_of_date="2026-03-14",
+            should_run_core=False,
+            serving_mode="light",
+            force_core=False,
+            core_reason="test",
+            data_db=db_path,
+            cache_db=cache_db,
+        )
 
 
 def test_neon_readiness_stage_skips_when_core_is_not_running(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -734,10 +849,15 @@ def test_neon_readiness_stage_surfaces_workspace_preparation_failure(
     monkeypatch.setattr(
         run_model_pipeline.neon_authority,
         "prepare_neon_rebuild_workspace",
-        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("Neon rebuild readiness failed: missing_table:security_master")),
+        lambda **kwargs: (_ for _ in ()).throw(
+            RuntimeError("Neon rebuild readiness failed: missing_table:security_master_compat_current")
+        ),
     )
 
-    with pytest.raises(RuntimeError, match="Neon rebuild readiness failed: missing_table:security_master"):
+    with pytest.raises(
+        RuntimeError,
+        match="Neon rebuild readiness failed: missing_table:security_master_compat_current",
+    ):
         run_model_pipeline._run_stage(
             profile="core-weekly",
             stage="neon_readiness",
