@@ -20,6 +20,7 @@ from backend.data.trbc_schema import (
     pick_trbc_industry_column,
 )
 from backend.trading_calendar import filter_xnys_sessions
+from backend.universe.runtime_rows import load_security_runtime_map_by_date
 from backend.universe.security_master_sync import load_default_source_universe_rows
 
 logger = logging.getLogger(__name__)
@@ -280,9 +281,15 @@ def _compute_price_features(prices: pd.DataFrame) -> pd.DataFrame:
         beta = cov / var.replace(0.0, np.nan)
         return beta
 
+    beta_parts: list[pd.Series] = []
+    for _, grp in out.groupby("ric", sort=False):
+        beta = _rolling_beta(grp)
+        beta.index = grp.index
+        beta_parts.append(beta)
     out["beta_raw"] = (
-        out.groupby("ric", sort=False, group_keys=False)[["ret_1d", "market_ret"]]
-        .apply(_rolling_beta)
+        pd.concat(beta_parts).sort_index()
+        if beta_parts
+        else pd.Series(dtype=float)
     )
     out["log_avg_dollar_volume_20d_raw"] = np.log(np.clip(out["avg_dollar_volume_20d"], 0.0, None) + 1.0)
     return out
@@ -393,28 +400,66 @@ def rebuild_raw_cross_section_history(
         ).date().isoformat()
         max_date = dates[-1]
 
+        runtime_rows_by_date = load_security_runtime_map_by_date(
+            conn,
+            as_of_dates=dates,
+            include_disabled=False,
+            allow_empty_registry_fallback=True,
+        )
+        runtime_identity = pd.DataFrame(
+            [
+                {
+                    "as_of_date": as_of_date,
+                    "ric": row.get("ric"),
+                    "ticker": row.get("ticker"),
+                    "allow_cuse_native_core": row.get("allow_cuse_native_core"),
+                    "is_single_name_equity": row.get("is_single_name_equity"),
+                    "classification_ready": row.get("classification_ready"),
+                }
+                for as_of_date, runtime_map in runtime_rows_by_date.items()
+                for row in runtime_map.values()
+            ]
+        )
+        if runtime_identity.empty:
+            return {"status": "no-runtime-identity", "rows_upserted": 0, "table": TABLE}
+        runtime_identity["as_of_date"] = runtime_identity["as_of_date"].astype(str)
+        runtime_identity["ric"] = runtime_identity["ric"].astype(str).str.upper()
+        runtime_identity["ticker"] = runtime_identity["ticker"].astype(str).str.upper()
+        runtime_identity = runtime_identity[
+            runtime_identity["allow_cuse_native_core"].astype(int).eq(1)
+            & runtime_identity["is_single_name_equity"].astype(int).eq(1)
+            & runtime_identity["classification_ready"].astype(int).eq(1)
+        ][["ric", "ticker", "as_of_date"]].drop_duplicates(subset=["ric", "as_of_date"], keep="last")
+        default_source_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
+        if default_source_rows:
+            default_source_rics = {
+                str(row.get("ric") or "").strip().upper()
+                for row in default_source_rows
+                if str(row.get("ric") or "").strip()
+            }
+            runtime_identity = runtime_identity[
+                runtime_identity["ric"].astype(str).str.upper().isin(default_source_rics)
+            ]
+        if runtime_identity.empty:
+            return {"status": "no-runtime-core-identity", "rows_upserted": 0, "table": TABLE}
+        runtime_union_identity = runtime_identity[["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
+        runtime_rics = runtime_union_identity["ric"].astype(str).tolist()
+        runtime_placeholders = ",".join("?" for _ in runtime_rics)
+
         prices_raw = pd.read_sql_query(
             f"""
-            SELECT UPPER(p.ric) AS ric, UPPER(sm.ticker) AS ticker, p.date, p.close, p.volume, p.source, p.updated_at
+            SELECT UPPER(p.ric) AS ric, p.date, p.close, p.volume, p.source, p.updated_at
             FROM {PRICES_TABLE} p
-            JOIN {SECURITY_MASTER_TABLE} sm
-              ON sm.ric = p.ric
             WHERE p.date >= ? AND p.date <= ?
+              AND UPPER(p.ric) IN ({runtime_placeholders})
             ORDER BY UPPER(p.ric), p.date
             """,
             conn,
-            params=(min_for_roll, max_date),
+            params=(min_for_roll, max_date, *runtime_rics),
         )
-        # NOTE: load_default_source_universe_rows excludes projection-only instruments
-        # (coverage_role='projection_only') because they have is_equity_eligible=0.
-        # This ensures ETFs and other projection-only instruments never enter the
-        # raw cross-section history used for core factor estimation.
-        source_universe_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
-        if source_universe_rows:
-            source_universe = pd.DataFrame(source_universe_rows)
-            source_universe["ric"] = source_universe["ric"].astype(str).str.upper()
-            source_universe["ticker"] = source_universe["ticker"].astype(str).str.upper()
-            prices_raw = prices_raw.merge(source_universe, on=["ric", "ticker"], how="inner")
+        if not prices_raw.empty:
+            prices_raw["ric"] = prices_raw["ric"].astype(str).str.upper()
+            prices_raw = prices_raw.merge(runtime_union_identity, on="ric", how="inner")
         prices = _dedupe_prices(prices_raw)
         prices = _compute_price_features(prices)
         logger.info(
@@ -441,6 +486,7 @@ def rebuild_raw_cross_section_history(
         base = base.rename(columns={"date": "as_of_date", "close": "price_close", "volume": "price_volume"})
         base["as_of_date_dt"] = pd.to_datetime(base["as_of_date"], errors="coerce")
         base = base.dropna(subset=["as_of_date_dt"])
+        base = base.merge(runtime_identity, on=["ric", "ticker", "as_of_date"], how="inner")
         if base.empty:
             return {"status": "no-base", "rows_upserted": 0, "table": TABLE}
 
@@ -468,18 +514,18 @@ def rebuild_raw_cross_section_history(
             fselect_cols = ", ".join(f"f.{c}" for c in fkeep)
             fundamentals = pd.read_sql_query(
                 f"""
-                SELECT UPPER(f.ric) AS ric, UPPER(sm.ticker) AS ticker, f.as_of_date AS fetch_date, {fselect_cols}
+                SELECT UPPER(f.ric) AS ric, f.as_of_date AS fetch_date, {fselect_cols}
                 FROM {FUNDAMENTALS_TABLE} f
-                JOIN {SECURITY_MASTER_TABLE} sm
-                  ON sm.ric = f.ric
                 WHERE f.as_of_date <= ?
+                  AND UPPER(f.ric) IN ({runtime_placeholders})
                 ORDER BY UPPER(f.ric), f.as_of_date
                 """,
                 conn,
-                params=(max_date,),
+                params=(max_date, *runtime_rics),
             )
         if not fundamentals.empty:
             fundamentals["ric"] = fundamentals["ric"].astype(str).str.upper()
+            fundamentals = fundamentals.merge(runtime_identity, on="ric", how="left")
             fundamentals["ticker"] = fundamentals["ticker"].astype(str).str.upper()
             fundamentals["fetch_date"] = fundamentals["fetch_date"].astype(str)
             fundamentals["fetch_date_dt"] = pd.to_datetime(fundamentals["fetch_date"], errors="coerce")
@@ -525,22 +571,21 @@ def rebuild_raw_cross_section_history(
                 f"""
                 SELECT
                     UPPER(c.ric) AS ric,
-                    UPPER(sm.ticker) AS ticker,
                     c.as_of_date,
                     c.{trbc_sec_col} AS trbc_economic_sector_short,
                     c.{trbc_biz_col} AS trbc_business_sector,
                     {f"c.{trbc_ind_col}" if trbc_ind_col else "NULL"} AS trbc_industry_group_l3
                 FROM {CLASSIFICATION_TABLE} c
-                JOIN {SECURITY_MASTER_TABLE} sm
-                  ON sm.ric = c.ric
                 WHERE c.as_of_date <= ?
+                  AND UPPER(c.ric) IN ({runtime_placeholders})
                 ORDER BY UPPER(c.ric), c.as_of_date
                 """,
                 conn,
-                params=(max_date,),
+                params=(max_date, *runtime_rics),
             )
             if not trbc.empty:
                 trbc["ric"] = trbc["ric"].astype(str).str.upper()
+                trbc = trbc.merge(runtime_union_identity, on="ric", how="left")
                 trbc["ticker"] = trbc["ticker"].astype(str).str.upper()
                 trbc["as_of_date"] = trbc["as_of_date"].astype(str)
                 trbc["as_of_date_dt"] = pd.to_datetime(trbc["as_of_date"], errors="coerce")

@@ -15,6 +15,7 @@ import pandas as pd
 
 from backend.scripts.download_data_lseg import download_from_lseg
 from backend.trading_calendar import previous_or_same_xnys_session
+from backend.universe.schema import SECURITY_REGISTRY_TABLE
 from backend.universe.security_master_sync import load_default_source_universe_rows
 
 
@@ -30,9 +31,22 @@ def _pit_dates(start_date: str, end_date: str, *, frequency: str) -> list[str]:
 def _eligible_universe_count(db_path: Path) -> int:
     conn = sqlite3.connect(str(db_path))
     try:
-        return int(len(load_default_source_universe_rows(conn, include_pending_seed=False)))
+        return int(len(load_default_source_universe_rows(conn, include_pending_seed=True)))
     finally:
         conn.close()
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type='table' AND name=?
+        LIMIT 1
+        """,
+        (table,),
+    ).fetchone()
+    return row is not None
 
 
 def _requested_ric_count(db_path: Path, rics_csv: str | None) -> int:
@@ -42,17 +56,20 @@ def _requested_ric_count(db_path: Path, rics_csv: str | None) -> int:
     conn = sqlite3.connect(str(db_path))
     try:
         placeholders = ",".join("?" for _ in requested)
-        row = conn.execute(
-            f"""
-            SELECT COUNT(*)
-            FROM security_master
-            WHERE ric IS NOT NULL
-              AND TRIM(ric) <> ''
-              AND UPPER(TRIM(ric)) IN ({placeholders})
-            """,
-            requested,
-        ).fetchone()
-        return int(row[0] or 0) if row else 0
+        if _table_exists(conn, SECURITY_REGISTRY_TABLE):
+            row = conn.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM {SECURITY_REGISTRY_TABLE}
+                WHERE ric IS NOT NULL
+                  AND TRIM(ric) <> ''
+                  AND UPPER(TRIM(ric)) IN ({placeholders})
+                  AND COALESCE(NULLIF(TRIM(tracking_status), ''), 'active') <> 'disabled'
+                """,
+                requested,
+            ).fetchone()
+            return int(row[0] or 0) if row else 0
+        return 0
     finally:
         conn.close()
 
