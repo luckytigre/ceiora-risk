@@ -5,10 +5,13 @@ artifact_registry_repository_id = "ceiora-images"
 cloudflare_zone_name          = "ceiora.com"
 cloudflare_proxied            = false
 
-# Optional explicit image refs when the operator pushes tagged images.
-# frontend_image_ref         = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/frontend:latest"
-# serve_image_ref            = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/serve:latest"
-# control_image_ref          = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:latest"
+# Production should pin explicit image refs instead of relying on the default
+# `image_tag = "latest"`. For config-only Terraform changes such as billing-mode
+# updates, pin the currently deployed image refs so the plan only changes the
+# intended service configuration.
+# frontend_image_ref         = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/frontend:<tag>"
+# serve_image_ref            = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/serve:<tag>"
+# control_image_ref          = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:<tag>"
 
 # Optional override for the frontend build/runtime proxy origin during run.app smoke.
 # frontend_backend_api_origin = "https://<serve-service>.run.app"

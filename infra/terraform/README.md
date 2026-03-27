@@ -77,6 +77,7 @@ Important Cloud Run billing rule:
 - when a service defines `template.containers.resources`, set `cpu_idle = true` explicitly to preserve request-based billing
 - direct `gcloud run deploy` workflows must also pass `--cpu-throttling`, or the live service can drift back to instance-based billing
 - rollout verification should include `terraform plan`, `make cloud-request-billing-check`, `make smoke-check`, and `RUN_REFRESH_DISPATCH=1 make operator-check`
+- for config-only Terraform changes in production, pin `frontend_image_ref`, `serve_image_ref`, and `control_image_ref` to the currently deployed image refs so the plan does not drift to `:latest`
 
 Important frontend rule:
 - the frontend image bakes `BACKEND_API_ORIGIN` at build time
