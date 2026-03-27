@@ -29,6 +29,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       image = local.frontend_image_ref
 
       resources {
+        cpu_idle = true
         limits = {
           cpu    = "1"
           memory = var.frontend_memory_limit
@@ -101,6 +102,7 @@ resource "google_cloud_run_v2_service" "serve" {
       image = local.serve_image_ref
 
       resources {
+        cpu_idle = true
         limits = {
           cpu    = "1"
           memory = var.serve_memory_limit
@@ -191,6 +193,7 @@ resource "google_cloud_run_v2_service" "control" {
       image = local.control_image_ref
 
       resources {
+        cpu_idle = true
         limits = {
           cpu    = "1"
           memory = var.control_memory_limit

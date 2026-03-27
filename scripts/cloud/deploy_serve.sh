@@ -28,6 +28,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
   --image "${SERVE_IMAGE}" \
+  --cpu-throttling \
   --quiet
 
 printf 'Deployed serve image %s to Cloud Run service %s (%s)\n' "${SERVE_IMAGE}" "${SERVICE_NAME}" "${REGION}"

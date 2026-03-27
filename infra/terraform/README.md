@@ -70,8 +70,13 @@ Important ingress rule:
 
 Observability prep owned here:
 - `_Default` Cloud Logging retention
-- uptime checks for `app.ceiora.com` and `api.ceiora.com`
+- no public uptime checks by default, to preserve scale-to-zero behavior
 - `control.ceiora.com` remains an operator-token smoke target and is documented in the runbook instead of being a public uptime probe
+
+Important Cloud Run billing rule:
+- when a service defines `template.containers.resources`, set `cpu_idle = true` explicitly to preserve request-based billing
+- direct `gcloud run deploy` workflows must also pass `--cpu-throttling`, or the live service can drift back to instance-based billing
+- rollout verification should include `terraform plan`, `make cloud-request-billing-check`, `make smoke-check`, and `RUN_REFRESH_DISPATCH=1 make operator-check`
 
 Important frontend rule:
 - the frontend image bakes `BACKEND_API_ORIGIN` at build time

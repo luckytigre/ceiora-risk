@@ -1,6 +1,6 @@
 # Cloud-Native Runbook
 
-Date: 2026-03-21
+Date: 2026-03-27
 Owner: Codex
 Status: custom-domain rollout live and validated on `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com`
 
@@ -229,6 +229,7 @@ Preferred serve rollout path:
 - `make cloud-serve-deploy`
   - builds and pushes the `serve` image with the minimal backend-only context
   - deploys that image directly to the Cloud Run serve service
+  - preserves request-based billing with `--cpu-throttling`
 
 Build-time contract:
 - the frontend image reads `BACKEND_API_ORIGIN` at build time so the Next rewrite proxy is baked for the target serve API host
@@ -255,6 +256,8 @@ Current Cloud Run service prep:
 - the Terraform `prod` root now defines frontend, serve, and control service resources
 - all three services are intentionally public at the Cloud Run layer for the first `run.app` smoke phase
 - the control service stays operator-token-protected in-app
+- all three services pin request-based billing by explicitly setting `cpu_idle=true` in Terraform
+- any direct `gcloud run deploy` rollout must preserve request-based billing with `--cpu-throttling`
 - the live service headroom is now:
   - frontend: `1 vCPU`, `1Gi`, `maxScale=4`
   - serve: `1 vCPU`, `1Gi`, `maxScale=4`
@@ -300,6 +303,14 @@ Before using these split surfaces for real deployment:
 - frontend `typecheck` and `build` should pass
 - operator/control proxy routes should be smoke-checked against separate origins
 - docs and the tracked plan should be current
+
+For the request-based billing rollout specifically:
+- roll out `control` first, then `serve`, then `frontend`
+- after each Terraform apply, confirm Cloud Run reports `run.googleapis.com/cpu-throttling=true` with `make cloud-request-billing-check`
+- require a clean `terraform plan` after the rollout so live state and Terraform state agree
+- use `make smoke-check` for repo-side contract checks
+- use `make operator-check` with `APP_BASE_URL`, `CONTROL_BASE_URL`, and `OPERATOR_API_TOKEN` set for live control-plane validation
+- set `RUN_REFRESH_DISPATCH=1` on `make operator-check` to run a real `POST /api/refresh?profile=serve-refresh` and watch `/api/refresh/status` to terminal state
 
 ## First Rollout Order
 
