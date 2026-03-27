@@ -330,6 +330,10 @@ Parallel cPAR note:
 - One-command operator check:
   - `make operator-check`
   - or `./scripts/operator_check.sh`
+  - live cloud check:
+    - `APP_BASE_URL=https://app.ceiora.com CONTROL_BASE_URL=https://control.ceiora.com OPERATOR_API_TOKEN=... make operator-check`
+  - live cloud dispatch + reconciliation:
+    - `APP_BASE_URL=https://app.ceiora.com CONTROL_BASE_URL=https://control.ceiora.com OPERATOR_API_TOKEN=... RUN_REFRESH_DISPATCH=1 make operator-check`
   - If Neon auto-sync is disabled, this check degrades gracefully instead of failing on missing parity artifacts.
 - Verify latest refresh metadata:
   - `curl -s "http://localhost:8000/api/data/diagnostics" | jq '.cache_outputs[] | select(.key==\"refresh_meta\")'`
