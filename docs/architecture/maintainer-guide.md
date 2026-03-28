@@ -27,7 +27,7 @@ Use a single root virtualenv for local work:
 - activate with `source .venv_local/bin/activate`
 - the local app scripts and backend commands assume `.venv_local`
 - the repository is standardized on Python `3.14.x`
-- `make doctor` verifies `.venv_local`, core backend imports, whether `lseg.data` is importable in that environment, and that clean duplicate aliases are not still present in the seed/local `security_master`
+- `make doctor` verifies `.venv_local`, core backend imports, whether `lseg.data` is importable in that environment, and that the registry-first current-state surfaces plus `security_master_compat_current` are present and structurally sane in the local workspace
 - install the real LSEG runtime into `.venv_local` when you need ingest/rebuild lanes; the backend package extra is `.[lseg]`, and `./scripts/setup_local_env.sh` also attempts `pip install lseg-data`
 
 ## Where New Code Should Go

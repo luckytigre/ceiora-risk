@@ -106,8 +106,11 @@ try {
   assert.match(homeHtml, /cPAR/i);
 
   await assertRedirect("/exposures", "/cuse/exposures");
+  await assertRedirect("/exposures?mode=sensitivity", "/cuse/exposures?mode=sensitivity");
   await assertRedirect("/explore", "/cuse/explore");
+  await assertRedirect("/explore?q=AAPL", "/cuse/explore?q=AAPL");
   await assertRedirect("/health", "/cuse/health");
+  await assertRedirect("/health?panel=operator", "/cuse/health?panel=operator");
   await assertRedirect("/cuse", "/cuse/exposures");
   await assertRedirect("/cpar", "/cpar/risk");
   await assertRedirect("/cpar/portfolio", "/cpar/risk");

@@ -36,11 +36,11 @@ Goal:
 
 Implementation surface:
 - `frontend/next.config.js`
+- `frontend/scripts/family_redirect_contract_check.mjs`
 - `frontend/scripts/family_routes_smoke.mjs`
-- `backend/tests/test_frontend_route_redirect_contract.py`
 
 Validation:
-- `./backend/.venv/bin/python -m pytest backend/tests/test_frontend_route_redirect_contract.py`
+- `cd frontend && node scripts/family_redirect_contract_check.mjs`
 - `cd frontend && node scripts/family_routes_smoke.mjs`
 
 ### Phase 2: cUSE4 Service De-dup
@@ -162,6 +162,6 @@ Implementation findings:
 
 Validation results for this slice:
 - `git diff --check` passed for the touched files
-- direct execution of `backend/tests/test_frontend_route_redirect_contract.py` passed inside `backend/.venv`
+- `cd frontend && node scripts/family_redirect_contract_check.mjs` passed
 - `node --check frontend/scripts/family_routes_smoke.mjs` passed
 - targeted backend `pytest` and frontend `tsc` invocations were attempted, but both stalled behind existing long-running workspace processes in this environment

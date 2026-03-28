@@ -345,8 +345,10 @@ Parallel cPAR note:
   - `sqlite3 backend/runtime/cache.db "SELECT date,exp_date,regression_member_n,structural_coverage,regression_coverage FROM daily_universe_eligibility_summary ORDER BY date DESC LIMIT 10;"`
 - Verify no compatibility views remain:
   - `sqlite3 backend/runtime/data.db "SELECT COUNT(*) FROM sqlite_master WHERE type='view';"`
-- Verify `security_master` no longer carries deprecated compatibility metadata:
-  - `sqlite3 backend/runtime/data.db "SELECT name FROM pragma_table_info('security_master') WHERE name IN ('sid','permid','instrument_type','asset_category_description');"`
+- Verify the compatibility projection no longer carries deprecated metadata:
+  - `sqlite3 backend/runtime/data.db "SELECT name FROM pragma_table_info('security_master_compat_current') WHERE name IN ('sid','permid','instrument_type','asset_category_description');"`
+- Verify active universe authority remains registry-first:
+  - `sqlite3 backend/runtime/data.db "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('security_registry','security_policy_current','security_taxonomy_current','security_source_status_current');"`
 
 ## Rollback
 - Create checkpoint before major changes:
