@@ -343,3 +343,24 @@ Outcome:
 Validation:
 - `git diff --check -- backend/services/cuse4_holdings_service.py backend/services/holdings_service.py docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/maintainer-guide.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
 - `./.venv_local/bin/python -m pytest -q backend/tests/test_holdings_service.py backend/tests/test_holdings_route_dirty_state.py backend/tests/test_portfolio_whatif_route.py::test_portfolio_whatif_apply_route_returns_service_payload backend/tests/test_model_family_ownership_boundaries.py`
+
+## Slice 7B
+
+Scope:
+- `backend/services/cuse4_portfolio_whatif.py`
+- `backend/services/portfolio_whatif.py`
+- `backend/tests/test_portfolio_whatif_service.py`
+- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/REPO_TIGHTENING_PLAN.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- moved the concrete portfolio what-if preview implementation into `backend/services/cuse4_portfolio_whatif.py`
+- reduced `backend/services/portfolio_whatif.py` to a compatibility shim that still re-exports the public preview contract for older callers and direct service tests
+- made the cUSE4 holdings dependency explicit inside the concrete owner while keeping the route-facing cUSE4 preview API unchanged
+- added an explicit shim-parity test so the supported legacy import surface remains pinned even as internal helpers move
+
+Validation:
+- `git diff --check -- backend/services/cuse4_portfolio_whatif.py backend/services/portfolio_whatif.py backend/tests/test_portfolio_whatif_service.py docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/maintainer-guide.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py backend/tests/test_model_family_ownership_boundaries.py`

@@ -526,6 +526,33 @@ Validation:
 Commit boundary:
 - holdings owner move only
 
+#### Slice 7B: cUSE4 Portfolio What-If Owner Move
+
+Goal:
+- make `backend/services/cuse4_portfolio_whatif.py` the concrete portfolio what-if owner
+- reduce `backend/services/portfolio_whatif.py` to a compatibility shim without dropping any public preview symbols
+
+Study first:
+- verify the full public portfolio what-if contract that older callers and tests still depend on
+- confirm route and service consumers only rely on the public preview surface plus injected dependency contract
+- document that the shim keeps only the supported public import surface rather than broad legacy monkeypatch parity
+
+Primary surfaces:
+- `backend/services/cuse4_portfolio_whatif.py`
+- `backend/services/portfolio_whatif.py`
+- `backend/tests/test_portfolio_whatif_service.py`
+- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `docs/architecture/maintainer-guide.md`
+- this plan file
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Validation:
+- `git diff --check -- backend/services/cuse4_portfolio_whatif.py backend/services/portfolio_whatif.py backend/tests/test_portfolio_whatif_service.py docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/maintainer-guide.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py backend/tests/test_model_family_ownership_boundaries.py`
+
+Commit boundary:
+- portfolio what-if owner move only
+
 #### Slice 7: cUSE4 Service Surface De-Dup Part B
 
 Goal:

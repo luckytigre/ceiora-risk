@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pandas as pd
 
+from backend.services import cuse4_portfolio_whatif
 from backend.services import portfolio_whatif
 from backend.services import neon_holdings
 
@@ -13,6 +14,19 @@ def _deps(**overrides) -> portfolio_whatif.PortfolioWhatIfDependencies:
         portfolio_whatif.get_portfolio_whatif_dependencies(),
         **overrides,
     )
+
+
+def test_portfolio_whatif_legacy_shim_reexports_supported_contract() -> None:
+    assert portfolio_whatif.PortfolioWhatIfDependencies is cuse4_portfolio_whatif.PortfolioWhatIfDependencies
+    assert portfolio_whatif.config is cuse4_portfolio_whatif.config
+    assert portfolio_whatif.get_portfolio_whatif_dependencies is cuse4_portfolio_whatif.get_portfolio_whatif_dependencies
+    assert portfolio_whatif.preview_portfolio_whatif is cuse4_portfolio_whatif.preview_portfolio_whatif
+    assert sorted(portfolio_whatif.__all__) == [
+        "PortfolioWhatIfDependencies",
+        "config",
+        "get_portfolio_whatif_dependencies",
+        "preview_portfolio_whatif",
+    ]
 
 
 def test_preview_portfolio_whatif_projects_current_and_hypothetical_without_writes() -> None:

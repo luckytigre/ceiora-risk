@@ -95,12 +95,14 @@ Practical rule:
   - holdings reads/writes from the shared holdings owners above
   - cUSE-only modeled snapshot/control reads from `frontend/src/hooks/useCuse4Api.ts`
   - cPAR read-only method overlays from `frontend/src/hooks/useCparApi.ts`
-- when touching the default cUSE dashboard/factor-history/health/holdings service surfaces, prefer:
+- when touching the default cUSE dashboard/factor-history/health/holdings/portfolio-whatif service surfaces, prefer:
   - `backend/services/cuse4_dashboard_payload_service.py`
   - `backend/services/cuse4_factor_history_service.py`
   - `backend/services/cuse4_health_diagnostics_service.py`
   - `backend/services/cuse4_holdings_service.py`
+  - `backend/services/cuse4_portfolio_whatif.py`
   - treat the legacy default-named modules as compatibility shims unless a cleanup slice is explicitly removing them
+  - do not depend on undocumented legacy helper globals or monkeypatch seams surviving those shims
 
 ## Where New Code Should NOT Go
 
