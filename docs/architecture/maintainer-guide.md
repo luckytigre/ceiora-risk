@@ -91,6 +91,10 @@ Practical rule:
   - `frontend/src/lib/holdingsApi.ts`
   - `frontend/src/lib/types/holdings.ts`
   - `frontend/src/lib/apiTransport.ts` only for neutral low-level transport/error handling
+- when touching the shared `/positions` surface, keep the split explicit:
+  - holdings reads/writes from the shared holdings owners above
+  - cUSE-only modeled snapshot/control reads from `frontend/src/hooks/useCuse4Api.ts`
+  - cPAR read-only method overlays from `frontend/src/hooks/useCparApi.ts`
 
 ## Where New Code Should NOT Go
 
