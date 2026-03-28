@@ -1,8 +1,8 @@
-"""Compatibility module for cUSE4 health-diagnostics route semantics.
+"""Compatibility owner for cUSE4 health-diagnostics route semantics.
 
 Prefer importing `backend.services.cuse4_health_diagnostics_service` from the
-default cUSE4 route family. This module remains as the compatibility home for
-older callers and tests that still bind directly to it.
+default cUSE4 route family. Shared helpers live here so the alias module can
+stay thin without losing its monkeypatch seams in route tests.
 """
 
 from __future__ import annotations
@@ -29,3 +29,11 @@ def load_health_diagnostics_payload() -> dict[str, Any]:
             message="Health diagnostics are not ready yet. Run core-weekly, cold-core, or another diagnostics-producing lane.",
         )
     return {**data, "_cached": True}
+
+
+__all__ = [
+    "HealthDiagnosticsNotReady",
+    "cache_get",
+    "load_health_diagnostics_payload",
+    "load_runtime_payload",
+]

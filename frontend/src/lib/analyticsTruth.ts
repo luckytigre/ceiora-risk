@@ -9,7 +9,7 @@ import type {
   PortfolioData,
   RiskData,
   SourceDates,
-} from "@/lib/types";
+} from "@/lib/types/cuse4";
 
 function cleanDate(value: string | null | undefined): string | null {
   const text = String(value || "").trim();

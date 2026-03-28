@@ -4,8 +4,12 @@
 // Prefer importing `cuse4Refresh.ts` from cUSE4-owned pages/components.
 
 import { mutate } from "swr";
-import { ApiError, apiFetch, apiPath } from "@/lib/api";
-import type { OperatorStatusData, RefreshStatusData, RefreshStatusState } from "@/lib/types";
+import { ApiError, apiFetch, apiPath } from "@/lib/cuse4Api";
+import type {
+  OperatorStatusData,
+  RefreshStatusData,
+  RefreshStatusState,
+} from "@/lib/types/cuse4";
 
 const REFRESH_POLL_INTERVAL_MS = 1500;
 const REFRESH_TIMEOUT_MS = 5 * 60 * 1000;

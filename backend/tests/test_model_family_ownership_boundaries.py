@@ -18,14 +18,11 @@ ALLOWED_LIB_API_EXACT = {
     "lib/api.ts",
     "lib/cparApi.ts",
     "lib/cuse4Api.ts",
-    "lib/refresh.ts",
 }
 
 ALLOWED_LIB_TYPES_PREFIXES: tuple[str, ...] = ()
 ALLOWED_LIB_TYPES_EXACT = {
     "hooks/useApi.ts",
-    "lib/analyticsTruth.ts",
-    "lib/refresh.ts",
     "lib/types.ts",
 }
 
@@ -99,9 +96,9 @@ ALLOWED_ROOT_CUSE4_COMPONENT_EXACT = {
     "features/cpar/components/CparCovarianceHeatmap.tsx",
     "features/cpar/components/CparFactorHistoryChart.tsx",
     "features/cpar/components/CparExposureBarChart.tsx",
+    "features/cpar/components/CparRiskDecompChart.tsx",
     "features/cpar/components/CparTickerPriceChart.tsx",
 }
-
 
 def _ts_files() -> list[Path]:
     return sorted(
@@ -208,8 +205,6 @@ def test_root_cuse4_component_imports_are_limited_to_components_and_cuse4_wrappe
         if any(token in text for token in ROOT_CUSE4_COMPONENT_IMPORTS):
             offenders.append(relative_path)
     assert offenders == []
-
-
 def test_default_cuse4_routes_use_explicit_cuse4_service_aliases() -> None:
     offenders: list[str] = []
     for rel_path, tokens in ROUTE_CUSE4_IMPORT_EXPECTATIONS.items():

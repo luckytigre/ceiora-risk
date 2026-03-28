@@ -2,28 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-
-from backend.data.serving_outputs import load_runtime_payload
-from backend.data.sqlite import cache_get
+from backend.services import health_diagnostics_service as _legacy
 
 
-@dataclass(frozen=True)
-class HealthDiagnosticsNotReady(RuntimeError):
-    cache_key: str
-    message: str
-    refresh_profile: str = "cold-core"
+HealthDiagnosticsNotReady = _legacy.HealthDiagnosticsNotReady
+cache_get = _legacy.cache_get
+load_runtime_payload = _legacy.load_runtime_payload
 
 
-def load_health_diagnostics_payload() -> dict[str, Any]:
-    data = load_runtime_payload("health_diagnostics", fallback_loader=cache_get)
-    if data is None:
-        raise HealthDiagnosticsNotReady(
-            cache_key="health_diagnostics",
-            message="Health diagnostics are not ready yet. Run core-weekly, cold-core, or another diagnostics-producing lane.",
-        )
-    return {**data, "_cached": True}
+def load_health_diagnostics_payload() -> dict[str, object]:
+    return _legacy.load_health_diagnostics_payload()
 
 
 __all__ = [

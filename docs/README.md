@@ -39,6 +39,7 @@ Primary files:
 - `dependency-rules.md`
 - `maintainer-guide.md`
 - `MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `REPO_TIGHTENING_PLAN.md`
 - `UNIVERSE_REGISTRY_AND_MODEL_GATING_PLAN.md`
 
 cPAR-specific active architecture docs stay in the same folder:
