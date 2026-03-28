@@ -450,3 +450,33 @@ Validation:
 
 Validation blockers:
 - `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 9 keeps the blocker recorded instead of widening scope into a repair
+
+## Slice 10A
+
+Scope:
+- `backend/services/cpar_portfolio_hedge_service.py`
+- `backend/services/cpar_portfolio_snapshot_service.py`
+- `backend/tests/test_cpar_portfolio_hedge_service.py`
+- `backend/tests/test_cpar_runtime_coverage_contract.py`
+- `backend/tests/test_cpar_service_route_boundaries.py`
+- `docs/architecture/CPAR_BACKEND_READ_SURFACES.md`
+- `docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/REPO_TIGHTENING_PLAN.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- made `backend/services/cpar_portfolio_hedge_service.py` the explicit route-facing hedge payload owner instead of leaving the real load path inside `backend/services/cpar_portfolio_snapshot_service.py`
+- kept `backend/services/cpar_portfolio_snapshot_service.py` focused on the shared account-scoped hedge snapshot/context/support core instead of also owning the route-facing hedge load path
+- kept portfolio what-if package/context/support-row reuse unchanged so one request still builds both `current` and `hypothetical` from one pinned account/support snapshot set
+- kept the runtime coverage contract on the shared hedge snapshot builder and added boundary checks so the route-facing hedge load path does not silently fall back into the snapshot service
+- updated the active cPAR architecture, backend-read, operations, maintainer, dependency, and slice-plan docs to describe the explicit hedge route owner plus shared snapshot support/core split
+
+Validation:
+- `git diff --check -- backend/services/cpar_portfolio_hedge_service.py backend/services/cpar_portfolio_snapshot_service.py backend/tests/test_cpar_portfolio_hedge_service.py backend/tests/test_cpar_runtime_coverage_contract.py backend/tests/test_cpar_service_route_boundaries.py docs/architecture/CPAR_BACKEND_READ_SURFACES.md docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md docs/operations/CPAR_OPERATIONS_PLAYBOOK.md docs/architecture/maintainer-guide.md docs/architecture/dependency-rules.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_cpar_portfolio_snapshot_service.py backend/tests/test_cpar_portfolio_hedge_service.py backend/tests/test_cpar_runtime_coverage_contract.py backend/tests/test_cpar_architecture_boundaries.py backend/tests/test_cpar_service_route_boundaries.py backend/tests/test_cpar_routes.py::test_cpar_portfolio_hedge_route_returns_payload`
+
+Validation blockers:
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 10A keeps the blocker recorded instead of widening scope into a repair
