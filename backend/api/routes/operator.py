@@ -9,6 +9,7 @@ from backend.api.auth import require_role
 from backend.services import cuse4_operator_status_service as operator_status_service
 
 router = APIRouter()
+build_operator_status_payload = operator_status_service.build_operator_status_payload
 
 
 @router.get("/operator/status")
@@ -24,4 +25,4 @@ def get_operator_status(
             x_refresh_token=x_refresh_token,
             authorization=authorization,
         )
-    return operator_status_service.build_operator_status_payload()
+    return build_operator_status_payload()

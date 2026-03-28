@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend.main import app
 from backend.api.routes import operator as operator_route
-from backend.services import operator_status_service as svc
+import backend.services.cuse4_operator_status_service as svc
 from backend.analytics import pipeline
 
 

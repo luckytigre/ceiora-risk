@@ -400,6 +400,9 @@ Study first:
 - inventory route and service tests that patch alias-module globals directly
 - identify stable public seams that can replace deep monkeypatch fan-out
 
+Execution note:
+- prefer route-level callable seams or public injected service kwargs over monkeypatching alias-module globals directly
+
 Primary surfaces:
 - `backend/tests/test_dashboard_payload_service.py`
 - `backend/tests/test_exposure_history_route.py`
@@ -450,33 +453,28 @@ Commit boundary:
 #### Slice 6: Test Seam Hardening For cUSE4 De-Dup Part B
 
 Goal:
-- reduce monkeypatch-heavy coupling that blocks cUSE alias-wrapper cleanup for holdings, operator status, universe, and portfolio what-if
+- reduce monkeypatch-heavy coupling that blocks cUSE alias-wrapper cleanup for operator status
 
 Study first:
-- inventory route and service tests that patch alias-module globals directly
-- identify stable public seams that can replace deep monkeypatch fan-out
+- inventory route tests that still patch the legacy operator-status compatibility module instead of the cUSE4 route-facing owner
+- identify the narrowest seam that keeps auth tests route-scoped while moving service-heavy tests onto the cUSE4 owner surface
 
 Primary surfaces:
-- `backend/tests/test_holdings_service.py`
-- `backend/tests/test_holdings_route_dirty_state.py`
 - `backend/tests/test_operator_status_route.py`
-- `backend/tests/test_universe_search_route.py`
-- `backend/tests/test_universe_history_route.py`
-- `backend/tests/test_universe_loadings_service.py`
-- `backend/tests/test_portfolio_whatif_service.py`
-- `backend/tests/test_portfolio_whatif_route.py`
-- any helper seams introduced to support narrower injection
+- `backend/tests/test_cloud_auth_and_runtime_roles.py`
+- `backend/api/routes/operator.py`
+- `backend/services/cuse4_operator_status_service.py`
 
 Required doc updates:
 - this plan file
-- `docs/architecture/maintainer-guide.md` if new stable test seams become part of maintainer guidance
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
 
 Validation:
-- `git diff --check -- <touched paths>`
-- `./.venv_local/bin/pytest -q backend/tests/test_holdings_service.py backend/tests/test_holdings_route_dirty_state.py backend/tests/test_operator_status_route.py backend/tests/test_universe_search_route.py backend/tests/test_universe_history_route.py backend/tests/test_universe_loadings_service.py backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py`
+- `git diff --check -- backend/api/routes/operator.py backend/services/cuse4_operator_status_service.py backend/tests/test_operator_status_route.py backend/tests/test_cloud_auth_and_runtime_roles.py docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_operator_status_route.py backend/tests/test_cloud_auth_and_runtime_roles.py -k operator_status`
 
 Commit boundary:
-- tests and narrow seam extraction for holdings/operator/universe/portfolio-whatif only
+- operator-status seam hardening only
 
 #### Slice 7: cUSE4 Service Surface De-Dup Part B
 

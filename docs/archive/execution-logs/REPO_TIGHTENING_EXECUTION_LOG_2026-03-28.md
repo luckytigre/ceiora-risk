@@ -290,3 +290,22 @@ Validation:
 
 Notes:
 - the repo-local `.venv_local` is present in this workspace, so the earlier “venv missing” blocker note for Slice 4 was stale by the time this repair was validated
+
+## Slice 6
+
+Scope:
+- `backend/api/routes/operator.py`
+- `backend/services/cuse4_operator_status_service.py`
+- `backend/tests/test_operator_status_route.py`
+- `backend/tests/test_cloud_auth_and_runtime_roles.py`
+- `docs/architecture/REPO_TIGHTENING_PLAN.md`
+
+Outcome:
+- narrowed Slice 6 after adversarial review to the actual compat-module blocker: operator-status tests were still binding to the legacy default service even though the route already serves through the cUSE4 owner surface
+- added an explicit route-level callable seam for `/api/operator/status` so auth-only tests can stay route-scoped instead of patching service internals
+- moved the operator-status route tests onto `backend.services.cuse4_operator_status_service` and exposed the private helper hooks those tests already rely on there, aligning the tests with the service owner that Slice 7 will keep
+- left universe, holdings, and portfolio what-if out of this slice because they are either already aligned with cUSE-facing surfaces or belong with the later owner move
+
+Validation:
+- `git diff --check -- backend/api/routes/operator.py backend/services/cuse4_operator_status_service.py backend/tests/test_operator_status_route.py backend/tests/test_cloud_auth_and_runtime_roles.py docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_operator_status_route.py backend/tests/test_cloud_auth_and_runtime_roles.py -k operator_status`

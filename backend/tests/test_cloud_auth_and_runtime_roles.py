@@ -15,7 +15,6 @@ from backend.api.routes import refresh as refresh_routes
 
 orchestrator = importlib.import_module("backend.orchestration.run_model_pipeline")
 refresh_manager = importlib.import_module("backend.services.refresh_manager")
-operator_status_service = importlib.import_module("backend.services.operator_status_service")
 
 
 def _config_snapshot_with_env(**updates: str | None) -> dict[str, object]:
@@ -119,9 +118,7 @@ def test_cloud_operator_status_requires_operator_token(monkeypatch) -> None:
     monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(operator_route.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(operator_route.config, "OPERATOR_API_TOKEN", "op-secret")
-    monkeypatch.setattr(operator_status_service.job_runs, "latest_run_summary_by_profile", lambda **kwargs: {})
-    monkeypatch.setattr(operator_status_service.core_reads, "load_source_dates", lambda: {})
-    monkeypatch.setattr(operator_status_service.sqlite, "cache_get", lambda key: {})
+    monkeypatch.setattr(operator_route, "build_operator_status_payload", lambda: {"status": "ok"})
 
     client = TestClient(app)
     assert client.get("/api/operator/status").status_code == 401
