@@ -272,3 +272,21 @@ Validation:
 Validation blockers:
 - `python3 -m pytest -q backend/tests/test_dashboard_payload_service.py backend/tests/test_architecture_boundaries.py backend/tests/test_model_family_ownership_boundaries.py` could not run because `pytest` is not installed in the global interpreter in this shell
 - the planned `./.venv_local/bin/pytest ...` bundle remains unavailable because `.venv_local` does not exist in this workspace
+
+## Slice 4 Follow-Up Repair
+
+Scope:
+- `backend/services/cuse4_factor_history_service.py`
+- `backend/services/cuse4_health_diagnostics_service.py`
+
+Outcome:
+- restored the public injected-kwargs seam on the concrete cUSE4 factor-history and health-diagnostics owners
+- fixed the exact regression left behind by Slice 4, where the route tests had already been rewritten to call these public seams but the concrete service entrypoints no longer accepted the injected loaders
+- kept runtime behavior unchanged; this repair only re-opened the public test seam that the committed tests already expected
+
+Validation:
+- `git diff --check -- backend/services/cuse4_factor_history_service.py backend/services/cuse4_health_diagnostics_service.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_exposure_history_route.py backend/tests/test_serving_output_route_preference.py`
+
+Notes:
+- the repo-local `.venv_local` is present in this workspace, so the earlier “venv missing” blocker note for Slice 4 was stale by the time this repair was validated

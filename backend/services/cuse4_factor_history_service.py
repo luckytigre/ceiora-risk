@@ -175,17 +175,22 @@ def load_factor_history_response(
     factor_token: str,
     years: int,
     cache_db: Path | None = None,
+    payload_loader: Callable[..., Any] | None = None,
+    fallback_loader: Callable[..., Any] | None = None,
+    factor_resolver: Callable[..., tuple[str, str]] | None = None,
+    history_loader: Callable[..., tuple[Any, list[tuple[Any, Any]]]] | None = None,
+    sqlite_path: str | Path | None = None,
 ) -> dict[str, object]:
     deps = get_factor_history_dependencies()
     return _build_factor_history_response(
         factor_token=factor_token,
         years=int(years),
         cache_db=cache_db,
-        payload_loader=deps.payload_loader,
-        fallback_loader=deps.fallback_loader,
-        factor_resolver=deps.factor_resolver,
-        history_loader=deps.history_loader,
-        sqlite_path=deps.sqlite_path,
+        payload_loader=payload_loader or deps.payload_loader,
+        fallback_loader=fallback_loader or deps.fallback_loader,
+        factor_resolver=factor_resolver or deps.factor_resolver,
+        history_loader=history_loader or deps.history_loader,
+        sqlite_path=sqlite_path or deps.sqlite_path,
     )
 
 

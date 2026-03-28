@@ -30,11 +30,15 @@ def get_health_diagnostics_readers() -> HealthDiagnosticsReaders:
     )
 
 
-def load_health_diagnostics_payload() -> dict[str, object]:
+def load_health_diagnostics_payload(
+    *,
+    payload_loader: Callable[..., Any] | None = None,
+    fallback_loader: Callable[..., Any] | None = None,
+) -> dict[str, object]:
     readers = get_health_diagnostics_readers()
-    data = readers.payload_loader(
+    data = (payload_loader or readers.payload_loader)(
         "health_diagnostics",
-        fallback_loader=readers.fallback_loader,
+        fallback_loader=fallback_loader or readers.fallback_loader,
     )
     if data is None:
         raise HealthDiagnosticsNotReady(
