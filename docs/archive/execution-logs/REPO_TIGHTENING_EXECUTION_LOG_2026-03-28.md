@@ -315,15 +315,13 @@ Validation:
 Scope:
 - `backend/services/holdings_service.py`
 - `backend/tests/test_holdings_service.py`
-- `backend/services/portfolio_whatif.py`
-- `backend/tests/test_portfolio_whatif_service.py`
 - `docs/architecture/REPO_TIGHTENING_PLAN.md`
 
 Outcome:
-- added public dependency dataclasses and injected kwargs to the legacy holdings and portfolio what-if service entrypoints instead of forcing tests to mutate module globals directly
-- rewrote the holdings service tests and the preview-oriented portfolio what-if service tests to use those public dependency seams
-- kept runtime behavior unchanged and left the actual cUSE4 owner move for a later slice; this slice only makes that owner move safe
+- added a public dependency dataclass plus injected kwargs to the legacy holdings service entrypoints instead of forcing tests to mutate module globals directly
+- rewrote the holdings service tests to use that public dependency seam
+- kept runtime behavior unchanged and left the actual cUSE4 holdings owner move for a later slice; this slice only makes that owner move safe
 
 Validation:
-- `git diff --check -- backend/services/holdings_service.py backend/tests/test_holdings_service.py backend/services/portfolio_whatif.py backend/tests/test_portfolio_whatif_service.py docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
-- `./.venv_local/bin/python -m pytest -q backend/tests/test_holdings_service.py backend/tests/test_holdings_route_dirty_state.py backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py`
+- `git diff --check -- backend/services/holdings_service.py backend/tests/test_holdings_service.py docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_holdings_service.py backend/tests/test_holdings_route_dirty_state.py`
