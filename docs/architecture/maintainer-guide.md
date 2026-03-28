@@ -202,6 +202,7 @@ During repo-tightening work:
 - use the smallest meaningful validation bundle for the touched surface and split the slice again if narrow validation is not possible
 - for docs-only or hygiene-only slices, keep validation to `git diff --check -- <touched paths>` plus directly relevant static checks; do not run backend/runtime gates unless executable behavior changed
 - keep repo-hygiene ignore rules root-anchored and concrete so the cleanup does not hide legitimate source artifacts
+- when route tests need to isolate cUSE alias owners, patch the alias module's public dependency seam function rather than mutating several alias-module globals directly
 
 ## Semantic Contract Rules
 

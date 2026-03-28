@@ -25,14 +25,16 @@ def test_exposure_history_route_resolves_factor_id_to_factor_name(monkeypatch) -
 
     monkeypatch.setattr(
         exposures_routes.factor_history_service,
-        "load_runtime_payload",
-        lambda name, *, fallback_loader=None: _load_payload(name),
-    )
-    monkeypatch.setattr(exposures_routes.factor_history_service, "cache_get", lambda key: None)
-    monkeypatch.setattr(
-        exposures_routes.factor_history_service,
-        "load_factor_return_history",
-        lambda cache_db, *, factor, years: ("2026-03-03", [("2026-03-02", 0.01)]) if factor == "Beta" and years == 5 else (None, []),
+        "get_factor_history_dependencies",
+        lambda: exposures_routes.factor_history_service.FactorHistoryDependencies(
+            payload_loader=lambda name, *, fallback_loader=None: _load_payload(name),
+            fallback_loader=lambda _key: None,
+            factor_resolver=exposures_routes.factor_history_service.resolve_factor_history_factor,
+            history_loader=lambda cache_db, *, factor, years: ("2026-03-03", [("2026-03-02", 0.01)])
+            if factor == "Beta" and years == 5
+            else (None, []),
+            sqlite_path=exposures_routes.factor_history_service.config.SQLITE_PATH,
+        ),
     )
 
     client = TestClient(app)
@@ -73,9 +75,17 @@ def test_exposure_history_route_resolves_factor_id_from_history_when_catalog_mis
     conn.commit()
     conn.close()
 
-    monkeypatch.setattr(exposures_routes.factor_history_service, "load_runtime_payload", lambda name, *, fallback_loader=None: None)
-    monkeypatch.setattr(exposures_routes.factor_history_service, "cache_get", lambda key: None)
-    monkeypatch.setattr(exposures_routes.factor_history_service.config, "SQLITE_PATH", str(cache_db))
+    monkeypatch.setattr(
+        exposures_routes.factor_history_service,
+        "get_factor_history_dependencies",
+        lambda: exposures_routes.factor_history_service.FactorHistoryDependencies(
+            payload_loader=lambda name, *, fallback_loader=None: None,
+            fallback_loader=lambda _key: None,
+            factor_resolver=exposures_routes.factor_history_service.resolve_factor_history_factor,
+            history_loader=exposures_routes.factor_history_service.load_factor_return_history,
+            sqlite_path=str(cache_db),
+        ),
+    )
     monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: False)
 
     client = TestClient(app)
@@ -116,9 +126,17 @@ def test_exposure_history_route_resolves_punctuated_industry_name_from_history(
     conn.commit()
     conn.close()
 
-    monkeypatch.setattr(exposures_routes.factor_history_service, "load_runtime_payload", lambda name, *, fallback_loader=None: None)
-    monkeypatch.setattr(exposures_routes.factor_history_service, "cache_get", lambda key: None)
-    monkeypatch.setattr(exposures_routes.factor_history_service.config, "SQLITE_PATH", str(cache_db))
+    monkeypatch.setattr(
+        exposures_routes.factor_history_service,
+        "get_factor_history_dependencies",
+        lambda: exposures_routes.factor_history_service.FactorHistoryDependencies(
+            payload_loader=lambda name, *, fallback_loader=None: None,
+            fallback_loader=lambda _key: None,
+            factor_resolver=exposures_routes.factor_history_service.resolve_factor_history_factor,
+            history_loader=exposures_routes.factor_history_service.load_factor_return_history,
+            sqlite_path=str(cache_db),
+        ),
+    )
     monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: False)
 
     client = TestClient(app)
@@ -190,11 +208,17 @@ def test_exposure_history_route_returns_market_history_when_neon_surface_is_stal
 
     monkeypatch.setattr(
         exposures_routes.factor_history_service,
-        "load_runtime_payload",
-        lambda name, *, fallback_loader=None: {"factor_catalog": [{"factor_id": "market", "factor_name": "Market"}]} if name == "risk" else None,
+        "get_factor_history_dependencies",
+        lambda: exposures_routes.factor_history_service.FactorHistoryDependencies(
+            payload_loader=lambda name, *, fallback_loader=None: {"factor_catalog": [{"factor_id": "market", "factor_name": "Market"}]}
+            if name == "risk"
+            else None,
+            fallback_loader=lambda _key: None,
+            factor_resolver=exposures_routes.factor_history_service.resolve_factor_history_factor,
+            history_loader=exposures_routes.factor_history_service.load_factor_return_history,
+            sqlite_path=str(cache_db),
+        ),
     )
-    monkeypatch.setattr(exposures_routes.factor_history_service, "cache_get", lambda key: None)
-    monkeypatch.setattr(exposures_routes.factor_history_service.config, "SQLITE_PATH", str(cache_db))
     monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: True)
     monkeypatch.setattr(history_queries, "_path_matches_config", lambda path, configured: True)
     monkeypatch.setattr(history_queries, "resolve_dsn", lambda _dsn=None: "postgresql://example")
