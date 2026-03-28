@@ -37,28 +37,35 @@ Scope note:
 ## 2) Current Universe and Data-Model State
 
 Current implemented state:
-- Universe definition is centralized in `security_master` (identity hub; canonical time-series joins are RIC-keyed).
+- Universe identity and maintenance are registry-first:
+  - `security_registry` is the tracked-universe identity/lifecycle surface
+  - `security_policy_current` is the active ingest/model-policy surface
+  - `security_taxonomy_current` is the current identity/taxonomy enrichment surface
+  - `security_source_status_current` is the current observed source-readiness surface
+- `security_master_compat_current` remains a compatibility projection only; the physical `security_master` alias is no longer the canonical runtime contract.
 - Holdings dirty / `RECALC needed` state is backend-persisted and visible in the operator UI.
 - Health page is the primary operator cockpit, while Data is the source-table/cache diagnostics surface.
-- Eligible investable set is controlled by:
-  - `classification_ok = 1`
-  - `is_equity_eligible = 1`
-- As of this spec revision, the active eligible universe is 5,820 names (current DB run: 5,820 eligible RICs in `security_master`).
-- Distinct tickers can be lower than distinct RICs due to share classes/listing aliases.
+- Eligible cUSE membership is derived from registry/policy/taxonomy/readiness selectors rather than treating compatibility booleans as the primary contract.
+- Distinct tickers can be lower than distinct tracked RICs due to share classes/listing aliases.
 
 Data-model state:
+- Canonical current-state universe-maintenance tables are:
+  - `security_registry`
+  - `security_policy_current`
+  - `security_taxonomy_current`
+  - `security_source_status_current`
 - Canonical persisted source-of-truth tables are:
   - `security_fundamentals_pit`
   - `security_classification_pit`
   - `security_prices_eod`
-- Compatibility views were removed; canonical readers/writers use `security_*` tables directly.
+- `security_master_compat_current` remains available only as a compatibility surface for legacy readers and diagnostics during the demotion window.
 
 ## 3) Universe and Ingestion Filters
 
 ### 3.1 Universe authority and maintenance policy
 
 `security_registry` and `security_policy_current` are the authoritative universe-maintenance surfaces.
-- Universe updates are explicit: file-driven merge into the committed registry artifact, then bootstrap-sync into the authoritative registry/policy surfaces and the `security_master` compatibility mirror.
+- Universe updates are explicit: file-driven merge into the committed registry artifact, then bootstrap-sync into the authoritative registry/policy surfaces plus the `security_master_compat_current` compatibility projection.
 - Identity keys and tracking state live in `security_registry`; current ingest/model path controls live in `security_policy_current`.
 - The git-versioned primary universe artifact is `data/reference/security_registry_seed.csv`.
 - `data/reference/security_master_seed.csv` remains a compatibility export only while legacy workflows still need it.
@@ -107,28 +114,23 @@ Persist ESTU audit artifacts per `(date, ric)`.
 
 ## 4) Implemented Source-of-Truth Schemas (Canonical)
 
-## 4.1 `security_master` (canonical identity/classification)
+## 4.1 Registry-first identity and compatibility surfaces
 
-Metadata columns:
-- `ric`
-- `ticker`
-- `isin`
-- `exchange_name`
-- `classification_ok`
-- `is_equity_eligible`
-- `source`
-- `job_run_id`
-- `updated_at`
+Authoritative current-state surfaces:
+- `security_registry`
+- `security_policy_current`
+- `security_taxonomy_current`
+- `security_source_status_current`
 
-LSEG fields:
-- `TR.RIC`
-- `TR.TickerSymbol`
-- `TR.ISIN`
-- `TR.ExchangeName`
+Compatibility projection:
+- `security_master_compat_current`
 
 Origination policy:
-- `ric`, `ticker`, `isin`, and `exchange_name` are bootstrapped from the committed registry and refreshed from LSEG during canonical ingest/backfill.
-- `classification_ok` and `is_equity_eligible` are derived live from canonical LSEG classification coverage; they are not seed-file authority.
+- `security_registry` is bootstrapped from the committed registry artifact and carries tracked identity/lifecycle state.
+- `security_policy_current` carries active ingest/model capability flags and operator path intent.
+- `security_taxonomy_current` carries the current vendor-enriched identity/taxonomy view used by selectors and downstream reads.
+- `security_source_status_current` carries the current observed readiness state used by runtime selectors and diagnostics.
+- `security_master_compat_current` is materialized from those registry-era surfaces for compatibility-only readers such as legacy lookup/search/parity flows.
 
 ## 4.2 `security_fundamentals_pit`
 
@@ -230,9 +232,10 @@ Columns:
 
 ## 4.6 Compatibility Views and Deprecation Policy
 
-- Compatibility views were removed from active runtime DB.
+- General-purpose compatibility views were removed from the active runtime DB.
 - Legacy migration/resolver scripts are archived under `backend/scripts/_archive/`.
-- Canonical ingest/backfill scripts must write directly to `security_*` source-of-truth tables.
+- Canonical ingest/backfill scripts must write directly to the registry-first current-state surfaces plus canonical `security_*` source tables.
+- `security_master_compat_current` remains a compatibility projection only while legacy consumers and the demotion rollout still require it.
 
 ## 5) Factor Definitions and Metric Roll-up
 
@@ -383,7 +386,8 @@ Where this remains an approximation:
 ## 10) Implemented Data Workflow (Current)
 
 1. Universe and identity layer:
-   - Maintain `security_master` as the single universe authority (RIC primary key; SID/PermID as optional metadata).
+   - Maintain `security_registry`, `security_policy_current`, `security_taxonomy_current`, and `security_source_status_current` as the active universe authority surfaces.
+   - Keep `security_master_compat_current` only as a compatibility projection during the demotion window.
    - Canonical time-series tables are physically RIC-keyed.
 2. Canonical ingest/backfill from LSEG:
    - Write directly into:
@@ -471,7 +475,7 @@ The following implementation defects were closed and verified:
 - Refresh/model-output writes fail hard on empty required outputs.
 - Price ingest/backfill requests richer OHLCV/currency fields, and volume-repair mode uses `TR.Volume`.
 - Raw cross-section + residual/specific-risk relational persistence now use `ric` physical keys.
-- `security_master` now uses a trimmed canonical field set keyed by `ric`; deprecated `sid`/`permid` and dead instrument metadata were removed.
+- Registry-first compatibility surfaces now expose a trimmed `security_master` projection keyed by `ric`; deprecated `sid`/`permid` and dead instrument metadata were removed from the active compatibility contract.
 - Orchestrator ingest stage is active (`bootstrap_only` baseline, opt-in live ingest).
 - Regression tests added for schema/key/quality-gate and ingest behavior.
 - SQLite maintenance path added (`compact_sqlite_databases.py`) and operationalized.

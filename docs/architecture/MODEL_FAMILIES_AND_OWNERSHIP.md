@@ -49,9 +49,10 @@ Current cUSE4 integration is still the default app wiring in several places, inc
 - `backend/services/*`
 - `backend/api/routes/*`
 - `frontend/src/app/cuse/*`
-- `frontend/src/app/exposures/*`
-- `frontend/src/app/explore/*`
-- `frontend/src/app/health/*`
+- legacy route redirects in `frontend/next.config.js` for:
+  - `/exposures`
+  - `/explore`
+  - `/health`
 - `frontend/src/app/positions/*`
 - shared frontend helpers such as `frontend/src/lib/analyticsTruth.ts`
 
@@ -108,6 +109,8 @@ Legacy redirects remain in place from:
 - `/exposures`
 - `/explore`
 - `/health`
+
+The root legacy compatibility entrypoints should remain redirect-only and should not grow separate live page implementations.
 
 ## cPAR Ownership
 

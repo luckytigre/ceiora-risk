@@ -1,17 +1,17 @@
-"""cUSE4 universe cached read service.
+"""Compatibility owner for cUSE4 universe/search/detail route semantics.
 
-This module serves the current default cUSE4 universe/search/detail surfaces.
-It is not a generic cross-model universe abstraction. cPAR owns separate
-search/detail services under `backend/services/cpar_*`.
-Prefer importing `backend.services.cuse4_universe_service` from cUSE4 routes.
+Prefer importing `backend.services.cuse4_universe_service` from the default
+cUSE4 route family. Shared helpers live here so the alias module can stay thin
+without losing its current monkeypatch seams in route tests.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import HTTPException
 
@@ -29,6 +29,11 @@ class UniversePayloadNotReady(RuntimeError):
     cache_key: str
     message: str
     refresh_profile: str = "serve-refresh"
+
+
+PayloadLoader = Callable[..., Any]
+HistoryLoader = Callable[..., tuple[Any, list[tuple[Any, Any]]]]
+RowNormalizer = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 def _search_rank(row: dict[str, Any], needle: str) -> tuple[int, int, str]:
@@ -57,32 +62,53 @@ def _week_ending_friday(day: date) -> date:
     return day + timedelta(days=(4 - day.weekday()))
 
 
-def load_universe_payload() -> dict[str, Any]:
-    payload = load_runtime_payload("universe_loadings", fallback_loader=cache_get)
+def _load_universe_payload(
+    payload_name: str,
+    *,
+    payload_loader: PayloadLoader,
+    fallback_loader,
+) -> dict[str, Any]:
+    payload = payload_loader(payload_name, fallback_loader=fallback_loader)
     if payload is None:
         raise UniversePayloadNotReady(
-            cache_key="universe_loadings",
-            message="Universe cache is not ready yet. Run refresh and try again.",
+            cache_key=payload_name,
+            message=(
+                "Universe cache is not ready yet. Run refresh and try again."
+                if payload_name == "universe_loadings"
+                else "Universe factor cache is not ready yet."
+            ),
         )
     return payload
+
+
+def load_universe_payload() -> dict[str, Any]:
+    return _load_universe_payload(
+        "universe_loadings",
+        payload_loader=load_runtime_payload,
+        fallback_loader=cache_get,
+    )
 
 
 def load_universe_factors_payload() -> dict[str, Any]:
-    payload = load_runtime_payload("universe_factors", fallback_loader=cache_get)
-    if payload is None:
-        raise UniversePayloadNotReady(
-            cache_key="universe_factors",
-            message="Universe factor cache is not ready yet.",
-        )
-    return payload
+    return _load_universe_payload(
+        "universe_factors",
+        payload_loader=load_runtime_payload,
+        fallback_loader=cache_get,
+    )
 
 
-def load_universe_ticker_payload(
+def _load_universe_ticker_payload(
     ticker: str,
     *,
-    row_normalizer: Callable[[dict[str, Any]], dict[str, Any]],
+    payload_loader: PayloadLoader,
+    fallback_loader,
+    row_normalizer: RowNormalizer,
 ) -> dict[str, Any]:
-    data = load_universe_payload()
+    data = _load_universe_payload(
+        "universe_loadings",
+        payload_loader=payload_loader,
+        fallback_loader=fallback_loader,
+    )
     by_ticker = data.get("by_ticker") or {}
     item = by_ticker.get(str(ticker).upper().strip())
     if item is None:
@@ -90,8 +116,33 @@ def load_universe_ticker_payload(
     return {"item": row_normalizer(dict(item)), "_cached": True}
 
 
-def load_universe_ticker_history_payload(ticker: str, *, years: int) -> dict[str, Any]:
-    data = load_universe_payload()
+def load_universe_ticker_payload(
+    ticker: str,
+    *,
+    row_normalizer: RowNormalizer,
+) -> dict[str, Any]:
+    return _load_universe_ticker_payload(
+        ticker,
+        payload_loader=load_runtime_payload,
+        fallback_loader=cache_get,
+        row_normalizer=row_normalizer,
+    )
+
+
+def _load_universe_ticker_history_payload(
+    ticker: str,
+    *,
+    years: int,
+    payload_loader: PayloadLoader,
+    fallback_loader,
+    history_loader: HistoryLoader,
+    data_db: Path,
+) -> dict[str, Any]:
+    data = _load_universe_payload(
+        "universe_loadings",
+        payload_loader=payload_loader,
+        fallback_loader=fallback_loader,
+    )
     clean_ticker = str(ticker).upper().strip()
     item = (data.get("by_ticker") or {}).get(clean_ticker)
     if item is None:
@@ -100,8 +151,8 @@ def load_universe_ticker_history_payload(ticker: str, *, years: int) -> dict[str
     if not ric:
         raise HTTPException(status_code=404, detail="RIC mapping unavailable for ticker")
 
-    latest_date, rows = load_price_history_rows(
-        DATA_DB,
+    latest_date, rows = history_loader(
+        data_db,
         ric=ric,
         years=int(years),
     )
@@ -134,13 +185,30 @@ def load_universe_ticker_history_payload(ticker: str, *, years: int) -> dict[str
     }
 
 
-def search_universe_payload(
+def load_universe_ticker_history_payload(ticker: str, *, years: int) -> dict[str, Any]:
+    return _load_universe_ticker_history_payload(
+        ticker,
+        years=years,
+        payload_loader=load_runtime_payload,
+        fallback_loader=cache_get,
+        history_loader=load_price_history_rows,
+        data_db=DATA_DB,
+    )
+
+
+def _search_universe_payload(
     *,
     q: str,
     limit: int,
-    row_normalizer: Callable[[dict[str, Any]], dict[str, Any]],
+    payload_loader: PayloadLoader,
+    fallback_loader,
+    row_normalizer: RowNormalizer,
 ) -> dict[str, Any]:
-    data = load_universe_payload()
+    data = _load_universe_payload(
+        "universe_loadings",
+        payload_loader=payload_loader,
+        fallback_loader=fallback_loader,
+    )
     needle = str(q).strip().upper()
     if not needle:
         return {"query": q, "results": [], "total": 0, "_cached": True}
@@ -163,3 +231,32 @@ def search_universe_payload(
     ranked.sort(key=lambda item: item[0])
     hits = [row for _, row in ranked[:limit]]
     return {"query": q, "results": hits, "total": len(hits), "_cached": True}
+
+
+def search_universe_payload(
+    *,
+    q: str,
+    limit: int,
+    row_normalizer: RowNormalizer,
+) -> dict[str, Any]:
+    return _search_universe_payload(
+        q=q,
+        limit=limit,
+        payload_loader=load_runtime_payload,
+        fallback_loader=cache_get,
+        row_normalizer=row_normalizer,
+    )
+
+
+__all__ = [
+    "DATA_DB",
+    "UniversePayloadNotReady",
+    "cache_get",
+    "load_price_history_rows",
+    "load_runtime_payload",
+    "load_universe_factors_payload",
+    "load_universe_payload",
+    "load_universe_ticker_history_payload",
+    "load_universe_ticker_payload",
+    "search_universe_payload",
+]

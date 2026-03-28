@@ -5,6 +5,7 @@ Status: Active slice-3 orchestration implementation notes
 Owner: Codex
 
 This document describes the dedicated cPAR package-build orchestration only.
+Current cPAR read surfaces, routes, and frontend ownership live in the active cPAR architecture/operations docs; this note is intentionally limited to package-build ownership.
 
 Related cPAR docs:
 - [CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md)
@@ -64,7 +65,8 @@ This slice does not introduce any cloud build fallback or request-time fitting.
 ## Pipeline Stages
 
 `source_read`
-- resolves the fixed cPAR1 factor proxy set from `security_master`
+- resolves the fixed cPAR1 factor proxy set from the registry-first shared source surface
+- uses `security_registry`, `security_policy_current`, and taxonomy/current-source tables rather than treating physical `security_master` as the authority contract
 - loads the cPAR build universe from canonical source tables
 - keeps factor proxies in the instrument build universe so proxy ETFs themselves also receive persisted cPAR fits
 - loads package-window prices plus latest classification/common-name PIT rows
