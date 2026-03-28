@@ -553,10 +553,43 @@ Validation:
 Commit boundary:
 - portfolio what-if owner move only
 
+#### Slice 7C: cUSE4 Universe Service De-Dup
+
+Goal:
+- keep `backend/services/cuse4_universe_service.py` as the concrete universe/search/detail owner already used by the default routes
+- reduce `backend/services/universe_service.py` to a compatibility shim without dropping its supported public import surface
+
+Study first:
+- verify the cUSE4 module keeps the current route-test monkeypatch surface (`load_runtime_payload`, `cache_get`, `DATA_DB`, `load_price_history_rows`)
+- verify the legacy shim preserves public symbol parity and exception identity for older direct imports
+- validate the specific fallback/preference/golden route tests that still exercise the cUSE4 public globals
+
+Primary surfaces:
+- `backend/services/cuse4_universe_service.py`
+- `backend/services/universe_service.py`
+- `backend/tests/test_universe_service_contract.py`
+- `backend/tests/test_universe_search_route.py`
+- `backend/tests/test_universe_history_route.py`
+- `backend/tests/test_serving_output_route_fallbacks.py`
+- `backend/tests/test_serving_output_route_preference.py`
+- `backend/tests/test_api_golden_snapshots.py`
+- `backend/tests/test_model_family_ownership_boundaries.py`
+- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `docs/architecture/maintainer-guide.md`
+- this plan file
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Validation:
+- `git diff --check -- backend/services/cuse4_universe_service.py backend/services/universe_service.py backend/tests/test_universe_service_contract.py docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/maintainer-guide.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_universe_service_contract.py backend/tests/test_universe_search_route.py backend/tests/test_universe_history_route.py backend/tests/test_serving_output_route_fallbacks.py::test_universe_routes_use_persisted_payload_when_cache_missing backend/tests/test_serving_output_route_preference.py::test_universe_search_prefers_serving_payload_over_cache backend/tests/test_api_golden_snapshots.py::test_api_universe_factors_matches_golden_snapshot backend/tests/test_model_family_ownership_boundaries.py`
+
+Commit boundary:
+- universe service de-dup only
+
 #### Slice 7: cUSE4 Service Surface De-Dup Part B
 
 Goal:
-- finish alias-wrapper de-dup for holdings, operator status, universe, and portfolio what-if
+- finish alias-wrapper de-dup for holdings, operator status, and portfolio what-if
 
 Study first:
 - verify route imports and service owner targets
@@ -567,8 +600,6 @@ Primary surfaces:
 - `backend/services/holdings_service.py`
 - `backend/services/cuse4_operator_status_service.py`
 - `backend/services/operator_status_service.py`
-- `backend/services/cuse4_universe_service.py`
-- `backend/services/universe_service.py`
 - `backend/services/cuse4_portfolio_whatif.py`
 - `backend/services/portfolio_whatif.py`
 
@@ -578,10 +609,10 @@ Required doc updates:
 
 Validation:
 - `git diff --check -- <touched paths>`
-- `./.venv_local/bin/pytest -q backend/tests/test_holdings_service.py backend/tests/test_holdings_route_dirty_state.py backend/tests/test_operator_status_route.py backend/tests/test_universe_search_route.py backend/tests/test_universe_history_route.py backend/tests/test_universe_loadings_service.py backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py backend/tests/test_architecture_boundaries.py backend/tests/test_model_family_ownership_boundaries.py`
+- `./.venv_local/bin/pytest -q backend/tests/test_holdings_service.py backend/tests/test_holdings_route_dirty_state.py backend/tests/test_operator_status_route.py backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py backend/tests/test_architecture_boundaries.py backend/tests/test_model_family_ownership_boundaries.py`
 
 Commit boundary:
-- holdings/operator/universe/portfolio-whatif only
+- holdings/operator/portfolio-whatif only
 
 #### Slice 8: Security-Master Authority Wording And Doc Containment
 

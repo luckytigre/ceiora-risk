@@ -95,8 +95,9 @@ Practical rule:
   - holdings reads/writes from the shared holdings owners above
   - cUSE-only modeled snapshot/control reads from `frontend/src/hooks/useCuse4Api.ts`
   - cPAR read-only method overlays from `frontend/src/hooks/useCparApi.ts`
-- when touching the default cUSE dashboard/factor-history/health/holdings/portfolio-whatif service surfaces, prefer:
+- when touching the default cUSE dashboard/universe/factor-history/health/holdings/portfolio-whatif service surfaces, prefer:
   - `backend/services/cuse4_dashboard_payload_service.py`
+  - `backend/services/cuse4_universe_service.py`
   - `backend/services/cuse4_factor_history_service.py`
   - `backend/services/cuse4_health_diagnostics_service.py`
   - `backend/services/cuse4_holdings_service.py`

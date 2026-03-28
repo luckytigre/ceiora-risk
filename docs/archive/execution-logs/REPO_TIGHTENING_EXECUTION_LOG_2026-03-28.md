@@ -379,3 +379,23 @@ Outcome:
 Validation:
 - `git diff --check -- backend/services/portfolio_whatif.py backend/tests/test_portfolio_whatif_service.py docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
 - `./.venv_local/bin/python -m pytest -q backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py backend/tests/test_model_family_ownership_boundaries.py`
+
+## Slice 7C
+
+Scope:
+- `backend/services/cuse4_universe_service.py`
+- `backend/services/universe_service.py`
+- `backend/tests/test_universe_service_contract.py`
+- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/REPO_TIGHTENING_PLAN.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- kept `backend/services/cuse4_universe_service.py` as the concrete universe/search/detail owner already used by the default routes
+- reduced `backend/services/universe_service.py` to a compatibility shim that preserves the supported public import surface for older direct imports
+- added explicit universe shim-contract coverage so de-dup is verified independently of route behavior
+
+Validation:
+- `git diff --check -- backend/services/cuse4_universe_service.py backend/services/universe_service.py backend/tests/test_universe_service_contract.py docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/maintainer-guide.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_universe_service_contract.py backend/tests/test_universe_search_route.py backend/tests/test_universe_history_route.py backend/tests/test_serving_output_route_fallbacks.py::test_universe_routes_use_persisted_payload_when_cache_missing backend/tests/test_serving_output_route_preference.py::test_universe_search_prefers_serving_payload_over_cache backend/tests/test_api_golden_snapshots.py::test_api_universe_factors_matches_golden_snapshot backend/tests/test_model_family_ownership_boundaries.py`
