@@ -53,7 +53,6 @@ Current cUSE4 integration is still the default app wiring in several places, inc
   - `/exposures`
   - `/explore`
   - `/health`
-- `frontend/src/app/positions/*`
 - shared frontend helpers such as `frontend/src/lib/analyticsTruth.ts`
 
 These surfaces are not "generic factor-model abstractions."
@@ -103,6 +102,18 @@ Current cUSE4 frontend page family now resolves under:
 - `/cuse/explore`
 - `/cuse/health`
 - shared global `/positions`
+
+Current shared holdings surface:
+
+- `/positions` remains an intentional shared live-holdings control surface rather than a cUSE-only or cPAR-only page
+- shared holdings reads/writes on that page should prefer `frontend/src/hooks/useHoldingsApi.ts` and `frontend/src/lib/holdingsApi.ts`
+- cUSE participation there is explicit and read/write:
+  - operator/control chrome
+  - holdings publish + refresh flow
+  - modeled snapshot and truth summary via `frontend/src/hooks/useCuse4Api.ts`
+- cPAR participation there is explicit and read-only:
+  - method/coverage overlay sourced through `frontend/src/hooks/useCparApi.ts`
+- do not hide that mixed ownership behind the transitional mixed-family barrels
 
 Legacy redirects remain in place from:
 

@@ -22,12 +22,14 @@ Use this checklist before and after backend/frontend refreshes to keep runtime s
 ## 3) Smoke Check (Required)
 - Run:
   - `make smoke-check`
+  - `cd frontend && node scripts/positions_surface_smoke.mjs`
 - Pass criteria:
   - backend endpoints are `200`
   - root route redirects cleanly (`/`)
   - compatibility redirects resolve cleanly from the `next.config.js`-owned legacy roots (`/exposures`, `/explore`, `/health`)
   - canonical frontend routes render (`/cuse/exposures`, `/cuse/explore`, `/cuse/health`, `/data`, `/positions`)
   - frontend API proxies return expected keys (`refresh`, `positions`, `risk_shares`)
+  - `/positions` keeps its explicit shared-owner contract across shared holdings owners plus cUSE and cPAR read overlays
 
 ## 4) Release Readiness (Local)
 - Run targeted tests for touched behavior:
@@ -35,6 +37,7 @@ Use this checklist before and after backend/frontend refreshes to keep runtime s
   - `pytest -q backend/tests/test_cache_publisher_service.py`
   - `pytest -q backend/tests/test_neon_parity_value_checks.py`
 - If refresh/holdings flows changed, add/execute a matching targeted test.
+- If `/positions` ownership or holdings wiring changed, also run `cd frontend && node scripts/positions_surface_smoke.mjs`.
 - If health/risk math changed, also run a broader backend slice before considering the runtime clean.
 - If factor definitions, regression inference fields, or style membership changed, run `cold-core` once to rebuild factor history and then a follow-up `serve-refresh` to confirm the lightweight path serves the new factor set cleanly.
 - Verify no duplicate App Router pages exist for the legacy cUSE roots under `frontend/src/app/exposures`, `frontend/src/app/explore`, or `frontend/src/app/health`.

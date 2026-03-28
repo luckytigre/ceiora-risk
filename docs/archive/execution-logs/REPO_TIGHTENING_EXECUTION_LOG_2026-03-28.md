@@ -99,4 +99,128 @@ Validation blockers:
 Notes:
 - the post-edit adversarial review for this slice was dispatched to both standing agents after the final code/doc diff was in place
 - the timeout runner left orphaned `next dev` children on the first pass; those were cleaned up before the final blocker matrix was recorded
+
+## Slice 3
+
+Scope:
+- `frontend/src/app/positions/page.tsx`
+- `frontend/src/features/holdings/components/HoldingsLedgerSection.tsx`
+- `frontend/src/features/holdings/components/HoldingsImportPanel.tsx`
+- `frontend/src/features/holdings/components/ManualPositionEditor.tsx`
+- `frontend/src/features/holdings/hooks/useHoldingsManager.ts`
+- `frontend/scripts/positions_surface_smoke.mjs`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/CPAR_FRONTEND_SURFACES.md`
+- `docs/operations/OPERATIONS_HARDENING_CHECKLIST.md`
+- `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+
+Outcome:
+- kept `/positions` as an intentional shared live-holdings control surface rather than splitting it into family-owned pages
+- made the shared-owner split explicit in code:
+  - holdings reads/mutations on `/positions` now import from shared holdings owners
+  - cUSE modeled snapshot/control participation remains explicit
+  - cPAR participation remains explicit and read-only
+- aligned holdings-supporting components and helper types with the shared holdings owner instead of the cUSE type barrel where those components are not cUSE-specific
+- added `frontend/scripts/positions_surface_smoke.mjs` as the dedicated ownership-contract smoke for the shared `/positions` surface
+- updated the active architecture and operations docs to describe `/positions` as shared holdings control with cUSE operator ownership and cPAR read-only overlay participation
+
+Validation:
+- `git diff --check -- frontend/src/app/positions/page.tsx frontend/src/features/holdings/components/HoldingsLedgerSection.tsx frontend/src/features/holdings/components/HoldingsImportPanel.tsx frontend/src/features/holdings/components/ManualPositionEditor.tsx frontend/src/features/holdings/hooks/useHoldingsManager.ts frontend/scripts/positions_surface_smoke.mjs docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/dependency-rules.md docs/architecture/maintainer-guide.md docs/architecture/CPAR_FRONTEND_SURFACES.md docs/operations/OPERATIONS_HARDENING_CHECKLIST.md docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+- `cd frontend && node scripts/positions_surface_smoke.mjs`
+
+Validation blockers:
+- `cd frontend && npm run typecheck` progressed through `next typegen` successfully, then stalled in the later typecheck phase until manual termination
+- `cd frontend && npm run test:cpar-portfolio` timed out after 60s under the bounded runner
+- `cd frontend && npm run test:cpar-portfolio-whatif` exited `-15` under the same bounded runner after the portfolio timeout sequence
+- `cd frontend && npm run test:cpar-hedge` exited `-15` under the same bounded runner after the portfolio timeout sequence
+
+Notes:
+- the Slice 3 study resolved in favor of keeping `/positions` shared because the page, ledger, and navigation already treat it as a distinct cross-family holdings surface rather than an accidental cUSE page
+- post-edit agent review dispatch hit the collaboration thread limit before usable reviewer output returned, so the slice relies on the green ownership-contract smoke plus the path-scoped diff review in this log
+
+## Slice 3
+
+Scope:
+- `frontend/src/app/positions/page.tsx`
+- `frontend/src/features/holdings/components/HoldingsLedgerSection.tsx`
+- `frontend/src/features/holdings/components/HoldingsImportPanel.tsx`
+- `frontend/src/features/holdings/components/ManualPositionEditor.tsx`
+- `frontend/src/features/holdings/hooks/useHoldingsManager.ts`
+- `frontend/scripts/positions_surface_smoke.mjs`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/CPAR_FRONTEND_SURFACES.md`
+- `docs/operations/OPERATIONS_HARDENING_CHECKLIST.md`
+- `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+
+Outcome:
+- kept `/positions` as an intentional shared live-holdings control surface rather than splitting it into family-owned pages
+- made the shared surface explicit in code:
+  - shared holdings reads on `/positions` now come from `useHoldingsApi`
+  - holdings helper/type surfaces now prefer shared holdings owners where applicable
+  - cUSE modeled snapshot/control reads and cPAR read-only overlay remain explicit instead of hiding behind mixed barrels
+- added `frontend/scripts/positions_surface_smoke.mjs` as the ownership-contract smoke for the page
+- updated the active architecture and operations docs to describe `/positions` as shared holdings control with cUSE operator ownership and cPAR read-only participation
+
+Validation:
+- `git diff --check -- frontend/src/app/positions/page.tsx frontend/src/features/holdings/components/HoldingsLedgerSection.tsx frontend/src/features/holdings/components/HoldingsImportPanel.tsx frontend/src/features/holdings/components/ManualPositionEditor.tsx frontend/src/features/holdings/hooks/useHoldingsManager.ts frontend/scripts/positions_surface_smoke.mjs docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/dependency-rules.md docs/architecture/maintainer-guide.md docs/architecture/CPAR_FRONTEND_SURFACES.md docs/operations/OPERATIONS_HARDENING_CHECKLIST.md docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+- `cd frontend && node scripts/positions_surface_smoke.mjs`
+
+Validation blockers:
+- `cd frontend && npm run typecheck` progressed through `next typegen`, but then stalled in the later typecheck phase until manual termination
+- `cd frontend && npm run test:cpar-portfolio` timed out after 60s under the bounded runner
+- `cd frontend && npm run test:cpar-portfolio-whatif` exited `-15` under the same bounded runner after the portfolio timeout sequence
+- `cd frontend && npm run test:cpar-hedge` exited `-15` under the same bounded runner after the portfolio timeout sequence
+
+Notes:
+- the pre-edit adversarial review was dispatched, but the agent threads did not return usable output before the slice moved forward
+- the post-edit review dispatch hit the existing agent-thread cap until stale Slice 2 agents were closed, so this slice keeps the commit boundary narrow and records the validation state explicitly
+
+## Slice 3
+
+Scope:
+- `frontend/src/app/positions/page.tsx`
+- `frontend/src/features/holdings/components/HoldingsLedgerSection.tsx`
+- `frontend/src/features/holdings/components/HoldingsImportPanel.tsx`
+- `frontend/src/features/holdings/components/ManualPositionEditor.tsx`
+- `frontend/src/features/holdings/hooks/useHoldingsManager.ts`
+- `frontend/scripts/positions_surface_smoke.mjs`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/CPAR_FRONTEND_SURFACES.md`
+- `docs/operations/OPERATIONS_HARDENING_CHECKLIST.md`
+- `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+
+Decision:
+- `/positions` remains an intentional shared live-holdings control surface
+
+Outcome:
+- made the shared/family split explicit on `/positions` and the related holdings helpers:
+  - shared holdings reads and mutations now stay on the shared holdings owners
+  - cUSE participation remains explicit for modeled snapshot and operator/control semantics
+  - cPAR participation remains explicit and read-only for method/coverage overlays
+- added stable `data-testid` anchors for the positions surface and holdings ledger
+- added `frontend/scripts/positions_surface_smoke.mjs` as a source-contract smoke for the shared-owner decision
+- updated the active architecture and operations docs so `/positions` is documented as shared rather than implicitly cUSE-owned
+
+Validation:
+- `git diff --check -- frontend/src/app/positions/page.tsx frontend/src/features/holdings/components/HoldingsLedgerSection.tsx frontend/src/features/holdings/components/HoldingsImportPanel.tsx frontend/src/features/holdings/components/ManualPositionEditor.tsx frontend/src/features/holdings/hooks/useHoldingsManager.ts frontend/scripts/positions_surface_smoke.mjs docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/dependency-rules.md docs/architecture/maintainer-guide.md docs/architecture/CPAR_FRONTEND_SURFACES.md docs/operations/OPERATIONS_HARDENING_CHECKLIST.md docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+- `cd frontend && node scripts/positions_surface_smoke.mjs`
+
+Validation blockers:
+- `cd frontend && npm run typecheck` progressed past `next typegen`, then stalled in the later typecheck phase until manual termination
+- `cd frontend && npm run test:cpar-portfolio` timed out after 60s under the bounded runner
+- `cd frontend && npm run test:cpar-portfolio-whatif` exited `-15` under the same bounded runner after the portfolio timeout sequence
+- `cd frontend && npm run test:cpar-hedge` exited `-15` under the same bounded runner after the portfolio timeout sequence
+
+Notes:
+- the Slice 3 study confirmed there was no dedicated positions-focused smoke before this change
+- `/positions` remains intentionally separate from the cUSE and cPAR page families in navigation; this slice did not split the page back into family-owned surfaces
 - a follow-up docs-only clarification commit is required because `/cpar/explore` can hand staged deltas into the shared holdings apply surface even though cPAR itself still does not own a mutation route

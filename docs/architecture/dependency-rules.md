@@ -113,10 +113,12 @@ Data modules should not:
 Frontend pages should:
 - read a small number of backend surfaces
 - use shared truth helpers for user-facing freshness semantics
+- keep intentional shared surfaces explicit when they compose shared holdings owners plus read-only family overlays
 
 Frontend pages should not:
 - reconstruct source-of-truth semantics independently
 - duplicate page banner logic across pages
+- hide mixed-family ownership behind compatibility barrels when a page is intentionally shared
 
 ## Shared Code Rules
 

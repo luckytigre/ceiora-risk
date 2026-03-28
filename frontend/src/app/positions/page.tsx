@@ -7,14 +7,12 @@ import ConfirmActionModal from "@/components/ConfirmActionModal";
 import MethodLabel, { type MethodLabelTone } from "@/components/MethodLabel";
 import { compareNumber, compareText, useSortableRows } from "@/hooks/useSortableRows";
 import {
-  useHoldingsAccounts,
-  useHoldingsModes,
-  useHoldingsPositions,
   usePortfolio,
   useRisk,
 } from "@/hooks/useCuse4Api";
 import { useCparRisk } from "@/hooks/useCparApi";
-import type { HoldingsImportMode } from "@/lib/types/cuse4";
+import { useHoldingsAccounts, useHoldingsModes, useHoldingsPositions } from "@/hooks/useHoldingsApi";
+import type { HoldingsImportMode } from "@/lib/types/holdings";
 import HoldingsImportPanel from "@/features/holdings/components/HoldingsImportPanel";
 import HoldingsLedgerSection from "@/features/holdings/components/HoldingsLedgerSection";
 import HoldingsMutationFeedback from "@/features/holdings/components/HoldingsMutationFeedback";
@@ -249,7 +247,7 @@ export default function PositionsPage() {
   }
 
   return (
-    <div>
+    <div data-testid="positions-surface">
       <div className="chart-card mb-4">
         <div className="holdings-section-header">
           <h3>Holdings Manager</h3>

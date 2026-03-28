@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { mutate } from "swr";
-import { ApiError, apiPath } from "@/lib/cuse4Api";
-import {
-  triggerHoldingsImport,
-} from "@/hooks/useCuse4Api";
-import type { HoldingsImportMode, HoldingsPosition } from "@/lib/types/cuse4";
+import { ApiError } from "@/lib/apiTransport";
+import { cuse4ApiPath } from "@/lib/cuse4Api";
+import { holdingsApiPath } from "@/lib/holdingsApi";
+import { triggerHoldingsImport } from "@/hooks/useHoldingsApi";
+import type { HoldingsImportMode, HoldingsPosition } from "@/lib/types/holdings";
 import {
   refreshFailureMessage,
   refreshSucceeded,
@@ -88,10 +88,10 @@ export function useHoldingsManager(selectedAccount: string, holdingsRows: Holdin
   async function revalidateHoldingsViews(accountIds: string[]) {
     const uniqueAccounts = [...new Set(accountIds.map(normalizeAccountId).filter(Boolean))];
     await Promise.all([
-      mutate(apiPath.holdingsAccounts()),
-      mutate(apiPath.holdingsPositions(null)),
-      ...uniqueAccounts.map((accountId) => mutate(apiPath.holdingsPositions(accountId))),
-      mutate(apiPath.operatorStatus()),
+      mutate(holdingsApiPath.holdingsAccounts()),
+      mutate(holdingsApiPath.holdingsPositions(null)),
+      ...uniqueAccounts.map((accountId) => mutate(holdingsApiPath.holdingsPositions(accountId))),
+      mutate(cuse4ApiPath.operatorStatus()),
     ]);
   }
 

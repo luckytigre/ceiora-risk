@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import ApiErrorState from "@/features/cuse4/components/ApiErrorState";
 import MethodLabel from "@/components/MethodLabel";
 import TableRowToggle from "@/components/TableRowToggle";
-import type { HoldingsPosition, Position } from "@/lib/types/cuse4";
+import type { Position } from "@/lib/types/analytics";
 import type { CparPortfolioPositionRow } from "@/lib/types/cpar";
+import type { HoldingsPosition } from "@/lib/types/holdings";
 import { exposureMethodDisplayLabel, exposureMethodRank, exposureMethodTone } from "@/lib/exposureOrigin";
 import { describeCparPositionMethod } from "@/lib/cparTruth";
 import InlineShareDraftEditor from "./InlineShareDraftEditor";
@@ -243,7 +244,7 @@ export default function HoldingsLedgerSection({
   }
 
   return (
-    <div className="chart-card mb-4">
+    <div className="chart-card mb-4" data-testid="positions-ledger">
       <h3>Portfolio Holdings [{holdingsRows.length}]</h3>
       <div className="section-subtitle">
         Live Neon-backed holdings across all accounts. Inline changes stay local until `RECALC`, then the batch is written once and the modeled snapshot refreshes afterward.

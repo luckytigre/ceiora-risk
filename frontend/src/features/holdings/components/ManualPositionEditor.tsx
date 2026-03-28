@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { HoldingsAccount, UniverseSearchItem } from "@/lib/types/cuse4";
+import type { UniverseSearchItem } from "@/lib/types/analytics";
+import type { HoldingsAccount } from "@/lib/types/holdings";
 import { useUniverseSearch } from "@/hooks/useCuse4Api";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 

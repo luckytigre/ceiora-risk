@@ -153,6 +153,7 @@ Current page owners:
 - `/cpar/risk` stays owned by `frontend/src/features/cpar/components/CparRiskWorkspace.tsx`
 - `/cpar/hedge` stays owned by `frontend/src/app/cpar/hedge/page.tsx`
 - `/cpar/health` stays owned by `frontend/src/app/cpar/health/page.tsx`
+- `/positions` is not a cPAR page owner, but it may intentionally render a read-only cPAR method/coverage overlay from `frontend/src/hooks/useCparApi.ts`
 
 Preferred cPAR frontend import surfaces now include:
 - `frontend/src/hooks/useCparApi.ts` as the current cPAR-owned facade for route hooks

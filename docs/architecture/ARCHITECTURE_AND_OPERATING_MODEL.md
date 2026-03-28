@@ -222,8 +222,8 @@ Canonical page-to-backend wiring:
   - reads: `/api/universe/search`, `/api/universe/ticker/{ticker}`, `/api/universe/ticker/{ticker}/history`, `/api/universe/factors`, `/api/portfolio`, `/api/portfolio/whatif`
   - purpose: single-name inspection plus account-aware what-if preview against the current live holdings ledger, with optional apply + `serve-refresh` once a scenario is accepted
 - `Positions` (`/positions`)
-  - reads: `/api/holdings/*`, `/api/portfolio`, `/api/universe/search`
-  - purpose: holdings editing/import and current model portfolio view
+  - reads: `/api/holdings/*`, `/api/portfolio`, `/api/risk`, `/api/cpar/risk`, `/api/universe/search`
+  - purpose: shared live-holdings editing/import plus a dual-family modeled coverage check, with cUSE as the operator/control owner and cPAR as a read-only method overlay
 - `Data` (`/data`)
   - reads: `/api/data/diagnostics`
   - purpose: source-table lineage, coverage, cache surfaces, and integrity diagnostics

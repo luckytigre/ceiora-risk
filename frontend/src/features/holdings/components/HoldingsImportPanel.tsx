@@ -1,6 +1,6 @@
 "use client";
 
-import type { HoldingsAccount, HoldingsImportMode } from "@/lib/types/cuse4";
+import type { HoldingsAccount, HoldingsImportMode } from "@/lib/types/holdings";
 
 interface HoldingsImportPanelProps {
   selectedAccount: string;
