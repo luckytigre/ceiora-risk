@@ -96,3 +96,4 @@ If an archived file conflicts with an active doc, the active doc wins.
 - Project documentation should live under `docs/`, not at the repo root.
 - Root-level Markdown should be limited to repo meta/instructions such as `AGENTS.md`.
 - Completed trackers and one-time cleanup notes should be archived promptly instead of remaining in the active architecture or reference surface.
+- Persisted cleanup slice notes and one-off execution records belong under `archive/one-time-protocols/` or `archive/execution-logs/`, not in active architecture docs or at repo root.

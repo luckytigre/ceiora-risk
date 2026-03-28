@@ -140,6 +140,16 @@ Current reviewed exception:
 Additional cloud-runtime rule:
 - serve-facing services may read persisted refresh status, but they may not import refresh-manager execution helpers that assume local worker ownership
 
+## Cleanup Slice Rules
+
+While the repo remains in an active cleanup phase:
+
+- structural cleanup must stay path-scoped and rollback-safe
+- do not mix live operational work, unrelated migrations, or opportunistic tidy-ups into a cleanup slice
+- if two authority seams have different rollback behavior or different validation gates, they belong in different slices
+- update canonical docs in the same change when ownership, runtime authority, route semantics, or operator expectations change
+- repo-hygiene ignore rules must be root-anchored and concrete; do not add broad patterns that can hide legitimate repository content
+
 ## Documentation Rules
 
 Any structural refactor that changes ownership or semantics must update:
