@@ -4,7 +4,7 @@ import pytest
 
 from backend.cpar.factor_registry import CPAR1_METHOD_VERSION
 from backend.data import cpar_outputs, cpar_source_reads
-from backend.services import cpar_meta_service, cpar_portfolio_snapshot_service
+from backend.services import cpar_aggregate_risk_service, cpar_meta_service, cpar_portfolio_snapshot_service
 
 
 def _package() -> dict[str, object]:
@@ -274,8 +274,8 @@ def test_support_rows_does_not_swallow_unexpected_output_decode_bugs(
         )
 
 
-def test_build_cpar_risk_snapshot_uses_display_covariance_for_display_analytics() -> None:
-    payload = cpar_portfolio_snapshot_service.build_cpar_risk_snapshot(
+def test_aggregate_risk_builder_uses_display_covariance_for_display_analytics() -> None:
+    payload = cpar_aggregate_risk_service.build_cpar_risk_snapshot(
         package=_package(),
         accounts=[{"account_id": "acct_a", "account_name": "Account A"}],
         positions=[{"account_id": "all_accounts", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 1.0}],
@@ -313,7 +313,9 @@ def test_build_cpar_risk_snapshot_uses_display_covariance_for_display_analytics(
     raw_xlk = next(row for row in payload["factor_chart"] if row["factor_id"] == "XLK")
     display_xlk = next(row for row in payload["display_factor_chart"] if row["factor_id"] == "XLK")
     xlk_index = payload["display_cov_matrix"]["factors"].index("XLK")
+    raw_cov_xlk_index = payload["cov_matrix"]["factors"].index("XLK")
 
+    assert payload["cov_matrix"]["correlation"][0][raw_cov_xlk_index] == pytest.approx(0.8)
     assert payload["display_cov_matrix"]["correlation"][0][xlk_index] == pytest.approx(0.0)
     assert raw_xlk["covariance_adjustment"] == pytest.approx(1.0)
     assert display_xlk["covariance_adjustment"] == pytest.approx(1.0)

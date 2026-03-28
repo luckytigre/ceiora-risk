@@ -651,11 +651,13 @@ Study first:
 - map aggregate risk helper reuse between snapshot and risk routes
 - identify the smallest helper set that can move without dragging hedge/what-if logic with it
 - keep `load_cpar_portfolio_support_rows()` shared unless a later slice moves the whole package-pinned snapshot core together
-- preserve compatibility for `build_cpar_risk_snapshot()` consumers outside `/api/cpar/risk`, especially `cpar_explore_whatif_service.py`
+- preserve behavior for `build_cpar_risk_snapshot()` consumers outside `/api/cpar/risk` while allowing `/cpar/explore` to adopt the explicit aggregate owner directly
 
 Primary surfaces:
+- `backend/services/cpar_aggregate_risk_service.py`
 - `backend/services/cpar_portfolio_snapshot_service.py`
 - `backend/services/cpar_risk_service.py`
+- `backend/services/cpar_explore_whatif_service.py`
 - any extracted aggregate-risk helper modules
 
 Required doc updates:

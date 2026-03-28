@@ -56,6 +56,12 @@ Avoid:
 - cPAR routes importing `backend.data` or `backend.cpar`
 - cPAR services importing API or orchestration layers
 - cPAR integration reusing `serving_payload_current` or runtime-state surfaces unless a later documented exception is approved
+- routing aggregate cPAR snapshot assembly back through `cpar_portfolio_snapshot_service.build_cpar_risk_snapshot()` once `cpar_aggregate_risk_service.py` exists as the explicit aggregate owner
+
+Current cPAR owner exception:
+- `backend/services/cpar_risk_service.py` may stay as a thin route-facing shim over `backend/services/cpar_aggregate_risk_service.py`
+- other cPAR services may call `backend/services/cpar_aggregate_risk_service.py` directly when they need the same package-pinned aggregate snapshot semantics
+- `backend/services/cpar_portfolio_snapshot_service.py` remains the shared support/core layer below those owners and should not silently become the primary aggregate owner again
 
 ## Entrypoint Rules
 

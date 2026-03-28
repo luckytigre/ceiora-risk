@@ -416,3 +416,37 @@ Outcome:
 
 Validation:
 - `git diff --check -- docs/architecture/CPAR_BACKEND_READ_SURFACES.md docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md docs/operations/CPAR_OPERATIONS_PLAYBOOK.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+## Slice 9
+
+Scope:
+- `backend/services/cpar_aggregate_risk_service.py`
+- `backend/services/cpar_risk_service.py`
+- `backend/services/cpar_portfolio_snapshot_service.py`
+- `backend/services/cpar_explore_whatif_service.py`
+- `backend/tests/test_cpar_risk_service.py`
+- `backend/tests/test_cpar_portfolio_snapshot_service.py`
+- `backend/tests/test_cpar_explore_whatif_service.py`
+- `backend/tests/test_cpar_service_route_boundaries.py`
+- `docs/architecture/CPAR_BACKEND_READ_SURFACES.md`
+- `docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/REPO_TIGHTENING_PLAN.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- extracted explicit aggregate `/api/cpar/risk` assembly into `backend/services/cpar_aggregate_risk_service.py` while keeping `backend/services/cpar_risk_service.py` as the thin route-facing owner
+- kept `backend/services/cpar_portfolio_snapshot_service.py` as the shared package-pinned support/core owner for support-row loads and reused helper assembly instead of moving account-scoped hedge/what-if paths into the aggregate owner
+- moved `POST /api/cpar/explore/whatif` onto the explicit aggregate owner for aggregate current/hypothetical snapshots so the live path no longer routes back through the snapshot service
+- removed the obsolete snapshot-service aggregate-risk alias so the owner chain is one-directional again
+- pinned the raw-vs-display covariance contract so `cov_matrix` stays on raw package covariance while `display_cov_matrix` remains the additive explanatory surface
+- updated the active cPAR architecture, backend-read, operations, maintainer, dependency, and slice-plan docs to reflect the route-facing shim -> aggregate owner -> shared support/core chain
+
+Validation:
+- `git diff --check -- backend/services/cpar_aggregate_risk_service.py backend/services/cpar_risk_service.py backend/services/cpar_portfolio_snapshot_service.py backend/services/cpar_explore_whatif_service.py backend/tests/test_cpar_risk_service.py backend/tests/test_cpar_portfolio_snapshot_service.py backend/tests/test_cpar_explore_whatif_service.py backend/tests/test_cpar_service_route_boundaries.py docs/architecture/CPAR_BACKEND_READ_SURFACES.md docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md docs/operations/CPAR_OPERATIONS_PLAYBOOK.md docs/architecture/maintainer-guide.md docs/architecture/dependency-rules.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_cpar_risk_service.py backend/tests/test_cpar_portfolio_snapshot_service.py backend/tests/test_cpar_runtime_coverage_contract.py backend/tests/test_cpar_explore_whatif_service.py backend/tests/test_cpar_portfolio_hedge_service.py backend/tests/test_cpar_portfolio_whatif_service.py backend/tests/test_cpar_service_route_boundaries.py backend/tests/test_cpar_architecture_boundaries.py backend/tests/test_cpar_routes.py::test_cpar_risk_route_returns_payload backend/tests/test_cpar_routes.py::test_cpar_risk_route_maps_not_ready_to_503`
+
+Validation blockers:
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 9 keeps the blocker recorded instead of widening scope into a repair

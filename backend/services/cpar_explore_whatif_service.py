@@ -6,7 +6,11 @@ import math
 from typing import Any
 
 from backend.cpar.factor_registry import build_cpar1_factor_registry
-from backend.services import cpar_meta_service, cpar_portfolio_snapshot_service
+from backend.services import (
+    cpar_aggregate_risk_service,
+    cpar_meta_service,
+    cpar_portfolio_snapshot_service,
+)
 
 
 MAX_CPAR_EXPLORE_WHATIF_ROWS = 100
@@ -387,7 +391,7 @@ def load_cpar_explore_whatif_payload(
                 "Stage additions from active-package cPAR search results only."
             )
 
-    current_snapshot = cpar_portfolio_snapshot_service.build_cpar_risk_snapshot(
+    current_snapshot = cpar_aggregate_risk_service.build_cpar_risk_snapshot(
         package=package,
         accounts=current_accounts,
         positions=current_aggregated_positions,
@@ -396,7 +400,7 @@ def load_cpar_explore_whatif_payload(
         classification_by_ric=classification_by_ric,
         covariance_rows=covariance_rows,
     )
-    hypothetical_snapshot = cpar_portfolio_snapshot_service.build_cpar_risk_snapshot(
+    hypothetical_snapshot = cpar_aggregate_risk_service.build_cpar_risk_snapshot(
         package=package,
         accounts=hypothetical_accounts,
         positions=hypothetical_aggregated_positions,

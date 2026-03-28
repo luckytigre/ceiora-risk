@@ -115,10 +115,12 @@ Current owner decisions:
 - rebuilt `/cpar/explore`, `/cpar/hedge`, and `/cpar/health` surfaces should remain cPAR-owned when they return
 - `/cpar/risk` is now the explicit aggregate all-accounts cPAR risk owner:
   - route: `GET /api/cpar/risk`
-  - service: `backend/services/cpar_risk_service.py`
-  - shared lower assembly: `backend/services/cpar_portfolio_snapshot_service.py`
+  - route-facing service: `backend/services/cpar_risk_service.py`
+  - aggregate snapshot owner: `backend/services/cpar_aggregate_risk_service.py`
+  - shared lower support/core: `backend/services/cpar_portfolio_snapshot_service.py`
   - shared lower data adapters: `backend/data/holdings_reads.py` for aggregate holdings rows and `backend/data/cpar_outputs.py` / `backend/data/cpar_source_reads.py` for package/source support reads
-- `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower assembly owner for account-scoped cPAR reads and the current package-pinned aggregate snapshot core reused by `/cpar/risk` and `/cpar/explore` unless a later slice proves a clearer lower-layer split
+- `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower support/core owner for account-scoped cPAR reads and the helper layer reused by `backend/services/cpar_aggregate_risk_service.py`
+- aggregate current/hypothetical snapshots for `POST /api/cpar/explore/whatif` now also reuse `backend/services/cpar_aggregate_risk_service.py` directly rather than routing back through the snapshot-service compatibility alias
 - the aggregate risk owner exposes:
   - `coverage_breakdown`
   - `factor_variance_contributions`

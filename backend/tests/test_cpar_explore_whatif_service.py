@@ -160,7 +160,7 @@ def test_cpar_explore_whatif_service_builds_aggregate_preview(monkeypatch: pytes
         return _current_snapshot() if len(positions) == 2 else _hypothetical_snapshot()
 
     monkeypatch.setattr(
-        cpar_explore_whatif_service.cpar_portfolio_snapshot_service,
+        cpar_explore_whatif_service.cpar_aggregate_risk_service,
         "build_cpar_risk_snapshot",
         _build_snapshot,
     )

@@ -128,14 +128,17 @@ Aggregate risk owner:
 - `GET /api/cpar/risk` is now owned by `backend/services/cpar_risk_service.py`
 - this is the justified exception to the earlier account-scoped `/cpar/risk` freeze:
   - the user-facing page is now the aggregate all-accounts cPAR risk surface
-  - the route still reuses the shared package-pinned snapshot/risk core instead of inventing a second truth source
+  - the route-facing service stays thin and delegates aggregate package-pinned risk assembly to `backend/services/cpar_aggregate_risk_service.py`
+  - that aggregate owner still reuses the shared package-pinned support rows and helper core in `backend/services/cpar_portfolio_snapshot_service.py` instead of inventing a second truth source
   - it does not collapse account-scoped hedge or what-if flows into the same payload
 
 Account-scoped owners:
 - `GET /api/cpar/portfolio/hedge` remains owned by `backend/services/cpar_portfolio_hedge_service.py`
 - `POST /api/cpar/portfolio/whatif` remains owned by `backend/services/cpar_portfolio_whatif_service.py`
 - shared lower assembly for both stays in `backend/services/cpar_portfolio_snapshot_service.py`
-- the shared snapshot owner now supports both:
+- aggregate current/hypothetical package-pinned snapshots reused by `POST /api/cpar/explore/whatif` now also flow through `backend/services/cpar_aggregate_risk_service.py`
+- `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower support/core owner for all three flows
+- the shared lower support/core now supports:
   - account-scoped hedge/what-if assembly
   - aggregate risk assembly for `/api/cpar/risk`
   - aggregate current/hypothetical snapshot assembly for `POST /api/cpar/explore/whatif`

@@ -79,6 +79,10 @@ Practical rule:
 - when touching pure cUSE4 model logic, keep it in `backend/risk_model/*`
 - when touching pure cPAR model logic, keep it in `backend/cpar/*`
 - when touching cPAR integration, keep it in normal repo layers with `cpar_*` naming
+- when touching aggregate cPAR risk/explore snapshot assembly, keep the split explicit:
+  - `backend/services/cpar_risk_service.py` is the thin route-facing owner for `GET /api/cpar/risk`
+  - `backend/services/cpar_aggregate_risk_service.py` is the explicit aggregate package-pinned snapshot owner
+  - `backend/services/cpar_portfolio_snapshot_service.py` stays the shared support/core owner below those route-facing owners
 - when touching default cUSE4 frontend imports, prefer the explicit cUSE4 surfaces:
   - `frontend/src/hooks/useCuse4Api.ts`
   - `frontend/src/lib/cuse4Api.ts`

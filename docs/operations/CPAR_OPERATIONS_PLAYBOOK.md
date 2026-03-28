@@ -104,10 +104,12 @@ Current frontend-backed read surfaces:
 `/cpar/health` and `/cpar/hedge` are still lightweight placeholder surfaces.
 `/cpar/explore` now serves single-name persisted fit detail plus preview-only scenario analysis.
 `/cpar/risk` is aggregate and read-only: it reuses the shared Neon-backed adapter in `backend/data/holdings_reads.py` plus latest shared-source prices, but it does not reuse cUSE4 risk or what-if payload semantics.
-The shared snapshot assembly in `backend/services/cpar_portfolio_snapshot_service.py` still underpins both:
+The route-facing `/api/cpar/risk` service in `backend/services/cpar_risk_service.py` is now a thin shim over `backend/services/cpar_aggregate_risk_service.py`.
+That aggregate owner still reuses the shared support/core in `backend/services/cpar_portfolio_snapshot_service.py`, which underpins:
 - aggregate `/api/cpar/risk`
 - account-scoped `/api/cpar/portfolio/hedge` and `/api/cpar/portfolio/whatif`
 - aggregate current/hypothetical comparison states for `POST /api/cpar/explore/whatif`
+`POST /api/cpar/explore/whatif` now calls the explicit aggregate owner directly for those aggregate current/hypothetical snapshots.
 That shared snapshot now carries explicit `coverage_breakdown`, residualized `factor_variance_contributions`, additive residualized `display_factor_variance_contributions`, residualized `factor_chart`, additive explanatory `display_factor_chart`, per-position `thresholded_contributions`, additive `display_contributions`, package-owned `risk_shares`, `factor_variance_proxy`, `idio_variance_proxy`, `total_variance_proxy`, row-level `risk_mix`, and the package-pinned `cov_matrix`; those fields are still derived read surfaces from the same package-scoped snapshot, not a second risk engine.
 For aggregate `/cpar/risk`, the shared snapshot now also carries additive `display_cov_matrix`, derived read-time from the persisted proxy-return panel plus persisted market-orthogonalization transforms. That display matrix is package-pinned and explanatory; hedge previews still translate into raw ETF trade space separately.
 The aggregate `/cpar/risk` backend path now avoids loading every raw holdings row into Python:
