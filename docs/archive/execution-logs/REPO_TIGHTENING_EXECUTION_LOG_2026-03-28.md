@@ -104,6 +104,42 @@ Notes:
 
 Scope:
 - `frontend/src/app/positions/page.tsx`
+- `frontend/src/features/holdings/hooks/useHoldingsManager.ts`
+- `frontend/scripts/positions_surface_smoke.mjs`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/CPAR_FRONTEND_SURFACES.md`
+- `docs/operations/OPERATIONS_HARDENING_CHECKLIST.md`
+- `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+
+Outcome:
+- kept `/positions` as an intentional shared live-holdings control surface rather than splitting it into family-owned pages
+- moved the shared holdings reads/writes on `/positions` and in the holdings manager onto the explicit shared holdings owners
+- kept cUSE participation explicit for the modeled snapshot and operator/control refresh semantics
+- kept cPAR participation explicit as a read-only method/coverage overlay
+- added a dedicated `/positions` smoke script so the page has its own validation owner instead of relying only on broader family smokes
+- updated the architecture and operations docs to describe `/positions` as a shared holdings surface with explicit cUSE and cPAR roles
+
+Validation:
+- `git diff --check -- frontend/src/app/positions/page.tsx frontend/src/features/holdings/hooks/useHoldingsManager.ts frontend/scripts/positions_surface_smoke.mjs docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/dependency-rules.md docs/architecture/maintainer-guide.md docs/architecture/CPAR_FRONTEND_SURFACES.md docs/operations/OPERATIONS_HARDENING_CHECKLIST.md docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+
+Validation blockers:
+- `cd frontend && node scripts/positions_surface_smoke.mjs` launched `next dev` on port `3115` but did not complete before a 120s timeout
+- `cd frontend && npm run typecheck` progressed past `next typegen` and into `tsc --noEmit --incremental false`, but `tsc` still did not complete before manual termination after roughly two minutes
+- `cd frontend && npm run test:cpar-portfolio` timed out after 60s under a process-group kill
+- `cd frontend && npm run test:cpar-portfolio-whatif` timed out after 60s under a process-group kill
+- `cd frontend && npm run test:cpar-hedge` timed out after 60s under a process-group kill
+
+Notes:
+- the `/positions` smoke present in the worktree is a full browser/API-stub smoke rather than a static contract check, so the blocker above reflects the real runtime-oriented artifact being introduced for this slice
+- validation runs again left orphaned `next dev` children; those were cleaned up before recording the final blocker state
+
+## Slice 3
+
+Scope:
+- `frontend/src/app/positions/page.tsx`
 - `frontend/src/features/holdings/components/HoldingsLedgerSection.tsx`
 - `frontend/src/features/holdings/components/HoldingsImportPanel.tsx`
 - `frontend/src/features/holdings/components/ManualPositionEditor.tsx`
@@ -181,46 +217,32 @@ Notes:
 - the pre-edit adversarial review was dispatched, but the agent threads did not return usable output before the slice moved forward
 - the post-edit review dispatch hit the existing agent-thread cap until stale Slice 2 agents were closed, so this slice keeps the commit boundary narrow and records the validation state explicitly
 
-## Slice 3
+## Slice 4
 
 Scope:
-- `frontend/src/app/positions/page.tsx`
-- `frontend/src/features/holdings/components/HoldingsLedgerSection.tsx`
-- `frontend/src/features/holdings/components/HoldingsImportPanel.tsx`
-- `frontend/src/features/holdings/components/ManualPositionEditor.tsx`
-- `frontend/src/features/holdings/hooks/useHoldingsManager.ts`
-- `frontend/scripts/positions_surface_smoke.mjs`
-- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
-- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
-- `docs/architecture/dependency-rules.md`
+- `backend/services/cuse4_dashboard_payload_service.py`
+- `backend/services/cuse4_factor_history_service.py`
+- `backend/services/cuse4_health_diagnostics_service.py`
+- `backend/tests/test_exposure_history_route.py`
+- `backend/tests/test_serving_output_route_preference.py`
 - `docs/architecture/maintainer-guide.md`
-- `docs/architecture/CPAR_FRONTEND_SURFACES.md`
-- `docs/operations/OPERATIONS_HARDENING_CHECKLIST.md`
-- `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
-
-Decision:
-- `/positions` remains an intentional shared live-holdings control surface
 
 Outcome:
-- made the shared/family split explicit on `/positions` and the related holdings helpers:
-  - shared holdings reads and mutations now stay on the shared holdings owners
-  - cUSE participation remains explicit for modeled snapshot and operator/control semantics
-  - cPAR participation remains explicit and read-only for method/coverage overlays
-- added stable `data-testid` anchors for the positions surface and holdings ledger
-- added `frontend/scripts/positions_surface_smoke.mjs` as a source-contract smoke for the shared-owner decision
-- updated the active architecture and operations docs so `/positions` is documented as shared rather than implicitly cUSE-owned
+- introduced one public dependency seam per cUSE alias owner instead of relying on tests to mutate several alias-module globals directly:
+  - `get_dashboard_payload_readers()`
+  - `get_factor_history_dependencies()`
+  - `get_health_diagnostics_readers()`
+- updated the route-level tests to patch those public seams instead of patching `load_runtime_payload`, `cache_get`, `load_factor_return_history`, and `config.SQLITE_PATH` individually on the alias modules
+- kept route behavior unchanged; this slice only hardens the test seam ahead of the later cUSE service de-dup slices
+- updated maintainer guidance so future route tests patch the public alias dependency seam instead of mutating alias-module globals directly
 
 Validation:
-- `git diff --check -- frontend/src/app/positions/page.tsx frontend/src/features/holdings/components/HoldingsLedgerSection.tsx frontend/src/features/holdings/components/HoldingsImportPanel.tsx frontend/src/features/holdings/components/ManualPositionEditor.tsx frontend/src/features/holdings/hooks/useHoldingsManager.ts frontend/scripts/positions_surface_smoke.mjs docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/dependency-rules.md docs/architecture/maintainer-guide.md docs/architecture/CPAR_FRONTEND_SURFACES.md docs/operations/OPERATIONS_HARDENING_CHECKLIST.md docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
-- `cd frontend && node scripts/positions_surface_smoke.mjs`
+- `git diff --check -- backend/services/cuse4_dashboard_payload_service.py backend/services/cuse4_factor_history_service.py backend/services/cuse4_health_diagnostics_service.py backend/tests/test_dashboard_payload_service.py backend/tests/test_exposure_history_route.py backend/tests/test_health_diagnostics.py backend/tests/test_health_diagnostics_scoping.py backend/tests/test_serving_output_route_preference.py docs/architecture/maintainer-guide.md`
+- `python3 -m py_compile backend/services/cuse4_dashboard_payload_service.py backend/services/cuse4_factor_history_service.py backend/services/cuse4_health_diagnostics_service.py backend/tests/test_exposure_history_route.py backend/tests/test_serving_output_route_preference.py`
 
 Validation blockers:
-- `cd frontend && npm run typecheck` progressed past `next typegen`, then stalled in the later typecheck phase until manual termination
-- `cd frontend && npm run test:cpar-portfolio` timed out after 60s under the bounded runner
-- `cd frontend && npm run test:cpar-portfolio-whatif` exited `-15` under the same bounded runner after the portfolio timeout sequence
-- `cd frontend && npm run test:cpar-hedge` exited `-15` under the same bounded runner after the portfolio timeout sequence
+- `./.venv_local/bin/pytest -q backend/tests/test_dashboard_payload_service.py backend/tests/test_exposure_history_route.py backend/tests/test_health_diagnostics.py backend/tests/test_health_diagnostics_scoping.py backend/tests/test_serving_output_route_preference.py` could not run because `.venv_local` does not exist in this workspace
+- fallback `pytest -q ...` under the global interpreter failed during import because `python-dotenv` is not installed there (`ModuleNotFoundError: No module named 'dotenv'`)
 
 Notes:
-- the Slice 3 study confirmed there was no dedicated positions-focused smoke before this change
-- `/positions` remains intentionally separate from the cUSE and cPAR page families in navigation; this slice did not split the page back into family-owned surfaces
-- a follow-up docs-only clarification commit is required because `/cpar/explore` can hand staged deltas into the shared holdings apply surface even though cPAR itself still does not own a mutation route
+- the seam problem was concentrated in the cUSE alias owners, but the validation bundle still referenced the wider dashboard/health tests to preserve the planned rollback boundary once the repo-local env is available again

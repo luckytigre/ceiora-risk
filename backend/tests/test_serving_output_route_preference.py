@@ -13,13 +13,13 @@ from backend.api.routes import universe as universe_routes
 def test_portfolio_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(
         portfolio_routes.dashboard_payload_service,
-        "load_runtime_payload",
-        lambda name, *, fallback_loader=None: {"positions": [], "total_value": 1, "position_count": 0} if name == "portfolio" else None,
-    )
-    monkeypatch.setattr(
-        portfolio_routes.dashboard_payload_service,
-        "cache_get",
-        lambda key: {"positions": [], "total_value": 999, "position_count": 9},
+        "get_dashboard_payload_readers",
+        lambda: portfolio_routes.dashboard_payload_service.DashboardPayloadReaders(
+            payload_loader=lambda name, *, fallback_loader=None: {"positions": [], "total_value": 1, "position_count": 0}
+            if name == "portfolio"
+            else None,
+            fallback_loader=lambda key: {"positions": [], "total_value": 999, "position_count": 9},
+        ),
     )
 
     client = TestClient(app)
@@ -32,13 +32,13 @@ def test_portfolio_prefers_serving_payload_over_cache(monkeypatch) -> None:
 def test_exposures_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(
         exposures_routes.dashboard_payload_service,
-        "load_runtime_payload",
-        lambda name, *, fallback_loader=None: {"raw": [{"factor_id": "style_size_score"}]} if name == "exposures" else None,
-    )
-    monkeypatch.setattr(
-        exposures_routes.dashboard_payload_service,
-        "cache_get",
-        lambda key: {"raw": [{"factor_id": "style_momentum_score"}]},
+        "get_dashboard_payload_readers",
+        lambda: exposures_routes.dashboard_payload_service.DashboardPayloadReaders(
+            payload_loader=lambda name, *, fallback_loader=None: {"raw": [{"factor_id": "style_size_score"}]}
+            if name == "exposures"
+            else None,
+            fallback_loader=lambda key: {"raw": [{"factor_id": "style_momentum_score"}]},
+        ),
     )
 
     client = TestClient(app)
@@ -51,12 +51,18 @@ def test_exposures_prefers_serving_payload_over_cache(monkeypatch) -> None:
 def test_exposures_normalizes_legacy_factor_field(monkeypatch) -> None:
     monkeypatch.setattr(
         exposures_routes.dashboard_payload_service,
-        "load_runtime_payload",
-        lambda name, *, fallback_loader=None: {"raw": [{"factor": "Momentum", "value": 1.0}], "sensitivity": [], "risk_contribution": []}
-        if name == "exposures"
-        else None,
+        "get_dashboard_payload_readers",
+        lambda: exposures_routes.dashboard_payload_service.DashboardPayloadReaders(
+            payload_loader=lambda name, *, fallback_loader=None: {
+                "raw": [{"factor": "Momentum", "value": 1.0}],
+                "sensitivity": [],
+                "risk_contribution": [],
+            }
+            if name == "exposures"
+            else None,
+            fallback_loader=lambda key: None,
+        ),
     )
-    monkeypatch.setattr(exposures_routes.dashboard_payload_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/exposures?mode=raw")
@@ -76,10 +82,16 @@ def test_risk_prefers_serving_payload_over_cache(monkeypatch) -> None:
     }
     monkeypatch.setattr(
         risk_routes.dashboard_payload_service,
-        "load_runtime_payload",
-        lambda name, *, fallback_loader=None: risk_payload if name == "risk" else {"status": "ok"} if name == "model_sanity" else None,
+        "get_dashboard_payload_readers",
+        lambda: risk_routes.dashboard_payload_service.DashboardPayloadReaders(
+            payload_loader=lambda name, *, fallback_loader=None: risk_payload
+            if name == "risk"
+            else {"status": "ok"}
+            if name == "model_sanity"
+            else None,
+            fallback_loader=lambda key: None,
+        ),
     )
-    monkeypatch.setattr(risk_routes.dashboard_payload_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/risk")
@@ -99,10 +111,16 @@ def test_risk_normalizes_legacy_factor_and_country_fields(monkeypatch) -> None:
     }
     monkeypatch.setattr(
         risk_routes.dashboard_payload_service,
-        "load_runtime_payload",
-        lambda name, *, fallback_loader=None: risk_payload if name == "risk" else {"status": "ok"} if name == "model_sanity" else None,
+        "get_dashboard_payload_readers",
+        lambda: risk_routes.dashboard_payload_service.DashboardPayloadReaders(
+            payload_loader=lambda name, *, fallback_loader=None: risk_payload
+            if name == "risk"
+            else {"status": "ok"}
+            if name == "model_sanity"
+            else None,
+            fallback_loader=lambda key: None,
+        ),
     )
-    monkeypatch.setattr(risk_routes.dashboard_payload_service, "cache_get", lambda key: None)
 
     client = TestClient(app)
     res = client.get("/api/risk")
@@ -120,13 +138,15 @@ def test_health_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(health_routes, "require_role", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         health_routes.health_diagnostics_service,
-        "load_runtime_payload",
-        lambda name, *, fallback_loader=None: {"status": "ok", "as_of": "2026-03-03", "notes": ["fresh"]} if name == "health_diagnostics" else None,
-    )
-    monkeypatch.setattr(
-        health_routes.health_diagnostics_service,
-        "cache_get",
-        lambda key: {"status": "ok", "as_of": "2020-01-01", "notes": ["stale"]} if key == "health_diagnostics" else None,
+        "get_health_diagnostics_readers",
+        lambda: health_routes.health_diagnostics_service.HealthDiagnosticsReaders(
+            payload_loader=lambda name, *, fallback_loader=None: {"status": "ok", "as_of": "2026-03-03", "notes": ["fresh"]}
+            if name == "health_diagnostics"
+            else None,
+            fallback_loader=lambda key: {"status": "ok", "as_of": "2020-01-01", "notes": ["stale"]}
+            if key == "health_diagnostics"
+            else None,
+        ),
     )
 
     client = TestClient(app)
