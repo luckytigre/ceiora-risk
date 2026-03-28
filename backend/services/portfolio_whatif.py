@@ -8,6 +8,8 @@ Prefer importing `backend.services.cuse4_portfolio_whatif` from cUSE4 routes.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import math
@@ -35,6 +37,29 @@ from backend.risk_model.risk_attribution import risk_decomposition
 from backend.services import holdings_service
 
 
+@dataclass(frozen=True)
+class PortfolioWhatIfDependencies:
+    current_payload_loader: Callable[[str], Any]
+    runtime_cache_loader: Callable[[str], Any]
+    live_cache_loader: Callable[[str], Any]
+    holdings_loader: Callable[[str | None], list[dict[str, Any]]]
+    universe_loader: Callable[..., dict[str, Any]]
+    covariance_loader: Callable[..., tuple[pd.DataFrame, bool]]
+    specific_risk_loader: Callable[..., tuple[dict[str, dict[str, Any]], bool]]
+
+
+def get_portfolio_whatif_dependencies() -> PortfolioWhatIfDependencies:
+    return PortfolioWhatIfDependencies(
+        current_payload_loader=load_current_payload,
+        runtime_cache_loader=cache_get,
+        live_cache_loader=cache_get_live_first,
+        holdings_loader=holdings_service.load_holdings_positions,
+        universe_loader=_load_universe_loadings_from_current_payload,
+        covariance_loader=_load_covariance_frame_from_current_payload,
+        specific_risk_loader=_load_specific_risk_by_ticker_from_current_payload,
+    )
+
+
 def _normalize_account_id(raw: str | None) -> str:
     return str(raw or "").strip().lower()
 
@@ -55,9 +80,10 @@ def _scenario_key(account_id: str, ric: str | None, ticker: str | None) -> str:
 def _load_serving_or_runtime_cache(
     payload_name: str,
     *,
+    current_payload_loader: Callable[[str], Any] = load_current_payload,
     fallback_loader,
 ):
-    payload = load_current_payload(payload_name)
+    payload = current_payload_loader(payload_name)
     if payload is not None:
         return payload
     if not config.serving_outputs_cache_fallback_enabled():
@@ -65,19 +91,31 @@ def _load_serving_or_runtime_cache(
     return fallback_loader(payload_name)
 
 
-def _load_current_serving_payloads(*payload_names: str) -> dict[str, Any | None]:
-    if load_current_payload is serving_outputs_store.load_current_payload:
+def _load_current_serving_payloads(
+    *payload_names: str,
+    current_payload_loader: Callable[[str], Any] = load_current_payload,
+) -> dict[str, Any | None]:
+    if current_payload_loader is serving_outputs_store.load_current_payload:
         return serving_outputs_store.load_current_payloads(payload_names)
     return {
-        payload_name: load_current_payload(payload_name)
+        payload_name: current_payload_loader(payload_name)
         for payload_name in payload_names
     }
 
 
-def _load_universe_loadings(*, current_payload: Any | None = None) -> dict[str, Any]:
+def _load_universe_loadings(
+    *,
+    current_payload: Any | None = None,
+    current_payload_loader: Callable[[str], Any] = load_current_payload,
+    fallback_loader: Callable[[str], Any] = cache_get,
+) -> dict[str, Any]:
     data = current_payload
     if data is None:
-        data = _load_serving_or_runtime_cache("universe_loadings", fallback_loader=cache_get)
+        data = _load_serving_or_runtime_cache(
+            "universe_loadings",
+            current_payload_loader=current_payload_loader,
+            fallback_loader=fallback_loader,
+        )
     if not isinstance(data, dict) or not isinstance(data.get("by_ticker"), dict):
         raise RuntimeError("Universe loadings are not ready. Run refresh before using what-if preview.")
     return data
@@ -91,11 +129,15 @@ def _load_covariance_frame() -> pd.DataFrame:
 def _load_covariance_frame_with_source(
     *,
     current_payload: Any | None = None,
+    current_payload_loader: Callable[[str], Any] = load_current_payload,
+    live_cache_loader: Callable[[str], Any] = cache_get_live_first,
 ) -> tuple[pd.DataFrame, bool]:
-    serving_payload = current_payload if current_payload is not None else load_current_payload("risk_engine_cov")
+    serving_payload = (
+        current_payload if current_payload is not None else current_payload_loader("risk_engine_cov")
+    )
     payload = serving_payload
     if payload is None and config.serving_outputs_cache_fallback_enabled():
-        payload = cache_get_live_first("risk_engine_cov")
+        payload = live_cache_loader("risk_engine_cov")
     if not isinstance(payload, dict):
         raise RuntimeError("Risk engine covariance is not ready. Run refresh before using what-if preview.")
     factors = [str(x) for x in (payload.get("factors") or [])]
@@ -113,22 +155,34 @@ def _load_specific_risk_by_ticker() -> dict[str, dict[str, Any]]:
 def _load_specific_risk_by_ticker_with_source(
     *,
     current_payload: Any | None = None,
+    current_payload_loader: Callable[[str], Any] = load_current_payload,
+    live_cache_loader: Callable[[str], Any] = cache_get_live_first,
 ) -> tuple[dict[str, dict[str, Any]], bool]:
     serving_payload = (
-        current_payload if current_payload is not None else load_current_payload("risk_engine_specific_risk")
+        current_payload
+        if current_payload is not None
+        else current_payload_loader("risk_engine_specific_risk")
     )
     payload = serving_payload
     if payload is None and config.serving_outputs_cache_fallback_enabled():
-        payload = cache_get_live_first("risk_engine_specific_risk")
+        payload = live_cache_loader("risk_engine_specific_risk")
     payload = payload or {}
     if not isinstance(payload, dict):
         payload = {}
     return specific_risk_by_ticker_view(payload), isinstance(serving_payload, dict)
 
 
-def _load_universe_loadings_from_current_payload(current_payload: Any | None) -> dict[str, Any]:
+def _load_universe_loadings_from_current_payload(
+    current_payload: Any | None,
+    *,
+    current_payload_loader: Callable[[str], Any] = load_current_payload,
+    fallback_loader: Callable[[str], Any] = cache_get,
+) -> dict[str, Any]:
     if current_payload is None:
-        return _load_universe_loadings()
+        return _load_universe_loadings(
+            current_payload_loader=current_payload_loader,
+            fallback_loader=fallback_loader,
+        )
     if not isinstance(current_payload, dict) or not isinstance(current_payload.get("by_ticker"), dict):
         raise RuntimeError("Universe loadings are not ready. Run refresh before using what-if preview.")
     return current_payload
@@ -136,9 +190,15 @@ def _load_universe_loadings_from_current_payload(current_payload: Any | None) ->
 
 def _load_covariance_frame_from_current_payload(
     current_payload: Any | None,
+    *,
+    current_payload_loader: Callable[[str], Any] = load_current_payload,
+    live_cache_loader: Callable[[str], Any] = cache_get_live_first,
 ) -> tuple[pd.DataFrame, bool]:
     if current_payload is None:
-        return _load_covariance_frame_with_source()
+        return _load_covariance_frame_with_source(
+            current_payload_loader=current_payload_loader,
+            live_cache_loader=live_cache_loader,
+        )
     factors = [str(x) for x in (current_payload.get("factors") or [])]
     matrix = current_payload.get("matrix") or []
     if not factors or not matrix:
@@ -148,9 +208,15 @@ def _load_covariance_frame_from_current_payload(
 
 def _load_specific_risk_by_ticker_from_current_payload(
     current_payload: Any | None,
+    *,
+    current_payload_loader: Callable[[str], Any] = load_current_payload,
+    live_cache_loader: Callable[[str], Any] = cache_get_live_first,
 ) -> tuple[dict[str, dict[str, Any]], bool]:
     if current_payload is None:
-        return _load_specific_risk_by_ticker_with_source()
+        return _load_specific_risk_by_ticker_with_source(
+            current_payload_loader=current_payload_loader,
+            live_cache_loader=live_cache_loader,
+        )
     payload = current_payload or {}
     if not isinstance(payload, dict):
         payload = {}
@@ -189,8 +255,10 @@ def _normalize_scenario_rows(scenario_rows: list[dict[str, Any]]) -> list[dict[s
 
 def _build_holdings_snapshot(
     scenario_rows: list[dict[str, Any]],
+    *,
+    holdings_loader: Callable[[str | None], list[dict[str, Any]]] = holdings_service.load_holdings_positions,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    live_rows = holdings_service.load_holdings_positions(account_id=None)
+    live_rows = holdings_loader(account_id=None)
     current_by_key: dict[str, dict[str, Any]] = {}
     for raw in live_rows:
         account_id = _normalize_account_id(raw.get("account_id"))
@@ -406,22 +474,39 @@ def _factor_delta_rows(
 def preview_portfolio_whatif(
     *,
     scenario_rows: list[dict[str, Any]],
+    dependencies: PortfolioWhatIfDependencies | None = None,
 ) -> dict[str, Any]:
+    deps = dependencies or get_portfolio_whatif_dependencies()
     normalized_scenario_rows = _normalize_scenario_rows(scenario_rows)
     current_payloads = _load_current_serving_payloads(
         "portfolio",
         "universe_loadings",
         "risk_engine_cov",
         "risk_engine_specific_risk",
+        current_payload_loader=deps.current_payload_loader,
     )
-    universe_loadings = _load_universe_loadings_from_current_payload(current_payloads.get("universe_loadings"))
-    cov, cov_from_serving = _load_covariance_frame_from_current_payload(current_payloads.get("risk_engine_cov"))
-    specific_risk, specific_risk_from_serving = _load_specific_risk_by_ticker_from_current_payload(
+    universe_loadings = deps.universe_loader(
+        current_payloads.get("universe_loadings"),
+        current_payload_loader=deps.current_payload_loader,
+        fallback_loader=deps.runtime_cache_loader,
+    )
+    cov, cov_from_serving = deps.covariance_loader(
+        current_payloads.get("risk_engine_cov"),
+        current_payload_loader=deps.current_payload_loader,
+        live_cache_loader=deps.live_cache_loader,
+    )
+    specific_risk, specific_risk_from_serving = deps.specific_risk_loader(
         current_payloads.get("risk_engine_specific_risk"),
+        current_payload_loader=deps.current_payload_loader,
+        live_cache_loader=deps.live_cache_loader,
     )
     current_portfolio_payload = current_payloads.get("portfolio")
     if current_portfolio_payload is None:
-        current_portfolio_payload = _load_serving_or_runtime_cache("portfolio", fallback_loader=cache_get) or {}
+        current_portfolio_payload = _load_serving_or_runtime_cache(
+            "portfolio",
+            current_payload_loader=deps.current_payload_loader,
+            fallback_loader=deps.runtime_cache_loader,
+        ) or {}
     source_dates = (
         (current_portfolio_payload or {}).get("source_dates")
         or universe_loadings.get("source_dates")
@@ -434,7 +519,10 @@ def preview_portfolio_whatif(
         or ""
     ).strip() or None
     factor_coverage: dict[str, Any] = {}
-    current_rows, hypothetical_rows, deltas = _build_holdings_snapshot(normalized_scenario_rows)
+    current_rows, hypothetical_rows, deltas = _build_holdings_snapshot(
+        normalized_scenario_rows,
+        holdings_loader=deps.holdings_loader,
+    )
     current_preview = _build_preview_payload(
         holdings_rows=current_rows,
         sleeve_label="LIVE HOLDINGS",
@@ -519,3 +607,10 @@ def preview_portfolio_whatif(
         "truth_surface": truth_surface,
         "_preview_only": True,
     }
+
+
+__all__ = [
+    "PortfolioWhatIfDependencies",
+    "get_portfolio_whatif_dependencies",
+    "preview_portfolio_whatif",
+]

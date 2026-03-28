@@ -476,6 +476,33 @@ Validation:
 Commit boundary:
 - operator-status seam hardening only
 
+#### Slice 6B: Service Injection Hardening For Holdings And Portfolio What-If
+
+Goal:
+- replace legacy module-global monkeypatching with public injected service dependencies for holdings mutations and cUSE4 portfolio what-if preview
+- make the later owner move safe without forcing service tests to patch private globals on the legacy modules
+
+Study first:
+- confirm which holdings and portfolio-what-if tests still patch legacy globals directly
+- expose the smallest public dependency surface that preserves current behavior while making tests route/service-owner agnostic
+
+Primary surfaces:
+- `backend/services/holdings_service.py`
+- `backend/tests/test_holdings_service.py`
+- `backend/services/portfolio_whatif.py`
+- `backend/tests/test_portfolio_whatif_service.py`
+
+Required doc updates:
+- this plan file
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Validation:
+- `git diff --check -- backend/services/holdings_service.py backend/tests/test_holdings_service.py backend/services/portfolio_whatif.py backend/tests/test_portfolio_whatif_service.py docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_holdings_service.py backend/tests/test_holdings_route_dirty_state.py backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py`
+
+Commit boundary:
+- holdings and portfolio what-if seam hardening only
+
 #### Slice 7: cUSE4 Service Surface De-Dup Part B
 
 Goal:

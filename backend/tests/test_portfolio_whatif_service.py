@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 
 from backend.services import portfolio_whatif
 from backend.services import neon_holdings
 
 
-def test_preview_portfolio_whatif_projects_current_and_hypothetical_without_writes(monkeypatch) -> None:
+def _deps(**overrides) -> portfolio_whatif.PortfolioWhatIfDependencies:
+    return replace(
+        portfolio_whatif.get_portfolio_whatif_dependencies(),
+        **overrides,
+    )
+
+
+def test_preview_portfolio_whatif_projects_current_and_hypothetical_without_writes() -> None:
     universe_loadings = {
         "by_ticker": {
             "AAA": {
@@ -53,53 +62,44 @@ def test_preview_portfolio_whatif_projects_current_and_hypothetical_without_writ
         {"account_id": "acct_b", "ticker": "BBB", "ric": "BBB.N", "quantity": 5.0, "source": "ui_edit"},
     ]
 
-    monkeypatch.setattr(portfolio_whatif, "_load_universe_loadings", lambda: universe_loadings)
-    monkeypatch.setattr(portfolio_whatif, "_load_covariance_frame_with_source", lambda: (cov, True))
-    monkeypatch.setattr(
-        portfolio_whatif,
-        "_load_specific_risk_by_ticker_with_source",
-        lambda: (
-            {
-                "AAA": {"specific_var": 0.01},
-                "BBB": {"specific_var": 0.02},
-            },
-            True,
-        ),
-    )
-    monkeypatch.setattr(portfolio_whatif.holdings_service, "load_holdings_positions", lambda account_id=None: live_rows)
-    monkeypatch.setattr(
-        portfolio_whatif,
-        "load_current_payload",
-        lambda key: {
-            "portfolio": {
-                "source_dates": {
-                    "prices_asof": "2026-03-03",
-                    "exposures_asof": "2026-03-04",
-                    "exposures_latest_available_asof": "2026-03-04",
-                    "exposures_served_asof": "2026-03-03",
-                },
-                "run_id": "run_meta_1",
-                "snapshot_id": "snap_meta_1",
-                "refresh_started_at": "2026-03-15T14:00:00+00:00",
-            },
-            "risk_engine_cov": {"factors": ["Beta", "Book-to-Price"], "matrix": [[0.04, 0.01], [0.01, 0.09]]},
-            "risk_engine_specific_risk": {
-                "AAA.OQ": {"ticker": "AAA", "specific_var": 0.01},
-                "BBB.OQ": {"ticker": "BBB", "specific_var": 0.02},
-            },
-        }.get(key),
-    )
-    monkeypatch.setattr(
-        portfolio_whatif.holdings_service,
-        "run_holdings_import",
-        lambda **kwargs: (_ for _ in ()).throw(AssertionError("preview must not write holdings")),
-    )
-
     out = portfolio_whatif.preview_portfolio_whatif(
         scenario_rows=[
             {"account_id": "acct_a", "ticker": "AAA", "quantity": 20.0},
             {"account_id": "acct_b", "ticker": "BBB", "quantity": -5.0},
-        ]
+        ],
+        dependencies=_deps(
+            current_payload_loader=lambda key: {
+                "portfolio": {
+                    "source_dates": {
+                        "prices_asof": "2026-03-03",
+                        "exposures_asof": "2026-03-04",
+                        "exposures_latest_available_asof": "2026-03-04",
+                        "exposures_served_asof": "2026-03-03",
+                    },
+                    "run_id": "run_meta_1",
+                    "snapshot_id": "snap_meta_1",
+                    "refresh_started_at": "2026-03-15T14:00:00+00:00",
+                },
+                "risk_engine_cov": {
+                    "factors": ["Beta", "Book-to-Price"],
+                    "matrix": [[0.04, 0.01], [0.01, 0.09]],
+                },
+                "risk_engine_specific_risk": {
+                    "AAA.OQ": {"ticker": "AAA", "specific_var": 0.01},
+                    "BBB.OQ": {"ticker": "BBB", "specific_var": 0.02},
+                },
+            }.get(key),
+            holdings_loader=lambda account_id=None: live_rows,
+            universe_loader=lambda current_payload, **kwargs: universe_loadings,
+            covariance_loader=lambda current_payload, **kwargs: (cov, True),
+            specific_risk_loader=lambda current_payload, **kwargs: (
+                {
+                    "AAA": {"specific_var": 0.01},
+                    "BBB": {"specific_var": 0.02},
+                },
+                True,
+            ),
+        ),
     )
 
     assert out["_preview_only"] is True
@@ -117,7 +117,7 @@ def test_preview_portfolio_whatif_projects_current_and_hypothetical_without_writ
     assert out["truth_surface"] == "live_holdings_projected_through_current_served_model"
 
 
-def test_preview_portfolio_whatif_prefers_published_risk_payloads(monkeypatch) -> None:
+def test_preview_portfolio_whatif_prefers_published_risk_payloads() -> None:
     published_payloads = {
         "portfolio": {
             "source_dates": {"exposures_served_asof": "2026-03-03"},
@@ -148,19 +148,21 @@ def test_preview_portfolio_whatif_prefers_published_risk_payloads(monkeypatch) -
         "risk_engine_specific_risk": {"AAA.OQ": {"ticker": "AAA", "specific_var": 0.01}},
     }
 
-    monkeypatch.setattr(portfolio_whatif, "load_current_payload", lambda key: published_payloads.get(key))
-    monkeypatch.setattr(
-        portfolio_whatif,
-        "cache_get_live_first",
-        lambda key: {"factors": ["Wrong"], "matrix": [[9.0]]} if key == "risk_engine_cov" else {"AAA.OQ": {"ticker": "AAA", "specific_var": 9.0}},
-    )
-    monkeypatch.setattr(portfolio_whatif, "cache_get", lambda key: {})
-    monkeypatch.setattr(portfolio_whatif.holdings_service, "load_holdings_positions", lambda account_id=None: [
-        {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.N", "quantity": 10.0, "source": "ui_edit"},
-    ])
-
     out = portfolio_whatif.preview_portfolio_whatif(
         scenario_rows=[{"account_id": "acct_a", "ticker": "AAA", "quantity": 5.0}],
+        dependencies=_deps(
+            current_payload_loader=lambda key: published_payloads.get(key),
+            live_cache_loader=lambda key: {
+                "factors": ["Wrong"],
+                "matrix": [[9.0]],
+            } if key == "risk_engine_cov" else {
+                "AAA.OQ": {"ticker": "AAA", "specific_var": 9.0},
+            },
+            runtime_cache_loader=lambda key: {},
+            holdings_loader=lambda account_id=None: [
+                {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.N", "quantity": 10.0, "source": "ui_edit"},
+            ],
+        ),
     )
 
     assert out["serving_snapshot"]["snapshot_id"] == "snap_meta_2"
@@ -172,49 +174,47 @@ def test_preview_portfolio_whatif_prefers_published_risk_payloads(monkeypatch) -
 
 def test_preview_portfolio_whatif_labels_live_risk_cache_fallback(monkeypatch) -> None:
     monkeypatch.setattr(portfolio_whatif.config, "DATA_BACKEND", "sqlite")
-    monkeypatch.setattr(
-        portfolio_whatif,
-        "load_current_payload",
-        lambda key: {
-            "portfolio": {
-                "source_dates": {"exposures_served_asof": "2026-03-03"},
-                "snapshot_id": "snap_meta_3",
-                "run_id": "run_meta_3",
-            },
-            "universe_loadings": {
-                "by_ticker": {
-                    "AAA": {
-                        "ticker": "AAA",
-                        "name": "AAA",
-                        "price": 10.0,
-                        "exposures": {"Beta": 1.0},
-                        "specific_var": 0.01,
-                        "specific_vol": 0.1,
-                        "model_status": "core_estimated",
-                        "eligibility_reason": "",
-                        "trbc_economic_sector_short": "Technology",
-                        "trbc_economic_sector_short_abbr": "Tech",
-                        "trbc_industry_group": "Software",
-                    },
-                },
-                "source_dates": {"exposures_served_asof": "2026-03-03"},
-                "snapshot_id": "snap_meta_3",
-                "run_id": "run_meta_3",
-            },
-        }.get(key),
-    )
-    monkeypatch.setattr(
-        portfolio_whatif,
-        "cache_get_live_first",
-        lambda key: {"factors": ["Beta"], "matrix": [[0.04]]} if key == "risk_engine_cov" else {"AAA.OQ": {"ticker": "AAA", "specific_var": 0.01}},
-    )
-    monkeypatch.setattr(portfolio_whatif, "cache_get", lambda key: {})
-    monkeypatch.setattr(portfolio_whatif.holdings_service, "load_holdings_positions", lambda account_id=None: [
-        {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.N", "quantity": 10.0, "source": "ui_edit"},
-    ])
-
     out = portfolio_whatif.preview_portfolio_whatif(
         scenario_rows=[{"account_id": "acct_a", "ticker": "AAA", "quantity": 5.0}],
+        dependencies=_deps(
+            current_payload_loader=lambda key: {
+                "portfolio": {
+                    "source_dates": {"exposures_served_asof": "2026-03-03"},
+                    "snapshot_id": "snap_meta_3",
+                    "run_id": "run_meta_3",
+                },
+                "universe_loadings": {
+                    "by_ticker": {
+                        "AAA": {
+                            "ticker": "AAA",
+                            "name": "AAA",
+                            "price": 10.0,
+                            "exposures": {"Beta": 1.0},
+                            "specific_var": 0.01,
+                            "specific_vol": 0.1,
+                            "model_status": "core_estimated",
+                            "eligibility_reason": "",
+                            "trbc_economic_sector_short": "Technology",
+                            "trbc_economic_sector_short_abbr": "Tech",
+                            "trbc_industry_group": "Software",
+                        },
+                    },
+                    "source_dates": {"exposures_served_asof": "2026-03-03"},
+                    "snapshot_id": "snap_meta_3",
+                    "run_id": "run_meta_3",
+                },
+            }.get(key),
+            live_cache_loader=lambda key: {
+                "factors": ["Beta"],
+                "matrix": [[0.04]],
+            } if key == "risk_engine_cov" else {
+                "AAA.OQ": {"ticker": "AAA", "specific_var": 0.01},
+            },
+            runtime_cache_loader=lambda key: {},
+            holdings_loader=lambda account_id=None: [
+                {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.N", "quantity": 10.0, "source": "ui_edit"},
+            ],
+        ),
     )
 
     assert out["truth_surface"] == "live_holdings_projected_through_current_loadings_and_live_risk_cache"
@@ -231,7 +231,7 @@ def test_preview_portfolio_whatif_requires_account_id() -> None:
     raise AssertionError("preview_portfolio_whatif should reject missing account_id")
 
 
-def test_preview_portfolio_whatif_aggregates_duplicate_live_rows_by_account_and_ticker(monkeypatch) -> None:
+def test_preview_portfolio_whatif_aggregates_duplicate_live_rows_by_account_and_ticker() -> None:
     universe_loadings = {
         "by_ticker": {
             "AAA": {
@@ -256,16 +256,14 @@ def test_preview_portfolio_whatif_aggregates_duplicate_live_rows_by_account_and_
         {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.K", "quantity": 5.0, "source": "ui_edit"},
     ]
 
-    monkeypatch.setattr(portfolio_whatif, "_load_universe_loadings", lambda: universe_loadings)
-    monkeypatch.setattr(portfolio_whatif, "_load_covariance_frame_with_source", lambda: (cov, True))
-    monkeypatch.setattr(
-        portfolio_whatif,
-        "_load_specific_risk_by_ticker_with_source",
-        lambda: ({"AAA": {"specific_var": 0.01}}, True),
-    )
-    monkeypatch.setattr(portfolio_whatif.holdings_service, "load_holdings_positions", lambda account_id=None: live_rows)
     out = portfolio_whatif.preview_portfolio_whatif(
         scenario_rows=[{"account_id": "acct_a", "ticker": "AAA", "quantity": 20.0}],
+        dependencies=_deps(
+            holdings_loader=lambda account_id=None: live_rows,
+            universe_loader=lambda current_payload, **kwargs: universe_loadings,
+            covariance_loader=lambda current_payload, **kwargs: (cov, True),
+            specific_risk_loader=lambda current_payload, **kwargs: ({"AAA": {"specific_var": 0.01}}, True),
+        ),
     )
 
     assert out["current"]["position_count"] == 1
@@ -275,7 +273,7 @@ def test_preview_portfolio_whatif_aggregates_duplicate_live_rows_by_account_and_
     assert out["current"]["positions"][0]["sleeve"] == "LIVE HOLDINGS"
 
 
-def test_preview_portfolio_whatif_rejects_duplicate_scenario_rows(monkeypatch) -> None:
+def test_preview_portfolio_whatif_rejects_duplicate_scenario_rows() -> None:
     universe_loadings = {
         "by_ticker": {
             "AAA": {
@@ -296,20 +294,18 @@ def test_preview_portfolio_whatif_rejects_duplicate_scenario_rows(monkeypatch) -
     }
     cov = pd.DataFrame([[0.04]], index=["Beta"], columns=["Beta"])
 
-    monkeypatch.setattr(portfolio_whatif, "_load_universe_loadings", lambda: universe_loadings)
-    monkeypatch.setattr(portfolio_whatif, "_load_covariance_frame_with_source", lambda: (cov, True))
-    monkeypatch.setattr(
-        portfolio_whatif,
-        "_load_specific_risk_by_ticker_with_source",
-        lambda: ({"AAA": {"specific_var": 0.01}}, True),
-    )
-    monkeypatch.setattr(portfolio_whatif.holdings_service, "load_holdings_positions", lambda account_id=None: [])
     try:
         portfolio_whatif.preview_portfolio_whatif(
             scenario_rows=[
                 {"account_id": "acct_a", "ticker": "AAA", "quantity": 10.0},
                 {"account_id": "acct_a", "ticker": "AAA", "quantity": 20.0},
             ],
+            dependencies=_deps(
+                holdings_loader=lambda account_id=None: [],
+                universe_loader=lambda current_payload, **kwargs: universe_loadings,
+                covariance_loader=lambda current_payload, **kwargs: (cov, True),
+                specific_risk_loader=lambda current_payload, **kwargs: ({"AAA": {"specific_var": 0.01}}, True),
+            ),
         )
     except ValueError as exc:
         assert "Duplicate what-if row" in str(exc)
