@@ -19,14 +19,64 @@ def _deps(**overrides) -> portfolio_whatif.PortfolioWhatIfDependencies:
 def test_portfolio_whatif_legacy_shim_reexports_supported_contract() -> None:
     assert portfolio_whatif.PortfolioWhatIfDependencies is cuse4_portfolio_whatif.PortfolioWhatIfDependencies
     assert portfolio_whatif.config is cuse4_portfolio_whatif.config
-    assert portfolio_whatif.get_portfolio_whatif_dependencies is cuse4_portfolio_whatif.get_portfolio_whatif_dependencies
-    assert portfolio_whatif.preview_portfolio_whatif is cuse4_portfolio_whatif.preview_portfolio_whatif
     assert sorted(portfolio_whatif.__all__) == [
         "PortfolioWhatIfDependencies",
         "config",
         "get_portfolio_whatif_dependencies",
         "preview_portfolio_whatif",
     ]
+
+
+def test_portfolio_whatif_legacy_shim_preview_uses_legacy_default_dependencies(
+    monkeypatch,
+) -> None:
+    sentinel_dependencies = _deps(
+        current_payload_loader=lambda key: {
+            "portfolio": {
+                "source_dates": {"exposures_served_asof": "2026-03-03"},
+                "snapshot_id": "shim_snap",
+                "run_id": "shim_run",
+            },
+            "universe_loadings": {
+                "by_ticker": {
+                    "AAA": {
+                        "ticker": "AAA",
+                        "name": "AAA",
+                        "price": 10.0,
+                        "exposures": {"Beta": 1.0},
+                        "specific_var": 0.01,
+                        "specific_vol": 0.1,
+                        "model_status": "core_estimated",
+                        "eligibility_reason": "",
+                        "trbc_economic_sector_short": "Technology",
+                        "trbc_economic_sector_short_abbr": "Tech",
+                        "trbc_industry_group": "Software",
+                    },
+                },
+                "source_dates": {"exposures_served_asof": "2026-03-03"},
+                "snapshot_id": "shim_snap",
+                "run_id": "shim_run",
+            },
+            "risk_engine_cov": {"factors": ["Beta"], "matrix": [[0.04]]},
+            "risk_engine_specific_risk": {"AAA.OQ": {"ticker": "AAA", "specific_var": 0.01}},
+        }.get(key),
+        holdings_loader=lambda account_id=None: [
+            {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.N", "quantity": 10.0, "source": "ui_edit"},
+        ],
+    )
+    monkeypatch.setattr(
+        portfolio_whatif,
+        "get_portfolio_whatif_dependencies",
+        lambda: sentinel_dependencies,
+    )
+
+    out = portfolio_whatif.preview_portfolio_whatif(
+        scenario_rows=[{"account_id": "acct_a", "ticker": "AAA", "quantity": 5.0}],
+    )
+
+    assert out["serving_snapshot"]["snapshot_id"] == "shim_snap"
+    assert out["source_dates"]["exposures_served_asof"] == "2026-03-03"
+    assert out["current"]["position_count"] == 1
 
 
 def test_preview_portfolio_whatif_projects_current_and_hypothetical_without_writes() -> None:

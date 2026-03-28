@@ -364,3 +364,18 @@ Outcome:
 Validation:
 - `git diff --check -- backend/services/cuse4_portfolio_whatif.py backend/services/portfolio_whatif.py backend/tests/test_portfolio_whatif_service.py docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md docs/architecture/maintainer-guide.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
 - `./.venv_local/bin/python -m pytest -q backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py backend/tests/test_model_family_ownership_boundaries.py`
+
+## Slice 7B Follow-up
+
+Scope:
+- `backend/services/portfolio_whatif.py`
+- `backend/tests/test_portfolio_whatif_service.py`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- restored legacy-shim default-call composition so `backend.services.portfolio_whatif.preview_portfolio_whatif()` resolves the legacy module's own `get_portfolio_whatif_dependencies()` when callers omit explicit dependencies
+- expanded portfolio what-if service coverage to exercise that legacy default path directly instead of only asserting import identity
+
+Validation:
+- `git diff --check -- backend/services/portfolio_whatif.py backend/tests/test_portfolio_whatif_service.py docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_portfolio_whatif_service.py backend/tests/test_portfolio_whatif_route.py backend/tests/test_model_family_ownership_boundaries.py`
