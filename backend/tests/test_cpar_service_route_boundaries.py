@@ -85,6 +85,15 @@ def _attribute_call_count(path: Path, *, alias: str, attribute: str) -> int:
     return count
 
 
+def _defined_function_names(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            names.add(str(node.name))
+    return names
+
+
 def test_cpar_services_do_not_import_api_layers() -> None:
     offenders: list[str] = []
     forbidden_prefixes = ("backend.api", "backend.orchestration", "frontend", "fastapi")
@@ -187,3 +196,9 @@ def test_cpar_snapshot_service_does_not_import_aggregate_owner() -> None:
     path = REPO_ROOT / "backend" / "services" / "cpar_portfolio_snapshot_service.py"
 
     assert "backend.services.cpar_aggregate_risk_service" not in _imported_modules(path)
+
+def test_cpar_snapshot_service_does_not_define_account_scoped_hedge_owner_functions() -> None:
+    path = REPO_ROOT / "backend" / "services" / "cpar_portfolio_snapshot_service.py"
+
+    names = _defined_function_names(path)
+    assert "load_cpar_portfolio_hedge_payload" not in names

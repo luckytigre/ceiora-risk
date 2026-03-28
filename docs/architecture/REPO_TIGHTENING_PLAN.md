@@ -675,39 +675,35 @@ Validation:
 Commit boundary:
 - cPAR aggregate-risk extraction only
 
-#### Slice 10: cPAR Snapshot Service Decomposition Part B
+#### Slice 10A: cPAR Account Snapshot Decomposition Part A
 
 Goal:
-- split account-scoped hedge, portfolio what-if, and explore what-if assembly away from aggregate snapshot ownership
-- leave shared lower helpers only where reuse is real and stable
+- extract the route-facing hedge payload load path out of `cpar_portfolio_snapshot_service.py`
+- keep the shared account-scoped hedge snapshot builder in place while the lower account-scoped split is studied further
 
 Study first:
-- map hedge/what-if/explore dependencies on snapshot helpers
-- confirm which account-scoped helpers should live below the service layer and which should remain route-owned assembly
+- map hedge-route dependencies on snapshot helpers
+- confirm which account-scoped helpers are still shared enough that they should remain below the service layer for now
 
 Primary surfaces:
 - `backend/services/cpar_portfolio_snapshot_service.py`
 - `backend/services/cpar_portfolio_hedge_service.py`
-- `backend/services/cpar_portfolio_whatif_service.py`
-- `backend/services/cpar_explore_whatif_service.py`
-- any extracted account-scoped helper modules
+- `backend/tests/test_cpar_runtime_coverage_contract.py`
 
 Required doc updates:
 - `docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md`
 - `docs/architecture/CPAR_BACKEND_READ_SURFACES.md`
-- `docs/architecture/CPAR_FRONTEND_SURFACES.md` if route freshness or response semantics change
 - `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
 - `docs/architecture/dependency-rules.md`
 - `docs/architecture/maintainer-guide.md`
-- `docs/architecture/MODEL_FAMILIES_AND_OWNERSHIP.md`
 
 Validation:
 - `git diff --check -- <touched paths>`
-- `./.venv_local/bin/pytest -q backend/tests/test_cpar_portfolio_snapshot_service.py backend/tests/test_cpar_portfolio_hedge_service.py backend/tests/test_cpar_portfolio_whatif_service.py backend/tests/test_cpar_explore_whatif_service.py backend/tests/test_cpar_runtime_coverage_contract.py backend/tests/test_cpar_architecture_boundaries.py backend/tests/test_cpar_service_route_boundaries.py backend/tests/test_cpar_routes.py::test_cpar_portfolio_hedge_route_returns_payload backend/tests/test_cpar_routes.py::test_cpar_portfolio_whatif_route_returns_payload backend/tests/test_cpar_routes.py::test_cpar_explore_whatif_route_returns_payload`
+- `./.venv_local/bin/pytest -q backend/tests/test_cpar_portfolio_snapshot_service.py backend/tests/test_cpar_portfolio_hedge_service.py backend/tests/test_cpar_runtime_coverage_contract.py backend/tests/test_cpar_architecture_boundaries.py backend/tests/test_cpar_service_route_boundaries.py backend/tests/test_cpar_routes.py::test_cpar_portfolio_hedge_route_returns_payload`
 - `make doctor`
 
 Commit boundary:
-- cPAR account-scoped hedge/what-if/explore extraction only
+- cPAR route-facing hedge-owner extraction only
 
 #### Slice 11: Mixed-State Read-Layer Split Part A
 

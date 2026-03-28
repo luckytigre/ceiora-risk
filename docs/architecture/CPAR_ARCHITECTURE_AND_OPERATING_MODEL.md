@@ -43,8 +43,8 @@ Integration code stays in the normal repo layers:
 - `backend/api/routes/*` owns thin cPAR transport surfaces
 - `frontend/*` owns cPAR page rendering and user-facing status/warning semantics
 
-Within `backend/services/*`, the shared account-scoped portfolio snapshot assembly now lives in `cpar_portfolio_snapshot_service.py`.
-That keeps `cpar_portfolio_hedge_service.py` and `cpar_portfolio_whatif_service.py` as separate application-facing flows without turning either one into a hidden utility owner.
+Within `backend/services/*`, the shared account-scoped snapshot/context/support core now lives in `cpar_portfolio_snapshot_service.py`.
+`cpar_portfolio_hedge_service.py` now owns the route-facing hedge payload load path explicitly, while `cpar_portfolio_whatif_service.py` keeps reusing the shared snapshot builder inside `cpar_portfolio_snapshot_service.py`.
 
 Current boundary rules:
 - `backend/cpar/*` does not import `backend.api`, `backend.services`, `backend.orchestration`, or `backend.data`
@@ -119,7 +119,7 @@ Current owner decisions:
   - aggregate snapshot owner: `backend/services/cpar_aggregate_risk_service.py`
   - shared lower support/core: `backend/services/cpar_portfolio_snapshot_service.py`
   - shared lower data adapters: `backend/data/holdings_reads.py` for aggregate holdings rows and `backend/data/cpar_outputs.py` / `backend/data/cpar_source_reads.py` for package/source support reads
-- `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower support/core owner for account-scoped cPAR reads and the helper layer reused by `backend/services/cpar_aggregate_risk_service.py`
+- `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower snapshot/context/support/core owner for account-scoped cPAR reads and the helper layer reused by `backend/services/cpar_aggregate_risk_service.py` and `backend/services/cpar_portfolio_hedge_service.py`
 - aggregate current/hypothetical snapshots for `POST /api/cpar/explore/whatif` now also reuse `backend/services/cpar_aggregate_risk_service.py` directly rather than routing back through the snapshot-service compatibility alias
 - the aggregate risk owner exposes:
   - `coverage_breakdown`

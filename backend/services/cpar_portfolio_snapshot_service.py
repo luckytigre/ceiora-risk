@@ -9,7 +9,7 @@ from typing import Any
 from backend.cpar import hedge_engine
 from backend.cpar.factor_registry import build_cpar1_factor_registry
 from backend.data import cpar_outputs, cpar_source_reads, holdings_reads
-from backend.services import cpar_display_covariance, cpar_display_loadings, cpar_meta_service
+from backend.services import cpar_display_loadings, cpar_meta_service
 
 _EPSILON = 1e-12
 
@@ -1166,50 +1166,3 @@ def build_cpar_portfolio_hedge_snapshot(
         }
     )
     return payload
-
-def load_cpar_portfolio_hedge_payload(
-    *,
-    account_id: str,
-    mode: str,
-    data_db=None,
-) -> dict[str, object]:
-    package, account, positions = load_cpar_portfolio_account_context(
-        account_id=account_id,
-        data_db=data_db,
-    )
-    if not positions:
-        return build_cpar_portfolio_hedge_snapshot(
-            package=package,
-            account=account,
-            positions=[],
-            mode=mode,
-            fit_by_ric={},
-            price_by_ric={},
-            classification_by_ric={},
-            covariance_rows=[],
-        )
-    rics = [str(row.get("ric") or "") for row in positions if str(row.get("ric") or "").strip()]
-    fit_by_ric, price_by_ric, classification_by_ric, covariance_rows = load_cpar_portfolio_support_rows(
-        rics=rics,
-        package_run_id=str(package["package_run_id"]),
-        package_date=str(package["package_date"]),
-        data_db=data_db,
-    )
-    try:
-        display_covariance_rows = cpar_display_covariance.load_package_display_covariance_rows(
-            package_run_id=str(package["package_run_id"]),
-            data_db=data_db,
-        )
-    except Exception:
-        display_covariance_rows = None
-    return build_cpar_portfolio_hedge_snapshot(
-        package=package,
-        account=account,
-        positions=positions,
-        mode=mode,
-        fit_by_ric=fit_by_ric,
-        price_by_ric=price_by_ric,
-        classification_by_ric=classification_by_ric,
-        covariance_rows=covariance_rows,
-        display_covariance_rows=display_covariance_rows,
-    )
