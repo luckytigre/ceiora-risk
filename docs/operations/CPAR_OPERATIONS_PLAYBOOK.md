@@ -132,6 +132,7 @@ The cPAR wrappers now own only cPAR route helpers and hooks over that neutral tr
 `/cpar/risk` no longer reuses the shared holdings-account hook because it is no longer an account selector page.
 Upcoming cPAR risk/explore expansion should keep following the same ownership rule: extend current cPAR route/service owners by default, and only add a new cPAR-specific owner when the authority/read pattern is genuinely different.
 Single-name cPAR detail now uses `GET /api/cpar/ticker/{ticker}` for persisted fit detail and `POST /api/cpar/explore/whatif` for preview-only scenario comparison. It still does not reuse cUSE universe/read surfaces.
+When `/cpar/explore` exposes an apply action for staged deltas, that write still goes through the shared holdings apply surface `/api/portfolio/whatif/apply`; cPAR itself remains preview-only and does not own a mutation route.
 
 ## Fail-Closed Cases
 

@@ -99,3 +99,4 @@ Validation blockers:
 Notes:
 - the post-edit adversarial review for this slice was dispatched to both standing agents after the final code/doc diff was in place
 - the timeout runner left orphaned `next dev` children on the first pass; those were cleaned up before the final blocker matrix was recorded
+- a follow-up docs-only clarification commit is required because `/cpar/explore` can hand staged deltas into the shared holdings apply surface even though cPAR itself still does not own a mutation route

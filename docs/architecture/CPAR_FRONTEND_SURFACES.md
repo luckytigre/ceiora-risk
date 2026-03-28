@@ -206,6 +206,7 @@ Read failures:
 `/cpar/explore`
 - owns single-name detail, source-context, and preview-only scenario analysis
 - should present residualized explanatory loadings, not hedge-trade-space loadings
+- may hand staged deltas into the shared holdings apply surface, but that handoff is outside the cPAR route family
 
 `/cpar/hedge`
 - is intentionally blank aside from a reset placeholder
