@@ -7,9 +7,6 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-import google.auth
-from google.auth.transport.requests import Request
-
 from backend import config
 
 _SCOPE = "https://www.googleapis.com/auth/cloud-platform"
@@ -43,9 +40,21 @@ def _execution_resource_name(execution_name: str) -> str:
     )
 
 
+def _google_auth_default(*, scopes: list[str]) -> tuple[Any, str | None]:
+    import google.auth
+
+    return google.auth.default(scopes=scopes)
+
+
+def _google_auth_request() -> Any:
+    from google.auth.transport.requests import Request
+
+    return Request()
+
+
 def _access_token() -> str:
-    credentials, _ = google.auth.default(scopes=[_SCOPE])
-    credentials.refresh(Request())
+    credentials, _ = _google_auth_default(scopes=[_SCOPE])
+    credentials.refresh(_google_auth_request())
     token = str(getattr(credentials, "token", "") or "").strip()
     if not token:
         raise RuntimeError("Google application credentials did not return an access token.")
