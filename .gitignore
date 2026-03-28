@@ -49,3 +49,11 @@ override.tf.json
 
 # OS
 .DS_Store
+
+# Local agent / merge debris
+/.claude/worktrees/
+/*conflicted copy*
+
+# Root-generated hygiene debris
+/.pytest_cache/
+/<sqlite3.Connection object at 0x*>

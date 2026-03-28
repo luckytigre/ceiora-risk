@@ -182,6 +182,18 @@ When extending the system:
 - add only the smallest new helper module that creates a clearer boundary
 - update the architecture docs when ownership materially changes
 
+## Cleanup Execution Protocol
+
+During repo-tightening work:
+
+- keep one rollback-safe cleanup slice per commit
+- treat the dirty worktree as hostile context and do not absorb unrelated files into a slice
+- write a slice note before editing with exact in-scope files, explicit out-of-scope files, required doc updates, validation commands, and the rollback boundary
+- run at least two adversarial pre-edit reviews for every slice; add a post-edit review before commit when the slice touches runtime authority, serving behavior, or orchestration
+- use the smallest meaningful validation bundle for the touched surface and split the slice again if narrow validation is not possible
+- for docs-only or hygiene-only slices, keep validation to `git diff --check -- <touched paths>` plus directly relevant static checks; do not run backend/runtime gates unless executable behavior changed
+- keep repo-hygiene ignore rules root-anchored and concrete so the cleanup does not hide legitimate source artifacts
+
 ## Semantic Contract Rules
 
 Canonical contract names and compatibility-alias rules are defined in `architecture-invariants.md`.
