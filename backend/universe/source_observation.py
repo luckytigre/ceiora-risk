@@ -85,15 +85,16 @@ def refresh_security_source_observation_daily(
     rics: list[str] | None = None,
 ) -> int:
     effective_as_of_date = _resolve_as_of_date(conn, explicit_as_of_date=as_of_date)
-    ric_filter = ""
-    params: list[object] = []
     clean_rics = [normalize_ric(ric) for ric in (rics or []) if normalize_ric(ric)]
     use_registry_authority = _table_has_rows(conn, SECURITY_REGISTRY_TABLE)
     use_compat_authority = _table_has_rows(conn, SECURITY_MASTER_COMPAT_CURRENT_TABLE)
+    registry_ric_filter = ""
+    compat_ric_filter = ""
+    params: list[object] = []
     if clean_rics:
         placeholders = ",".join("?" for _ in clean_rics)
-        anchor_alias = "reg" if use_registry_authority else "comp"
-        ric_filter = f" AND UPPER(TRIM({anchor_alias}.ric)) IN ({placeholders})"
+        registry_ric_filter = f" AND UPPER(TRIM(reg.ric)) IN ({placeholders})"
+        compat_ric_filter = f" AND UPPER(TRIM(comp.ric)) IN ({placeholders})"
         params.extend(clean_rics)
     base_query = f"""
         WITH latest_price AS (
@@ -148,8 +149,9 @@ def refresh_security_source_observation_daily(
             WHERE rn = 1
         )
     """
+    rows: list[tuple[object, ...]] = []
     if use_registry_authority:
-        rows = conn.execute(
+        rows.extend(conn.execute(
             base_query
             + f"""
         SELECT
@@ -184,7 +186,7 @@ def refresh_security_source_observation_daily(
           ON cr.ric = UPPER(TRIM(reg.ric))
         WHERE reg.ric IS NOT NULL AND TRIM(reg.ric) <> ''
           AND COALESCE(NULLIF(TRIM(reg.tracking_status), ''), 'active') <> 'disabled'
-          {ric_filter}
+          {registry_ric_filter}
         """,
             [
                 effective_as_of_date,
@@ -193,9 +195,15 @@ def refresh_security_source_observation_daily(
                 *sorted(NON_EQUITY_ECONOMIC_SECTORS),
                 *params,
             ],
-        ).fetchall()
-    elif use_compat_authority:
-        rows = conn.execute(
+        ).fetchall())
+    if use_compat_authority:
+        compat_anti_join = ""
+        if _table_exists(conn, SECURITY_REGISTRY_TABLE):
+            compat_anti_join = f"""
+        LEFT JOIN {SECURITY_REGISTRY_TABLE} reg_anchor
+          ON UPPER(TRIM(reg_anchor.ric)) = UPPER(TRIM(comp.ric))
+        """
+        rows.extend(conn.execute(
             base_query
             + f"""
         SELECT
@@ -213,6 +221,7 @@ def refresh_security_source_observation_daily(
             fr.latest_fundamentals_as_of_date,
             cr.latest_classification_as_of_date
         FROM {SECURITY_MASTER_COMPAT_CURRENT_TABLE} comp
+        {compat_anti_join}
         LEFT JOIN {SECURITY_POLICY_CURRENT_TABLE} pol
           ON UPPER(TRIM(pol.ric)) = UPPER(TRIM(comp.ric))
         LEFT JOIN latest_price pr
@@ -222,12 +231,11 @@ def refresh_security_source_observation_daily(
         LEFT JOIN latest_classification cr
           ON cr.ric = UPPER(TRIM(comp.ric))
         WHERE comp.ric IS NOT NULL AND TRIM(comp.ric) <> ''
-          {ric_filter}
+          {compat_ric_filter}
+          {"AND reg_anchor.ric IS NULL" if compat_anti_join else ""}
         """,
             [effective_as_of_date, effective_as_of_date, effective_as_of_date, *params],
-        ).fetchall()
-    else:
-        rows = []
+        ).fetchall())
     payload: list[tuple[object, ...]] = []
     for row in rows:
         ric = normalize_ric(row[0])
