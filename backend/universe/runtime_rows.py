@@ -25,33 +25,6 @@ from backend.universe.schema import (
 )
 
 
-def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute(
-        """
-        SELECT 1
-        FROM sqlite_master
-        WHERE type='table' AND name=?
-        LIMIT 1
-        """,
-        (table,),
-    ).fetchone()
-    return row is not None
-
-
-def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    if not _table_exists(conn, table):
-        return set()
-    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    return {str(row[1]) for row in rows}
-
-
-def _table_has_rows(conn: sqlite3.Connection, table: str) -> bool:
-    if not _table_exists(conn, table):
-        return False
-    row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
-    return bool(row and int(row[0] or 0) > 0)
-
-
 _POLICY_FLAG_FIELDS = (
     "price_ingest_enabled",
     "pit_fundamentals_enabled",
@@ -92,9 +65,9 @@ def _updated_not_future(updated_at: Any, as_of_date: str | None) -> bool:
 
 
 def _load_compat_rows_from_table(conn: sqlite3.Connection, table: str) -> dict[str, dict[str, Any]]:
-    if not _table_exists(conn, table):
+    if not runtime_authority.table_exists(conn, table):
         return {}
-    cols = _table_columns(conn, table)
+    cols = runtime_authority.table_columns(conn, table)
     ticker_expr = "UPPER(TRIM(COALESCE(ticker, '')))" if "ticker" in cols else "''"
     isin_expr = "isin" if "isin" in cols else "NULL"
     exchange_expr = "exchange_name" if "exchange_name" in cols else "NULL"
@@ -141,9 +114,9 @@ def _load_compat_rows_from_table(conn: sqlite3.Connection, table: str) -> dict[s
 
 def _load_compat_rows(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
-    if _table_exists(conn, SECURITY_MASTER_COMPAT_CURRENT_TABLE):
+    if runtime_authority.table_exists(conn, SECURITY_MASTER_COMPAT_CURRENT_TABLE):
         rows.update(_load_compat_rows_from_table(conn, SECURITY_MASTER_COMPAT_CURRENT_TABLE))
-    if _table_exists(conn, SECURITY_MASTER_TABLE):
+    if runtime_authority.table_exists(conn, SECURITY_MASTER_TABLE):
         for ric, row in _load_compat_rows_from_table(conn, SECURITY_MASTER_TABLE).items():
             rows.setdefault(ric, row)
     return rows
@@ -155,9 +128,9 @@ def _load_historical_classification_rows(
     as_of_date: str | None,
 ) -> dict[str, dict[str, Any]]:
     as_of_key = _iso_date_key(as_of_date)
-    if not as_of_key or not _table_exists(conn, "security_classification_pit"):
+    if not as_of_key or not runtime_authority.table_exists(conn, "security_classification_pit"):
         return {}
-    cols = _table_columns(conn, "security_classification_pit")
+    cols = runtime_authority.table_columns(conn, "security_classification_pit")
     sector_expr = "NULL"
     if "trbc_economic_sector" in cols:
         sector_expr = "NULLIF(TRIM(trbc_economic_sector), '')"
@@ -315,27 +288,6 @@ def _resolve_effective_policy_row(
     return resolved
 
 
-def _requested_registry_rics(
-    *,
-    registry_rows: dict[str, dict[str, Any]],
-    requested_rics: set[str],
-    requested_tickers: set[str],
-) -> set[str]:
-    if requested_rics:
-        return {ric for ric in requested_rics if ric in registry_rows}
-    if requested_tickers:
-        return {
-            ric
-            for ric, row in registry_rows.items()
-            if normalize_ticker(row.get("ticker")) in requested_tickers
-        }
-    return {
-        ric
-        for ric, row in registry_rows.items()
-        if (normalize_optional_text(row.get("tracking_status")) or "active") == "active"
-    }
-
-
 def _registry_companion_coverage_complete(
     *,
     registry_rows: dict[str, dict[str, Any]],
@@ -357,6 +309,27 @@ def _registry_companion_coverage_complete(
     elif not scoped_registry_rics:
         return True
     return scoped_registry_rics <= set(policy_rows) and scoped_registry_rics <= set(taxonomy_rows)
+
+
+def _requested_registry_rics(
+    *,
+    registry_rows: dict[str, dict[str, Any]],
+    requested_rics: set[str],
+    requested_tickers: set[str],
+) -> set[str]:
+    if requested_rics:
+        return {ric for ric in requested_rics if ric in registry_rows}
+    if requested_tickers:
+        return {
+            ric
+            for ric, row in registry_rows.items()
+            if normalize_ticker(row.get("ticker")) in requested_tickers
+        }
+    return {
+        ric
+        for ric, row in registry_rows.items()
+        if (normalize_optional_text(row.get("tracking_status")) or "active") == "active"
+    }
 
 
 def _candidate_runtime_rics(

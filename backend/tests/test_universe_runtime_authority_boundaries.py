@@ -40,3 +40,8 @@ def test_runtime_rows_remains_the_public_runtime_owner() -> None:
     text = RUNTIME_ROWS.read_text(encoding="utf-8")
     assert "def load_security_runtime_rows(" in text
     assert "load_runtime_authority_state(" in text
+    assert "def _table_exists(" not in text
+    assert "def _table_columns(" not in text
+    assert "def _table_has_rows(" not in text
+    assert "runtime_authority.table_exists(" in text
+    assert "runtime_authority.table_columns(" in text
