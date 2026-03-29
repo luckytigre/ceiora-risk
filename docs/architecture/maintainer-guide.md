@@ -92,6 +92,9 @@ Practical rule:
 - when touching universe runtime assembly, keep the split explicit:
   - `backend/universe/runtime_authority.py` owns current-table authority loading for registry/policy/taxonomy/source-observation rows
   - `backend/universe/runtime_rows.py` still owns compat/legacy fallback, historical classification resolution, mixed-state policy/structural resolution, candidate-RIC selection, and the public runtime-row loaders
+- when touching canonical source reads, keep the split explicit:
+  - `backend/data/source_read_authority.py` owns the lower registry-first source authority helpers
+  - `backend/data/source_reads.py` stays the public source-read facade and keeps SQLite cache/compat logic plus raw cross-section exposure helpers
 - when touching default cUSE4 frontend imports, prefer the explicit cUSE4 surfaces:
   - `frontend/src/hooks/useCuse4Api.ts`
   - `frontend/src/lib/cuse4Api.ts`

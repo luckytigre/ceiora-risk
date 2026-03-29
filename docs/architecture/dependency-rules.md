@@ -70,6 +70,10 @@ Current universe runtime owner exception:
 - `backend/universe/runtime_authority.py` owns current-table authority loading for registry/policy/taxonomy/source-observation rows
 - `backend/universe/runtime_rows.py` remains the mixed-state runtime owner over compat/legacy fallback, historical classification reads, structural/policy resolution, candidate-RIC selection, and the public runtime-row loaders
 
+Current source-read owner exception:
+- `backend/data/source_read_authority.py` owns the lower registry-first source authority helpers
+- `backend/data/source_reads.py` remains the public source-read facade and keeps SQLite cache/compat logic plus raw cross-section exposure helpers
+
 ## Entrypoint Rules
 
 Routes, CLI wrappers, and local scripts must stay thin.

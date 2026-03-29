@@ -540,3 +540,33 @@ Validation:
 Validation blockers:
 - `backend/tests/test_architecture_boundaries.py::test_backend_does_not_add_new_vague_module_names` still fails on the unrelated existing file `backend/tests/test_lseg_session_manager.py`, so Slice 11A keeps that repo-hygiene blocker recorded instead of widening scope into unrelated renaming
 - `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 11A keeps the blocker recorded instead of widening scope into a repair
+
+## Slice 12
+
+Scope:
+- `backend/data/source_read_authority.py`
+- `backend/data/source_reads.py`
+- `backend/tests/test_source_read_authority_boundaries.py`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/REPO_TIGHTENING_PLAN.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- extracted the lower registry-first source authority helpers into `backend/data/source_read_authority.py`
+- kept `backend/data/source_reads.py` as the public source-read facade with the SQLite cache path, compat branches, and raw cross-section exposure helpers still in place
+- left `backend/data/core_reads.py` unchanged so higher layers continue to depend on `source_reads.py` instead of the new lower module
+- added a dedicated source-read authority boundary test to pin that ownership split
+- narrowed the slice after adversarial review so it did not absorb the broader worktree’s session-lifecycle or source-read behavior changes
+
+Validation:
+- `git diff --check -- backend/data/source_read_authority.py backend/data/source_reads.py backend/tests/test_source_read_authority_boundaries.py docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/maintainer-guide.md docs/architecture/dependency-rules.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/operations/OPERATIONS_PLAYBOOK.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_source_read_authority_boundaries.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_core_reads.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_architecture_boundaries.py`
+
+Validation blockers:
+- `backend/tests/test_architecture_boundaries.py::test_backend_does_not_add_new_vague_module_names` still fails on the unrelated existing file `backend/tests/test_lseg_session_manager.py`, so Slice 12 keeps that repo-hygiene blocker recorded instead of widening scope into unrelated renaming
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 12 keeps the blocker recorded instead of widening scope into a repair

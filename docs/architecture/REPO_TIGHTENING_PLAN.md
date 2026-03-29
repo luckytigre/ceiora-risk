@@ -771,15 +771,16 @@ Commit boundary:
 #### Slice 12: Mixed-State Read-Layer Split Part B1
 
 Goal:
-- split `source_reads.py` authority assembly away from serving-payload and runtime-state fallback logic
+- extract the lower registry-first source authority helpers out of `source_reads.py`
+- keep the public `source_reads.py` wrappers, SQLite cache/compat logic, and raw cross-section exposure helpers in place
 
 Study first:
 - map source-read consumers by payload type
-- isolate source-date, observation, and archive-read responsibilities from serve-time fallback rules
+- isolate the lower registry-first authority helpers from the public source-read wrappers and compatibility branches
 
 Primary surfaces:
 - `backend/data/source_reads.py`
-- any extracted source-read helper modules
+- `backend/data/source_read_authority.py`
 
 Required doc updates:
 - `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
@@ -789,11 +790,13 @@ Required doc updates:
 
 Validation:
 - `git diff --check -- <touched paths>`
-- `./.venv_local/bin/pytest -q backend/tests/test_core_reads.py backend/tests/test_holdings_reads.py backend/tests/test_cpar_source_reads.py backend/tests/test_registry_first_diagnostics.py backend/tests/test_architecture_boundaries.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_source_read_authority_boundaries.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_core_reads.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_architecture_boundaries.py`
 - `make doctor`
 
 Commit boundary:
-- source-read authority split only
+- lower registry-first source authority extraction only
 
 #### Slice 13: Mixed-State Read-Layer Split Part B2
 

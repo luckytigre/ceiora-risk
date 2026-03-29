@@ -148,6 +148,7 @@ Rule:
 - `source-daily` enforces closed-month PIT anchors only; open-month fundamentals/classification rows are purged and missing prior month anchors are backfilled automatically.
 - `source-daily` also repairs missing daily price sessions between the previous local price date and the latest completed session.
 - Only `local-ingest` should publish broad source/model updates into Neon.
+- `backend/data/source_reads.py` stays the public source-read facade, with lower registry-first authority helpers isolated in `backend/data/source_read_authority.py`.
 
 ### 3) Core cUSE4 Model Layer
 
