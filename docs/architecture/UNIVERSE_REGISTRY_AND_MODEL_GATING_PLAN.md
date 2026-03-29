@@ -1,7 +1,7 @@
 # Universe Registry And Model Gating Plan
 
 Date: 2026-03-25
-Status: Repository implementation complete through compatibility cutover and registry-first repo-surface cleanup; operational destructive demotion still requires an actual rollout window
+Status: Repository implementation complete through compatibility cutover; follow-up fallback-scope remediation remains partially executed and operational destructive demotion still requires an actual rollout window
 Owner: Codex
 
 ## Purpose
@@ -1575,12 +1575,12 @@ Execution status for this follow-up:
 - bootstrap seed provenance now follows the actual seed artifact path, so `security_registry_seed.csv` bootstraps stamp `security_registry_seed` instead of the legacy source label
 - legacy compatibility exporter converted to the shared mapper in `backend/scripts/export_security_master_seed.py`
 - holdings identifier fallback refactor completed in `backend/services/neon_holdings_identifiers.py`
-- holdings identifier registry cutover now waits for populated policy and taxonomy companion coverage before taking the registry-authoritative path
-- cPAR registry/legacy read split and policy-authoritative registry filtering completed in `backend/data/cpar_source_reads.py`
-- cPAR partial-companion fallback is now pinned by regression coverage so mixed-state reads stay on legacy until active-registry policy/compat coverage is complete
+- holdings identifier resolution is now targeted registry-first whenever `security_registry` exists; compat fallback is retained only for registry-table-missing mode
+- the `backend/data/cpar_source_reads.py` work was re-cut after adversarial review and is not landed in this follow-up status block
+- the `backend/universe/runtime_rows.py` / `backend/universe/source_observation.py` default-consolidation work was also re-cut after adversarial review and is not landed in this follow-up status block
 - dead cUSE membership ballast removed from `backend/risk_model/cuse_membership.py`
 - cUSE membership routing no longer depends on raw compat `legacy_coverage_role`; it now routes through runtime policy flags only
-- regression coverage added in `backend/tests/test_security_registry_sync.py`, `backend/tests/test_neon_holdings_identifiers.py`, `backend/tests/test_cpar_source_reads.py`, and `backend/tests/test_cuse_membership_contract.py`
+- regression coverage added in `backend/tests/test_security_registry_sync.py` and `backend/tests/test_neon_holdings_identifiers.py`; broader cPAR/runtime follow-up coverage remains part of the re-cut work above
 
 Deferred larger follow-up remains unchanged:
 
@@ -1655,16 +1655,22 @@ Validation recorded for this follow-up:
 - targeted regression suite: `128 passed`
 - touched-module `py_compile`: passed
 - adversarial issues addressed before moving on: yes
-- final oversight disposition after the follow-up test fixes: `go` from `Meitner`; no blocker-level repo issues remained in the reviewed scope
+- final oversight disposition after the follow-up test fixes: `go` from `Meitner` for that hardening pass only; a later fallback-scope review reopened a narrower repo-side slice in cPAR shared reads and runtime/source-observation defaults
 
 Re-evaluated outstanding work after this hardening pass:
 
-- the repo-side mixed-state contract is now intentionally strict and test-covered
-- the remaining repo questions are long-term disposition questions, not unvetted behavior seams
+- the repo-side mixed-state contract was materially tightened, but it was not the final repo-side word on fallback behavior
+- a later fallback-scope review reopened three narrower repo-side follow-ups:
+  - cPAR shared-source reads still need a clean fallback-scope slice that does not bundle taxonomy-driven cPAR bucketing semantics
+  - holdings identifier fallback needed a narrower table-missing compatibility carveout and is now landed separately
+  - runtime/source-observation default-owner work still needs a clean slice that does not bundle historical precedence or legacy-master candidate-anchor changes
+- the remaining repo questions are therefore split between those re-cut behavior seams and the longer-term disposition questions below
   - whether `security_master_seed.csv` remains versioned as a compatibility artifact
   - whether compatibility-only authoring tools like `export_security_master_seed.py` or `augment_security_master_from_ric_xlsx.py` remain operator-supported after rollout
   - when the destructive Phase 9 demotion removes physical `security_master` from supported write/read paths
-- the true remaining blockers are now rollout-only
+- the remaining blockers are therefore no longer rollout-only
+  - the re-cut repo-side cPAR shared-read slice
+  - the re-cut repo-side runtime/source-observation default-owner slice
   - real Neon migration execution
   - retained-window parity/backfill evidence
   - stabilization-window evidence
@@ -1689,8 +1695,8 @@ Operational and rollout follow-ups:
 
 Current interpretation:
 
-- there are no blocker-level repository-code issues left for the mixed-state registry-first contract currently implemented in the repo
-- the remaining work is the final compatibility retirement decision, the destructive rollout sequence, and the operational evidence required to close the plan fully
+- the remaining repository-code work is now narrow and well-bounded, but it is not fully closed
+- the remaining work is the re-cut fallback-scope cleanup, the final compatibility retirement decision, the destructive rollout sequence, and the operational evidence required to close the plan fully
 
 ### 2026-03-27 Detailed Remaining Execution Plan
 
@@ -2349,55 +2355,54 @@ Refactor outline:
 
 ### Execution Status
 
-Status: completed for repo-side remediation
+Status: partially completed after slice re-cut
 
 Implemented:
 
-- `backend/data/cpar_source_reads.py`
-  - removed the global registry completeness gate for cPAR shared reads
-  - narrowed registry-path prerequisites to query-specific table presence
-  - made compat metadata optional on the registry path instead of a cutover precondition
-  - preserved legacy fallback only when required registry-owned tables are absent or registry execution fails
 - `backend/services/neon_holdings_identifiers.py`
   - removed the global registry companion-completeness gate
   - changed holdings identifier resolution to attempt targeted registry-path reads whenever `security_registry` exists
   - made policy/taxonomy joins optional metadata for ranking rather than an all-or-nothing cutover guard
   - preserved legacy fallback only when `security_registry` is absent
-- `backend/universe/runtime_rows.py`
-  - removed the duplicate legacy policy default implementation and switched runtime derivation to the shared owner in `registry_sync.py`
-- `backend/universe/source_observation.py`
-  - changed legacy SQL defaults to derive from the shared compatibility default owner
+- `backend/universe/registry_sync.py`
+  - preserved legacy-role defaults for explicitly normalized `other` / `unknown` / non-equity structural rows instead of falling through to the zeroed non-equity branch
 - `backend/universe/security_master_sync.py`
   - changed unknown custom seed paths to stamp `security_registry_seed` provenance instead of the legacy label
 
+Not yet landed in this execution block:
+
+- `backend/data/cpar_source_reads.py`
+  - the current worktree diff widens into taxonomy-driven cPAR classification semantics and remains outside the safe fallback-scope slice boundary
+- `backend/universe/runtime_rows.py`
+  - the current worktree diff widens into historical policy precedence and legacy-master candidate anchoring
+- `backend/universe/source_observation.py`
+  - the current worktree diff changes registry-vs-compat observation precedence and remains coupled to the blocked runtime slice
+
 Tests updated:
 
-- `backend/tests/test_cpar_source_reads.py`
-  - updated the old fallback assertion to the new registry-first behavior
-  - added a regression proving factor-proxy reads stay registry-first without compat metadata
 - `backend/tests/test_neon_holdings_identifiers.py`
-  - updated the incomplete-companion-surface case so it now proves registry-first resolution instead of legacy fallback
+  - updated the registry-table-missing contract so compat fallback remains explicit only when `security_registry` is absent
+  - kept the incomplete-companion-surface case registry-first
 - `backend/tests/test_security_registry_sync.py`
-  - added a regression proving custom registry-first seed paths stamp `security_registry_seed`
-- `backend/tests/test_universe_migration_scaffolding.py`
-  - added a regression proving runtime rows consume the shared legacy-policy defaults
+  - added a regression proving normalized `other` / `unknown` / non-equity structure preserves the owned legacy-role defaults
 
 Validation executed:
 
-- `43 passed` on:
-  - `backend/tests/test_cpar_source_reads.py`
+- `8 passed` on:
   - `backend/tests/test_neon_holdings_identifiers.py`
-  - `backend/tests/test_security_registry_sync.py`
-  - `backend/tests/test_universe_migration_scaffolding.py`
+- `1 passed` on:
+  - `backend/tests/test_security_registry_sync.py -k derive_policy_flags`
 - touched-module `py_compile` passed
 - path-scoped `git diff --check` passed
 
 Doc outcome:
 
-- no separate operator or architecture doc updates were required beyond this plan document because the old all-or-nothing fallback behavior was not materially documented as an operator contract elsewhere
+- the active plan now reflects the actual committed slice state instead of a broader repo-side remediation closeout that had not landed
 
 Remaining work:
 
+- re-cut and land the cPAR shared-read fallback slice without bundling taxonomy-driven cPAR bucketing semantics
+- re-cut and land the runtime/source-observation default-owner work without bundling historical precedence or legacy-master candidate-anchor changes
 - operational rollout items remain unchanged from the larger migration plan:
   - real Neon rollout execution
   - retained-window parity/backfill acceptance
