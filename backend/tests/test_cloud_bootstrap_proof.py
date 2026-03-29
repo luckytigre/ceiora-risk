@@ -47,11 +47,20 @@ def test_cloud_bootstrap_reads_from_neon_without_local_sqlite(tmp_path: Path, mo
         "neon_surface_enabled",
         lambda surface: surface in {"serving_outputs", "runtime_state", "core_reads"},
     )
-    monkeypatch.setattr(serving_outputs, "_load_current_payload_neon", lambda payload_name: {"payload_name": payload_name, "source": "neon"})
     monkeypatch.setattr(
         serving_outputs,
-        "_load_current_payload_sqlite",
-        lambda payload_name: (_ for _ in ()).throw(AssertionError("cloud bootstrap should not read serving payloads from sqlite")),
+        "_load_current_payloads_neon",
+        lambda payload_names: {
+            str(payload_name): {"payload_name": str(payload_name), "source": "neon"}
+            for payload_name in payload_names
+        },
+    )
+    monkeypatch.setattr(
+        serving_outputs,
+        "_load_current_payloads_sqlite",
+        lambda payload_names: (_ for _ in ()).throw(
+            AssertionError("cloud bootstrap should not read serving payloads from sqlite")
+        ),
     )
 
     monkeypatch.setattr(
@@ -103,11 +112,17 @@ def test_cloud_bootstrap_fails_closed_without_local_fallbacks(tmp_path: Path, mo
         "neon_surface_enabled",
         lambda surface: surface in {"serving_outputs", "runtime_state", "core_reads"},
     )
-    monkeypatch.setattr(serving_outputs, "_load_current_payload_neon", lambda payload_name: None)
     monkeypatch.setattr(
         serving_outputs,
-        "_load_current_payload_sqlite",
-        lambda payload_name: (_ for _ in ()).throw(AssertionError("cloud bootstrap should not fall back to sqlite serving payloads")),
+        "_load_current_payloads_neon",
+        lambda payload_names: {str(payload_name): None for payload_name in payload_names},
+    )
+    monkeypatch.setattr(
+        serving_outputs,
+        "_load_current_payloads_sqlite",
+        lambda payload_names: (_ for _ in ()).throw(
+            AssertionError("cloud bootstrap should not fall back to sqlite serving payloads")
+        ),
     )
 
     monkeypatch.setattr(

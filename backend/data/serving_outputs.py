@@ -11,9 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from psycopg.rows import dict_row
-
 from backend import config
+from backend.data import serving_output_read_authority
 from backend.data.neon import connect, resolve_dsn
 from backend.data.neon_primary_write import execute_neon_primary_write
 
@@ -471,31 +470,13 @@ def _load_current_payload_rows_neon(
 
 
 def _load_current_payloads_sqlite(payload_names: Iterable[str]) -> dict[str, Any | None]:
-    clean_names = _normalize_payload_names(payload_names)
-    if not clean_names:
-        return {}
-    db = DATA_DB
-    if not db.exists():
-        return {name: None for name in clean_names}
-    conn = sqlite3.connect(str(db))
-    try:
-        _ensure_sqlite_schema(conn)
-        placeholders = ",".join("?" for _ in clean_names)
-        rows = conn.execute(
-            """
-            SELECT payload_name, payload_json
-            FROM serving_payload_current
-            WHERE payload_name IN ("""
-            + placeholders
-            + ")",
-            clean_names,
-        ).fetchall()
-    finally:
-        conn.close()
-    out = {name: None for name in clean_names}
-    for payload_name, raw_payload in rows:
-        out[str(payload_name)] = _decode_payload_json(raw_payload)
-    return out
+    return serving_output_read_authority.load_current_payloads_sqlite(
+        payload_names,
+        data_db=DATA_DB,
+        normalize_payload_names=_normalize_payload_names,
+        ensure_sqlite_schema=_ensure_sqlite_schema,
+        decode_payload_json=_decode_payload_json,
+    )
 
 
 def _load_current_payload_neon(payload_name: str) -> dict[str, Any] | list[Any] | None:
@@ -503,40 +484,13 @@ def _load_current_payload_neon(payload_name: str) -> dict[str, Any] | list[Any] 
 
 
 def _load_current_payloads_neon(payload_names: Iterable[str]) -> dict[str, Any | None]:
-    clean_names = _normalize_payload_names(payload_names)
-    if not clean_names:
-        return {}
-    try:
-        conn = connect(
-            dsn=resolve_dsn(None),
-            autocommit=True,
-            connect_timeout=5,
-            options={"options": "-c statement_timeout=8000"},
-        )
-    except Exception:
-        return {name: None for name in clean_names}
-    try:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT payload_name, payload_json
-                FROM serving_payload_current
-                WHERE payload_name = ANY(%s)
-                """,
-                (clean_names,),
-            )
-            rows = cur.fetchall()
-    except Exception:
-        return {name: None for name in clean_names}
-    finally:
-        conn.close()
-    out = {name: None for name in clean_names}
-    for row in rows:
-        payload_name = str(row.get("payload_name") or "").strip()
-        if not payload_name:
-            continue
-        out[payload_name] = _decode_payload_json(row.get("payload_json"))
-    return out
+    return serving_output_read_authority.load_current_payloads_neon(
+        payload_names,
+        normalize_payload_names=_normalize_payload_names,
+        connect_fn=connect,
+        resolve_dsn_fn=resolve_dsn,
+        decode_payload_json=_decode_payload_json,
+    )
 
 
 def _persist_current_payloads_neon(

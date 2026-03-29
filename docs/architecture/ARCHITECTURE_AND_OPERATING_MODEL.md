@@ -252,6 +252,7 @@ Key rule:
 - The durable serving publish boundary comes before deep diagnostics. Once payload persistence plus active snapshot publish completes, the run should emit a publish milestone and clients may revalidate app-facing surfaces without waiting for diagnostics tail completion.
 - Deep model-health diagnostics belong to `core-weekly`, `cold-core`, or another explicit diagnostics-producing lane rather than the ordinary quick refresh path.
 - The currently active serving payload set should be durable and mirrorable (`serving_payload_current`), not only present in the local cache layer.
+- public serving-payload reads go through `backend/data/serving_outputs.py` (`load_current_payload(s)` / `load_runtime_payload(s)`), while lower Neon/SQLite read helpers stay isolated in `backend/data/serving_output_read_authority.py`
 - Full serving promotion now means the canonical payload set, not an arbitrary subset:
   - `eligibility`
   - `exposures`

@@ -74,6 +74,10 @@ Current source-read owner exception:
 - `backend/data/source_read_authority.py` owns the lower registry-first source authority helpers
 - `backend/data/source_reads.py` remains the public source-read facade and keeps SQLite cache/compat logic plus raw cross-section exposure helpers
 
+Current serving-output owner exception:
+- `backend/data/serving_output_read_authority.py` owns the lower Neon/SQLite serving-payload read helpers
+- `backend/data/serving_outputs.py` remains the public serving-payload facade and keeps route-facing read semantics plus write/verify ownership
+
 ## Entrypoint Rules
 
 Routes, CLI wrappers, and local scripts must stay thin.

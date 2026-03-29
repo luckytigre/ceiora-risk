@@ -593,3 +593,35 @@ Revision:
   - Slice 13B: serving-output write/verify/manifest split only
   - Slice 13C: runtime-state split only
 - Slice 14 and later remain in the same order, but now depend on the 13A/13B/13C sequence instead of one combined Slice 13
+
+## Slice 13A
+
+Scope:
+- `backend/data/serving_output_read_authority.py`
+- `backend/data/serving_outputs.py`
+- `backend/tests/test_serving_output_read_authority_boundaries.py`
+- `backend/tests/test_cloud_bootstrap_proof.py`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- extracted only the lower batch serving-payload read adapters into `backend/data/serving_output_read_authority.py`
+- kept `backend/data/serving_outputs.py` as the public serving-payload boundary for `load_current_payload(s)` and `load_runtime_payload(s)`
+- kept row-reader helpers in `serving_outputs.py` after adversarial review narrowed the rollback boundary away from manifest-adjacent code
+- corrected the stale cloud-bootstrap tests so they patch the real batch read seams instead of a nonexistent sqlite single-payload helper
+- added a dedicated serving-output read-authority boundary test so higher layers stay pinned to `serving_outputs.py` and the lower module remains read-only
+- updated the active architecture, dependency, and operations docs to make the public serving-output boundary explicit
+
+Validation:
+- `git diff --check -- backend/data/serving_outputs.py backend/data/serving_output_read_authority.py backend/tests/test_serving_output_read_authority_boundaries.py backend/tests/test_cloud_bootstrap_proof.py docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/dependency-rules.md docs/operations/OPERATIONS_PLAYBOOK.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m py_compile backend/data/serving_outputs.py backend/data/serving_output_read_authority.py backend/tests/test_serving_output_read_authority_boundaries.py backend/tests/test_cloud_bootstrap_proof.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_serving_output_read_authority_boundaries.py backend/tests/test_serving_outputs.py backend/tests/test_serving_output_route_preference.py backend/tests/test_cloud_bootstrap_proof.py backend/tests/test_cloud_auth_and_runtime_roles.py::test_serving_outputs_cloud_mode_does_not_fallback_to_sqlite`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_dashboard_payload_service.py backend/tests/test_portfolio_whatif_service.py`
+
+Validation blockers:
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 13A keeps the blocker recorded instead of widening scope into a repair
+
+Notes:
+- two adversarial reviewers disagreed about whether a sqlite single-payload seam should exist; the landed slice followed the stricter reading and kept store-specific reads batched under the public `serving_outputs.py` facade while updating the stale bootstrap tests to target the real seams

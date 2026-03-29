@@ -61,6 +61,7 @@
   - operator/editor tokens as needed for exposed endpoints
 - In that mode:
   - cUSE durable serving payloads should read from Neon and not fall back to local SQLite
+  - `backend/data/serving_outputs.py` remains the boundary module for those reads through `load_current_payload(s)` / `load_runtime_payload(s)`; higher layers should not import `backend/data/serving_output_read_authority.py` directly
   - runtime/operator state should read from Neon and not fall back to local SQLite
   - holdings should read from Neon and fail closed if Neon is unavailable
   - cPAR package reads should use the Neon authority store and fail closed if no package exists there
