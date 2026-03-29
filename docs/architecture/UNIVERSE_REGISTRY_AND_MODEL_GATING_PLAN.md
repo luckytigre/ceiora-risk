@@ -1284,14 +1284,11 @@ Preconditions:
 Cleanup actions:
 
 1. freeze all legacy writes to physical `security_master`
-2. rename physical `security_master` to `security_master_legacy`
-3. create `security_master` as a read-only compatibility view over `security_master_compat_current`
-4. keep `security_master_legacy` in place for a full stabilization window after the read cutover
-5. remove direct code references to legacy columns
-6. after the stabilization window, drop:
-   - `security_master_legacy`
-   - legacy column references
-   - selector wrappers that only exist for `projection_only`
+2. for local SQLite rehearsal or compatibility-only repair flows, optionally rename physical `security_master` to `security_master_legacy`
+3. for those local SQLite rehearsal flows only, create `security_master` as a read-only compatibility view over `security_master_compat_current`
+4. for final Neon destructive cleanup, drop any remaining `security_master` relation and `security_master_legacy`; do not recreate a compatibility view in Neon
+5. keep `security_master_compat_current` as the only supported compatibility relation for live Neon/runtime reads
+6. remove direct code references to legacy columns and retire wrappers that only existed to support the physical `security_master` era
 
 Potential additional cleanup:
 
@@ -1304,7 +1301,8 @@ Potential additional cleanup:
 - `backend/universe/bootstrap.py`
 - `backend/universe/security_master_sync.py`
 - `backend/scripts/export_security_master_seed.py`
-- `backend/scripts/cleanup_security_master_second_pass_aliases.py`
+- archived historical alias-cleanup implementation:
+  `backend/scripts/_archive/cleanup_security_master_second_pass_aliases.py`
 - `backend/scripts/augment_security_master_from_ric_xlsx.py`
 - new `backend/scripts/export_security_registry_seed.py`
 - new `backend/scripts/migrate_security_master_to_registry_v1.py`
@@ -1600,7 +1598,7 @@ Repo-surface cleanup completed in this follow-up:
 - `security_master_seed.csv` is now described consistently as a compatibility export artifact only
 - active operator guidance in `UNIVERSE_ADD_RUNBOOK.md`, `OPERATIONS_PLAYBOOK.md`, and `ARCHITECTURE_AND_OPERATING_MODEL.md` is registry-first
 - `scripts/doctor.sh` now audits `security_registry_seed.csv` and local `security_registry` as the primary surfaces, while still checking the compatibility artifact when present
-- `cleanup_security_master_second_pass_aliases.py` now defaults its `--seed-path` to `security_registry_seed.csv`
+- `cleanup_security_master_second_pass_aliases.py` is now retired as a live entrypoint and retained only as archived historical context
 - the central bootstrap seam now reads registry-first even though it still delegates into the compatibility-preserving sync implementation
 - default Neon source sync, readiness, bounded parity, and rebuild workspace preparation are registry-first and no longer require physical `security_master`
 - shared source reads now prefer `security_master_compat_current` over physical `security_master` when registry-authoritative reads are unavailable
@@ -1693,6 +1691,61 @@ Current interpretation:
 
 - there are no blocker-level repository-code issues left for the mixed-state registry-first contract currently implemented in the repo
 - the remaining work is the final compatibility retirement decision, the destructive rollout sequence, and the operational evidence required to close the plan fully
+
+### 2026-03-27 Detailed Remaining Execution Plan
+
+The remaining work is now split into four explicit buckets so repo-complete and rollout-complete are not conflated.
+
+1. Repo-side destructive-cutover prep
+
+- add and validate the missing Neon destructive cleanup artifact:
+  - `docs/reference/migrations/neon/NEON_REGISTRY_FIRST_CLEANUP.sql`
+- keep local SQLite demotion/rehearsal separate from live Neon cleanup:
+  - local helper: `backend/scripts/demote_security_master_to_compat_view.py`
+  - final Neon cleanup: remove any lingering `security_master` or `security_master_legacy` relation entirely
+- treat the alias-cleanup script and protocol as retired history only
+- keep local compatibility/bootstrap semantics explicit until a separate follow-up retires them:
+  - `security_master_seed.csv`
+  - `export_security_master_seed.py`
+  - `augment_security_master_from_ric_xlsx.py`
+  - local selector/runtime fallback helpers used only when registry surfaces are absent or deliberately minimal
+
+2. Gate F live Neon execution
+
+- apply additive schema first:
+  - `python3 -m backend.scripts.neon_apply_schema --include-cpar --include-holdings`
+- run the end-to-end cutover helper without destructive cleanup first:
+  - `python3 -m backend.scripts.neon_registry_first_cutover --include-holdings --json`
+- confirm artifacts for:
+  - source snapshot preflight
+  - source integrity preflight
+  - canonical/cPAR/holdings schema apply
+  - source sync
+  - latest cUSE rebuild
+  - latest cPAR package run
+- only after those pass, apply destructive cleanup and post-cleanup checks:
+  - `python3 -m backend.scripts.neon_registry_first_cutover --include-holdings --include-cleanup --json`
+- Gate F is closed only when post-cleanup checks prove:
+  - no live Neon `security_master` relation remains
+  - `security_master_compat_current` remains present
+  - post-cleanup source sync still works
+  - cUSE reads, cPAR reads, holdings reads, and serving payload reads still succeed
+
+3. Gate G retained-window acceptance
+
+- rerun the cutover helper with historical windows enabled for evidence capture
+- record:
+  - historical cUSE sample rebuild results
+  - historical cPAR package backfill results
+  - any retained-window parity outputs or deltas referenced by the cutover artifacts
+- Gate G is closed only when retained-window rebuild/backfill results are present and acceptable for the intended rollout window
+
+4. Final closeout and commit/rollout evidence
+
+- record commit SHAs for the repo-side demotion/cleanup slice
+- record the exact Neon cleanup run artifact directory and migration timestamp
+- record operator-facing rollout notes before any production read-flag flip
+- keep local SQLite compatibility support explicitly documented until a separate repo phase retires it; live Neon cleanup alone does not imply local bootstrap/repair deletion
 
 ### 2026-03-26 Independent Review Before Operational Next Steps
 

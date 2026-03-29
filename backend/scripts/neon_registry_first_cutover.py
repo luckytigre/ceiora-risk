@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import gc
 import json
 import re
@@ -407,6 +408,77 @@ def _run_post_cleanup_sync_probe(*, sqlite_path: Path, dsn: str | None) -> dict[
     )
 
 
+@contextmanager
+def _force_neon_runtime_authority(*, dsn: str | None):
+    clean_dsn = str(dsn or "").strip()
+    if not clean_dsn:
+        raise RuntimeError("post-cleanup verification requires an explicit Neon DSN")
+    prior_neon_dsn = config.NEON_DATABASE_URL
+    prior_data_backend = config.DATA_BACKEND
+    prior_serving_reads = config.SERVING_OUTPUTS_PRIMARY_READS
+    try:
+        config.NEON_DATABASE_URL = clean_dsn
+        config.DATA_BACKEND = "neon"
+        config.SERVING_OUTPUTS_PRIMARY_READS = True
+        with core_reads.core_read_backend("neon"):
+            yield
+    finally:
+        config.NEON_DATABASE_URL = prior_neon_dsn
+        config.DATA_BACKEND = prior_data_backend
+        config.SERVING_OUTPUTS_PRIMARY_READS = prior_serving_reads
+
+
+def _run_post_cleanup_runtime_read_probes(*, dsn: str | None, include_holdings: bool) -> dict[str, Any]:
+    with _force_neon_runtime_authority(dsn=dsn):
+        latest_prices = core_reads.load_latest_prices()
+        latest_fundamentals = core_reads.load_latest_fundamentals()
+        cpar_build_universe = cpar_source_reads.load_build_universe_rows()
+        cpar_factor_proxy_rows = cpar_source_reads.resolve_factor_proxy_rows(["SPY", "QQQ"])
+        universe_payload = load_runtime_payload("universe_loadings")
+        risk_payload = load_runtime_payload("risk")
+        portfolio_payload = load_runtime_payload("portfolio")
+
+        out: dict[str, Any] = {
+            "latest_prices_rows": int(len(latest_prices.index)),
+            "latest_fundamentals_rows": int(len(latest_fundamentals.index)),
+            "cpar_build_universe_rows": int(len(cpar_build_universe)),
+            "cpar_factor_proxy_rows": int(len(cpar_factor_proxy_rows)),
+            "universe_payload_keys": int(len(universe_payload) if isinstance(universe_payload, dict) else 0),
+            "risk_payload_keys": int(len(risk_payload) if isinstance(risk_payload, dict) else 0),
+            "portfolio_payload_keys": int(len(portfolio_payload) if isinstance(portfolio_payload, dict) else 0),
+        }
+
+        if include_holdings:
+            accounts = holdings_reads.load_holdings_accounts()
+            out["holdings_accounts"] = int(len(accounts))
+            if accounts:
+                account_id = str(accounts[0].get("account_id") or "")
+                positions = holdings_reads.load_holdings_positions(account_id=account_id)
+                out["holdings_positions_rows"] = int(len(positions))
+                out["holdings_account_id_checked"] = account_id
+            else:
+                out["holdings_positions_rows"] = 0
+                out["holdings_account_id_checked"] = None
+        return out
+
+
+def _require_positive_runtime_probe_counts(probes: dict[str, Any]) -> None:
+    required_positive = {
+        "latest_prices_rows": "latest price read",
+        "latest_fundamentals_rows": "latest fundamentals read",
+        "cpar_build_universe_rows": "cPAR build-universe read",
+        "cpar_factor_proxy_rows": "cPAR factor-proxy read",
+        "universe_payload_keys": "universe serving payload",
+        "risk_payload_keys": "risk serving payload",
+        "portfolio_payload_keys": "portfolio serving payload",
+    }
+    for key, label in required_positive.items():
+        if int(probes.get(key) or 0) <= 0:
+            raise RuntimeError(
+                f"post-cleanup verification failed: {label} returned no rows"
+            )
+
+
 def _run_post_cleanup_checks(*, dsn: str | None, include_holdings: bool, sqlite_path: Path) -> dict[str, Any]:
     table_presence = {
         "security_registry": _pg_table_exists(dsn, "security_registry"),
@@ -447,39 +519,15 @@ def _run_post_cleanup_checks(*, dsn: str | None, include_holdings: bool, sqlite_
     if str(legacy_schema_cleanliness.get("status") or "") != "ok":
         raise RuntimeError("post-cleanup verification failed: legacy schema/index artifacts remain in Neon")
 
-    latest_prices = core_reads.load_latest_prices()
-    latest_fundamentals = core_reads.load_latest_fundamentals()
-    cpar_build_universe = cpar_source_reads.load_build_universe_rows()
-    cpar_factor_proxy_rows = cpar_source_reads.resolve_factor_proxy_rows(["SPY", "QQQ"])
-    universe_payload = load_runtime_payload("universe_loadings")
-    risk_payload = load_runtime_payload("risk")
-    portfolio_payload = load_runtime_payload("portfolio")
-
     out: dict[str, Any] = {
         "status": "ok",
         "table_presence": table_presence,
         "post_cleanup_sync_probe": source_sync_probe,
         "legacy_schema_cleanliness": legacy_schema_cleanliness,
-        "latest_prices_rows": int(len(latest_prices.index)),
-        "latest_fundamentals_rows": int(len(latest_fundamentals.index)),
-        "cpar_build_universe_rows": int(len(cpar_build_universe)),
-        "cpar_factor_proxy_rows": int(len(cpar_factor_proxy_rows)),
-        "universe_payload_keys": int(len(universe_payload) if isinstance(universe_payload, dict) else 0),
-        "risk_payload_keys": int(len(risk_payload) if isinstance(risk_payload, dict) else 0),
-        "portfolio_payload_keys": int(len(portfolio_payload) if isinstance(portfolio_payload, dict) else 0),
     }
-
-    if include_holdings:
-        accounts = holdings_reads.load_holdings_accounts()
-        out["holdings_accounts"] = int(len(accounts))
-        if accounts:
-            account_id = str(accounts[0].get("account_id") or "")
-            positions = holdings_reads.load_holdings_positions(account_id=account_id)
-            out["holdings_positions_rows"] = int(len(positions))
-            out["holdings_account_id_checked"] = account_id
-        else:
-            out["holdings_positions_rows"] = 0
-            out["holdings_account_id_checked"] = None
+    runtime_read_probes = _run_post_cleanup_runtime_read_probes(dsn=dsn, include_holdings=include_holdings)
+    _require_positive_runtime_probe_counts(runtime_read_probes)
+    out.update(runtime_read_probes)
     return out
 
 
