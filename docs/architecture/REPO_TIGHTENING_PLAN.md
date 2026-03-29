@@ -121,7 +121,14 @@ Required outcome:
 - route/service tests focus on public behavior
 - orchestration tests isolate boundaries through explicit seams, not broad monkeypatch fan-out
 
-## Current Slice
+## Historical Initial Slice Snapshot
+
+This section records the first execution batch that expanded the cleanup
+program. It is no longer the active slice pointer.
+
+The active execution state now lives in:
+- the slice sections below
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
 
 The current implementation batch covers the route contract hardening from phase 1 and the active doc realignment from phase 3.
 Phase 2 remains deferred.
@@ -981,23 +988,46 @@ Revision:
 - the next priority remains the Neon decomposition chain rather than reopening `pipeline.py` immediately
 - during Slice 17, do not move `run_parity_audit()` just because it still lives in `backend/services/neon_stage2.py`; parity/report ownership remains part of Slice 18 unless a smaller rollback-safe seam is explicitly documented first
 
-#### Slice 17: Neon Source-Sync Contract Decomposition
+#### Rebaseline After Multi-Agent Assessment
 
-Goal:
-- split Neon schema, sync, and identifier-backfill responsibilities by job contract
+Context:
+- multi-agent reassessment found the landed slices coherent, but the remaining Neon work was still cut too broadly for the current repo state
+- `source_sync` still routes through `run_neon_mirror_cycle()` today, so the public contract surface is wider than `sync_from_sqlite_to_neon()` alone
+- the dirty worktree still contains abandoned serving/core-read experiments and active registry-first cleanup residue that must stay out of the next structural Neon commits
 
 Study first:
-- map `sync_from_sqlite_to_neon` responsibilities
+- keep the next Neon slices narrow enough that they do not absorb:
+  - abandoned serving/core-read residue in `backend/analytics/pipeline.py`, `backend/orchestration/stage_serving.py`, `backend/data/core_read_backend.py`, `backend/data/core_reads.py`, and `backend/tests/test_operating_model_contract.py`
+  - active Gate G / registry-first cleanup work in `backend/scripts/neon_registry_first_cutover.py`, `backend/tests/test_neon_registry_first_cutover.py`, `backend/tests/test_neon_stage2_model_tables.py`, and `docs/reference/migrations/neon/NEON_REGISTRY_FIRST_CLEANUP.sql`
+- leave parity/report ownership with Slice 18 explicitly; do not move `run_parity_audit()` as incidental fallout of source-sync cleanup
+- treat `stage_source.py -> run_neon_mirror_cycle()` as a real current contract until a later explicit contract-cut slice rewires it
+
+Revision:
+- split the remaining Neon program into:
+  - `17A`: source-sync metadata/status lifecycle extraction
+  - `17B`: source-sync table copy and identifier-backfill extraction
+  - `18A`: source-sync contract cut from mirror plus mirror internal decomposition with current consumer contracts preserved
+  - `18B`: finalize/post-run/parity consumer rewiring
+  - `19`: final doc sweep and acceptance
+
+#### Slice 17A: Neon Source-Sync Metadata And Status Lifecycle
+
+Goal:
+- extract source-sync metadata/status lifecycle from `sync_from_sqlite_to_neon()` without changing the public `sync_from_sqlite_to_neon()` or `run_neon_mirror_cycle()` contracts
+
+Study first:
+- map the metadata/status responsibilities inside `backend/services/neon_stage2.py`:
+  - source-sync run start/finalize lifecycle
+  - metadata-table requirement checks
+  - `source_sync_watermarks` publication
+  - `security_source_status_current` materialization
 - preserve current fail-closed semantics, sync metadata behavior, and source-date rules
-- keep the study focused on source-sync-specific helpers inside `backend/services/neon_stage2.py`:
-  - schema/column alignment helpers that `sync_from_sqlite_to_neon()` needs
-  - source-sync metadata recording
-  - identifier-history backfill semantics
-- treat `run_parity_audit()` as out of scope for this slice unless the study proves a smaller rollback-safe extraction is required first
+- keep `stage_source.py` and `backend/services/neon_mirror.py` behavior unchanged in this slice
 
 Primary surfaces:
 - `backend/services/neon_stage2.py`
-- supporting scripts that call those entrypoints
+- extracted metadata/status helper module(s) if warranted
+- direct tests for `sync_from_sqlite_to_neon()` metadata behavior
 
 Required doc updates:
 - `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
@@ -1011,20 +1041,91 @@ Validation:
 - `make doctor`
 
 Commit boundary:
-- Neon source-sync decomposition only
+- source-sync metadata/status lifecycle only
 
 Execution note:
-- do not widen this slice into mirror, prune, or post-run publication cleanup
-- do not count parity-audit relocation as incidental cleanup here; that ownership remains with Slice 18
+- do not widen this slice into table-copy/backfill extraction, mirror cleanup, or source-sync contract rewiring
 
-#### Slice 18: Neon Mirror And Post-Run Publication Decomposition
+#### Slice 17B: Neon Source-Sync Table Copy And Identifier Backfill
 
 Goal:
-- split mirror, prune, parity, and report orchestration away from lower sync logic
+- extract table copy, overlap-reload planning, and identifier-history backfill from `sync_from_sqlite_to_neon()` after the metadata/status lifecycle is already isolated
+
+Study first:
+- map the remaining table-strategy logic inside `sync_from_sqlite_to_neon()`:
+  - schema/column alignment helpers needed before load
+  - full versus incremental overlap reload rules
+  - upsert-versus-copy table strategy
+  - identifier-history backfill selection, delete, and reload behavior
+  - post-load row-count validation
+- preserve the public `sync_from_sqlite_to_neon()` return contract and the existing `run_neon_mirror_cycle()` consumer contract
+
+Primary surfaces:
+- `backend/services/neon_stage2.py`
+- extracted table-copy/backfill helper module(s) if warranted
+- direct tests for `sync_from_sqlite_to_neon()` table strategy behavior
+
+Required doc updates:
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+
+Validation:
+- `git diff --check -- <touched paths>`
+- `./.venv_local/bin/pytest -q backend/tests/test_neon_stage2_model_tables.py backend/tests/test_neon_authority.py backend/tests/test_refresh_profiles.py::test_source_sync_stage_pushes_source_tables_only backend/tests/test_refresh_profiles.py::test_source_sync_stage_fails_closed_when_source_dates_cannot_be_loaded backend/tests/test_refresh_profiles.py::test_source_sync_stage_requires_non_empty_local_source_dates backend/tests/test_refresh_profiles.py::test_source_sync_stage_refuses_to_downgrade_neon_sources backend/tests/test_refresh_profiles.py::test_source_sync_stage_refuses_newer_than_target_neon_dates backend/tests/test_refresh_profiles.py::test_neon_readiness_stage_prepares_workspace backend/tests/test_refresh_profiles.py::test_neon_readiness_stage_surfaces_workspace_preparation_failure`
+- `make doctor`
+
+Commit boundary:
+- source-sync table copy and identifier-backfill decomposition only
+
+Execution note:
+- do not widen this slice into mirror, prune, parity, or downstream consumer rewiring
+
+#### Slice 18A: Neon Source-Sync Contract Cut And Mirror Internal Decomposition
+
+Goal:
+- stop using the mirror wrapper as the implicit public source-sync contract and decompose mirror internals while preserving current downstream consumer contracts
 
 Study first:
 - map `run_neon_mirror_cycle` responsibilities
+- map how `stage_source.py` currently consumes source-sync through `run_neon_mirror_cycle()`
+- preserve current `finalize_run.py` and `post_run_publish.py` consumer contracts in this slice
+- preserve current artifact, report, and fail-closed behavior
+
+Primary surfaces:
+- `backend/services/neon_mirror.py`
+- `backend/orchestration/stage_source.py`
+- supporting source-sync script callers if needed
+- any mirror/source-sync helper modules extracted from those owners
+
+Required doc updates:
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/operations/CLOUD_NATIVE_RUNBOOK.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+
+Validation:
+- `git diff --check -- <touched paths>`
+- `./.venv_local/bin/pytest -q backend/tests/test_refresh_profiles.py backend/tests/test_neon_mirror_integration.py`
+- `make doctor`
+
+Commit boundary:
+- source-sync contract cut from mirror plus mirror internal decomposition with downstream consumer contracts unchanged
+
+Execution note:
+- do not rewire `finalize_run.py` or `post_run_publish.py` in the same commit
+- parity ownership still remains with Slice 18B
+
+#### Slice 18B: Neon Finalize, Post-Run, And Parity Consumer Rewiring
+
+Goal:
+- move finalize/post-run/parity consumers onto the explicit mirror/parity owners after Slice 18A stabilizes the mirror result contract
+
+Study first:
 - map how finalize and post-run publication consume mirror results
+- map parity/report ownership and artifact propagation
 - preserve current artifact, report, and fail-closed behavior
 
 Primary surfaces:
@@ -1047,14 +1148,10 @@ Validation:
 - `make doctor`
 
 Commit boundary:
-- Neon mirror, finalize, and post-run publication decomposition only
+- finalize/post-run/parity consumer rewiring only
 
 Execution note:
-- parity ownership lives in this slice, not slice 17
-- if parity helpers still need to move out of `backend/services/neon_stage2.py`, do that move here with the mirror/report consumers rather than burying it inside Slice 17
-- if the mirror result contract consumed by `finalize_run.py` or `post_run_publish.py` must change, split this into two commits:
-  - `18A`: `neon_mirror.py` extraction with consumer contract unchanged
-  - `18B`: consumer rewiring in `finalize_run.py` and `post_run_publish.py`
+- parity ownership lives in this slice, not slice 17A or 17B
 
 #### Slice 19: Final Doc Sweep And Acceptance
 

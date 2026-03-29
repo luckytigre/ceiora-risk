@@ -775,3 +775,25 @@ Validation blockers:
 
 Notes:
 - this execution-log entry is intentionally explicit that the landed Slice 16 commit was narrower than the original broader decomposition draft; the program should not pretend that `385799b` completed a larger helper-extraction sweep than it actually did
+
+## Rebaseline After Multi-Agent Assessment
+
+Assessment outcome:
+- the landed slices through 16 remain coherent; the review did not find a rollback-boundary defect in 13A, 13B, 13C, 14, 15, or 16
+- tracking drift, not code quality, was the main problem; `f9c8db5` corrected the missing Slice 15/16 ledger entries and the stale runbook references
+- the remaining Neon program was still cut too broadly for the live repo state, so the next work should proceed on smaller rollback seams
+
+Re-cut remaining slices:
+- `17A`: source-sync metadata/status lifecycle extraction inside `backend/services/neon_stage2.py`
+- `17B`: source-sync table copy and identifier-backfill extraction inside `backend/services/neon_stage2.py`
+- `18A`: source-sync contract cut from `run_neon_mirror_cycle()` plus mirror internal decomposition with current downstream consumer contracts preserved
+- `18B`: finalize/post-run/parity consumer rewiring after `18A` stabilizes the mirror result contract
+- `19`: final doc sweep and acceptance
+
+Isolation rules before the next structural Neon commit:
+- keep the abandoned serving/core-read residue in `backend/analytics/pipeline.py`, `backend/orchestration/stage_serving.py`, `backend/data/core_read_backend.py`, `backend/data/core_reads.py`, and `backend/tests/test_operating_model_contract.py` out of the Neon slice boundary
+- keep the active Gate G / registry-first cleanup stream in `backend/scripts/neon_registry_first_cutover.py`, `backend/tests/test_neon_registry_first_cutover.py`, `backend/tests/test_neon_stage2_model_tables.py`, and `docs/reference/migrations/neon/NEON_REGISTRY_FIRST_CLEANUP.sql` out of the structural cleanup commit boundary
+- treat `stage_source.py -> run_neon_mirror_cycle()` as the current public source-sync contract until Slice `18A` rewires it explicitly
+
+Next slice:
+- proceed with `17A` only if the pre-edit study confirms that source-sync metadata/status lifecycle can be extracted without changing the public `sync_from_sqlite_to_neon()` or `run_neon_mirror_cycle()` contracts
