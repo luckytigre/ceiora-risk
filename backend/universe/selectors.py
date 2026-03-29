@@ -105,12 +105,76 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
         """
         SELECT 1
         FROM sqlite_master
-        WHERE type='table' AND name=?
+        WHERE type IN ('table', 'view') AND name=?
         LIMIT 1
         """,
         (table,),
     ).fetchone()
     return row is not None
+
+
+def _table_has_rows(conn: sqlite3.Connection, table: str) -> bool:
+    if not _table_exists(conn, table):
+        return False
+    row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    return bool(row and int(row[0] or 0) > 0)
+
+
+def _load_legacy_selector_runtime_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    if not _table_exists(conn, SECURITY_MASTER_TABLE):
+        return []
+    rows = conn.execute(
+        f"""
+        SELECT
+            UPPER(TRIM(ric)) AS ric,
+            UPPER(TRIM(COALESCE(ticker, ''))) AS ticker,
+            exchange_name,
+            COALESCE(classification_ok, 0) AS classification_ok,
+            COALESCE(is_equity_eligible, 0) AS is_equity_eligible,
+            COALESCE(coverage_role, 'native_equity') AS coverage_role,
+            source
+        FROM {SECURITY_MASTER_TABLE}
+        WHERE ric IS NOT NULL
+          AND TRIM(ric) <> ''
+          AND ticker IS NOT NULL
+          AND TRIM(ticker) <> ''
+        """
+    ).fetchall()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        ric = normalize_ric(row[0])
+        ticker = normalize_ticker(row[1]) or ticker_from_ric(row[0])
+        coverage_role = normalize_optional_text(row[5]) or "native_equity"
+        classification_ready = int(row[3] or 0)
+        is_equity_eligible = int(row[4] or 0)
+        out.append(
+            {
+                "ric": ric,
+                "ticker": ticker,
+                "exchange_name": normalize_optional_text(row[2]),
+                "tracking_status": "active",
+                "source": normalize_optional_text(row[6]),
+                "classification_ready": classification_ready,
+                "is_single_name_equity": 0 if coverage_role == "projection_only" else is_equity_eligible,
+                "price_ingest_enabled": 1,
+                "pit_fundamentals_enabled": 0 if coverage_role == "projection_only" else is_equity_eligible,
+                "pit_classification_enabled": 0 if coverage_role == "projection_only" else classification_ready,
+                "allow_cuse_returns_projection": 1 if coverage_role == "projection_only" else 0,
+            }
+        )
+    return out
+
+
+def _load_selector_runtime_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = load_security_runtime_rows(
+        conn,
+        include_disabled=False,
+    )
+    if rows:
+        return rows
+    if _table_has_rows(conn, SECURITY_REGISTRY_TABLE):
+        return rows
+    return _load_legacy_selector_runtime_rows(conn)
 
 
 def load_registry_active_rows(conn: sqlite3.Connection) -> list[dict[str, str]]:
@@ -145,10 +209,7 @@ def load_pit_ingest_scope_rows(
     recent_sessions: int = 8,
 ) -> list[dict[str, str]]:
     degraded_recent = _recent_degraded_price_rics(conn, recent_sessions=recent_sessions)
-    runtime_rows = load_security_runtime_rows(
-        conn,
-        include_disabled=False,
-    )
+    runtime_rows = _load_selector_runtime_rows(conn)
     pending_rows: list[dict[str, str]] = []
     current_by_ticker: dict[str, dict[str, Any]] = {}
     for row in runtime_rows:
@@ -204,10 +265,7 @@ def load_pit_ingest_scope_rows(
 
 
 def load_cuse_returns_projection_scope_rows(conn: sqlite3.Connection) -> list[dict[str, str]]:
-    rows = load_security_runtime_rows(
-        conn,
-        include_disabled=False,
-    )
+    rows = _load_selector_runtime_rows(conn)
     out = [
         {
             "ticker": str(row.get("ticker") or ""),
@@ -229,10 +287,7 @@ def load_price_ingest_scope_rows(
     recent_sessions: int = 8,
 ) -> list[dict[str, str]]:
     del recent_sessions
-    runtime_rows = load_security_runtime_rows(
-        conn,
-        include_disabled=False,
-    )
+    runtime_rows = _load_selector_runtime_rows(conn)
     out: list[dict[str, str]] = []
     seen: set[str] = set()
     for row in runtime_rows:

@@ -27,15 +27,41 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     return row is not None
 
 
+def _relation_exists(conn: sqlite3.Connection, relation: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type IN ('table', 'view') AND name=?
+        LIMIT 1
+        """,
+        (relation,),
+    ).fetchone()
+    return row is not None
+
+
+def _relation_type(conn: sqlite3.Connection, relation: str) -> str | None:
+    row = conn.execute(
+        """
+        SELECT type
+        FROM sqlite_master
+        WHERE type IN ('table', 'view') AND name=?
+        LIMIT 1
+        """,
+        (relation,),
+    ).fetchone()
+    return str(row[0]) if row and row[0] is not None else None
+
+
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    if not _table_exists(conn, table):
+    if not _relation_exists(conn, table):
         return set()
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return {str(r[1]) for r in rows}
 
 
 def _pk_cols(conn: sqlite3.Connection, table: str) -> list[str]:
-    if not _table_exists(conn, table):
+    if not _relation_exists(conn, table):
         return []
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return [str(r[1]) for r in rows if int(r[5] or 0) > 0]
@@ -262,8 +288,11 @@ def _create_security_master_compat_current_table(conn: sqlite3.Connection) -> No
 
 
 def _ensure_security_master_schema(conn: sqlite3.Connection) -> None:
-    if not _table_exists(conn, SECURITY_MASTER_TABLE):
+    relation_type = _relation_type(conn, SECURITY_MASTER_TABLE)
+    if relation_type is None:
         _create_security_master_table(conn)
+        return
+    if relation_type == "view":
         return
 
     cols = _table_columns(conn, SECURITY_MASTER_TABLE)

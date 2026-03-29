@@ -27,6 +27,10 @@ def core_read_backend(backend: str):
     return core_backend.core_read_backend(backend)
 
 
+def neon_core_read_session():
+    return core_backend.neon_core_read_session()
+
+
 def _to_pg_sql(query: str) -> str:
     return core_backend.to_pg_sql(query)
 
@@ -101,14 +105,15 @@ def load_raw_cross_section_latest(
     *,
     data_db: Path | None = None,
 ) -> pd.DataFrame:
-    return source_reads.load_raw_cross_section_latest(
-        tickers=tickers,
-        fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=data_db),
-        exposure_source_table_required_fn=lambda: _exposure_source_table_required(data_db=data_db),
-        resolve_latest_well_covered_exposure_asof_fn=(
-            lambda table: _resolve_latest_well_covered_exposure_asof(table, data_db=data_db)
-        ),
-    )
+    with core_backend.neon_core_read_session():
+        return source_reads.load_raw_cross_section_latest(
+            tickers=tickers,
+            fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=data_db),
+            exposure_source_table_required_fn=lambda: _exposure_source_table_required(data_db=data_db),
+            resolve_latest_well_covered_exposure_asof_fn=(
+                lambda table: _resolve_latest_well_covered_exposure_asof(table, data_db=data_db)
+            ),
+        )
 
 
 def load_latest_fundamentals(
@@ -117,12 +122,13 @@ def load_latest_fundamentals(
     *,
     data_db: Path | None = None,
 ) -> pd.DataFrame:
-    return source_reads.load_latest_fundamentals(
-        tickers=tickers,
-        as_of_date=as_of_date,
-        fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=data_db),
-        missing_tables_fn=lambda *tables: _missing_tables(*tables, data_db=data_db),
-    )
+    with core_backend.neon_core_read_session():
+        return source_reads.load_latest_fundamentals(
+            tickers=tickers,
+            as_of_date=as_of_date,
+            fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=data_db),
+            missing_tables_fn=lambda *tables: _missing_tables(*tables, data_db=data_db),
+        )
 
 
 def load_latest_prices(
@@ -132,16 +138,18 @@ def load_latest_prices(
 ) -> pd.DataFrame:
     if not _use_neon_core_reads():
         return _load_latest_prices_sqlite(tickers, data_db=data_db)
-    return source_reads.load_latest_prices(
-        tickers=tickers,
-        fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=data_db),
-        missing_tables_fn=lambda *tables: _missing_tables(*tables, data_db=data_db),
-    )
+    with core_backend.neon_core_read_session():
+        return source_reads.load_latest_prices(
+            tickers=tickers,
+            fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=data_db),
+            missing_tables_fn=lambda *tables: _missing_tables(*tables, data_db=data_db),
+        )
 
 
 def load_source_dates(*, data_db: Path | None = None) -> dict[str, str | None]:
-    return source_dates.load_source_dates(
-        fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=data_db),
-        table_exists_fn=lambda table: _table_exists(table, data_db=data_db),
-        exposure_source_table_required_fn=lambda: _exposure_source_table_required(data_db=data_db),
-    )
+    with core_backend.neon_core_read_session():
+        return source_dates.load_source_dates(
+            fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=data_db),
+            table_exists_fn=lambda table: _table_exists(table, data_db=data_db),
+            exposure_source_table_required_fn=lambda: _exposure_source_table_required(data_db=data_db),
+        )

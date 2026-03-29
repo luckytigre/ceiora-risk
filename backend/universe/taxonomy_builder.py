@@ -140,16 +140,28 @@ def refresh_security_taxonomy_current(
         SELECT
             UPPER(TRIM(reg.ric)) AS ric,
             UPPER(TRIM(reg.ticker)) AS ticker,
-            COALESCE(pol.allow_cuse_returns_projection, 0) AS allow_cuse_returns_projection,
-            pol.pit_fundamentals_enabled AS pit_fundamentals_enabled,
-            pol.pit_classification_enabled AS pit_classification_enabled,
-            pol.policy_source AS policy_source,
-            COALESCE(reg.source, pol.policy_source, obs.source, '') AS source,
-            COALESCE(reg.job_run_id, pol.job_run_id, obs.job_run_id) AS job_run_id,
-            COALESCE(reg.updated_at, pol.updated_at, obs.updated_at) AS updated_at
+            CASE
+                WHEN COALESCE(pol.allow_cuse_returns_projection, 0) = 1
+                 AND COALESCE(pol.pit_fundamentals_enabled, 0) = 0
+                 AND COALESCE(pol.pit_classification_enabled, 0) = 0
+                THEN 'projection_only'
+                ELSE COALESCE(
+                    comp.coverage_role,
+                    master.coverage_role
+                )
+            END AS coverage_role,
+            COALESCE(comp.classification_ok, master.classification_ok, 0) AS compat_classification_ok,
+            COALESCE(comp.is_equity_eligible, master.is_equity_eligible, 0) AS compat_is_equity_eligible,
+            COALESCE(reg.source, obs.source, comp.source, master.source, '') AS source,
+            COALESCE(reg.job_run_id, obs.job_run_id, comp.job_run_id, master.job_run_id) AS job_run_id,
+            COALESCE(reg.updated_at, obs.updated_at, comp.updated_at, master.updated_at) AS updated_at
         FROM {SECURITY_REGISTRY_TABLE} reg
         LEFT JOIN {SECURITY_POLICY_CURRENT_TABLE} pol
           ON UPPER(TRIM(pol.ric)) = UPPER(TRIM(reg.ric))
+        LEFT JOIN {SECURITY_MASTER_COMPAT_CURRENT_TABLE} comp
+          ON UPPER(TRIM(comp.ric)) = UPPER(TRIM(reg.ric))
+        LEFT JOIN {SECURITY_MASTER_TABLE} master
+          ON UPPER(TRIM(master.ric)) = UPPER(TRIM(reg.ric))
         LEFT JOIN latest_obs obs
           ON obs.ric = UPPER(TRIM(reg.ric))
         WHERE reg.ric IS NOT NULL AND TRIM(reg.ric) <> ''
@@ -164,31 +176,12 @@ def refresh_security_taxonomy_current(
             continue
         classification = classification_by_ric.get(ric, {})
         classification_ready, is_equity_eligible = _classification_flags(classification)
-        allow_cuse_returns_projection = int(row[2] or 0)
-        pit_fundamentals_enabled = (
-            int(row[3])
-            if row[3] is not None
-            else (1 if is_equity_eligible == 1 else 0)
-        )
-        pit_classification_enabled = (
-            int(row[4])
-            if row[4] is not None
-            else (1 if is_equity_eligible == 1 else 0)
-        )
+        legacy_coverage_role = normalize_optional_text(row[2])
+        compat_classification_ok = int(row[3] or 0)
+        compat_is_equity_eligible = int(row[4] or 0)
         hq_country_code = str(classification.get("hq_country_code") or "").strip().upper() or None
         classification_sector = normalize_optional_text(classification.get("trbc_economic_sector"))
-        projection_only_policy = (
-            allow_cuse_returns_projection == 1
-            and pit_fundamentals_enabled == 0
-            and pit_classification_enabled == 0
-        )
-        policy_implies_single_name_equity = (
-            pit_fundamentals_enabled == 1
-            and pit_classification_enabled == 1
-        )
-        if (
-            projection_only_policy
-        ):
+        if legacy_coverage_role == "projection_only":
             instrument_kind = "fund_vehicle"
             vehicle_structure = "projection_only_vehicle"
             is_single_name_equity = 0
@@ -196,7 +189,11 @@ def refresh_security_taxonomy_current(
             instrument_kind = "fund_vehicle"
             vehicle_structure = "classified_non_equity"
             is_single_name_equity = 0
-        elif is_equity_eligible == 1 or (classification_ready == 0 and policy_implies_single_name_equity):
+        elif is_equity_eligible == 1 or (
+            classification_ready == 0
+            and compat_classification_ok == 1
+            and compat_is_equity_eligible == 1
+        ):
             instrument_kind = "single_name_equity"
             vehicle_structure = "equity_security"
             is_single_name_equity = 1
@@ -206,20 +203,20 @@ def refresh_security_taxonomy_current(
             is_single_name_equity = 0
         model_home_market_scope = "us" if hq_country_code == "US" else ("ex_us" if hq_country_code else "unknown")
         payload.append(
-            (
-                ric,
-                instrument_kind,
-                vehicle_structure,
-                hq_country_code,
-                None,
-                model_home_market_scope,
-                is_single_name_equity,
-                classification_ready,
-                normalize_optional_text(row[6]),
-                normalize_optional_text(row[7]),
-                normalize_optional_text(row[8]),
+                (
+                    ric,
+                    instrument_kind,
+                    vehicle_structure,
+                    hq_country_code,
+                    None,
+                    model_home_market_scope,
+                    is_single_name_equity,
+                    classification_ready,
+                    normalize_optional_text(row[5]),
+                    normalize_optional_text(row[6]),
+                    normalize_optional_text(row[7]),
+                )
             )
-        )
     if not payload:
         return 0
     conn.executemany(

@@ -112,14 +112,19 @@ def _load_compat_rows_from_table(conn: sqlite3.Connection, table: str) -> dict[s
     }
 
 
-def _load_compat_rows(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
-    rows: dict[str, dict[str, Any]] = {}
+def _load_compat_rows(
+    conn: sqlite3.Connection,
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    compat_current_rows: dict[str, dict[str, Any]] = {}
+    legacy_master_rows: dict[str, dict[str, Any]] = {}
     if runtime_authority.table_exists(conn, SECURITY_MASTER_COMPAT_CURRENT_TABLE):
-        rows.update(_load_compat_rows_from_table(conn, SECURITY_MASTER_COMPAT_CURRENT_TABLE))
+        compat_current_rows = _load_compat_rows_from_table(
+            conn,
+            SECURITY_MASTER_COMPAT_CURRENT_TABLE,
+        )
     if runtime_authority.table_exists(conn, SECURITY_MASTER_TABLE):
-        for ric, row in _load_compat_rows_from_table(conn, SECURITY_MASTER_TABLE).items():
-            rows.setdefault(ric, row)
-    return rows
+        legacy_master_rows = _load_compat_rows_from_table(conn, SECURITY_MASTER_TABLE)
+    return compat_current_rows, legacy_master_rows
 
 
 def _load_historical_classification_rows(
@@ -274,41 +279,15 @@ def _resolve_effective_policy_row(
         legacy_coverage_role=legacy_coverage_role,
         structural_row=structural_row,
     )
-    explicit_override = bool(
-        policy_row
-        and policy_source_is_explicit_override(policy_row.get("policy_source"))
-        and (not as_of_key or _updated_not_future(policy_row.get("updated_at"), as_of_key))
-    )
     resolved = {field: int(defaults.get(field, 0) or 0) for field in _POLICY_FLAG_FIELDS}
-    if explicit_override:
-        for field in _POLICY_FLAG_FIELDS:
-            if policy_row.get(field) is not None:
-                resolved[field] = int(policy_row.get(field) or 0)
+    if not policy_row:
         return resolved
+    if as_of_key and not _updated_not_future(policy_row.get("updated_at"), as_of_key):
+        return resolved
+    for field in _POLICY_FLAG_FIELDS:
+        if policy_row.get(field) is not None:
+            resolved[field] = int(policy_row.get(field) or 0)
     return resolved
-
-
-def _registry_companion_coverage_complete(
-    *,
-    registry_rows: dict[str, dict[str, Any]],
-    policy_rows: dict[str, dict[str, Any]],
-    taxonomy_rows: dict[str, dict[str, Any]],
-    requested_rics: set[str],
-    requested_tickers: set[str],
-) -> bool:
-    if not registry_rows:
-        return True
-    scoped_registry_rics = _requested_registry_rics(
-        registry_rows=registry_rows,
-        requested_rics=requested_rics,
-        requested_tickers=requested_tickers,
-    )
-    if requested_rics or requested_tickers:
-        if not scoped_registry_rics:
-            return False
-    elif not scoped_registry_rics:
-        return True
-    return scoped_registry_rics <= set(policy_rows) and scoped_registry_rics <= set(taxonomy_rows)
 
 
 def _requested_registry_rics(
@@ -336,7 +315,8 @@ def _candidate_runtime_rics(
     *,
     registry_table_exists: bool,
     registry_rows: dict[str, dict[str, Any]],
-    compat_rows: dict[str, dict[str, Any]],
+    compat_current_rows: dict[str, dict[str, Any]],
+    legacy_master_rows: dict[str, dict[str, Any]],
     policy_rows: dict[str, dict[str, Any]],
     taxonomy_rows: dict[str, dict[str, Any]],
     observation_rows: dict[str, dict[str, Any]],
@@ -344,21 +324,51 @@ def _candidate_runtime_rics(
     requested_tickers: set[str],
     allow_empty_registry_fallback: bool,
 ) -> set[str]:
+    requested = bool(requested_rics or requested_tickers)
+    requested_compat_current_rics = _requested_registry_rics(
+        registry_rows=compat_current_rows,
+        requested_rics=requested_rics,
+        requested_tickers=requested_tickers,
+    )
+    requested_legacy_master_rics = _requested_registry_rics(
+        registry_rows=legacy_master_rows,
+        requested_rics=requested_rics,
+        requested_tickers=requested_tickers,
+    )
+    requested_compat_fallback_rics = set(requested_compat_current_rics)
+    requested_compat_fallback_rics.update(
+        requested_legacy_master_rics - set(requested_compat_current_rics)
+    )
     if registry_table_exists:
         if not registry_rows:
             if allow_empty_registry_fallback:
-                return set(compat_rows) | set(policy_rows) | set(taxonomy_rows) | set(observation_rows)
-            return set()
-        if _registry_companion_coverage_complete(
+                fallback_rics = (
+                    set(compat_current_rows)
+                    or set(legacy_master_rows)
+                    or set(policy_rows)
+                    or set(taxonomy_rows)
+                    or set(observation_rows)
+                )
+                if requested:
+                    return fallback_rics | requested_compat_fallback_rics
+                return fallback_rics
+            return requested_compat_fallback_rics if requested else set()
+        scoped_registry_rics = _requested_registry_rics(
             registry_rows=registry_rows,
-            policy_rows=policy_rows,
-            taxonomy_rows=taxonomy_rows,
             requested_rics=requested_rics,
             requested_tickers=requested_tickers,
-        ):
-            return set(registry_rows)
-        return set(registry_rows) | set(compat_rows) | set(policy_rows) | set(taxonomy_rows) | set(observation_rows)
-    return set(registry_rows) | set(compat_rows) | set(policy_rows) | set(taxonomy_rows) | set(observation_rows)
+        )
+        if requested:
+            return scoped_registry_rics | (requested_compat_fallback_rics - scoped_registry_rics)
+        return scoped_registry_rics
+    fallback_rics = set(policy_rows) | set(taxonomy_rows) | set(observation_rows)
+    if compat_current_rows:
+        fallback_rics |= set(compat_current_rows)
+    else:
+        fallback_rics |= set(legacy_master_rows)
+    if requested:
+        fallback_rics |= requested_compat_fallback_rics
+    return fallback_rics
 
 
 def load_security_runtime_rows(
@@ -375,7 +385,10 @@ def load_security_runtime_rows(
         conn,
         as_of_date=as_of_date,
     )
-    compat_rows = _load_compat_rows(conn)
+    compat_current_rows, legacy_master_rows = _load_compat_rows(conn)
+    compat_rows = dict(compat_current_rows)
+    for ric, row in legacy_master_rows.items():
+        compat_rows.setdefault(ric, row)
     policy_rows = authority_state.policy_rows
     taxonomy_rows = authority_state.taxonomy_rows
     observation_rows = authority_state.observation_rows
@@ -389,7 +402,8 @@ def load_security_runtime_rows(
     candidate_rics = _candidate_runtime_rics(
         registry_table_exists=registry_table_exists,
         registry_rows=registry_rows,
-        compat_rows=compat_rows,
+        compat_current_rows=compat_current_rows,
+        legacy_master_rows=legacy_master_rows,
         policy_rows=policy_rows,
         taxonomy_rows=taxonomy_rows,
         observation_rows=observation_rows,

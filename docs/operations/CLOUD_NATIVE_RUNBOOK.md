@@ -390,7 +390,7 @@ For the request-based billing rollout specifically:
   - `https://app.ceiora.com/api/refresh/status` returns `200` with the operator token,
   - a post-cutover `serve-refresh` dispatch completed successfully through the control plane and reconciled in persisted runtime status.
 - Separate cloud caveat still open after cutover:
-  - address `security_master` parity if projection-only loadings should become available in cloud mode instead of remaining fail-closed/unavailable.
+  - address `security_master_compat_current` parity if projection-only loadings should become available in cloud mode instead of remaining fail-closed/unavailable.
 - Latest validated `run.app` state:
   - the control service account can now read `serve-refresh` execution status and reconcile stale `running` rows,
   - a fresh `serve-refresh` Cloud Run Job run completed successfully with the `4Gi` memory limit,
@@ -402,7 +402,7 @@ For the request-based billing rollout specifically:
   - Cloudflare DNS now points `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com` at that shared ingress IP,
   - the frontend Cloud Run service is already running the final-domain bake against `https://api.ceiora.com` and `https://control.ceiora.com`,
   - the managed certificate is active and the final custom-domain HTTPS path is now the primary validated ingress,
-  - projection-only loadings still warn and degrade unavailable when `security_master` parity is absent, but the refresh path remains green and publishes serving payloads.
+  - projection-only loadings still warn and degrade unavailable when `security_master_compat_current` parity is absent, but the refresh path remains green and publishes serving payloads.
 
 ## Control Smoke
 

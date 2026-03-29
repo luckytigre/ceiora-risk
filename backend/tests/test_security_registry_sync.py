@@ -36,6 +36,7 @@ def test_bootstrap_populates_registry_policy_and_compat_from_legacy_seed(tmp_pat
     out = bootstrap_cuse4_source_tables(db_path=data_db, seed_path=seed_path)
 
     assert out["status"] == "ok"
+    assert out["security_master_rows"] == 0
     assert out["security_registry_rows"] == 2
     assert out["security_policy_current_rows"] == 2
     assert out["security_master_compat_current_rows"] == 2
@@ -94,6 +95,7 @@ def test_bootstrap_derives_legacy_coverage_role_from_registry_policy_columns(tmp
     out = bootstrap_cuse4_source_tables(db_path=data_db, seed_path=seed_path)
 
     assert out["status"] == "ok"
+    assert out["security_master_rows"] == 0
 
     conn = sqlite3.connect(str(data_db))
     try:
@@ -104,26 +106,16 @@ def test_bootstrap_derives_legacy_coverage_role_from_registry_policy_columns(tmp
             ("AAPL.OQ", "security_registry_seed"),
             ("SPY.P", "security_registry_seed"),
         ]
-        master_sources = conn.execute(
-            "SELECT ric, source FROM security_master ORDER BY ric"
-        ).fetchall()
-        assert master_sources == [
-            ("AAPL.OQ", "security_registry_seed"),
-            ("SPY.P", "security_registry_seed"),
-        ]
         compat_rows = conn.execute(
-            "SELECT ric, ticker, coverage_role FROM security_master_compat_current ORDER BY ric"
+            """
+            SELECT ric, ticker, coverage_role, source
+            FROM security_master_compat_current
+            ORDER BY ric
+            """
         ).fetchall()
         assert compat_rows == [
-            ("AAPL.OQ", "AAPL", "native_equity"),
-            ("SPY.P", "SPY", "projection_only"),
-        ]
-        seed_rows = conn.execute(
-            "SELECT ric, coverage_role FROM security_master ORDER BY ric"
-        ).fetchall()
-        assert seed_rows == [
-            ("AAPL.OQ", "native_equity"),
-            ("SPY.P", "projection_only"),
+            ("AAPL.OQ", "AAPL", "native_equity", "security_registry_seed"),
+            ("SPY.P", "SPY", "projection_only", "security_registry_seed"),
         ]
     finally:
         conn.close()
@@ -150,6 +142,7 @@ def test_bootstrap_custom_registry_seed_path_stamps_registry_seed_provenance(tmp
     out = bootstrap_cuse4_source_tables(db_path=data_db, seed_path=seed_path)
 
     assert out["status"] == "ok"
+    assert out["security_master_rows"] == 0
 
     conn = sqlite3.connect(str(data_db))
     try:
@@ -157,10 +150,14 @@ def test_bootstrap_custom_registry_seed_path_stamps_registry_seed_provenance(tmp
             "SELECT ric, source FROM security_registry ORDER BY ric"
         ).fetchall()
         assert registry_sources == [("AAPL.OQ", "security_registry_seed")]
-        master_sources = conn.execute(
-            "SELECT ric, source FROM security_master ORDER BY ric"
+        compat_sources = conn.execute(
+            """
+            SELECT ric, source
+            FROM security_master_compat_current
+            ORDER BY ric
+            """
         ).fetchall()
-        assert master_sources == [("AAPL.OQ", "security_registry_seed")]
+        assert compat_sources == [("AAPL.OQ", "security_registry_seed")]
     finally:
         conn.close()
 

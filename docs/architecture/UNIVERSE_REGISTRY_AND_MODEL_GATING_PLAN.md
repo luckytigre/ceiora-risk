@@ -1681,7 +1681,7 @@ Outstanding to-dos after reevaluating the plan:
 
 Repository-code follow-ups:
 
-- destructive Phase 9 cleanup remains open because physical `security_master` still exists as a compatibility write/read surface and has not yet been demoted to a rollout-only artifact or read-only compatibility view.
+- destructive Phase 9 cleanup remains open because physical `security_master` still exists as a compatibility artifact for rollout-only and explicit legacy-read seams and has not yet been demoted to a read-only compatibility view or retired completely.
 - remaining compatibility tooling still needs a final long-term disposition.
   Current examples include `backend/scripts/export_security_master_seed.py`, `backend/scripts/augment_security_master_from_ric_xlsx.py`, and the decision about whether any compatibility-only authoring path remains operator-supported after rollout.
 - the final committed-seed cutover is still incomplete until the team decides whether `security_master_seed.csv` should remain versioned long-term or become purely derived/optional

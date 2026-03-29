@@ -7,6 +7,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROUTES_DIR = REPO_ROOT / "backend" / "api" / "routes"
 OPERATOR_STATUS_SERVICE = REPO_ROOT / "backend" / "services" / "operator_status_service.py"
+CUSE4_OPERATOR_STATUS_SERVICE = REPO_ROOT / "backend" / "services" / "cuse4_operator_status_service.py"
 BACKEND_DIR = REPO_ROOT / "backend"
 ALLOWED_VAGUE_MODULES = {
     "refresh_manager.py",
@@ -47,9 +48,10 @@ def test_route_modules_do_not_import_backend_data_directly() -> None:
     assert offenders == []
 
 
-def test_operator_status_service_does_not_import_run_model_pipeline() -> None:
-    imported = _imported_modules(OPERATOR_STATUS_SERVICE)
-    assert "backend.orchestration.run_model_pipeline" not in imported
+def test_operator_status_services_do_not_import_run_model_pipeline() -> None:
+    for path in (CUSE4_OPERATOR_STATUS_SERVICE, OPERATOR_STATUS_SERVICE):
+        imported = _imported_modules(path)
+        assert "backend.orchestration.run_model_pipeline" not in imported
 
 
 def test_backend_does_not_add_new_vague_module_names() -> None:

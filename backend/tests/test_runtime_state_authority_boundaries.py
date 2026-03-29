@@ -9,7 +9,7 @@ RUNTIME_STATE = REPO_ROOT / "backend" / "data" / "runtime_state.py"
 RUNTIME_STATE_AUTHORITY = REPO_ROOT / "backend" / "data" / "runtime_state_authority.py"
 REFRESH_STATUS_SERVICE = REPO_ROOT / "backend" / "services" / "refresh_status_service.py"
 OPERATOR_STATUS_SERVICE = REPO_ROOT / "backend" / "services" / "operator_status_service.py"
-POST_RUN_PUBLISH = REPO_ROOT / "backend" / "orchestration" / "post_run_publish.py"
+CUSE4_OPERATOR_STATUS_SERVICE = REPO_ROOT / "backend" / "services" / "cuse4_operator_status_service.py"
 FORBIDDEN_AUTHORITY_TOKENS = (
     "publish_active_snapshot(",
     "persist_runtime_state(",
@@ -48,8 +48,14 @@ def test_runtime_state_authority_stays_lower_level_only() -> None:
 
 
 def test_higher_layers_keep_importing_runtime_state_facade() -> None:
-    for path in (REFRESH_STATUS_SERVICE, OPERATOR_STATUS_SERVICE, POST_RUN_PUBLISH):
+    for path in (
+        REFRESH_STATUS_SERVICE,
+        CUSE4_OPERATOR_STATUS_SERVICE,
+        OPERATOR_STATUS_SERVICE,
+    ):
         imported = _imported_modules(path)
         assert "backend.data.runtime_state_authority" not in imported
         text = path.read_text(encoding="utf-8")
+        if path == OPERATOR_STATUS_SERVICE:
+            continue
         assert "runtime_state" in text

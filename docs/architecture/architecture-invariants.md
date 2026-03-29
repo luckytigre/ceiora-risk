@@ -46,7 +46,7 @@ These are the non-negotiable structural rules for this repository.
 
 11. Compatibility-named universe helpers must not retake authority.
    `security_master` and `security_master_sync.py` may remain for compatibility, diagnostics, and demotion rollout only.
-   Runtime/bootstrap/seed/LSEG update flows must treat registry/policy/taxonomy/source-status surfaces as authoritative and use `security_master_compat_current` only as the compatibility projection.
+   Runtime/bootstrap/seed/LSEG update flows must treat `security_registry`, `security_policy_current`, `security_taxonomy_current`, and `security_source_observation_daily` as authoritative and use `security_master_compat_current` only as the compatibility projection.
 
 12. Projection-only outputs are core-bound derived artifacts.
    Projection-only instruments must stay outside native cUSE estimation.
@@ -67,7 +67,7 @@ These are the non-negotiable structural rules for this repository.
 
 The repository already enforces several of these with lightweight tests in [test_architecture_boundaries.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/tests/test_architecture_boundaries.py):
 - routes may not import `backend.data` directly
-- `operator_status_service.py` may not import `backend.orchestration.run_model_pipeline`
+- `cuse4_operator_status_service.py` and the legacy `operator_status_service.py` shim may not import `backend.orchestration.run_model_pipeline`
 - new `shared.py`, `common.py`, and vague `*manager.py` files are rejected under `backend/`
 
 ## What These Guardrails Prevent
