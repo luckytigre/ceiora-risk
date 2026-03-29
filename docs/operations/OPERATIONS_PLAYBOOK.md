@@ -131,10 +131,11 @@ Rebuild-authority rule:
 - If Neon ever gets ahead of the intended `source-daily` target date because of a premature or invalid session stamp, `source_sync` now fails closed rather than trying to heal across the newer-than-target boundary. Investigate the bad stamp or advance the intended target first.
 - In the default Neon-authoritative path, those rebuild lanes execute in this order:
   - `source_sync`: publish source tables from local SQLite into Neon only when Neon is not already newer than the allowed target boundary
-    - `backend/services/neon_stage2.py` remains the public source-sync owner; lower metadata/status lifecycle helpers now sit behind `backend/services/neon_source_sync_metadata.py`, and lower per-table overlap/backfill transfer helpers now sit behind `backend/services/neon_source_sync_transfer.py`
+    - `backend/services/neon_source_sync_cycle.py` owns the stage-facing source-only sync cycle
+    - `backend/services/neon_stage2.py` remains the public lower source-sync/parity facade; lower metadata/status lifecycle helpers now sit behind `backend/services/neon_source_sync_metadata.py`, and lower per-table overlap/backfill transfer helpers now sit behind `backend/services/neon_source_sync_transfer.py`
   - `neon_readiness`: validate Neon table coverage/retention and materialize a scratch SQLite rebuild workspace from Neon
   - core stages run from that Neon-backed scratch workspace
-  - final mirror publishes rebuilt analytics back into Neon
+  - final mirror publishes rebuilt analytics back into Neon through `backend/services/neon_mirror.py`, which still owns the broad `sync + factor_returns_sync + prune + parity` envelope consumed by finalization/post-run
   - local derived tables/cache are refreshed from the scratch workspace so the private mirror stays congruent
 - Rehearsal/cutover safety rule:
   - `neon_readiness` must surface a valid scratch workspace payload; malformed workspace metadata now fails the run closed instead of letting later stages guess paths

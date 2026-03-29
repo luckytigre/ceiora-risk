@@ -95,6 +95,7 @@ Expected behavior:
 - fail closed if Neon-backed serving or runtime truth is unavailable instead of silently falling back to local SQLite
 - public durable serving-payload reads/writes stay behind `backend/data/serving_outputs.py`, while lower Neon/SQLite authority helpers remain non-public implementation detail
 - public runtime/control state reads and writes stay behind `backend/data/runtime_state.py`, while lower Neon/fallback authority helpers remain non-public implementation detail
+- `source_sync` remains a `local-ingest` concern; cloud-serving surfaces should not call the source-only cycle in `backend/services/neon_source_sync_cycle.py`
 
 ### Backend control app
 

@@ -27,6 +27,14 @@ def _allow_current_state_sync_preflight(monkeypatch: pytest.MonkeyPatch) -> None
     )
 
 
+def _allow_source_sync_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "bootstrap_cuse4_source_tables",
+        lambda **_kwargs: {"status": "ok"},
+    )
+
+
 def test_run_model_pipeline_import_does_not_require_lseg_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -536,6 +544,7 @@ def test_planned_stages_insert_source_sync_for_source_daily_when_neon_is_primary
 def test_source_sync_stage_pushes_source_tables_only(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
     _allow_current_state_sync_preflight(monkeypatch)
+    _allow_source_sync_bootstrap(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
     monkeypatch.setattr(
@@ -544,7 +553,7 @@ def test_source_sync_stage_pushes_source_tables_only(monkeypatch: pytest.MonkeyP
         lambda **_kwargs: {"prices_asof": "2026-03-14", "fundamentals_asof": "2026-02-27", "classification_asof": "2026-02-27"},
     )
 
-    def _fake_mirror(**kwargs):
+    def _fake_source_sync(**kwargs):
         captured.update(kwargs)
         return {
             "status": "ok",
@@ -555,7 +564,12 @@ def test_source_sync_stage_pushes_source_tables_only(monkeypatch: pytest.MonkeyP
             },
         }
 
-    monkeypatch.setattr(run_model_pipeline, "run_neon_mirror_cycle", _fake_mirror)
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "run_neon_mirror_cycle",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("source_sync should use dedicated owner")),
+    )
+    monkeypatch.setattr(run_model_pipeline, "run_neon_source_sync_cycle", _fake_source_sync)
 
     out = run_model_pipeline._run_stage(
         profile="source-daily",
@@ -572,6 +586,9 @@ def test_source_sync_stage_pushes_source_tables_only(monkeypatch: pytest.MonkeyP
     assert out["status"] == "ok"
     assert str(out["snapshot_path"]).endswith(".db")
     assert Path(str(captured["sqlite_path"])).name != _UNUSED_DATA_DB.name
+    assert "cache_path" not in captured
+    assert "parity_enabled" not in captured
+    assert "prune_enabled" not in captured
     assert captured["tables"] == [
         "security_registry",
         "security_taxonomy_current",
@@ -592,6 +609,7 @@ def test_source_sync_stage_fails_closed_when_source_dates_cannot_be_loaded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _allow_current_state_sync_preflight(monkeypatch)
+    _allow_source_sync_bootstrap(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
 
@@ -616,6 +634,7 @@ def test_source_sync_stage_fails_closed_when_source_dates_cannot_be_loaded(
 
 def test_source_sync_stage_requires_non_empty_local_source_dates(monkeypatch: pytest.MonkeyPatch) -> None:
     _allow_current_state_sync_preflight(monkeypatch)
+    _allow_source_sync_bootstrap(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
 
@@ -643,6 +662,7 @@ def test_source_sync_stage_requires_non_empty_local_source_dates(monkeypatch: py
 
 def test_source_sync_stage_refuses_to_downgrade_neon_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     _allow_current_state_sync_preflight(monkeypatch)
+    _allow_source_sync_bootstrap(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
 
@@ -670,6 +690,7 @@ def test_source_sync_stage_refuses_to_downgrade_neon_sources(monkeypatch: pytest
 
 def test_source_sync_stage_refuses_newer_than_target_neon_dates(monkeypatch: pytest.MonkeyPatch) -> None:
     _allow_current_state_sync_preflight(monkeypatch)
+    _allow_source_sync_bootstrap(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
 
@@ -696,6 +717,7 @@ def test_source_sync_stage_refuses_newer_than_target_neon_dates(monkeypatch: pyt
 
 def test_source_sync_stage_refuses_open_period_pit_dates_in_neon(monkeypatch: pytest.MonkeyPatch) -> None:
     _allow_current_state_sync_preflight(monkeypatch)
+    _allow_source_sync_bootstrap(monkeypatch)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
     monkeypatch.setattr(run_model_pipeline.config, "SOURCE_DAILY_PIT_FREQUENCY", "monthly")
@@ -758,6 +780,7 @@ def test_source_sync_stage_refuses_partial_local_current_state_surfaces(
 
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
     monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgres://example")
+    _allow_source_sync_bootstrap(monkeypatch)
     monkeypatch.setattr(
         run_model_pipeline.core_reads,
         "load_source_dates",

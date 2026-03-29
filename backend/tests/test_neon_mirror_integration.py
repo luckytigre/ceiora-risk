@@ -112,6 +112,7 @@ def test_run_model_pipeline_skips_broad_neon_mirror_for_serve_refresh(monkeypatc
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_ENABLED", True)
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_PARITY_ENABLED", True)
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_PRUNE_ENABLED", True)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgresql://example")
     monkeypatch.setattr(
         run_model_pipeline,
         "run_neon_mirror_cycle",

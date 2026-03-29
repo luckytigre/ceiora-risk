@@ -41,7 +41,7 @@ def run_stage(
     repair_pit_gap_fn: Callable[..., dict[str, Any]],
     profile_source_sync_required_fn: Callable[..., bool],
     profile_neon_readiness_required_fn: Callable[..., bool],
-    run_neon_mirror_cycle_fn: Callable[..., dict[str, Any]],
+    run_neon_source_sync_cycle_fn: Callable[..., dict[str, Any]],
     neon_authority_module,
     rebuild_raw_cross_section_history_fn: Callable[..., Any],
     rebuild_cross_section_snapshot_fn: Callable[..., Any],
@@ -79,7 +79,7 @@ def run_stage(
             repair_pit_gap_fn=repair_pit_gap_fn,
             profile_source_sync_required_fn=profile_source_sync_required_fn,
             profile_neon_readiness_required_fn=profile_neon_readiness_required_fn,
-            run_neon_mirror_cycle_fn=run_neon_mirror_cycle_fn,
+            run_neon_source_sync_cycle_fn=run_neon_source_sync_cycle_fn,
             neon_authority_module=neon_authority_module,
         )
 

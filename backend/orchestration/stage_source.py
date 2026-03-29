@@ -30,7 +30,7 @@ def run_source_stage(
     repair_pit_gap_fn: Callable[..., dict[str, Any]],
     profile_source_sync_required_fn: Callable[..., bool],
     profile_neon_readiness_required_fn: Callable[..., bool],
-    run_neon_mirror_cycle_fn: Callable[..., dict[str, Any]],
+    run_neon_source_sync_cycle_fn: Callable[..., dict[str, Any]],
     neon_authority_module,
 ) -> dict[str, Any]:
     if stage == "ingest":
@@ -171,9 +171,8 @@ def run_source_stage(
             )
             if progress_callback is not None:
                 progress_callback({"message": "Syncing retained source/model window into Neon", "progress_kind": "io"})
-            out = run_neon_mirror_cycle_fn(
+            out = run_neon_source_sync_cycle_fn(
                 sqlite_path=snapshot_path,
-                cache_path=cache_db,
                 dsn=dsn,
                 mode=str(config_module.NEON_AUTO_SYNC_MODE or "incremental"),
                 tables=[
@@ -190,10 +189,6 @@ def run_source_stage(
                     "estu_membership_daily",
                     "universe_cross_section_snapshot",
                 ],
-                parity_enabled=False,
-                prune_enabled=False,
-                source_years=int(config_module.NEON_SOURCE_RETENTION_YEARS),
-                analytics_years=int(config_module.NEON_ANALYTICS_RETENTION_YEARS),
             )
             if str(out.get("status") or "") != "ok":
                 raise RuntimeError(f"source_sync stage failed: {out}")

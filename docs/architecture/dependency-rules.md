@@ -85,9 +85,11 @@ Current runtime-state owner exception:
 - `backend/data/runtime_state.py` remains the public runtime-state facade and keeps the allowed-key policy, schema helper, public read/write entrypoints, and active-snapshot publish contract
 
 Current Neon source-sync owner exception:
+- `backend/services/neon_source_sync_cycle.py` owns the higher source-only sync cycle used by `source_sync` and should remain the direct orchestration seam for that stage
 - `backend/services/neon_source_sync_metadata.py` owns the lower source-sync metadata/status lifecycle helpers
 - `backend/services/neon_source_sync_transfer.py` owns the lower per-table overlap-reload, copy, and identifier-backfill helpers
-- `backend/services/neon_stage2.py` remains the public source-sync/parity facade and keeps schema alignment, outward per-table payload assembly, and the public `sync_from_sqlite_to_neon()` / parity entrypoints
+- `backend/services/neon_stage2.py` remains the public lower source-sync/parity facade and keeps schema alignment, outward per-table payload assembly, and the public `sync_from_sqlite_to_neon()` / parity entrypoints
+- `backend/services/neon_mirror.py` remains the public broad mirror/parity/prune owner for finalization and post-run consumers until that downstream contract is rewired explicitly
 
 ## Entrypoint Rules
 

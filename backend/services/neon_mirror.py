@@ -13,12 +13,12 @@ from psycopg import sql
 
 from backend import config
 from backend.data.neon import connect, resolve_dsn
+from backend.services.neon_source_sync_cycle import run_neon_source_sync_cycle
 from backend.trading_calendar import previous_or_same_xnys_session
 from backend.services.neon_stage2 import (
     apply_sql_file,
     canonical_tables,
     ensure_target_columns_from_sqlite,
-    sync_from_sqlite_to_neon,
 )
 
 
@@ -1477,41 +1477,15 @@ def run_neon_mirror_cycle(
     source_years: int = 10,
     analytics_years: int = 5,
 ) -> dict[str, Any]:
-    selected_tables = tables or canonical_tables()
-    out: dict[str, Any] = {
-        "status": "ok",
-        "mode": str(mode),
-        "tables": selected_tables,
-        "schema_ensure": None,
-        "sync": None,
-        "factor_returns_sync": None,
-        "prune": None,
-        "parity": None,
-    }
-
-    out["schema_ensure"] = ensure_neon_canonical_schema(dsn=dsn)
-
-    out["sync"] = sync_from_sqlite_to_neon(
+    out = run_neon_source_sync_cycle(
         sqlite_path=Path(sqlite_path),
         dsn=dsn,
-        tables=selected_tables,
         mode=str(mode),
+        tables=(tables or canonical_tables()),
         batch_size=int(batch_size),
     )
-
-    factor_sync_table = (out.get("sync") or {}).get("tables", {}).get("model_factor_returns_daily")
-    if isinstance(factor_sync_table, dict):
-        out["factor_returns_sync"] = {
-            "status": "ok",
-            "source_table": "model_factor_returns_daily",
-            **factor_sync_table,
-        }
-    else:
-        out["factor_returns_sync"] = {
-            "status": "skipped",
-            "reason": "table_not_selected",
-            "source_table": "model_factor_returns_daily",
-        }
+    out["prune"] = None
+    out["parity"] = None
 
     if prune_enabled:
         out["prune"] = prune_neon_history(

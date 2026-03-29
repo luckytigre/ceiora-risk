@@ -33,6 +33,7 @@ from backend.risk_model import (
     compute_daily_factor_returns,
     rebuild_raw_cross_section_history,
 )
+from backend.services.neon_source_sync_cycle import run_neon_source_sync_cycle
 from backend.services.neon_mirror import run_neon_mirror_cycle
 from backend.services import neon_authority
 from backend.services.holdings_runtime_state import mark_refresh_finished
@@ -366,7 +367,7 @@ def _run_stage(
         repair_pit_gap_fn=_repair_pit_gap,
         profile_source_sync_required_fn=profile_source_sync_required,
         profile_neon_readiness_required_fn=profile_neon_readiness_required,
-        run_neon_mirror_cycle_fn=run_neon_mirror_cycle,
+        run_neon_source_sync_cycle_fn=run_neon_source_sync_cycle,
         neon_authority_module=neon_authority,
         rebuild_raw_cross_section_history_fn=rebuild_raw_cross_section_history,
         rebuild_cross_section_snapshot_fn=rebuild_cross_section_snapshot,

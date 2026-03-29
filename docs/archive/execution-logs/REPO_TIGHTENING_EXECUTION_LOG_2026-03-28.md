@@ -875,3 +875,43 @@ Validation blockers:
 Notes:
 - `17B` stayed inside the per-table transfer boundary; it did not change the public `sync_from_sqlite_to_neon()` or `run_neon_mirror_cycle()` contracts and did not rewire `stage_source.py`
 - the wrapper/dependency-injection pattern in `backend/services/neon_stage2.py` is intentional so existing monkeypatch tests against `_upsert_table_on_pk`, `_pg_entity_min_dates`, `_delete_pg_rows_for_entities`, `_copy_into_postgres_idempotent`, and `_assert_post_load_row_counts` still intercept the live path
+
+## Slice 18A
+
+Scope:
+- `backend/services/neon_source_sync_cycle.py`
+- `backend/services/neon_mirror.py`
+- `backend/orchestration/stage_source.py`
+- `backend/orchestration/stage_runner.py`
+- `backend/orchestration/run_model_pipeline.py`
+- `backend/tests/test_refresh_profiles.py`
+- `backend/tests/test_neon_mirror_integration.py`
+- `backend/tests/test_neon_source_sync_cycle.py`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/operations/CLOUD_NATIVE_RUNBOOK.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- cut the `source_sync` orchestration stage over to the dedicated `backend/services/neon_source_sync_cycle.py` owner instead of routing that stage through the broad mirror seam
+- kept `backend/services/neon_mirror.py` as the public broad mirror/parity/prune owner by having `run_neon_mirror_cycle()` delegate to the dedicated source-sync cycle and then append prune/parity behavior
+- preserved the current source-sync result envelope so `stage_source.py` still validates `sync_run_id`, watermark publication, and `security_source_status_current` materialization through the same outward payload shape
+- kept `finalize_run.py` and `post_run_publish.py` unchanged in this slice; downstream mirror artifact, parity, and health publication contracts remain the Slice `18B` boundary
+- tightened the source-sync stage tests so they stub the bootstrap-heavy registry setup seam explicitly instead of stalling inside unrelated bootstrap work
+- pinned `NEON_DATABASE_URL` in the serve-refresh mirror-skip integration test so it exercises the intended `profile_skips_broad_neon_mirror` branch deterministically
+- updated the active docs so the higher source-only cycle owner is explicit and cloud-serving guidance does not imply that source-sync belongs to the cloud serve/control runtimes
+
+Validation:
+- `git diff --check -- backend/services/neon_source_sync_cycle.py backend/services/neon_mirror.py backend/orchestration/stage_source.py backend/orchestration/stage_runner.py backend/orchestration/run_model_pipeline.py backend/tests/test_refresh_profiles.py backend/tests/test_neon_mirror_integration.py backend/tests/test_neon_source_sync_cycle.py docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/dependency-rules.md docs/architecture/maintainer-guide.md docs/operations/CLOUD_NATIVE_RUNBOOK.md docs/operations/OPERATIONS_PLAYBOOK.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m py_compile backend/services/neon_source_sync_cycle.py backend/services/neon_mirror.py backend/orchestration/stage_source.py backend/orchestration/stage_runner.py backend/orchestration/run_model_pipeline.py backend/tests/test_neon_source_sync_cycle.py`
+- `./.venv_local/bin/python -m py_compile backend/tests/test_refresh_profiles.py backend/tests/test_neon_source_sync_cycle.py backend/tests/test_neon_mirror_integration.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_refresh_profiles.py::test_planned_stages_insert_source_sync_and_neon_readiness_for_neon_core_profiles backend/tests/test_refresh_profiles.py::test_planned_stages_insert_source_sync_for_source_daily_when_neon_is_primary backend/tests/test_refresh_profiles.py::test_source_sync_stage_pushes_source_tables_only backend/tests/test_refresh_profiles.py::test_source_sync_stage_fails_closed_when_source_dates_cannot_be_loaded backend/tests/test_refresh_profiles.py::test_source_sync_stage_requires_non_empty_local_source_dates backend/tests/test_refresh_profiles.py::test_source_sync_stage_refuses_to_downgrade_neon_sources backend/tests/test_refresh_profiles.py::test_source_sync_stage_refuses_newer_than_target_neon_dates backend/tests/test_refresh_profiles.py::test_source_sync_stage_refuses_open_period_pit_dates_in_neon backend/tests/test_refresh_profiles.py::test_source_sync_stage_refuses_partial_local_current_state_surfaces`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_neon_source_sync_cycle.py backend/tests/test_neon_mirror_integration.py`
+
+Validation blockers:
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 18A keeps the blocker recorded instead of widening scope into a repair
+
+Notes:
+- this slice intentionally preserved the broad `run_neon_mirror_cycle()` contract for finalize/post-run consumers while removing it from the `source_sync` stage path

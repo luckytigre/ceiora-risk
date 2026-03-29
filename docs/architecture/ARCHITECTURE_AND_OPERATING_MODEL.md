@@ -149,7 +149,8 @@ Rule:
 - `source-daily` also repairs missing daily price sessions between the previous local price date and the latest completed session.
 - Only `local-ingest` should publish broad source/model updates into Neon.
 - `backend/data/source_reads.py` stays the public source-read facade, with lower registry-first authority helpers isolated in `backend/data/source_read_authority.py`.
-- `backend/services/neon_stage2.py` stays the public source-sync/parity facade, with lower source-sync metadata/status lifecycle helpers isolated in `backend/services/neon_source_sync_metadata.py` and lower per-table overlap/backfill transfer helpers isolated in `backend/services/neon_source_sync_transfer.py`.
+- `backend/services/neon_source_sync_cycle.py` now owns the source-only Neon publish cycle used by `source_sync`; `backend/services/neon_stage2.py` stays the public lower source-sync/parity facade, with metadata/status lifecycle helpers isolated in `backend/services/neon_source_sync_metadata.py` and per-table overlap/backfill transfer helpers isolated in `backend/services/neon_source_sync_transfer.py`.
+- `backend/services/neon_mirror.py` remains the public broad mirror/parity/prune owner consumed after stage execution during finalization; Slice `18A` did not move that downstream contract.
 
 ### 3) Core cUSE4 Model Layer
 
