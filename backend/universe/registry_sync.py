@@ -173,6 +173,8 @@ def derive_policy_flags_from_structure(
         return defaults
     normalized_kind = raw_kind or "other"
     normalized_scope = raw_scope or "unknown"
+    if normalized_kind == "other" and normalized_scope == "unknown" and single_name_equity == 0:
+        return defaults
     if normalized_kind == "fund_vehicle":
         return {
             **defaults,
