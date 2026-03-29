@@ -66,6 +66,10 @@ Current cPAR owner exception:
 - `backend/services/cpar_portfolio_snapshot_service.py` remains the shared support/core layer below those owners, and `build_cpar_portfolio_hedge_snapshot()` is compatibility only while callers migrate
 - `backend/services/cpar_portfolio_snapshot_service.py` should not silently become the primary aggregate owner again
 
+Current universe runtime owner exception:
+- `backend/universe/runtime_authority.py` owns current-table authority loading for registry/policy/taxonomy/source-observation rows
+- `backend/universe/runtime_rows.py` remains the mixed-state runtime owner over compat/legacy fallback, historical classification reads, structural/policy resolution, candidate-RIC selection, and the public runtime-row loaders
+
 ## Entrypoint Rules
 
 Routes, CLI wrappers, and local scripts must stay thin.

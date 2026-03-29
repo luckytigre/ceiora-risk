@@ -510,3 +510,33 @@ Validation:
 
 Validation blockers:
 - `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 10B keeps the blocker recorded instead of widening scope into a repair
+
+## Slice 11A
+
+Scope:
+- `backend/universe/runtime_authority.py`
+- `backend/universe/runtime_rows.py`
+- `backend/tests/test_universe_runtime_authority_boundaries.py`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/REPO_TIGHTENING_PLAN.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- extracted current-table runtime authority loading for registry, policy, taxonomy, and source-observation rows into `backend/universe/runtime_authority.py`
+- kept `backend/universe/runtime_rows.py` as the mixed-state owner for compat/legacy fallback, historical classification reads, structural/policy resolution, candidate-RIC selection, and the public runtime-row loaders
+- narrowed the slice after adversarial review so historical and mixed-state resolvers did not cross the boundary in the same commit
+- added a dedicated runtime-authority boundary test so the new owner cannot silently absorb legacy fallback or PIT history logic
+- updated the active maintainer/dependency rules and slice plan to describe the new `runtime_authority.py` -> `runtime_rows.py` split explicitly
+
+Validation:
+- `git diff --check -- backend/universe/runtime_authority.py backend/universe/runtime_rows.py backend/tests/test_universe_runtime_authority_boundaries.py docs/architecture/maintainer-guide.md docs/architecture/dependency-rules.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m py_compile backend/universe/runtime_authority.py backend/universe/runtime_rows.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_universe_runtime_authority_boundaries.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_universe_selector_parity.py -k runtime_rows backend/tests/test_universe_migration_scaffolding.py -k runtime_rows`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_cuse_membership_contract.py -k runtime_state_by_row_as_of_date`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_core_reads.py backend/tests/test_holdings_reads.py backend/tests/test_universe_selector_parity.py backend/tests/test_registry_first_diagnostics.py backend/tests/test_architecture_boundaries.py`
+
+Validation blockers:
+- `backend/tests/test_architecture_boundaries.py::test_backend_does_not_add_new_vague_module_names` still fails on the unrelated existing file `backend/tests/test_lseg_session_manager.py`, so Slice 11A keeps that repo-hygiene blocker recorded instead of widening scope into unrelated renaming
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 11A keeps the blocker recorded instead of widening scope into a repair

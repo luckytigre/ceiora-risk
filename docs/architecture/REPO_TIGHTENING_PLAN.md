@@ -740,15 +740,16 @@ Commit boundary:
 #### Slice 11: Mixed-State Read-Layer Split Part A
 
 Goal:
-- separate registry, taxonomy, policy, and source-observation assembly from compatibility fallback inside runtime rows
+- extract current-table authority loading out of `runtime_rows.py`
+- keep historical classification reads, structural/policy resolution, candidate-RIC selection, and compat/legacy fallback inside `runtime_rows.py`
 
 Study first:
 - map `runtime_rows.py` call sites
-- isolate which behavior is current-state authority, which is historical lookup, and which is compatibility fallback
+- isolate which helpers load current registry/policy/taxonomy/source-observation rows versus which helpers still encode mixed-state or historical semantics
 
 Primary surfaces:
 - `backend/universe/runtime_rows.py`
-- any extracted narrow helper modules with concrete names
+- `backend/universe/runtime_authority.py`
 
 Required doc updates:
 - `docs/architecture/dependency-rules.md`
@@ -757,11 +758,15 @@ Required doc updates:
 
 Validation:
 - `git diff --check -- <touched paths>`
+- `./.venv_local/bin/python -m py_compile backend/universe/runtime_authority.py backend/universe/runtime_rows.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_universe_runtime_authority_boundaries.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_universe_selector_parity.py -k runtime_rows backend/tests/test_universe_migration_scaffolding.py -k runtime_rows`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_cuse_membership_contract.py -k runtime_state_by_row_as_of_date`
 - `./.venv_local/bin/pytest -q backend/tests/test_core_reads.py backend/tests/test_holdings_reads.py backend/tests/test_universe_selector_parity.py backend/tests/test_registry_first_diagnostics.py backend/tests/test_architecture_boundaries.py`
 - `make doctor`
 
 Commit boundary:
-- runtime-row authority split only
+- current-table runtime-authority loading extraction only
 
 #### Slice 12: Mixed-State Read-Layer Split Part B1
 

@@ -89,6 +89,9 @@ Practical rule:
   - `backend/services/cpar_portfolio_account_snapshot_service.py` owns the shared account-scoped hedge snapshot builder below those services
   - `backend/services/cpar_portfolio_snapshot_service.py::build_cpar_portfolio_hedge_snapshot()` is compatibility only while callers migrate; do not grow new logic there
   - `backend/services/cpar_portfolio_whatif_service.py` should keep one package/context/support-row set for `current` and `hypothetical` instead of rereading through the hedge route
+- when touching universe runtime assembly, keep the split explicit:
+  - `backend/universe/runtime_authority.py` owns current-table authority loading for registry/policy/taxonomy/source-observation rows
+  - `backend/universe/runtime_rows.py` still owns compat/legacy fallback, historical classification resolution, mixed-state policy/structural resolution, candidate-RIC selection, and the public runtime-row loaders
 - when touching default cUSE4 frontend imports, prefer the explicit cUSE4 surfaces:
   - `frontend/src/hooks/useCuse4Api.ts`
   - `frontend/src/lib/cuse4Api.ts`
