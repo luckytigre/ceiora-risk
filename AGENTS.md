@@ -68,5 +68,7 @@ Common minimums:
 - `git diff --check`
 - targeted backend tests for touched services/routes
 - `cd frontend && npm run typecheck` for frontend changes
+- use Node `20.x` for frontend build/typecheck work so local runs match CI; `frontend/.nvmrc` is the local pin
+- when `next build` behavior is in question, prefer `cd frontend && npm run build:compile` followed by `cd frontend && npm run build:generate` so the missing `BUILD_ID` failure mode is explicit
 
 When runtime/ops contracts change, also check the relevant runbook/doc surface and any applicable smoke or repair path.

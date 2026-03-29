@@ -2,9 +2,16 @@
   "name": "cuse-dashboard-frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 3000",
-    "build": "next build",
+    "build": "NEXT_TELEMETRY_DISABLED=1 next build",
+    "clean:artifacts": "rm -rf .next",
+    "build:compile": "npm run clean:artifacts && NEXT_TELEMETRY_DISABLED=1 next build --experimental-build-mode compile && node scripts/assert_build_id.mjs",
+    "build:generate": "node scripts/run_generate_build.mjs",
+    "build:debug": "npm run clean:artifacts && NEXT_TELEMETRY_DISABLED=1 next build --debug --experimental-app-only",
     "start": "next start",
     "typegen": "node -e \"require('fs').mkdirSync('.next/types',{recursive:true})\" && next typegen",
     "typecheck": "npm run typegen && tsc --noEmit --incremental false",

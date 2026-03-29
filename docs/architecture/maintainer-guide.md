@@ -27,6 +27,8 @@ Use a single root virtualenv for local work:
 - activate with `source .venv_local/bin/activate`
 - the local app scripts and backend commands assume `.venv_local`
 - the repository is standardized on Python `3.14.x`
+- frontend build and typecheck work is standardized on Node `20.x`; use `frontend/.nvmrc` or an equivalent pinned Node 20 runtime locally so your environment matches CI
+- the frontend build contract lives in `frontend/package.json`; use `npm run build:compile` and `npm run build:generate` when you need to split the compile/generate phases to diagnose a stalled `next build`
 - `make doctor` verifies `.venv_local`, core backend imports, whether `lseg.data` is importable in that environment, and that the registry-first current-state surfaces plus `security_master_compat_current` are present and structurally sane in the local workspace
 - install the real LSEG runtime into `.venv_local` when you need ingest/rebuild lanes; the backend package extra is `.[lseg]`, and `./scripts/setup_local_env.sh` also attempts `pip install lseg-data`
 
