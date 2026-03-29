@@ -689,3 +689,37 @@ Validation blockers:
 
 Notes:
 - the runtime-state slice stayed intentionally smaller than the serving-output slices because `runtime_state.py` already had a limited surface area and `refresh_status_service.py` still owns a direct Neon claim path against the same table contract
+
+## Slice 14
+
+Scope:
+- `backend/universe/security_master_sync.py`
+- `backend/tests/test_security_master_lineage.py`
+- `backend/tests/test_security_master_demotion.py`
+- `backend/tests/test_projection_only_exclusion.py`
+- `backend/tests/test_registry_first_diagnostics.py`
+- `backend/tests/test_universe_migration_scaffolding.py`
+- `docs/reference/specs/cUSE4_engine_spec.md`
+- `docs/architecture/architecture-invariants.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- tightened `backend/universe/security_master_sync.py` so its legacy-named runtime/bootstrap/seed helpers operate on registry-first surfaces plus `security_master_compat_current` instead of treating physical `security_master` as the normal runtime write target
+- kept the legacy helper name in place, but shifted the contained behavior to registry/policy/taxonomy/source-observation plus compat-projection maintenance
+- added direct demotion coverage in `backend/tests/test_security_master_demotion.py`
+- updated the lineage, projection-only, diagnostics, and migration-scaffolding tests to assert registry-first and compat-current behavior explicitly
+- updated the active spec, invariants, operations, and maintainer docs to make the compatibility-only status of `security_master` and `security_master_sync.py` explicit
+
+Validation:
+- `git diff --check -- backend/universe/security_master_sync.py backend/tests/test_security_master_lineage.py backend/tests/test_security_master_demotion.py backend/tests/test_projection_only_exclusion.py backend/tests/test_registry_first_diagnostics.py backend/tests/test_universe_migration_scaffolding.py docs/reference/specs/cUSE4_engine_spec.md docs/architecture/architecture-invariants.md docs/operations/OPERATIONS_PLAYBOOK.md docs/architecture/maintainer-guide.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_security_master_lineage.py backend/tests/test_security_master_demotion.py backend/tests/test_projection_only_exclusion.py backend/tests/test_registry_first_diagnostics.py backend/tests/test_universe_migration_scaffolding.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_architecture_boundaries.py`
+
+Validation blockers:
+- `backend/tests/test_architecture_boundaries.py::test_backend_does_not_add_new_vague_module_names` still fails on the unrelated existing file `backend/tests/test_lseg_session_manager.py`, so Slice 14 keeps that repo-hygiene blocker recorded instead of widening scope into unrelated renaming
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 14 keeps the blocker recorded instead of widening scope into a repair
+
+Notes:
+- the broad worktree already contained a candidate Slice 14 change set before this slice study; the work here treated that diff as the starting point and validated that it was coherent as a compat-containment slice rather than a mixed unrelated refactor

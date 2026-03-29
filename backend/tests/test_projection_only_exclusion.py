@@ -133,10 +133,27 @@ def test_lseg_upsert_preserves_projection_only_coverage_role(tmp_path: Path) -> 
     now_iso = datetime.now(timezone.utc).isoformat()
     conn.execute(
         """
-        INSERT INTO security_master (
-            ric, ticker, classification_ok, is_equity_eligible,
-            coverage_role, source, updated_at
-        ) VALUES ('SPY.P', 'SPY', 0, 0, 'projection_only', 'security_master_seed', ?)
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('SPY.P', 'SPY', 'active', 'security_registry_seed', ?)
+        """,
+        (now_iso,),
+    )
+    conn.execute(
+        """
+        INSERT INTO security_policy_current (
+            ric,
+            price_ingest_enabled,
+            pit_fundamentals_enabled,
+            pit_classification_enabled,
+            allow_cuse_native_core,
+            allow_cuse_fundamental_projection,
+            allow_cuse_returns_projection,
+            allow_cpar_core_target,
+            allow_cpar_extended_target,
+            policy_source,
+            updated_at
+        ) VALUES ('SPY.P', 1, 0, 0, 0, 0, 1, 0, 1, 'registry_seed_defaults', ?)
         """,
         (now_iso,),
     )
@@ -162,13 +179,13 @@ def test_lseg_upsert_preserves_projection_only_coverage_role(tmp_path: Path) -> 
     row = conn.execute(
         """
         SELECT classification_ok, is_equity_eligible, coverage_role, source
-        FROM security_master
+        FROM security_master_compat_current
         WHERE ric = 'SPY.P'
         """
     ).fetchone()
     conn.close()
 
-    assert row == (1, 1, "projection_only", "lseg_toolkit")
+    assert row == (0, 0, "projection_only", "lseg_toolkit")
 
 
 class TestCoverageRoleColumnMigration:

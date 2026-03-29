@@ -236,6 +236,7 @@ Columns:
 - Legacy migration/resolver scripts are archived under `backend/scripts/_archive/`.
 - Canonical ingest/backfill scripts must write directly to the registry-first current-state surfaces plus canonical `security_*` source tables.
 - `security_master_compat_current` remains a compatibility projection only while legacy consumers and the demotion rollout still require it.
+- `backend/universe/security_master_sync.py` is compatibility-named only; seed/bootstrap/LSEG updates through that seam should update registry-first current-state surfaces plus `security_master_compat_current`, not treat the physical `security_master` table as the runtime write target.
 
 ## 5) Factor Definitions and Metric Roll-up
 

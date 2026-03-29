@@ -41,17 +41,21 @@ These are the non-negotiable structural rules for this repository.
    UI, docs, and new code should prefer explicit fields such as `core_state_through_date`, `core_rebuild_date`, `exposures_served_asof`, `exposures_latest_available_asof`, `model_status_reason`, `factor_coverage_asof`, `served_loadings_asof`, and `latest_loadings_available_asof`.
    Legacy aliases may remain only for compatibility and fallback decoding.
 
-11. Projection-only outputs are core-bound derived artifacts.
+11. Compatibility-named universe helpers must not retake authority.
+   `security_master` and `security_master_sync.py` may remain for compatibility, diagnostics, and demotion rollout only.
+   Runtime/bootstrap/seed/LSEG update flows must treat registry/policy/taxonomy/source-status surfaces as authoritative and use `security_master_compat_current` only as the compatibility projection.
+
+12. Projection-only outputs are core-bound derived artifacts.
    Projection-only instruments must stay outside native cUSE estimation.
    Their projected loadings must read durable core outputs, refresh only on the core-package cadence, persist once per active core package, expose `projection_asof = core_state_through_date`, and be read by serving rather than recomputed opportunistically.
    Missing projected outputs for the active core package must surface explicit degraded/unavailable state instead of silent omission.
 
-12. cPAR stays parallel to cUSE4 and keeps its own owned surfaces.
+13. cPAR stays parallel to cUSE4 and keeps its own owned surfaces.
    Pure cPAR logic belongs in `backend/cpar/*`.
    cPAR integration still belongs in the normal repo layers.
    Current cPAR slices must not reuse cUSE4 serving-payload or runtime-state surfaces by implication.
 
-13. Cloud serve surfaces stay stateless and do not own refresh execution.
+14. Cloud serve surfaces stay stateless and do not own refresh execution.
    `backend/services/refresh_control_service.py` is the reviewed application-facing control surface for refresh routes.
    `backend/services/refresh_manager.py` remains the reviewed process-local execution owner for local thread-based lifecycle compatibility.
    Serve-facing readers must use the persisted refresh-status surface and must not reconcile worker ownership as though they own the control process.
