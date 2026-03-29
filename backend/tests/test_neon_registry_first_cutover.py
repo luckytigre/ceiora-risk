@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import sqlite3
 from pathlib import Path
@@ -234,6 +235,142 @@ def test_run_post_cleanup_checks_fails_when_legacy_schema_artifacts_remain(monke
         )
 
 
+def test_run_post_cleanup_checks_forces_explicit_neon_authority(monkeypatch, tmp_path: Path) -> None:
+    sqlite_path = tmp_path / "snapshot.db"
+    sqlite_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        cutover,
+        "_pg_table_exists",
+        lambda _dsn, table: table
+        in {
+            "security_registry",
+            "security_policy_current",
+            "security_taxonomy_current",
+            "security_master_compat_current",
+            "source_sync_runs",
+            "source_sync_watermarks",
+            "security_source_status_current",
+        },
+    )
+    monkeypatch.setattr(
+        cutover,
+        "_run_post_cleanup_sync_probe",
+        lambda *, sqlite_path, dsn: {
+            "status": "ok",
+            "sync_run_id": "source_sync_probe_1",
+            "watermark_rows_updated": 1,
+            "security_source_status_current_rows": 5,
+        },
+    )
+    monkeypatch.setattr(
+        cutover,
+        "_probe_live_legacy_cleanliness",
+        lambda *, dsn: {"status": "ok", "issues": [], "legacy_columns": [], "legacy_indexes": []},
+    )
+
+    observed: dict[str, object] = {}
+
+    @contextmanager
+    def fake_core_backend(name: str):
+        observed["backend_name"] = name
+        observed["dsn_inside"] = cutover.config.NEON_DATABASE_URL
+        observed["data_backend_inside"] = cutover.config.DATA_BACKEND
+        observed["serving_reads_inside"] = cutover.config.SERVING_OUTPUTS_PRIMARY_READS
+        yield
+
+    monkeypatch.setattr(cutover.core_reads, "core_read_backend", fake_core_backend)
+    monkeypatch.setattr(
+        cutover.core_reads,
+        "load_latest_prices",
+        lambda: type("Frame", (), {"index": [1, 2, 3]})(),
+    )
+    monkeypatch.setattr(
+        cutover.core_reads,
+        "load_latest_fundamentals",
+        lambda: type("Frame", (), {"index": [1, 2]})(),
+    )
+    monkeypatch.setattr(cutover.cpar_source_reads, "load_build_universe_rows", lambda: [{"ric": "AAA.OQ"}])
+    monkeypatch.setattr(cutover.cpar_source_reads, "resolve_factor_proxy_rows", lambda _tickers: [{"ticker": "SPY"}])
+    monkeypatch.setattr(cutover, "load_runtime_payload", lambda name: {"payload": name})
+
+    monkeypatch.setattr(cutover.config, "NEON_DATABASE_URL", "")
+    monkeypatch.setattr(cutover.config, "DATA_BACKEND", "sqlite")
+    monkeypatch.setattr(cutover.config, "SERVING_OUTPUTS_PRIMARY_READS", False)
+
+    out = cutover._run_post_cleanup_checks(
+        dsn="postgresql://example",
+        include_holdings=False,
+        sqlite_path=sqlite_path,
+    )
+
+    assert out["status"] == "ok"
+    assert observed == {
+        "backend_name": "neon",
+        "dsn_inside": "postgresql://example",
+        "data_backend_inside": "neon",
+        "serving_reads_inside": True,
+    }
+    assert cutover.config.NEON_DATABASE_URL == ""
+    assert cutover.config.DATA_BACKEND == "sqlite"
+    assert cutover.config.SERVING_OUTPUTS_PRIMARY_READS is False
+
+
+def test_run_post_cleanup_checks_fails_when_runtime_probe_is_empty(monkeypatch, tmp_path: Path) -> None:
+    sqlite_path = tmp_path / "snapshot.db"
+    sqlite_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        cutover,
+        "_pg_table_exists",
+        lambda _dsn, table: table
+        in {
+            "security_registry",
+            "security_policy_current",
+            "security_taxonomy_current",
+            "security_master_compat_current",
+            "source_sync_runs",
+            "source_sync_watermarks",
+            "security_source_status_current",
+        },
+    )
+    monkeypatch.setattr(
+        cutover,
+        "_run_post_cleanup_sync_probe",
+        lambda *, sqlite_path, dsn: {
+            "status": "ok",
+            "sync_run_id": "source_sync_probe_1",
+            "watermark_rows_updated": 1,
+            "security_source_status_current_rows": 5,
+        },
+    )
+    monkeypatch.setattr(
+        cutover,
+        "_probe_live_legacy_cleanliness",
+        lambda *, dsn: {"status": "ok", "issues": [], "legacy_columns": [], "legacy_indexes": []},
+    )
+    monkeypatch.setattr(
+        cutover.core_reads,
+        "load_latest_prices",
+        lambda: type("Frame", (), {"index": []})(),
+    )
+    monkeypatch.setattr(
+        cutover.core_reads,
+        "load_latest_fundamentals",
+        lambda: type("Frame", (), {"index": [1, 2]})(),
+    )
+    monkeypatch.setattr(cutover.cpar_source_reads, "load_build_universe_rows", lambda: [{"ric": "AAA.OQ"}])
+    monkeypatch.setattr(cutover.cpar_source_reads, "resolve_factor_proxy_rows", lambda _tickers: [{"ticker": "SPY"}])
+    monkeypatch.setattr(cutover, "load_runtime_payload", lambda name: {"payload": name})
+
+    with pytest.raises(RuntimeError, match="latest price read returned no rows"):
+        cutover._run_post_cleanup_checks(
+            dsn="postgresql://example",
+            include_holdings=False,
+            sqlite_path=sqlite_path,
+        )
+
+
 def test_main_routes_cpar_validation_runs_to_snapshot_archive(monkeypatch, tmp_path: Path, capsys) -> None:
     source_db = tmp_path / "source.db"
     sqlite3.connect(str(source_db)).close()
@@ -303,3 +440,85 @@ def test_main_routes_cpar_validation_runs_to_snapshot_archive(monkeypatch, tmp_p
     )
     assert captured["cpar_latest_2026-03-20"]["data_db"] == snapshot_path
     assert captured["cpar_historical_2026-03-13"]["data_db"] == snapshot_path
+
+
+def test_main_runs_cleanup_branch_when_enabled(monkeypatch, tmp_path: Path, capsys) -> None:
+    source_db = tmp_path / "source.db"
+    sqlite3.connect(str(source_db)).close()
+    seed_path = tmp_path / "security_registry_seed.csv"
+    seed_path.write_text("ric,ticker\n", encoding="utf-8")
+    snapshot_dir = tmp_path / "snapshots"
+    snapshot_dir.mkdir()
+
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        cutover,
+        "_parse_args",
+        lambda: argparse.Namespace(
+            dsn="postgresql://example",
+            db_path=source_db,
+            seed_path=seed_path,
+            snapshot_dir=snapshot_dir,
+            artifact_dir=None,
+            canonical_schema=tmp_path / "canonical.sql",
+            cpar_schema=tmp_path / "cpar.sql",
+            holdings_schema=tmp_path / "holdings.sql",
+            cleanup_schema=tmp_path / "cleanup.sql",
+            sync_mode="incremental",
+            historical_cuse_samples=0,
+            cpar_max_backfill=0,
+            include_holdings=True,
+            include_cleanup=True,
+            json=True,
+        ),
+    )
+    monkeypatch.setattr(cutover, "resolve_dsn", lambda dsn: dsn or "postgresql://example")
+    monkeypatch.setattr(cutover, "bootstrap_cuse4_source_tables", lambda **kwargs: {"status": "ok"})
+    monkeypatch.setattr(
+        cutover,
+        "_sqlite_backup",
+        lambda _source, target: sqlite3.connect(str(target)).close(),
+    )
+    monkeypatch.setattr(cutover, "_validate_required_snapshot_tables", lambda *args, **kwargs: {"status": "ok"})
+    monkeypatch.setattr(cutover, "inspect_sqlite_source_integrity", lambda **kwargs: {"status": "ok", "issues": []})
+    monkeypatch.setattr(cutover, "_apply_schema_stack", lambda **kwargs: [{"status": "ok"}])
+    monkeypatch.setattr(cutover, "sync_from_sqlite_to_neon", lambda **kwargs: {"status": "ok"})
+    monkeypatch.setattr(cutover, "_latest_source_date", lambda _sqlite_path: "2026-03-26")
+    monkeypatch.setattr(cutover, "validate_neon_rebuild_readiness", lambda **kwargs: {"status": "ok"})
+    monkeypatch.setattr(cutover, "_historical_cuse_sample_dates", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cutover, "resolve_package_date", lambda **kwargs: "2026-03-20")
+    monkeypatch.setattr(cutover, "_historical_cpar_package_dates", lambda *args, **kwargs: ["2026-03-20"])
+    monkeypatch.setattr(
+        cutover,
+        "_run_and_record",
+        lambda **kwargs: {"status": "ok", "run_id": "run", "selected_stages": [], "stage_results": [], "run_rows": []},
+    )
+    monkeypatch.setattr(
+        cutover,
+        "_apply_cleanup",
+        lambda **kwargs: _record_and_return(calls, "cleanup_kwargs", kwargs),
+    )
+    monkeypatch.setattr(
+        cutover,
+        "_run_post_cleanup_checks",
+        lambda **kwargs: _record_and_return(calls, "post_cleanup_kwargs", kwargs),
+    )
+
+    rc = cutover.main()
+
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "ok"
+    assert calls["cleanup_kwargs"]["dsn"] == "postgresql://example"
+    assert Path(str(calls["cleanup_kwargs"]["cleanup_schema"])).name == "cleanup.sql"
+    assert calls["post_cleanup_kwargs"]["dsn"] == "postgresql://example"
+    assert calls["post_cleanup_kwargs"]["include_holdings"] is True
+    assert Path(str(calls["post_cleanup_kwargs"]["sqlite_path"])).exists()
+    assert out["cleanup"]["status"] == "ok"
+    assert out["post_cleanup_checks"]["status"] == "ok"
+
+
+def _record_and_return(calls: dict[str, object], key: str, kwargs: dict[str, object]) -> dict[str, object]:
+    calls[key] = dict(kwargs)
+    return {"status": "ok"}
