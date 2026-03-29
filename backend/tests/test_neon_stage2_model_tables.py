@@ -45,6 +45,23 @@ def test_canonical_schema_defines_durable_model_tables() -> None:
     assert "ADD COLUMN IF NOT EXISTS run_id TEXT" in schema_sql
 
 
+def test_registry_first_cleanup_sql_exists_and_drops_legacy_security_master() -> None:
+    cleanup_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "reference"
+        / "migrations"
+        / "neon"
+        / "NEON_REGISTRY_FIRST_CLEANUP.sql"
+    )
+    cleanup_sql = cleanup_path.read_text(encoding="utf-8")
+
+    assert "security_master" in cleanup_sql
+    assert "security_master_legacy" in cleanup_sql
+    assert "DROP INDEX IF EXISTS public.idx_security_master_ticker" in cleanup_sql
+    assert "DROP INDEX IF EXISTS public.idx_security_master_permid" in cleanup_sql
+
+
 class _DummyPgConn:
     class _Cursor:
         rowcount = 0
