@@ -1,7 +1,7 @@
 # Universe Registry And Model Gating Plan
 
 Date: 2026-03-25
-Status: Repository implementation complete through compatibility cutover; follow-up fallback-scope remediation remains partially executed and operational destructive demotion still requires an actual rollout window
+Status: Repository implementation complete through compatibility cutover and fallback-scope remediation; broader runtime behavior follow-on and operational destructive demotion still require separate execution
 Owner: Codex
 
 ## Purpose
@@ -1581,7 +1581,7 @@ Execution status for this follow-up:
 - `backend/universe/source_observation.py` now keeps registry rows primary while preserving compat-only rows for names absent from `security_registry`
 - dead cUSE membership ballast removed from `backend/risk_model/cuse_membership.py`
 - cUSE membership routing no longer depends on raw compat `legacy_coverage_role`; it now routes through runtime policy flags only
-- regression coverage added in `backend/tests/test_security_registry_sync.py`, `backend/tests/test_neon_holdings_identifiers.py`, `backend/tests/test_cpar_source_reads.py`, `backend/tests/test_cpar_pipeline_runtime.py`, and `backend/tests/test_universe_runtime_authority_boundaries.py`
+- regression coverage added in `backend/tests/test_security_registry_sync.py`, `backend/tests/test_neon_holdings_identifiers.py`, `backend/tests/test_cpar_source_reads.py`, `backend/tests/test_cpar_pipeline_runtime.py`, `backend/tests/test_universe_runtime_authority_boundaries.py`, and the relevant `backend/tests/test_universe_migration_scaffolding.py` source-observation authority cases
 
 Deferred larger follow-up remains unchanged:
 
@@ -2356,7 +2356,7 @@ Refactor outline:
 
 ### Execution Status
 
-Status: partially completed after slice re-cut
+Status: completed for the re-cut repo-side slice program
 
 Implemented:
 
