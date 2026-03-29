@@ -723,3 +723,55 @@ Validation blockers:
 
 Notes:
 - the broad worktree already contained a candidate Slice 14 change set before this slice study; the work here treated that diff as the starting point and validated that it was coherent as a compat-containment slice rather than a mixed unrelated refactor
+
+## Slice 15
+
+Scope:
+- `backend/analytics/pipeline.py`
+- `backend/analytics/refresh_publication.py`
+- `docs/architecture/maintainer-guide.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- extracted the publish-only republish path, durable publish sequencing, and post-publish deep-health patch out of `backend/analytics/pipeline.py` into `backend/analytics/refresh_publication.py`
+- kept the stable `pipeline.py` monkeypatch seams intact so the existing operating-model contract tests did not need to retarget onto the new helper module
+- updated the active maintainer and operations docs so serving publication sequencing now points at `backend/analytics/refresh_publication.py` instead of describing those state transitions as ad hoc `pipeline.py` branches
+
+Validation:
+- `git diff --check -- backend/analytics/pipeline.py backend/analytics/refresh_publication.py docs/architecture/maintainer-guide.md docs/operations/OPERATIONS_PLAYBOOK.md`
+- `./.venv_local/bin/python -m py_compile backend/analytics/pipeline.py backend/analytics/refresh_publication.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_operating_model_contract.py::test_run_refresh_publish_only_republishes_cached_payloads_without_recompute backend/tests/test_operating_model_contract.py::test_run_refresh_publishes_before_deep_health_diagnostics backend/tests/test_operating_model_contract.py::test_load_publishable_payloads_prefers_durable_serving_payloads backend/tests/test_operating_model_contract.py::test_run_model_pipeline_clears_pending_after_serving_refresh backend/tests/test_projection_only_serving_cadence.py::test_validate_projection_only_serving_outputs_raises_on_native_downgrade backend/tests/test_projection_only_serving_cadence.py::test_publish_only_refresh_fails_when_projection_only_ticker_is_downgraded`
+
+Validation blockers:
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 15 keeps the blocker recorded instead of widening scope into a repair
+
+Notes:
+- the landed extraction stayed inside the publish/persist/diagnostics rollback boundary; it did not pull refresh-context or core-read ownership changes into the same commit
+
+## Slice 16
+
+Scope:
+- `backend/analytics/pipeline.py`
+- `backend/orchestration/stage_serving.py`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/architecture-invariants.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- narrowed `backend/orchestration/stage_serving.py` so workspace `data_db` / `cache_db` paths no longer force local core reads on their own
+- hoisted the projection-only locals in `backend/analytics/pipeline.py` so the reused and rebuilt universe-loadings paths share one variable-definition contract
+- updated the active architecture, invariants, maintainer, and operations docs to describe the narrower serving-lane authority rule precisely
+- accepted the adversarial-review narrowing explicitly: this landed as a serving authority-selection correction, not as a broad extraction of all remaining `run_refresh` refresh-context and projection-assembly logic
+
+Validation:
+- `git diff --check -- backend/analytics/pipeline.py backend/orchestration/stage_serving.py docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/architecture-invariants.md docs/architecture/maintainer-guide.md docs/operations/OPERATIONS_PLAYBOOK.md`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_projection_only_serving_cadence.py::test_run_serving_stage_requests_projection_refresh_on_core_lane backend/tests/test_projection_only_serving_cadence.py::test_run_serving_stage_does_not_request_projection_refresh_on_serving_only_lane backend/tests/test_projection_only_serving_cadence.py::test_run_refresh_uses_persisted_projection_outputs_on_serving_rebuild backend/tests/test_projection_only_serving_cadence.py::test_run_refresh_recomputes_projection_outputs_when_persisted_asof_is_stale backend/tests/test_projection_only_serving_cadence.py::test_run_refresh_uses_canonical_projection_rows_when_workspace_has_none backend/tests/test_operating_model_contract.py::test_pipeline_prefers_fundamentals_asof backend/tests/test_operating_model_contract.py::test_light_refresh_can_fail_closed_when_stable_core_package_is_required backend/tests/test_operating_model_contract.py::test_run_stage_serving_refresh_uses_local_source_archive_for_local_publish_profiles backend/tests/test_operating_model_contract.py::test_run_stage_serving_refresh_keeps_neon_backend_for_canonical_serve_refresh backend/tests/test_operating_model_contract.py::test_run_stage_serving_refresh_uses_local_backend_during_core_rebuild backend/tests/test_operating_model_contract.py::test_run_stage_serving_refresh_passes_workspace_paths_without_mutating_core_reads`
+
+Validation blockers:
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 16 keeps the blocker recorded instead of widening scope into a repair
+
+Notes:
+- this execution-log entry is intentionally explicit that the landed Slice 16 commit was narrower than the original broader decomposition draft; the program should not pretend that `385799b` completed a larger helper-extraction sweep than it actually did

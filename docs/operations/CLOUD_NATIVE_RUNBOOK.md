@@ -93,6 +93,8 @@ Expected behavior:
 - no local refresh execution ownership
 - holdings writes may mark state dirty but return control-plane-required refresh metadata in cloud mode
 - fail closed if Neon-backed serving or runtime truth is unavailable instead of silently falling back to local SQLite
+- public durable serving-payload reads/writes stay behind `backend/data/serving_outputs.py`, while lower Neon/SQLite authority helpers remain non-public implementation detail
+- public runtime/control state reads and writes stay behind `backend/data/runtime_state.py`, while lower Neon/fallback authority helpers remain non-public implementation detail
 
 ### Backend control app
 
@@ -111,6 +113,8 @@ Expected behavior:
 - dispatches `serve-refresh` to the Cloud Run Job surface
 - does not need to expose public dashboard read routes
 - uses Neon-backed runtime/control truth and should fail closed when that authority is unavailable
+- serving publication sequencing lives in `backend/analytics/refresh_publication.py`; do not split publish-only republish, durable publish, and post-publish health patch back across ad hoc `pipeline.py` branches
+- workspace `data_db` / `cache_db` inputs handed to serving lanes are explicit file targets, not an automatic local-core-read override by themselves
 
 ### Frontend
 
@@ -167,7 +171,7 @@ This prevents a serve-only process from reconciling or mutating shared refresh s
 ## Cloud Readiness Gates
 
 Before real cloud reads or cloud `serve-refresh` ownership are treated as production-valid:
-- `security_master` bootstrap/parity must be satisfied
+- registry/policy/taxonomy/compat bootstrap and parity must be satisfied
 - source-sync expectations must be satisfied
 - stable-core expectations must be satisfied
 - Neon-readiness must be satisfied for the lanes being exposed

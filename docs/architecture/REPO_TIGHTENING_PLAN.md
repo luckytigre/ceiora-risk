@@ -969,6 +969,18 @@ Validation:
 Commit boundary:
 - refresh context, source-state, core-state, and projection assembly only
 
+#### Rebaseline After Slices 15-16
+
+Context:
+- Slice 15 landed as planned: publication sequencing now has an explicit owner in `backend/analytics/refresh_publication.py`
+- the landed Slice 16 commit was intentionally narrower than the original broader decomposition draft
+
+Revision:
+- treat Slice 16 as complete for the serving-lane authority correction that actually landed
+- do not assume that every possible remaining `run_refresh` helper extraction is now done; if more `pipeline.py` decomposition is still warranted later, it should return as a new explicitly scoped slice instead of being silently counted as already completed
+- the next priority remains the Neon decomposition chain rather than reopening `pipeline.py` immediately
+- during Slice 17, do not move `run_parity_audit()` just because it still lives in `backend/services/neon_stage2.py`; parity/report ownership remains part of Slice 18 unless a smaller rollback-safe seam is explicitly documented first
+
 #### Slice 17: Neon Source-Sync Contract Decomposition
 
 Goal:
@@ -977,6 +989,11 @@ Goal:
 Study first:
 - map `sync_from_sqlite_to_neon` responsibilities
 - preserve current fail-closed semantics, sync metadata behavior, and source-date rules
+- keep the study focused on source-sync-specific helpers inside `backend/services/neon_stage2.py`:
+  - schema/column alignment helpers that `sync_from_sqlite_to_neon()` needs
+  - source-sync metadata recording
+  - identifier-history backfill semantics
+- treat `run_parity_audit()` as out of scope for this slice unless the study proves a smaller rollback-safe extraction is required first
 
 Primary surfaces:
 - `backend/services/neon_stage2.py`
@@ -998,6 +1015,7 @@ Commit boundary:
 
 Execution note:
 - do not widen this slice into mirror, prune, or post-run publication cleanup
+- do not count parity-audit relocation as incidental cleanup here; that ownership remains with Slice 18
 
 #### Slice 18: Neon Mirror And Post-Run Publication Decomposition
 
@@ -1033,6 +1051,7 @@ Commit boundary:
 
 Execution note:
 - parity ownership lives in this slice, not slice 17
+- if parity helpers still need to move out of `backend/services/neon_stage2.py`, do that move here with the mirror/report consumers rather than burying it inside Slice 17
 - if the mirror result contract consumed by `finalize_run.py` or `post_run_publish.py` must change, split this into two commits:
   - `18A`: `neon_mirror.py` extraction with consumer contract unchanged
   - `18B`: consumer rewiring in `finalize_run.py` and `post_run_publish.py`
