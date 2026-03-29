@@ -8,7 +8,6 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from backend.universe.registry_sync import policy_defaults_for_legacy_coverage_role
 
-
 ACCOUNT_ID_RE = re.compile(r"^[a-z0-9_\-]{2,64}$")
 QTY_SCALE = Decimal("0.000001")
 IMPORT_MODES = {"replace_account", "upsert_absolute", "increment_delta"}
@@ -126,22 +125,26 @@ def _fetch_registry_ticker_resolution_rows(pg_conn, ticker_norm: str):
         if has_taxonomy
         else ""
     )
+    taxonomy_core_fallback = (
+        "CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 "
+        "AND COALESCE(tax.classification_ready, 0) = 1 THEN 1 ELSE 0 END"
+    )
     if has_policy and has_taxonomy:
-        allow_cuse_native_core = "COALESCE(pol.allow_cuse_native_core, CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 1 ELSE 0 END)"
-        allow_cpar_core_target = "COALESCE(pol.allow_cpar_core_target, CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 1 ELSE 0 END)"
-        allow_cuse_returns_projection = "COALESCE(pol.allow_cuse_returns_projection, CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 0 ELSE 1 END)"
+        allow_cuse_native_core = f"COALESCE(pol.allow_cuse_native_core, {taxonomy_core_fallback})"
+        allow_cpar_core_target = f"COALESCE(pol.allow_cpar_core_target, {taxonomy_core_fallback})"
+        allow_cuse_returns_projection = "COALESCE(pol.allow_cuse_returns_projection, 0)"
     elif has_policy:
         allow_cuse_native_core = "COALESCE(pol.allow_cuse_native_core, 0)"
         allow_cpar_core_target = "COALESCE(pol.allow_cpar_core_target, 0)"
         allow_cuse_returns_projection = "COALESCE(pol.allow_cuse_returns_projection, 0)"
     elif has_taxonomy:
-        allow_cuse_native_core = "CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 1 ELSE 0 END"
-        allow_cpar_core_target = "CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 1 ELSE 0 END"
-        allow_cuse_returns_projection = "CASE WHEN COALESCE(tax.is_single_name_equity, 0) = 1 THEN 0 ELSE 1 END"
+        allow_cuse_native_core = taxonomy_core_fallback
+        allow_cpar_core_target = taxonomy_core_fallback
+        allow_cuse_returns_projection = "0"
     else:
         allow_cuse_native_core = "0"
         allow_cpar_core_target = "0"
-        allow_cuse_returns_projection = "1"
+        allow_cuse_returns_projection = "0"
     is_single_name_equity = "COALESCE(tax.is_single_name_equity, 0)" if has_taxonomy else "0"
     classification_ready = "COALESCE(tax.classification_ready, 0)" if has_taxonomy else "0"
     with pg_conn.cursor() as cur:
@@ -187,16 +190,13 @@ def _fetch_compat_ticker_resolution_rows(pg_conn, ticker_norm: str):
 def ric_exists(pg_conn, ric: str) -> tuple[bool, str | None]:
     clean_ric = normalize_ric(ric)
     registry_available = _pg_table_exists(pg_conn, "security_registry")
-    compat_available = _pg_table_exists(pg_conn, "security_master_compat_current")
-    row = (
-        _lookup_active_registry_ticker_for_ric(pg_conn, clean_ric)
-        if registry_available
-        else (_lookup_compat_ticker_for_ric(pg_conn, clean_ric) if compat_available else None)
-    )
     if registry_available:
+        row = _lookup_active_registry_ticker_for_ric(pg_conn, clean_ric)
         if row:
             return True, (str(row[0]).upper().strip() if row[0] is not None else None)
         return False, None
+    compat_available = _pg_table_exists(pg_conn, "security_master_compat_current")
+    row = _lookup_compat_ticker_for_ric(pg_conn, clean_ric) if compat_available else None
     if not row:
         return False, None
     return True, (str(row[0]).upper().strip() if row[0] is not None else None)
@@ -205,12 +205,11 @@ def ric_exists(pg_conn, ric: str) -> tuple[bool, str | None]:
 def resolve_ticker_to_ric_internal(pg_conn, ticker: str) -> tuple[str | None, list[str]]:
     ticker_norm = normalize_ticker(ticker)
     registry_available = _pg_table_exists(pg_conn, "security_registry")
-    compat_available = _pg_table_exists(pg_conn, "security_master_compat_current")
-    rows = (
-        _fetch_registry_ticker_resolution_rows(pg_conn, ticker_norm)
-        if registry_available
-        else (_fetch_compat_ticker_resolution_rows(pg_conn, ticker_norm) if compat_available else [])
-    )
+    if registry_available:
+        rows = _fetch_registry_ticker_resolution_rows(pg_conn, ticker_norm)
+    else:
+        compat_available = _pg_table_exists(pg_conn, "security_master_compat_current")
+        rows = _fetch_compat_ticker_resolution_rows(pg_conn, ticker_norm) if compat_available else []
     if not rows:
         return None, []
 
