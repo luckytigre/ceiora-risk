@@ -107,8 +107,9 @@ It does not add:
 
 All cPAR read routes use the durable relational `cpar_*` tables through the cPAR data facade.
 Each backend response pins one active `package_run_id` before reading dependent rows, so one payload does not silently mix active-package metadata from one package with fit or covariance reads from a later package.
-The shared account-scoped snapshot/context/support core for the portfolio hedge and what-if flows now lives in `backend/services/cpar_portfolio_snapshot_service.py`.
-The route-facing hedge payload owner now lives in `backend/services/cpar_portfolio_hedge_service.py`, so the hedge route no longer depends on `backend/services/cpar_portfolio_snapshot_service.py` owning both the shared core and the route-facing load path.
+The shared account-context/support loaders for the portfolio hedge and what-if flows now live in `backend/services/cpar_portfolio_snapshot_service.py`.
+The shared account-scoped hedge snapshot builder now lives in `backend/services/cpar_portfolio_account_snapshot_service.py`, with `backend/services/cpar_portfolio_snapshot_service.py` keeping a forwarding compatibility seam for `build_cpar_portfolio_hedge_snapshot()` while callers migrate.
+The route-facing hedge payload owner now lives in `backend/services/cpar_portfolio_hedge_service.py`, so the hedge route no longer depends on `backend/services/cpar_portfolio_snapshot_service.py` owning both the shared account loaders and the route-facing load path.
 The shared holdings/account dependency for those account-scoped routes lives below that service owner in `backend/data/holdings_reads.py`; cPAR portfolio flows do not reach sideways into cUSE4 holdings or what-if services.
 
 These routes do not:
@@ -137,11 +138,13 @@ Account-scoped owners:
 - `GET /api/cpar/portfolio/hedge` remains owned by `backend/services/cpar_portfolio_hedge_service.py`
 - `POST /api/cpar/portfolio/whatif` remains owned by `backend/services/cpar_portfolio_whatif_service.py`
 - `backend/services/cpar_portfolio_hedge_service.py` now owns the route-facing hedge payload assembly
-- `backend/services/cpar_portfolio_snapshot_service.py` still owns the shared account-scoped hedge snapshot builder reused by both the hedge and what-if services
+- `backend/services/cpar_portfolio_account_snapshot_service.py` now owns the shared account-scoped hedge snapshot builder reused by both the hedge and what-if services
+- `backend/services/cpar_portfolio_snapshot_service.py` keeps the shared package/account/support-row loaders plus the compatibility seam for `build_cpar_portfolio_hedge_snapshot()`
 - aggregate current/hypothetical package-pinned snapshots reused by `POST /api/cpar/explore/whatif` now also flow through `backend/services/cpar_aggregate_risk_service.py`
-- `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower snapshot/context/support/core owner for all three flows
+- `backend/services/cpar_portfolio_snapshot_service.py` remains the shared lower account-context/support/helper-core owner for all three flows
 - the shared lower support/core now supports:
-  - account-scoped hedge/what-if assembly
+  - account-scoped hedge/what-if context and support-row loading
+  - the shared account-scoped hedge snapshot builder in `backend/services/cpar_portfolio_account_snapshot_service.py`
   - aggregate risk assembly for `/api/cpar/risk`
   - aggregate current/hypothetical snapshot assembly for `POST /api/cpar/explore/whatif`
 - shared contract fields include:

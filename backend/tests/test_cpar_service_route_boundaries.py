@@ -15,6 +15,7 @@ SERVICE_FILES = [
     REPO_ROOT / "backend" / "services" / "cpar_risk_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_factor_history_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_portfolio_snapshot_service.py",
+    REPO_ROOT / "backend" / "services" / "cpar_portfolio_account_snapshot_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_portfolio_hedge_service.py",
     REPO_ROOT / "backend" / "services" / "cpar_portfolio_whatif_service.py",
 ]
@@ -196,6 +197,23 @@ def test_cpar_snapshot_service_does_not_import_aggregate_owner() -> None:
     path = REPO_ROOT / "backend" / "services" / "cpar_portfolio_snapshot_service.py"
 
     assert "backend.services.cpar_aggregate_risk_service" not in _imported_modules(path)
+
+
+def test_cpar_snapshot_service_forwards_account_scoped_hedge_builder_to_lower_owner() -> None:
+    path = REPO_ROOT / "backend" / "services" / "cpar_portfolio_snapshot_service.py"
+
+    assert _attribute_call_count(
+        path,
+        alias="cpar_portfolio_account_snapshot_service",
+        attribute="build_cpar_portfolio_hedge_snapshot",
+    ) == 1
+
+
+def test_cpar_account_snapshot_service_does_not_import_snapshot_service() -> None:
+    path = REPO_ROOT / "backend" / "services" / "cpar_portfolio_account_snapshot_service.py"
+
+    assert "backend.services.cpar_portfolio_snapshot_service" not in _imported_modules(path)
+
 
 def test_cpar_snapshot_service_does_not_define_account_scoped_hedge_owner_functions() -> None:
     path = REPO_ROOT / "backend" / "services" / "cpar_portfolio_snapshot_service.py"

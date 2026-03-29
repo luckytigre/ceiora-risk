@@ -4,7 +4,12 @@ import pytest
 
 from backend.cpar.factor_registry import CPAR1_METHOD_VERSION
 from backend.data import cpar_outputs, cpar_source_reads
-from backend.services import cpar_aggregate_risk_service, cpar_meta_service, cpar_portfolio_snapshot_service
+from backend.services import (
+    cpar_aggregate_risk_service,
+    cpar_meta_service,
+    cpar_portfolio_account_snapshot_service,
+    cpar_portfolio_snapshot_service,
+)
 
 
 def _package() -> dict[str, object]:
@@ -41,6 +46,31 @@ def test_account_context_maps_typed_holdings_failures_to_unavailable(
 
     with pytest.raises(cpar_meta_service.CparReadUnavailable, match="Holdings read failed"):
         cpar_portfolio_snapshot_service.load_cpar_portfolio_account_context(account_id="acct_main")
+
+
+def test_snapshot_service_forwards_hedge_snapshot_builder_to_account_snapshot_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = {"forwarded": True}
+
+    monkeypatch.setattr(
+        cpar_portfolio_account_snapshot_service,
+        "build_cpar_portfolio_hedge_snapshot",
+        lambda **kwargs: sentinel,
+    )
+
+    payload = cpar_portfolio_snapshot_service.build_cpar_portfolio_hedge_snapshot(
+        package=_package(),
+        account={"account_id": "acct_main", "account_name": "Main"},
+        positions=[],
+        mode="factor_neutral",
+        fit_by_ric={},
+        price_by_ric={},
+        classification_by_ric={},
+        covariance_rows=[],
+    )
+
+    assert payload is sentinel
 
 
 def test_account_context_does_not_swallow_unexpected_holdings_bugs(

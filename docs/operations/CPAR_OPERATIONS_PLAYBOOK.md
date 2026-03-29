@@ -107,10 +107,11 @@ Current frontend-backed read surfaces:
 The route-facing `/api/cpar/risk` service in `backend/services/cpar_risk_service.py` is now a thin shim over `backend/services/cpar_aggregate_risk_service.py`.
 That aggregate owner still reuses the shared support/core in `backend/services/cpar_portfolio_snapshot_service.py`, which underpins:
 - aggregate `/api/cpar/risk`
-- account-scoped snapshot/context/support rows for `/api/cpar/portfolio/hedge` and `/api/cpar/portfolio/whatif`
+- account-scoped context/support rows for `/api/cpar/portfolio/hedge` and `/api/cpar/portfolio/whatif`
 - aggregate current/hypothetical comparison states for `POST /api/cpar/explore/whatif`
 `GET /api/cpar/portfolio/hedge` is now the explicit route-facing hedge payload owner in `backend/services/cpar_portfolio_hedge_service.py`.
-`POST /api/cpar/portfolio/whatif` still reuses the shared account-scoped snapshot builder in `backend/services/cpar_portfolio_snapshot_service.py` so one request keeps one package/context/support-row set for both `current` and `hypothetical`.
+The shared account-scoped hedge snapshot builder now lives in `backend/services/cpar_portfolio_account_snapshot_service.py`, while `backend/services/cpar_portfolio_snapshot_service.py` keeps the account-context/support loaders plus a forwarding compatibility seam for `build_cpar_portfolio_hedge_snapshot()`.
+`POST /api/cpar/portfolio/whatif` still reuses that shared account-scoped hedge snapshot builder so one request keeps one package/context/support-row set for both `current` and `hypothetical`.
 `POST /api/cpar/explore/whatif` now calls the explicit aggregate owner directly for those aggregate current/hypothetical snapshots.
 That shared snapshot now carries explicit `coverage_breakdown`, residualized `factor_variance_contributions`, additive residualized `display_factor_variance_contributions`, residualized `factor_chart`, additive explanatory `display_factor_chart`, per-position `thresholded_contributions`, additive `display_contributions`, package-owned `risk_shares`, `factor_variance_proxy`, `idio_variance_proxy`, `total_variance_proxy`, row-level `risk_mix`, and the package-pinned `cov_matrix`; those fields are still derived read surfaces from the same package-scoped snapshot, not a second risk engine.
 For aggregate `/cpar/risk`, the shared snapshot now also carries additive `display_cov_matrix`, derived read-time from the persisted proxy-return panel plus persisted market-orthogonalization transforms. That display matrix is package-pinned and explanatory; hedge previews still translate into raw ETF trade space separately.

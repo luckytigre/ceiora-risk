@@ -705,6 +705,38 @@ Validation:
 Commit boundary:
 - cPAR route-facing hedge-owner extraction only
 
+#### Slice 10B: cPAR Account Snapshot Decomposition Part B
+
+Goal:
+- extract the shared account-scoped hedge snapshot builder into an explicit lower owner
+- keep `cpar_portfolio_snapshot_service.build_cpar_portfolio_hedge_snapshot()` as a forwarding compatibility seam while callers stay stable
+
+Study first:
+- confirm the direct caller set for `build_cpar_portfolio_hedge_snapshot()`
+- move only hedge-specific builder code; leave aggregate-risk helper reuse in `cpar_portfolio_snapshot_service.py`
+
+Primary surfaces:
+- `backend/services/cpar_portfolio_account_snapshot_service.py`
+- `backend/services/cpar_portfolio_snapshot_service.py`
+- `backend/tests/test_cpar_portfolio_snapshot_service.py`
+- `backend/tests/test_cpar_runtime_coverage_contract.py`
+- `backend/tests/test_cpar_service_route_boundaries.py`
+
+Required doc updates:
+- `docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/CPAR_BACKEND_READ_SURFACES.md`
+- `docs/operations/CPAR_OPERATIONS_PLAYBOOK.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+
+Validation:
+- `git diff --check -- <touched paths>`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_cpar_portfolio_snapshot_service.py backend/tests/test_cpar_portfolio_hedge_service.py backend/tests/test_cpar_portfolio_whatif_service.py backend/tests/test_cpar_runtime_coverage_contract.py backend/tests/test_cpar_service_route_boundaries.py backend/tests/test_cpar_routes.py::test_cpar_portfolio_hedge_route_returns_payload backend/tests/test_cpar_routes.py::test_cpar_portfolio_whatif_route_returns_payload`
+- `make doctor`
+
+Commit boundary:
+- cPAR shared hedge-snapshot builder extraction with compatibility shim only
+
 #### Slice 11: Mixed-State Read-Layer Split Part A
 
 Goal:

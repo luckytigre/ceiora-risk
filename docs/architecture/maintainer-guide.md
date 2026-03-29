@@ -85,7 +85,9 @@ Practical rule:
   - `backend/services/cpar_portfolio_snapshot_service.py` stays the shared support/core owner below those route-facing owners
 - when touching account-scoped cPAR hedge/what-if snapshot assembly, keep the split explicit:
   - `backend/services/cpar_portfolio_hedge_service.py` is the explicit route-facing hedge payload owner
-  - `backend/services/cpar_portfolio_snapshot_service.py` stays the shared account-scoped snapshot/context/support/core owner below both the hedge and what-if services
+  - `backend/services/cpar_portfolio_snapshot_service.py` stays the shared account-context/support/helper-core owner below both the hedge and what-if services
+  - `backend/services/cpar_portfolio_account_snapshot_service.py` owns the shared account-scoped hedge snapshot builder below those services
+  - `backend/services/cpar_portfolio_snapshot_service.py::build_cpar_portfolio_hedge_snapshot()` is compatibility only while callers migrate; do not grow new logic there
   - `backend/services/cpar_portfolio_whatif_service.py` should keep one package/context/support-row set for `current` and `hypothetical` instead of rereading through the hedge route
 - when touching default cUSE4 frontend imports, prefer the explicit cUSE4 surfaces:
   - `frontend/src/hooks/useCuse4Api.ts`
