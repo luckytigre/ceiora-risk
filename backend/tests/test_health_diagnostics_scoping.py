@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from backend.analytics import health
+from backend.data.cross_section_snapshot import ensure_cross_section_snapshot_table
 from backend.risk_model.factor_catalog import STYLE_COLUMN_TO_LABEL
 
 
@@ -112,3 +113,27 @@ def test_compute_exposure_turnover_only_builds_sampled_dates(monkeypatch) -> Non
 
     assert built_dates == ["2026-01-01", "2026-01-03"]
     assert [row["date"] for row in rows] == ["2026-01-03"]
+
+
+def test_load_core_runtime_identity_prefers_latest_snapshot_surface(tmp_path: Path) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        ensure_cross_section_snapshot_table(conn)
+        conn.executemany(
+            """
+            INSERT INTO universe_cross_section_snapshot (ric, ticker, as_of_date, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                ("OLD.OQ", "OLD", "2026-03-14", "2026-03-14T00:00:00Z"),
+                ("KEEP.OQ", "KEEP", "2026-03-21", "2026-03-21T00:00:00Z"),
+            ],
+        )
+        conn.commit()
+
+        out = health._load_core_runtime_identity(conn)
+    finally:
+        conn.close()
+
+    assert out.to_dict("records") == [{"ric": "KEEP.OQ", "ticker": "KEEP"}]

@@ -22,8 +22,6 @@ from backend.risk_model.factor_catalog import (
 )
 from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
 from backend.data.sqlite import cache_get
-from backend.universe.runtime_rows import load_security_runtime_rows
-
 ANNUALIZATION = 252.0
 HEALTH_CORE_COUNTRY_CODES = {"US"}
 logger = logging.getLogger(__name__)
@@ -889,18 +887,36 @@ def _load_equity_price_bounds(conn: sqlite3.Connection) -> pd.DataFrame:
 
 
 def _load_core_runtime_identity(conn: sqlite3.Connection) -> pd.DataFrame:
-    runtime_rows = load_security_runtime_rows(conn, include_disabled=False)
-    runtime_df = pd.DataFrame(runtime_rows)
-    if runtime_df.empty:
-        return pd.DataFrame(columns=["ric", "ticker"])
-    runtime_df["ric"] = runtime_df["ric"].astype(str).str.upper()
-    runtime_df["ticker"] = runtime_df["ticker"].astype(str).str.upper()
-    runtime_df = runtime_df[
-        runtime_df["allow_cuse_native_core"].astype(int).eq(1)
-        & runtime_df["is_single_name_equity"].astype(int).eq(1)
-        & runtime_df["classification_ready"].astype(int).eq(1)
-    ][["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
-    return runtime_df.reset_index(drop=True)
+    for table in ("universe_cross_section_snapshot", "barra_raw_cross_section_history"):
+        cols = {
+            str(row[1])
+            for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if "ric" not in cols or "as_of_date" not in cols:
+            continue
+        ticker_expr = "UPPER(COALESCE(MAX(ticker), '')) AS ticker" if "ticker" in cols else "'' AS ticker"
+        df = pd.read_sql_query(
+            f"""
+            WITH latest AS (
+                SELECT MAX(as_of_date) AS as_of_date
+                FROM {table}
+            )
+            SELECT
+                UPPER(ric) AS ric,
+                {ticker_expr}
+            FROM {table}
+            WHERE as_of_date = (SELECT as_of_date FROM latest)
+            GROUP BY UPPER(ric)
+            ORDER BY UPPER(ric)
+            """,
+            conn,
+        )
+        if df.empty:
+            continue
+        df["ric"] = df["ric"].astype(str).str.upper()
+        df["ticker"] = df["ticker"].astype(str).str.upper()
+        return df[["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last").reset_index(drop=True)
+    return pd.DataFrame(columns=["ric", "ticker"])
 
 
 def _load_equity_tickers(conn: sqlite3.Connection) -> set[str]:

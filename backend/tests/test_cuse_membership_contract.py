@@ -10,6 +10,12 @@ from backend.analytics.services.risk_views import build_positions_from_snapshot
 from backend.analytics.services.universe_loadings import build_universe_ticker_loadings
 from backend.data.cuse_membership_reads import load_cuse_membership_rows, load_cuse_stage_result_rows
 from backend.data.model_outputs import persist_model_outputs
+from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
+from backend.universe.schema import ensure_cuse4_schema
+
+
+def _ensure_estu_membership_daily_table(conn: sqlite3.Connection) -> None:
+    ensure_cuse4_schema(conn)
 
 
 def _seed_factor_returns(cache_db: Path) -> None:
@@ -45,65 +51,165 @@ def _seed_factor_returns(cache_db: Path) -> None:
 
 def _seed_source_context(data_db: Path) -> None:
     conn = sqlite3.connect(str(data_db))
-    conn.execute(
-        """
-        CREATE TABLE security_master (
-            ric TEXT PRIMARY KEY,
-            ticker TEXT,
-            classification_ok INTEGER NOT NULL DEFAULT 0,
-            is_equity_eligible INTEGER NOT NULL DEFAULT 0,
-            coverage_role TEXT
-        )
-        """
-    )
+    ensure_cuse4_schema(conn)
     conn.executemany(
         """
         INSERT INTO security_master (
-            ric, ticker, classification_ok, is_equity_eligible, coverage_role
-        ) VALUES (?, ?, ?, ?, ?)
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            ("AAPL.OQ", "AAPL", 1, 1, "native_equity"),
-            ("SPY.P", "SPY", 0, 0, "projection_only"),
+            ("AAPL.OQ", "AAPL", 1, 1, "native_equity", "seed", "2026-03-01T00:00:00+00:00"),
+            ("SPY.P", "SPY", 0, 0, "projection_only", "seed", "2026-03-01T00:00:00+00:00"),
         ],
     )
-    conn.execute(
-        """
-        CREATE TABLE security_classification_pit (
-            ric TEXT NOT NULL,
-            as_of_date TEXT NOT NULL,
-            trbc_business_sector TEXT,
-            hq_country_code TEXT
-        )
-        """
+    _seed_eligibility_inputs(
+        conn,
+        [
+            {
+                "ric": "AAPL.OQ",
+                "ticker": "AAPL",
+                "as_of_date": "2026-03-13",
+                "market_cap": 100.0,
+                "trbc_economic_sector": "Technology",
+                "trbc_business_sector": "Technology Equipment",
+                "hq_country_code": "US",
+            }
+        ],
     )
-    conn.execute(
-        """
-        INSERT INTO security_classification_pit (
-            ric, as_of_date, trbc_business_sector, hq_country_code
-        ) VALUES ('AAPL.OQ', '2026-03-13', 'Technology Equipment', 'US')
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE estu_membership_daily (
-            date TEXT NOT NULL,
-            ric TEXT NOT NULL,
-            estu_flag INTEGER NOT NULL DEFAULT 0,
-            drop_reason TEXT,
-            drop_reason_detail TEXT
-        )
-        """
-    )
+    _ensure_estu_membership_daily_table(conn)
     conn.execute(
         """
         INSERT INTO estu_membership_daily (
-            date, ric, estu_flag, drop_reason, drop_reason_detail
-        ) VALUES ('2026-03-13', 'AAPL.OQ', 1, '', '')
+            date, ric, estu_flag, drop_reason, drop_reason_detail, source, updated_at
+        ) VALUES ('2026-03-13', 'AAPL.OQ', 1, '', '', 'test', '2026-03-13T00:00:00Z')
         """
     )
     conn.commit()
     conn.close()
+
+
+def _seed_eligibility_inputs(
+    conn: sqlite3.Connection,
+    rows: list[dict[str, object]],
+) -> None:
+    def _table_columns(table: str) -> set[str]:
+        return {
+            str(record[1])
+            for record in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+
+    style_cols = list(STYLE_COLUMN_TO_LABEL.keys())
+    style_sql = ",\n            ".join(f"{column} REAL" for column in style_cols)
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS barra_raw_cross_section_history (
+            ric TEXT NOT NULL,
+            ticker TEXT,
+            as_of_date TEXT NOT NULL,
+            {style_sql}
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS security_fundamentals_pit (
+            ric TEXT NOT NULL,
+            as_of_date TEXT NOT NULL,
+            market_cap REAL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS security_classification_pit (
+            ric TEXT NOT NULL,
+            as_of_date TEXT NOT NULL,
+            trbc_economic_sector TEXT,
+            trbc_business_sector TEXT,
+            hq_country_code TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    fundamentals_cols = _table_columns("security_fundamentals_pit")
+    classification_cols = _table_columns("security_classification_pit")
+    raw_placeholders = ", ".join("?" for _ in range(3 + len(style_cols)))
+    raw_columns = ", ".join(style_cols)
+    for row in rows:
+        as_of_date = str(row["as_of_date"])
+        ric = str(row["ric"])
+        ticker = str(row.get("ticker") or ric.split(".")[0])
+        style_values = [1.0 for _ in style_cols]
+        conn.execute(
+            f"""
+            INSERT INTO barra_raw_cross_section_history (
+                ric, ticker, as_of_date, {raw_columns}
+            ) VALUES ({raw_placeholders})
+            """,
+            [ric, ticker, as_of_date, *style_values],
+        )
+        if {"stat_date", "period_end_date"}.issubset(fundamentals_cols):
+            conn.execute(
+                """
+                INSERT INTO security_fundamentals_pit (
+                    ric, as_of_date, stat_date, period_end_date, market_cap, source, job_run_id, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ric,
+                    as_of_date,
+                    as_of_date,
+                    as_of_date,
+                    float(row.get("market_cap") or 100.0),
+                    "test",
+                    "job_1",
+                    f"{as_of_date}T00:00:00Z",
+                ),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO security_fundamentals_pit (
+                    ric, as_of_date, market_cap
+                ) VALUES (?, ?, ?)
+                """,
+                (ric, as_of_date, float(row.get("market_cap") or 100.0)),
+            )
+        if {"source", "job_run_id"}.issubset(classification_cols):
+            conn.execute(
+                """
+                INSERT INTO security_classification_pit (
+                    ric, as_of_date, trbc_economic_sector, trbc_business_sector, hq_country_code, source, job_run_id, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ric,
+                    as_of_date,
+                    row.get("trbc_economic_sector"),
+                    row.get("trbc_business_sector"),
+                    row.get("hq_country_code"),
+                    "test",
+                    "job_1",
+                    f"{as_of_date}T00:00:00Z",
+                ),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO security_classification_pit (
+                    ric, as_of_date, trbc_economic_sector, trbc_business_sector, hq_country_code, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ric,
+                    as_of_date,
+                    row.get("trbc_economic_sector"),
+                    row.get("trbc_business_sector"),
+                    row.get("hq_country_code"),
+                    f"{as_of_date}T00:00:00Z",
+                ),
+            )
 
 
 def test_persist_model_outputs_writes_cuse_membership_and_stage_rows(
@@ -295,63 +401,43 @@ def test_build_cuse_membership_payloads_use_runtime_state_by_row_as_of_date(tmp_
 
     data_db = tmp_path / "data.db"
     conn = sqlite3.connect(str(data_db))
-    conn.execute(
-        """
-        CREATE TABLE security_master (
-            ric TEXT PRIMARY KEY,
-            ticker TEXT,
-            classification_ok INTEGER NOT NULL DEFAULT 0,
-            is_equity_eligible INTEGER NOT NULL DEFAULT 0,
-            coverage_role TEXT
-        )
-        """
-    )
+    ensure_cuse4_schema(conn)
     conn.execute(
         """
         INSERT INTO security_master (
-            ric, ticker, classification_ok, is_equity_eligible, coverage_role
-        ) VALUES ('AAPL.OQ', 'AAPL', 1, 1, 'native_equity')
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES ('AAPL.OQ', 'AAPL', 1, 1, 'native_equity', 'seed', '2026-03-01T00:00:00+00:00')
         """
     )
-    conn.execute(
-        """
-        CREATE TABLE security_classification_pit (
-            ric TEXT NOT NULL,
-            as_of_date TEXT NOT NULL,
-            trbc_business_sector TEXT,
-            trbc_economic_sector TEXT,
-            hq_country_code TEXT,
-            updated_at TEXT
-        )
-        """
-    )
-    conn.executemany(
-        """
-        INSERT INTO security_classification_pit (
-            ric, as_of_date, trbc_business_sector, trbc_economic_sector, hq_country_code, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        """,
+    _seed_eligibility_inputs(
+        conn,
         [
-            ("AAPL.OQ", "2026-03-06", "Technology Equipment", "Technology", "US", "2026-03-06T00:00:00Z"),
-            ("AAPL.OQ", "2026-03-13", "Technology Equipment", "Technology", "NL", "2026-03-13T00:00:00Z"),
+            {
+                "ric": "AAPL.OQ",
+                "ticker": "AAPL",
+                "as_of_date": "2026-03-06",
+                "market_cap": 100.0,
+                "trbc_economic_sector": "Technology",
+                "trbc_business_sector": "Technology Equipment",
+                "hq_country_code": "US",
+            },
+            {
+                "ric": "AAPL.OQ",
+                "ticker": "AAPL",
+                "as_of_date": "2026-03-13",
+                "market_cap": 110.0,
+                "trbc_economic_sector": "Technology",
+                "trbc_business_sector": "Technology Equipment",
+                "hq_country_code": "NL",
+            },
         ],
     )
-    conn.execute(
-        """
-        CREATE TABLE estu_membership_daily (
-            date TEXT NOT NULL,
-            ric TEXT NOT NULL,
-            estu_flag INTEGER NOT NULL DEFAULT 0,
-            drop_reason TEXT,
-            drop_reason_detail TEXT
-        )
-        """
-    )
+    _ensure_estu_membership_daily_table(conn)
     conn.executemany(
         """
         INSERT INTO estu_membership_daily (
-            date, ric, estu_flag, drop_reason, drop_reason_detail
-        ) VALUES (?, 'AAPL.OQ', 1, '', '')
+            date, ric, estu_flag, drop_reason, drop_reason_detail, source, updated_at
+        ) VALUES (?, 'AAPL.OQ', 1, '', '', 'test', '2026-03-13T00:00:00Z')
         """,
         [("2026-03-06",), ("2026-03-13",)],
     )
@@ -392,3 +478,233 @@ def test_build_cuse_membership_payloads_use_runtime_state_by_row_as_of_date(tmp_
     assert membership_by_date["2026-03-06"][4] == "core_estimated"
     assert membership_by_date["2026-03-13"][3] == "fundamental_projection_candidate"
     assert membership_by_date["2026-03-13"][4] == "projected_fundamental"
+
+
+def test_build_cuse_membership_payloads_uses_eligibility_reason_for_structural_failure(tmp_path: Path) -> None:
+    from backend.risk_model.cuse_membership import build_cuse_membership_payloads
+
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    conn.execute(
+        """
+        CREATE TABLE security_master (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            classification_ok INTEGER NOT NULL DEFAULT 0,
+            is_equity_eligible INTEGER NOT NULL DEFAULT 0,
+            coverage_role TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role
+        ) VALUES ('AAPL.OQ', 'AAPL', 1, 1, 'native_equity')
+        """
+    )
+    _seed_eligibility_inputs(
+        conn,
+        [
+            {
+                "ric": "AAPL.OQ",
+                "ticker": "AAPL",
+                "as_of_date": "2026-03-13",
+                "market_cap": 100.0,
+                "trbc_economic_sector": "Technology",
+                "trbc_business_sector": None,
+                "hq_country_code": "US",
+            }
+        ],
+    )
+    _ensure_estu_membership_daily_table(conn)
+    conn.commit()
+    conn.close()
+
+    membership_payload, stage_payload = build_cuse_membership_payloads(
+        data_db=data_db,
+        universe_payload={
+            "by_ticker": {
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "ric": "AAPL.OQ",
+                    "as_of_date": "2026-03-13",
+                    "model_status": "core_estimated",
+                    "model_status_reason": "",
+                    "exposure_origin": "native",
+                    "exposures": {"market": 1.0},
+                }
+            }
+        },
+        risk_engine_state={"core_state_through_date": "2026-03-13"},
+        run_id="run_1",
+        updated_at="2026-03-16T00:01:00Z",
+    )
+
+    assert membership_payload[0][8] == "missing_trbc_industry"
+    stage_map = {row[2]: row for row in stage_payload if row[1] == "AAPL.OQ"}
+    assert stage_map["structural_eligible"][3] == "failed"
+    assert stage_map["structural_eligible"][4] == "missing_trbc_industry"
+
+
+def test_build_cuse_membership_payloads_force_local_eligibility_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.risk_model.cuse_membership import build_cuse_membership_payloads
+
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    conn.execute(
+        """
+        CREATE TABLE security_master (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            classification_ok INTEGER NOT NULL DEFAULT 0,
+            is_equity_eligible INTEGER NOT NULL DEFAULT 0,
+            coverage_role TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role
+        ) VALUES ('AAPL.OQ', 'AAPL', 1, 1, 'native_equity')
+        """
+    )
+    _seed_eligibility_inputs(
+        conn,
+        [
+            {
+                "ric": "AAPL.OQ",
+                "ticker": "AAPL",
+                "as_of_date": "2026-03-13",
+                "market_cap": 100.0,
+                "trbc_economic_sector": "Technology",
+                "trbc_business_sector": "Technology Equipment",
+                "hq_country_code": "US",
+            }
+        ],
+    )
+    _ensure_estu_membership_daily_table(conn)
+    conn.execute(
+        """
+        INSERT INTO estu_membership_daily (
+            date, ric, estu_flag, drop_reason, drop_reason_detail, source, updated_at
+        ) VALUES ('2026-03-13', 'AAPL.OQ', 1, '', '', 'test', '2026-03-13T00:00:00Z')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("backend.risk_model.eligibility.core_backend.use_neon_core_reads", lambda: True)
+
+    membership_payload, _stage_payload = build_cuse_membership_payloads(
+        data_db=data_db,
+        universe_payload={
+            "by_ticker": {
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "ric": "AAPL.OQ",
+                    "as_of_date": "2026-03-13",
+                    "model_status": "core_estimated",
+                    "model_status_reason": "",
+                    "exposure_origin": "native",
+                    "exposures": {"market": 1.0},
+                }
+            }
+        },
+        risk_engine_state={"core_state_through_date": "2026-03-13"},
+        run_id="run_1",
+        updated_at="2026-03-16T00:01:00Z",
+    )
+
+    assert membership_payload[0][3] == "native_core_candidate"
+
+
+def test_build_cuse_membership_payloads_do_not_fallback_to_compat_when_registry_empty(
+    tmp_path: Path,
+) -> None:
+    from backend.risk_model.cuse_membership import build_cuse_membership_payloads
+
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    conn.execute(
+        """
+        CREATE TABLE security_registry (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            isin TEXT,
+            exchange_name TEXT,
+            tracking_status TEXT,
+            source TEXT,
+            job_run_id TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE security_master (
+            ric TEXT PRIMARY KEY,
+            ticker TEXT,
+            classification_ok INTEGER NOT NULL DEFAULT 0,
+            is_equity_eligible INTEGER NOT NULL DEFAULT 0,
+            coverage_role TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role
+        ) VALUES (
+            'AAPL.OQ', 'AAPL', 1, 1, 'projection_only'
+        )
+        """
+    )
+    _seed_eligibility_inputs(
+        conn,
+        [
+            {
+                "ric": "AAPL.OQ",
+                "ticker": "AAPL",
+                "as_of_date": "2026-03-13",
+                "market_cap": 100.0,
+                "trbc_economic_sector": "Technology",
+                "trbc_business_sector": "Technology Equipment",
+                "hq_country_code": "US",
+            },
+        ],
+    )
+    _ensure_estu_membership_daily_table(conn)
+    conn.execute(
+        """
+        INSERT INTO estu_membership_daily (
+            date, ric, estu_flag, drop_reason, drop_reason_detail, source, updated_at
+        ) VALUES ('2026-03-13', 'AAPL.OQ', 1, '', '', 'test', '2026-03-13T00:00:00Z')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    membership_payload, _stage_payload = build_cuse_membership_payloads(
+        data_db=data_db,
+        universe_payload={
+            "by_ticker": {
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "ric": "AAPL.OQ",
+                    "as_of_date": "2026-03-13",
+                    "model_status": "core_estimated",
+                    "model_status_reason": "",
+                    "exposure_origin": "native",
+                    "exposures": {"market": 1.0},
+                },
+            }
+        },
+        risk_engine_state={"core_state_through_date": "2026-03-13"},
+        run_id="run_compat_off",
+        updated_at="2026-03-16T00:01:00Z",
+    )
+
+    assert membership_payload[0][3] == "native_core_candidate"
+    assert membership_payload[0][4] == "core_estimated"

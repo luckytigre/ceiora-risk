@@ -7,6 +7,10 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from backend.risk_model.eligibility import (
+    build_eligibility_context,
+    structural_eligibility_for_date,
+)
 from backend.universe.runtime_rows import load_security_runtime_map_by_date
 from backend.universe.schema import ESTU_MEMBERSHIP_TABLE
 
@@ -98,6 +102,29 @@ def _load_estu_rows(
         for as_of_date, ric, estu_flag, drop_reason, drop_reason_detail in rows
         if _text(as_of_date) and _text(ric)
     }
+
+
+def _load_structural_eligibility_rows_by_date(
+    *,
+    data_db: Path,
+    as_of_dates: list[str],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    clean_dates = sorted({value for value in as_of_dates if _text(value)})
+    if not clean_dates:
+        return {}
+    context = build_eligibility_context(data_db, dates=clean_dates, force_local=True)
+    rows_by_date: dict[str, dict[str, dict[str, Any]]] = {}
+    for as_of_date in clean_dates:
+        _, frame = structural_eligibility_for_date(context, as_of_date)
+        if frame.empty:
+            rows_by_date[as_of_date] = {}
+            continue
+        rows_by_date[as_of_date] = {
+            _upper(ric): dict(values)
+            for ric, values in frame.to_dict(orient="index").items()
+            if _upper(ric)
+        }
+    return rows_by_date
 
 
 def _derive_realized_role(*, model_status: str, exposure_origin: str) -> str:
@@ -246,11 +273,15 @@ def build_cuse_membership_payloads(
             rics=unique_rics,
             as_of_dates=runtime_dates,
             include_disabled=True,
-            allow_empty_registry_fallback=True,
+            allow_empty_registry_fallback=False,
         )
         estu_rows = _load_estu_rows(conn, rics=unique_rics, as_of_dates=unique_dates)
     finally:
         conn.close()
+    eligibility_rows_by_date = _load_structural_eligibility_rows_by_date(
+        data_db=data_db,
+        as_of_dates=runtime_dates,
+    )
 
     membership_payload: list[tuple[Any, ...]] = []
     stage_payload: list[tuple[Any, ...]] = []
@@ -271,28 +302,22 @@ def build_cuse_membership_payloads(
         allow_native_core = bool(int(source_row.get("allow_cuse_native_core") or 0) == 1)
         allow_fundamental_projection = bool(int(source_row.get("allow_cuse_fundamental_projection") or 0) == 1)
         allow_returns_projection = bool(int(source_row.get("allow_cuse_returns_projection") or 0) == 1)
-        if source_row:
-            structural_eligible = bool(
-                int(source_row.get("is_single_name_equity") or 0) == 1
-                and int(source_row.get("classification_ready") or 0) == 1
-                and (allow_native_core or allow_fundamental_projection)
-            )
-        else:
-            structural_eligible = bool(
-                exposure_origin != "projected"
-                and (
-                    model_status in {"core_estimated", "projected_only"}
-                    or reason_code == "missing_factor_exposures"
-                )
-            )
-        hq_country_code = _upper(source_row.get("issuer_country_code")) or _infer_country_from_ric(ric)
-        core_country_eligible = bool(structural_eligible and hq_country_code == "US" and (allow_native_core or not source_row))
+        eligibility_row = ((eligibility_rows_by_date.get(as_of_date) or {}).get(ric, {}) if as_of_date and ric else {})
+        structural_reason = _text(eligibility_row.get("exclusion_reason"))
+        structural_eligible = bool(_bool(eligibility_row.get("is_structural_eligible")))
+        hq_country_code = (
+            _upper(eligibility_row.get("hq_country_code"))
+            or _upper(source_row.get("issuer_country_code"))
+            or _infer_country_from_ric(ric)
+        )
+        core_country_eligible = bool(structural_eligible and hq_country_code == "US")
         regression_candidate = core_country_eligible
         realized_role = _derive_realized_role(model_status=model_status, exposure_origin=exposure_origin)
         regression_member = realized_role == "core_estimated"
         estu_candidate = core_country_eligible
         estu_row = estu_rows.get((as_of_date, ric), {}) if ric and as_of_date else {}
         estu_member = bool(estu_candidate and int(estu_row.get("estu_flag") or 0) == 1)
+        effective_reason_code = reason_code or structural_reason or _text(estu_row.get("drop_reason"))
         fundamental_projection_candidate = bool(allow_fundamental_projection or (structural_eligible and not core_country_eligible))
         returns_projection_candidate = bool(
             allow_returns_projection
@@ -368,7 +393,7 @@ def build_cuse_membership_payloads(
                 output_status,
                 projection_candidate_status,
                 projection_output_status,
-                reason_code or None,
+                effective_reason_code or None,
                 quality_label,
                 source_snapshot_status,
                 projection_method or None,
@@ -380,7 +405,7 @@ def build_cuse_membership_payloads(
             )
         )
 
-        stage_reason = reason_code or _text(estu_row.get("drop_reason"))
+        stage_reason = effective_reason_code
         stage_detail_base = {
             "ticker": ticker,
             "model_status": model_status,
@@ -413,6 +438,7 @@ def build_cuse_membership_payloads(
             detail={
                 **stage_detail_base,
                 "instrument_kind": _text(source_row.get("instrument_kind")),
+                "eligibility_exclusion_reason": structural_reason,
                 "classification_ready": int(source_row.get("classification_ready") or 0),
                 "is_single_name_equity": int(source_row.get("is_single_name_equity") or 0),
                 "allow_cuse_native_core": int(source_row.get("allow_cuse_native_core") or 0),

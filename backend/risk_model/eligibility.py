@@ -36,16 +36,28 @@ def _use_neon_reads() -> bool:
     return core_backend.use_neon_core_reads()
 
 
-def _fetch_rows(data_db: Path, sql: str, params: list[object] | None = None) -> list[dict[str, object]]:
+def _should_use_neon_reads(*, force_local: bool = False) -> bool:
+    if force_local:
+        return False
+    return _use_neon_reads()
+
+
+def _fetch_rows(
+    data_db: Path,
+    sql: str,
+    params: list[object] | None = None,
+    *,
+    force_local: bool = False,
+) -> list[dict[str, object]]:
     return core_backend.fetch_rows(
         sql,
         params,
         data_db=data_db,
-        neon_enabled=_use_neon_reads(),
+        neon_enabled=_should_use_neon_reads(force_local=force_local),
     )
 
 
-def _table_columns_neon(data_db: Path, table: str) -> set[str]:
+def _table_columns_neon(data_db: Path, table: str, *, force_local: bool = False) -> set[str]:
     rows = _fetch_rows(
         data_db,
         """
@@ -54,6 +66,7 @@ def _table_columns_neon(data_db: Path, table: str) -> set[str]:
         WHERE table_schema='public' AND table_name=?
         """,
         [table],
+        force_local=force_local,
     )
     return {
         str(row.get("column_name") or "")
@@ -116,8 +129,8 @@ def most_recent_date(sorted_dates: list[str], target: str) -> str | None:
     return out
 
 
-def load_trading_dates(data_db: Path) -> list[str]:
-    if _use_neon_reads():
+def load_trading_dates(data_db: Path, *, force_local: bool = False) -> list[str]:
+    if _should_use_neon_reads(force_local=force_local):
         rows = _fetch_rows(
             data_db,
             """
@@ -126,6 +139,7 @@ def load_trading_dates(data_db: Path) -> list[str]:
             WHERE date IS NOT NULL
             ORDER BY date
             """,
+            force_local=force_local,
         )
         return [str(row.get("date")) for row in rows if row.get("date")]
     conn = sqlite3.connect(str(data_db))
@@ -147,11 +161,12 @@ def load_exposure_snapshots(
     data_db: Path,
     *,
     dates: list[str] | None = None,
+    force_local: bool = False,
 ) -> tuple[list[str], dict[str, pd.DataFrame]]:
     """Load exposure snapshots keyed by as_of_date (RIC-indexed)."""
-    if _use_neon_reads():
+    if _should_use_neon_reads(force_local=force_local):
         source_table = "barra_raw_cross_section_history"
-        cols = _table_columns_neon(data_db, source_table)
+        cols = _table_columns_neon(data_db, source_table, force_local=force_local)
         if not {"ric", "as_of_date"}.issubset(cols):
             return [], {}
         style_cols = [c for c in STYLE_COLUMN_TO_LABEL.keys() if c in cols]
@@ -174,6 +189,7 @@ def load_exposure_snapshots(
                 ORDER BY as_of_date
                 """,
                 [upper_bound],
+                force_local=force_local,
             )
             snapshot_dates = [str(row.get("as_of_date")) for row in snapshot_rows if row.get("as_of_date")]
             lower_bound = most_recent_date(snapshot_dates, requested_dates[0])
@@ -192,6 +208,7 @@ def load_exposure_snapshots(
             ORDER BY as_of_date, ric
             """,
             params,
+            force_local=force_local,
         )
         df = pd.DataFrame(rows)
     else:
@@ -265,10 +282,10 @@ def load_exposure_snapshots(
     return sorted(snapshots.keys()), snapshots
 
 
-def _load_market_cap_panel(data_db: Path, dates: list[str]) -> pd.DataFrame:
+def _load_market_cap_panel(data_db: Path, dates: list[str], *, force_local: bool = False) -> pd.DataFrame:
     if not dates:
         return pd.DataFrame()
-    if _use_neon_reads():
+    if _should_use_neon_reads(force_local=force_local):
         df = pd.DataFrame(
             _fetch_rows(
                 data_db,
@@ -279,6 +296,7 @@ def _load_market_cap_panel(data_db: Path, dates: list[str]) -> pd.DataFrame:
                 ORDER BY f.as_of_date, UPPER(f.ric)
                 """,
                 [dates[-1]],
+                force_local=force_local,
             )
         )
     else:
@@ -315,13 +333,15 @@ def _load_market_cap_panel(data_db: Path, dates: list[str]) -> pd.DataFrame:
 def _load_trbc_classification_panel(
     data_db: Path,
     dates: list[str],
+    *,
+    force_local: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if not dates:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     parts: list[pd.DataFrame] = []
-    if _use_neon_reads():
-        hcols = _table_columns_neon(data_db, "security_classification_pit")
+    if _should_use_neon_reads(force_local=force_local):
+        hcols = _table_columns_neon(data_db, "security_classification_pit", force_local=force_local)
         h_biz_col = pick_trbc_business_sector_column(hcols)
         h_ind_col = pick_trbc_industry_column(hcols)
         h_sec_col = _pick_trbc_economic_sector_short_column(hcols)
@@ -341,6 +361,7 @@ def _load_trbc_classification_panel(
                     WHERE h.as_of_date <= ?
                     """,
                     [dates[-1]],
+                    force_local=force_local,
                 )
             )
             if not hist.empty:
@@ -390,10 +411,10 @@ def _load_trbc_classification_panel(
     df["trbc_business_sector"] = _normalize_text_series(df["trbc_business_sector"])
     df["trbc_industry_group"] = _normalize_text_series(df["trbc_industry_group"])
     df["hq_country_code"] = _normalize_text_series(df["hq_country_code"]).str.upper()
-    df["trbc_economic_sector_short"] = df["trbc_economic_sector_short"].replace({"": np.nan})
-    df["trbc_business_sector"] = df["trbc_business_sector"].replace({"": np.nan})
-    df["trbc_industry_group"] = df["trbc_industry_group"].replace({"": np.nan})
-    df["hq_country_code"] = df["hq_country_code"].replace({"": np.nan})
+    df["trbc_economic_sector_short"] = df["trbc_economic_sector_short"].mask(df["trbc_economic_sector_short"].eq(""), pd.NA)
+    df["trbc_business_sector"] = df["trbc_business_sector"].mask(df["trbc_business_sector"].eq(""), pd.NA)
+    df["trbc_industry_group"] = df["trbc_industry_group"].mask(df["trbc_industry_group"].eq(""), pd.NA)
+    df["hq_country_code"] = df["hq_country_code"].mask(df["hq_country_code"].eq(""), pd.NA)
     df = df.dropna(subset=["ric", "ref_date"])
     df = (
         df.sort_values(["ref_date", "priority"])
@@ -438,12 +459,14 @@ def _load_trbc_classification_panel(
 def _load_panels_from_cross_section_snapshot(
     data_db: Path,
     dates: list[str],
+    *,
+    force_local: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if not dates:
         empty = pd.DataFrame()
         return empty, empty, empty, empty
-    if _use_neon_reads():
-        cols = _table_columns_neon(data_db, "universe_cross_section_snapshot")
+    if _should_use_neon_reads(force_local=force_local):
+        cols = _table_columns_neon(data_db, "universe_cross_section_snapshot", force_local=force_local)
         if not cols:
             empty = pd.DataFrame()
             return empty, empty, empty, empty
@@ -470,23 +493,24 @@ def _load_panels_from_cross_section_snapshot(
             else "'' AS trbc_business_sector"
         )
         df = pd.DataFrame(
-            _fetch_rows(
-                data_db,
-                f"""
-                SELECT
-                    ticker,
+                _fetch_rows(
+                    data_db,
+                    f"""
+                    SELECT
+                        ticker,
                     as_of_date AS ref_date,
                     market_cap,
                     {sector_expr},
                     {business_expr},
                     trbc_industry_group
-                FROM universe_cross_section_snapshot
-                WHERE as_of_date <= ?
-                ORDER BY as_of_date, ticker
-                """,
-                [dates[-1]],
+                    FROM universe_cross_section_snapshot
+                    WHERE as_of_date <= ?
+                    ORDER BY as_of_date, ticker
+                    """,
+                    [dates[-1]],
+                    force_local=force_local,
+                )
             )
-        )
     else:
         conn = sqlite3.connect(str(data_db))
         try:
@@ -541,9 +565,18 @@ def _load_panels_from_cross_section_snapshot(
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["ref_date"] = df["ref_date"].astype(str)
     df["market_cap"] = pd.to_numeric(df["market_cap"], errors="coerce")
-    df["trbc_economic_sector_short"] = _normalize_text_series(df["trbc_economic_sector_short"]).replace({"": np.nan})
-    df["trbc_business_sector"] = _normalize_text_series(df["trbc_business_sector"]).replace({"": np.nan})
-    df["trbc_industry_group"] = _normalize_text_series(df["trbc_industry_group"]).replace({"": np.nan})
+    df["trbc_economic_sector_short"] = _normalize_text_series(df["trbc_economic_sector_short"]).mask(
+        lambda s: s.eq(""),
+        pd.NA,
+    )
+    df["trbc_business_sector"] = _normalize_text_series(df["trbc_business_sector"]).mask(
+        lambda s: s.eq(""),
+        pd.NA,
+    )
+    df["trbc_industry_group"] = _normalize_text_series(df["trbc_industry_group"]).mask(
+        lambda s: s.eq(""),
+        pd.NA,
+    )
 
     market = df.pivot(index="ref_date", columns="ticker", values="market_cap").sort_index()
     sec = df.pivot(index="ref_date", columns="ticker", values="trbc_economic_sector_short").sort_index()
@@ -568,21 +601,27 @@ def build_eligibility_context(
     data_db: Path,
     *,
     dates: list[str] | None = None,
+    force_local: bool = False,
 ) -> EligibilityContext:
-    exposure_dates, snapshots = load_exposure_snapshots(data_db, dates=dates)
+    exposure_dates, snapshots = load_exposure_snapshots(data_db, dates=dates, force_local=force_local)
     if dates is None:
-        trading_dates = load_trading_dates(data_db)
+        trading_dates = load_trading_dates(data_db, force_local=force_local)
         # Include exposure dates so non-trading snapshot dates still resolve.
         merged_dates = sorted(set(trading_dates).union(exposure_dates))
     else:
         merged_dates = sorted(set(str(d) for d in dates))
 
-    market_cap_panel = _load_market_cap_panel(data_db, merged_dates)
-    sector_panel, business_sector_panel, industry_panel, country_panel = _load_trbc_classification_panel(data_db, merged_dates)
+    market_cap_panel = _load_market_cap_panel(data_db, merged_dates, force_local=force_local)
+    sector_panel, business_sector_panel, industry_panel, country_panel = _load_trbc_classification_panel(
+        data_db,
+        merged_dates,
+        force_local=force_local,
+    )
     if market_cap_panel.empty or sector_panel.empty or business_sector_panel.empty or industry_panel.empty:
         snap_market, snap_sector, snap_business, snap_industry = _load_panels_from_cross_section_snapshot(
             data_db,
             merged_dates,
+            force_local=force_local,
         )
         if market_cap_panel.empty:
             market_cap_panel = snap_market
@@ -631,11 +670,17 @@ def structural_eligibility_for_snapshot(
         return pd.DataFrame()
 
     non_equity = set(non_equity_sectors or NON_EQUITY_ECONOMIC_SECTORS)
-    style_cols = required_style_cols or list(STYLE_COLUMN_TO_LABEL.keys())
+    style_cols = (
+        list(STYLE_COLUMN_TO_LABEL.keys())
+        if required_style_cols is None
+        else list(required_style_cols)
+    )
     idx = pd.Index(exposure_snapshot.index.astype(str).str.upper(), name="ric")
     frame = pd.DataFrame(index=idx)
 
-    if style_cols and all(c in exposure_snapshot.columns for c in style_cols):
+    if not style_cols:
+        frame["has_all_style"] = True
+    elif all(c in exposure_snapshot.columns for c in style_cols):
         s = exposure_snapshot.reindex(columns=style_cols)
         finite = s.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
         frame["has_all_style"] = finite.notna().all(axis=1)

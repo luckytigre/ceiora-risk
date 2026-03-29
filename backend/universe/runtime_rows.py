@@ -352,7 +352,7 @@ def _candidate_runtime_rics(
                 if requested:
                     return fallback_rics | requested_compat_fallback_rics
                 return fallback_rics
-            return requested_compat_fallback_rics if requested else set()
+            return set()
         scoped_registry_rics = _requested_registry_rics(
             registry_rows=registry_rows,
             requested_rics=requested_rics,

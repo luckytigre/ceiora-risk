@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from backend.risk_model.descriptors import assemble_full_style_scores
+from backend.risk_model.eligibility import structural_eligibility_for_snapshot
 from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
 from backend.data.trbc_schema import (
     ensure_trbc_naming,
@@ -20,7 +21,7 @@ from backend.data.trbc_schema import (
     pick_trbc_industry_column,
 )
 from backend.trading_calendar import filter_xnys_sessions
-from backend.universe.runtime_rows import load_security_runtime_map_by_date
+from backend.universe.runtime_rows import load_security_runtime_rows
 from backend.universe.security_master_sync import load_default_source_universe_rows
 
 logger = logging.getLogger(__name__)
@@ -351,6 +352,30 @@ def _normalize_text(series: pd.Series) -> pd.Series:
     )
 
 
+def _load_runtime_identity(conn: sqlite3.Connection) -> pd.DataFrame:
+    runtime_rows = load_security_runtime_rows(
+        conn,
+        include_disabled=False,
+        allow_empty_registry_fallback=False,
+    )
+    if not runtime_rows:
+        return pd.DataFrame(columns=["ric", "ticker"])
+    runtime_identity = pd.DataFrame(
+        [
+            {
+                "ric": row.get("ric"),
+                "ticker": row.get("ticker"),
+            }
+            for row in runtime_rows
+        ]
+    )
+    if runtime_identity.empty:
+        return pd.DataFrame(columns=["ric", "ticker"])
+    runtime_identity["ric"] = runtime_identity["ric"].astype(str).str.upper()
+    runtime_identity["ticker"] = runtime_identity["ticker"].astype(str).str.upper()
+    return runtime_identity[["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
+
+
 def rebuild_raw_cross_section_history(
     data_db: Path,
     *,
@@ -400,36 +425,9 @@ def rebuild_raw_cross_section_history(
         ).date().isoformat()
         max_date = dates[-1]
 
-        runtime_rows_by_date = load_security_runtime_map_by_date(
-            conn,
-            as_of_dates=dates,
-            include_disabled=False,
-            allow_empty_registry_fallback=True,
-        )
-        runtime_identity = pd.DataFrame(
-            [
-                {
-                    "as_of_date": as_of_date,
-                    "ric": row.get("ric"),
-                    "ticker": row.get("ticker"),
-                    "allow_cuse_native_core": row.get("allow_cuse_native_core"),
-                    "is_single_name_equity": row.get("is_single_name_equity"),
-                    "classification_ready": row.get("classification_ready"),
-                }
-                for as_of_date, runtime_map in runtime_rows_by_date.items()
-                for row in runtime_map.values()
-            ]
-        )
+        runtime_identity = _load_runtime_identity(conn)
         if runtime_identity.empty:
             return {"status": "no-runtime-identity", "rows_upserted": 0, "table": TABLE}
-        runtime_identity["as_of_date"] = runtime_identity["as_of_date"].astype(str)
-        runtime_identity["ric"] = runtime_identity["ric"].astype(str).str.upper()
-        runtime_identity["ticker"] = runtime_identity["ticker"].astype(str).str.upper()
-        runtime_identity = runtime_identity[
-            runtime_identity["allow_cuse_native_core"].astype(int).eq(1)
-            & runtime_identity["is_single_name_equity"].astype(int).eq(1)
-            & runtime_identity["classification_ready"].astype(int).eq(1)
-        ][["ric", "ticker", "as_of_date"]].drop_duplicates(subset=["ric", "as_of_date"], keep="last")
         default_source_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
         if default_source_rows:
             default_source_rics = {
@@ -441,7 +439,7 @@ def rebuild_raw_cross_section_history(
                 runtime_identity["ric"].astype(str).str.upper().isin(default_source_rics)
             ]
         if runtime_identity.empty:
-            return {"status": "no-runtime-core-identity", "rows_upserted": 0, "table": TABLE}
+            return {"status": "no-runtime-identity", "rows_upserted": 0, "table": TABLE}
         runtime_union_identity = runtime_identity[["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
         runtime_rics = runtime_union_identity["ric"].astype(str).tolist()
         runtime_placeholders = ",".join("?" for _ in runtime_rics)
@@ -486,7 +484,7 @@ def rebuild_raw_cross_section_history(
         base = base.rename(columns={"date": "as_of_date", "close": "price_close", "volume": "price_volume"})
         base["as_of_date_dt"] = pd.to_datetime(base["as_of_date"], errors="coerce")
         base = base.dropna(subset=["as_of_date_dt"])
-        base = base.merge(runtime_identity, on=["ric", "ticker", "as_of_date"], how="inner")
+        base = base.merge(runtime_union_identity, on=["ric", "ticker"], how="inner")
         if base.empty:
             return {"status": "no-base", "rows_upserted": 0, "table": TABLE}
 
@@ -525,7 +523,7 @@ def rebuild_raw_cross_section_history(
             )
         if not fundamentals.empty:
             fundamentals["ric"] = fundamentals["ric"].astype(str).str.upper()
-            fundamentals = fundamentals.merge(runtime_identity, on="ric", how="left")
+            fundamentals = fundamentals.merge(runtime_union_identity, on="ric", how="left")
             fundamentals["ticker"] = fundamentals["ticker"].astype(str).str.upper()
             fundamentals["fetch_date"] = fundamentals["fetch_date"].astype(str)
             fundamentals["fetch_date_dt"] = pd.to_datetime(fundamentals["fetch_date"], errors="coerce")
@@ -574,7 +572,8 @@ def rebuild_raw_cross_section_history(
                     c.as_of_date,
                     c.{trbc_sec_col} AS trbc_economic_sector_short,
                     c.{trbc_biz_col} AS trbc_business_sector,
-                    {f"c.{trbc_ind_col}" if trbc_ind_col else "NULL"} AS trbc_industry_group_l3
+                    {f"c.{trbc_ind_col}" if trbc_ind_col else "NULL"} AS trbc_industry_group,
+                    COALESCE(UPPER(TRIM(c.hq_country_code)), '') AS hq_country_code
                 FROM {CLASSIFICATION_TABLE} c
                 WHERE c.as_of_date <= ?
                   AND UPPER(c.ric) IN ({runtime_placeholders})
@@ -591,8 +590,9 @@ def rebuild_raw_cross_section_history(
                 trbc["as_of_date_dt"] = pd.to_datetime(trbc["as_of_date"], errors="coerce")
                 trbc = trbc.dropna(subset=["as_of_date_dt"])
                 trbc["trbc_economic_sector_short"] = _normalize_text(trbc["trbc_economic_sector_short"])
-                trbc["trbc_industry_group_l3"] = _normalize_text(trbc.get("trbc_industry_group_l3"))
+                trbc["trbc_industry_group"] = _normalize_text(trbc.get("trbc_industry_group"))
                 trbc["trbc_business_sector"] = _normalize_text(trbc["trbc_business_sector"])
+                trbc["hq_country_code"] = _normalize_text(trbc["hq_country_code"]).str.upper()
                 trbc = trbc.sort_values(["ric", "as_of_date"]).drop_duplicates(
                     subset=["ric", "as_of_date"], keep="last"
                 )
@@ -649,7 +649,17 @@ def rebuild_raw_cross_section_history(
         if not trbc.empty:
             out = _merge_asof_by_ric(
                 out,
-                trbc[["ric", "ticker", "as_of_date_dt", "trbc_economic_sector_short", "trbc_business_sector"]],
+                trbc[
+                    [
+                        "ric",
+                        "ticker",
+                        "as_of_date_dt",
+                        "trbc_economic_sector_short",
+                        "trbc_business_sector",
+                        "trbc_industry_group",
+                        "hq_country_code",
+                    ]
+                ],
                 left_date_col="as_of_date_dt",
                 right_date_col="as_of_date_dt",
             )
@@ -658,6 +668,8 @@ def rebuild_raw_cross_section_history(
         out["ticker"] = out["ticker"].astype(str).str.upper()
         out["trbc_economic_sector_short"] = _normalize_text(out.get("trbc_economic_sector_short", pd.Series(index=out.index)))
         out["trbc_business_sector"] = _normalize_text(out.get("trbc_business_sector", pd.Series(index=out.index)))
+        out["trbc_industry_group"] = _normalize_text(out.get("trbc_industry_group", pd.Series(index=out.index)))
+        out["hq_country_code"] = _normalize_text(out.get("hq_country_code", pd.Series(index=out.index))).str.upper()
 
         # Rebuild beta against a lagged-cap market proxy after PIT market caps are merged.
         out = out.sort_values(["ric", "as_of_date"]).reset_index(drop=True)
@@ -693,9 +705,15 @@ def rebuild_raw_cross_section_history(
                 var = rm.rolling(252, min_periods=60).var()
                 return cov / var.replace(0.0, np.nan)
 
+            beta_parts: list[pd.Series] = []
+            for _, grp in out.groupby("ric", sort=False):
+                beta = _rolling_beta_from_proxy(grp)
+                beta.index = grp.index
+                beta_parts.append(beta)
             out["beta_raw"] = (
-                out.groupby("ric", sort=False, group_keys=False)[["ret_1d", "beta_market_ret"]]
-                .apply(_rolling_beta_from_proxy)
+                pd.concat(beta_parts).sort_index()
+                if beta_parts
+                else pd.Series(dtype=float)
             )
 
         market_cap = pd.to_numeric(out.get("market_cap"), errors="coerce")
@@ -814,6 +832,72 @@ def rebuild_raw_cross_section_history(
                             "progress_kind": "cross_sections",
                         }
                     )
+
+        keep_mask = pd.Series(False, index=out.index, dtype=bool)
+        eligibility_groups = list(out.groupby("as_of_date", sort=False).groups.items())
+        total_eligibility_groups = len(eligibility_groups)
+        for group_i, (as_of, idx) in enumerate(eligibility_groups, start=1):
+            grp = out.loc[idx]
+            exposure_snapshot = grp.set_index("ric")[_SCORE_COLS].copy()
+            required_style_cols = [
+                column
+                for column in _SCORE_COLS
+                if column in exposure_snapshot.columns and exposure_snapshot[column].notna().any()
+            ]
+            market_caps = pd.to_numeric(grp.set_index("ric")["market_cap"], errors="coerce")
+            economic_sectors = grp.set_index("ric")["trbc_economic_sector_short"]
+            business_sectors = grp.set_index("ric")["trbc_business_sector"]
+            industries = grp.set_index("ric")["trbc_industry_group"]
+            countries = grp.set_index("ric")["hq_country_code"]
+            eligibility_df = structural_eligibility_for_snapshot(
+                exposure_snapshot=exposure_snapshot,
+                market_caps=market_caps,
+                trbc_economic_sector_shorts=economic_sectors,
+                trbc_business_sectors=business_sectors,
+                trbc_industries=industries,
+                hq_country_codes=countries,
+                required_style_cols=required_style_cols,
+            )
+            if eligibility_df.empty:
+                if progress_callback is not None and (group_i % 250 == 0 or group_i == total_eligibility_groups):
+                    progress_callback(
+                        {
+                            "message": f"Evaluated structural eligibility through {as_of}",
+                            "items_processed": int(group_i),
+                            "items_total": int(total_eligibility_groups),
+                            "unit": "cross_sections",
+                            "progress_pct": round((float(group_i) / max(1.0, float(total_eligibility_groups))) * 100.0, 1),
+                            "current_as_of": str(as_of),
+                            "progress_kind": "eligibility",
+                        }
+                    )
+                continue
+            keep_rics = {
+                str(ric).upper()
+                for ric in eligibility_df.index[
+                    eligibility_df["is_structural_eligible"].astype(bool)
+                ]
+            }
+            if keep_rics:
+                keep_mask.loc[idx] = grp["ric"].astype(str).str.upper().isin(keep_rics).to_numpy()
+            if progress_callback is not None and (group_i % 250 == 0 or group_i == total_eligibility_groups):
+                progress_callback(
+                    {
+                        "message": f"Evaluated structural eligibility through {as_of}",
+                        "items_processed": int(group_i),
+                        "items_total": int(total_eligibility_groups),
+                        "unit": "cross_sections",
+                        "progress_pct": round((float(group_i) / max(1.0, float(total_eligibility_groups))) * 100.0, 1),
+                        "current_as_of": str(as_of),
+                        "progress_kind": "eligibility",
+                    }
+                )
+        out = out.loc[keep_mask.to_numpy()].copy()
+        if out.empty:
+            for d in sorted(set(dates)):
+                conn.execute(f"DELETE FROM {TABLE} WHERE as_of_date = ?", (d,))
+            conn.commit()
+            return {"status": "no-structural-eligible-rows", "rows_upserted": 0, "table": TABLE}
 
         # Quality metadata
         present = out[required_desc].notna().sum(axis=1).astype(float)

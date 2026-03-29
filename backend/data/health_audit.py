@@ -8,9 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from backend.universe.runtime_rows import load_security_runtime_rows
-
-
 CORE_TABLES = [
     "security_registry",
     "security_policy_current",
@@ -51,7 +48,7 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
         """
         SELECT 1
         FROM sqlite_master
-        WHERE type='table' AND name=?
+        WHERE type IN ('table', 'view') AND name=?
         LIMIT 1
         """,
         (table,),
@@ -70,7 +67,6 @@ def _preferred_registry_anchor(conn: sqlite3.Connection) -> tuple[str | None, st
     for table, alias in (
         ("security_registry", "reg"),
         ("security_master_compat_current", "compat"),
-        ("security_master", "sm"),
     ):
         if _table_has_rows(conn, table):
             return table, alias
@@ -78,25 +74,44 @@ def _preferred_registry_anchor(conn: sqlite3.Connection) -> tuple[str | None, st
 
 
 def _runtime_core_identity(conn: sqlite3.Connection) -> tuple[set[str], set[str]]:
-    rows = load_security_runtime_rows(conn, include_disabled=False)
-    if not rows:
-        return set(), set()
-    core_rics: set[str] = set()
-    core_tickers: set[str] = set()
-    for row in rows:
-        if int(row.get("allow_cuse_native_core") or 0) != 1:
+    for table in ("universe_cross_section_snapshot", "barra_raw_cross_section_history"):
+        if not _table_has_rows(conn, table):
             continue
-        if int(row.get("is_single_name_equity") or 0) != 1:
+        cols = {
+            str(row[1])
+            for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if "ric" not in cols or "as_of_date" not in cols:
             continue
-        if int(row.get("classification_ready") or 0) != 1:
+        ticker_expr = "UPPER(COALESCE(MAX(ticker), '')) AS ticker" if "ticker" in cols else "'' AS ticker"
+        rows = conn.execute(
+            f"""
+            WITH latest AS (
+                SELECT MAX(as_of_date) AS as_of_date
+                FROM {table}
+            )
+            SELECT
+                UPPER(ric) AS ric,
+                {ticker_expr}
+            FROM {table}
+            WHERE as_of_date = (SELECT as_of_date FROM latest)
+            GROUP BY UPPER(ric)
+            """
+        ).fetchall()
+        if not rows:
             continue
-        ric = str(row.get("ric") or "").strip().upper()
-        ticker = str(row.get("ticker") or "").strip().upper()
-        if ric:
-            core_rics.add(ric)
-        if ticker:
-            core_tickers.add(ticker)
-    return core_rics, core_tickers
+        core_rics = {
+            str(row[0] or "").strip().upper()
+            for row in rows
+            if str(row[0] or "").strip()
+        }
+        core_tickers = {
+            str(row[1] or "").strip().upper()
+            for row in rows
+            if len(row) > 1 and str(row[1] or "").strip()
+        }
+        return core_rics, core_tickers
+    return set(), set()
 
 
 def run_sqlite_health_audit(

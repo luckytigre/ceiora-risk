@@ -9,7 +9,6 @@ from typing import Any
 import pandas as pd
 
 from backend.data.cross_section_snapshot_schema import TABLE, table_columns, table_exists
-from backend.universe.runtime_rows import load_security_runtime_rows
 from backend.universe.security_master_sync import load_default_source_universe_rows
 
 
@@ -26,24 +25,6 @@ def load_base_cross_sections(
     if "ric" not in source_cols or "as_of_date" not in source_cols:
         return pd.DataFrame(columns=["ric", "ticker", "as_of_date"])
 
-    runtime_rows = load_security_runtime_rows(
-        conn,
-        tickers=tickers,
-        include_disabled=False,
-    )
-    runtime_df = pd.DataFrame(runtime_rows)
-    if runtime_df.empty:
-        return pd.DataFrame(columns=["ric", "ticker", "as_of_date"])
-    runtime_df["ric"] = runtime_df["ric"].astype(str).str.upper()
-    runtime_df["ticker"] = runtime_df["ticker"].astype(str).str.upper()
-    runtime_df = runtime_df[
-        runtime_df["allow_cuse_native_core"].astype(int).eq(1)
-        & runtime_df["is_single_name_equity"].astype(int).eq(1)
-        & runtime_df["classification_ready"].astype(int).eq(1)
-    ][["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
-    if runtime_df.empty:
-        return pd.DataFrame(columns=["ric", "ticker", "as_of_date"])
-
     clauses: list[str] = []
     params: list[Any] = []
     if start_date:
@@ -52,16 +33,16 @@ def load_base_cross_sections(
     if end_date:
         clauses.append("e.as_of_date <= ?")
         params.append(str(end_date))
-    allowed_rics = runtime_df["ric"].astype(str).tolist()
-    if allowed_rics:
-        placeholders = ",".join("?" for _ in allowed_rics)
-        clauses.append(f"UPPER(e.ric) IN ({placeholders})")
-        params.extend(allowed_rics)
+    requested_tickers = [str(ticker).strip().upper() for ticker in (tickers or []) if str(ticker).strip()]
+    if requested_tickers and "ticker" in source_cols:
+        placeholders = ",".join("?" for _ in requested_tickers)
+        clauses.append(f"UPPER(e.ticker) IN ({placeholders})")
+        params.extend(requested_tickers)
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     if str(mode).strip().lower() == "full":
         df = pd.read_sql_query(
             f"""
-            SELECT DISTINCT UPPER(e.ric) AS ric, e.as_of_date
+            SELECT DISTINCT UPPER(e.ric) AS ric, UPPER(COALESCE(e.ticker, '')) AS ticker, e.as_of_date
             FROM {source_table} e
             {where_sql}
             ORDER BY UPPER(e.ric), e.as_of_date
@@ -74,6 +55,7 @@ def load_base_cross_sections(
             f"""
             SELECT
                 UPPER(e.ric) AS ric,
+                UPPER(COALESCE(MAX(e.ticker), '')) AS ticker,
                 MAX(e.as_of_date) AS as_of_date
             FROM {source_table} e
             {where_sql}
@@ -86,9 +68,6 @@ def load_base_cross_sections(
     if df.empty:
         return df
     df["ric"] = df["ric"].astype(str).str.upper()
-    df = df.merge(runtime_df, on="ric", how="inner")
-    if df.empty:
-        return df
     df["ticker"] = df["ticker"].astype(str).str.upper()
     df["as_of_date"] = df["as_of_date"].astype(str)
     source_universe_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
@@ -96,7 +75,13 @@ def load_base_cross_sections(
         source_universe = pd.DataFrame(source_universe_rows)
         source_universe["ric"] = source_universe["ric"].astype(str).str.upper()
         source_universe["ticker"] = source_universe["ticker"].astype(str).str.upper()
-        df = df.merge(source_universe, on=["ric", "ticker"], how="inner")
+        df = df.drop(columns=["ticker"], errors="ignore").merge(
+            source_universe,
+            on="ric",
+            how="inner",
+        )
+    if requested_tickers:
+        df = df[df["ticker"].astype(str).str.upper().isin(requested_tickers)]
     return df
 
 
