@@ -915,3 +915,56 @@ Validation blockers:
 
 Notes:
 - this slice intentionally preserved the broad `run_neon_mirror_cycle()` contract for finalize/post-run consumers while removing it from the `source_sync` stage path
+
+## Recut After 18A Review
+
+Assessment outcome:
+- multi-agent review agreed that the old `18B` plan was still combining two rollback boundaries:
+  - the live finalization consumer path
+  - the offline parity-repair/report path
+- the live path and the offline repair path should not move in one commit because a break in one should not force rollback of the other
+
+Re-cut remaining slices:
+- `18B1`: live finalization consumer rewiring only
+- `18B2`: offline parity-repair/report rewiring only
+- `19`: final doc sweep and acceptance
+
+Validation note:
+- `backend/tests/test_stage_execution.py` remains a useful sentinel only if workspace handoff fields change; it is not the center of gravity for the live finalization consumer contract
+
+## Slice 18B1
+
+Scope:
+- `backend/services/neon_mirror_reporting.py`
+- `backend/orchestration/run_model_pipeline.py`
+- `backend/orchestration/post_run_publish.py`
+- `backend/tests/test_neon_mirror_reporting.py`
+- `backend/tests/test_neon_mirror_integration.py`
+- `backend/tests/test_post_run_publish.py`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/architecture/REPO_TIGHTENING_PLAN.md`
+- `docs/operations/CLOUD_NATIVE_RUNBOOK.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- introduced `backend/services/neon_mirror_reporting.py` as the explicit live mirror-reporting owner for artifact persistence and runtime-health publication
+- rewired `backend/orchestration/run_model_pipeline.py` so finalization now receives mirror artifact and sync-health callables from `backend/services/neon_mirror_reporting.py`, not from the orchestration helper module
+- kept `backend/orchestration/post_run_publish.py` as the compatibility facade for those moved functions while leaving its offline parity-repair/report path in place for the later `18B2` slice
+- added direct tests for the new reporting owner so the live consumer rewire is not validated only through broad integration coverage
+- updated the active docs to distinguish:
+  - `backend/services/neon_mirror.py` as the broad mirror/parity owner
+  - `backend/services/neon_mirror_reporting.py` as the live artifact/health publication owner
+
+Validation:
+- `git diff --check -- backend/services/neon_mirror_reporting.py backend/orchestration/run_model_pipeline.py backend/orchestration/post_run_publish.py backend/tests/test_neon_mirror_reporting.py backend/tests/test_neon_mirror_integration.py backend/tests/test_post_run_publish.py docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/dependency-rules.md docs/architecture/maintainer-guide.md docs/architecture/REPO_TIGHTENING_PLAN.md docs/operations/CLOUD_NATIVE_RUNBOOK.md docs/operations/OPERATIONS_PLAYBOOK.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m py_compile backend/services/neon_mirror_reporting.py backend/orchestration/post_run_publish.py backend/orchestration/run_model_pipeline.py backend/tests/test_neon_mirror_reporting.py backend/tests/test_neon_mirror_integration.py backend/tests/test_post_run_publish.py backend/tests/test_stage_execution.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_neon_mirror_reporting.py backend/tests/test_neon_mirror_integration.py backend/tests/test_post_run_publish.py backend/tests/test_stage_execution.py`
+
+Validation blockers:
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 18B1 keeps the blocker recorded instead of widening scope into a repair
+
+Notes:
+- `backend/scripts/repair_neon_sync_health.py` and the offline parity-repair owner stay on the `18B2` side of the boundary

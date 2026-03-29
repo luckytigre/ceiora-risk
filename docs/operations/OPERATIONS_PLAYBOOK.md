@@ -135,7 +135,8 @@ Rebuild-authority rule:
     - `backend/services/neon_stage2.py` remains the public lower source-sync/parity facade; lower metadata/status lifecycle helpers now sit behind `backend/services/neon_source_sync_metadata.py`, and lower per-table overlap/backfill transfer helpers now sit behind `backend/services/neon_source_sync_transfer.py`
   - `neon_readiness`: validate Neon table coverage/retention and materialize a scratch SQLite rebuild workspace from Neon
   - core stages run from that Neon-backed scratch workspace
-  - final mirror publishes rebuilt analytics back into Neon through `backend/services/neon_mirror.py`, which still owns the broad `sync + factor_returns_sync + prune + parity` envelope consumed by finalization/post-run
+  - final mirror publishes rebuilt analytics back into Neon through `backend/services/neon_mirror.py`, which still owns the broad `sync + factor_returns_sync + prune + parity` envelope and parity audit execution
+  - live mirror artifact persistence and runtime-health publication now route through `backend/services/neon_mirror_reporting.py`
   - local derived tables/cache are refreshed from the scratch workspace so the private mirror stays congruent
 - Rehearsal/cutover safety rule:
   - `neon_readiness` must surface a valid scratch workspace payload; malformed workspace metadata now fails the run closed instead of letting later stages guess paths

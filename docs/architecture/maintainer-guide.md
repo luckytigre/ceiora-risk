@@ -100,7 +100,8 @@ Practical rule:
   - `backend/services/neon_source_sync_metadata.py` owns the lower source-sync metadata/status lifecycle helpers
   - `backend/services/neon_source_sync_transfer.py` owns the lower per-table overlap-reload, copy, and identifier-backfill helpers
   - `backend/services/neon_stage2.py` stays the public lower source-sync/parity facade and keeps schema alignment, outward per-table payload assembly, and the public `sync_from_sqlite_to_neon()` entrypoint
-  - `backend/services/neon_mirror.py` still owns the broad mirror/parity/prune contract consumed by finalization and post-run publication; do not bypass or narrow that contract accidentally before the dedicated consumer-rewire slice lands
+  - `backend/services/neon_mirror.py` still owns the broad mirror/parity/prune contract and parity audit execution
+  - `backend/services/neon_mirror_reporting.py` owns artifact persistence and runtime-health publication built on top of that mirror contract
   - do not route higher layers around `backend/services/neon_source_sync_cycle.py` or `backend/services/neon_stage2.py` just to reach the metadata or transfer helper modules directly
 - when touching legacy-named universe sync code, keep the containment explicit:
   - `backend/universe/security_master_sync.py` is compatibility-named only

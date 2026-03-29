@@ -1118,22 +1118,23 @@ Execution note:
 - do not rewire `finalize_run.py` or `post_run_publish.py` in the same commit
 - parity ownership still remains with Slice 18B
 
-#### Slice 18B: Neon Finalize, Post-Run, And Parity Consumer Rewiring
+#### Slice 18B1: Neon Finalize Consumer Rewiring
 
 Goal:
-- move finalize/post-run/parity consumers onto the explicit mirror/parity owners after Slice 18A stabilizes the mirror result contract
+- move the live finalization consumer path onto the explicit mirror reporting owner after Slice 18A stabilizes the broad mirror result contract
 
 Study first:
-- map how finalize and post-run publication consume mirror results
-- map parity/report ownership and artifact propagation
-- preserve current artifact, report, and fail-closed behavior
+- map how `run_model_pipeline.py` hands the broad mirror/report callables into `finalize_run.py`
+- preserve the current broad mirror envelope shape, artifact write contract, and sync-health publication contract
+- keep offline parity-repair/report flows out of this slice
 
 Primary surfaces:
-- `backend/services/neon_mirror.py`
+- `backend/orchestration/run_model_pipeline.py`
 - `backend/orchestration/finalize_run.py`
-- `backend/orchestration/post_run_publish.py`
-- `backend/tests/test_stage_execution.py`
-- any mirror/report helper modules extracted from those owners
+- `backend/services/neon_mirror.py`
+- any extracted mirror-reporting helper module used only by the live finalization path
+- `backend/tests/test_neon_mirror_integration.py`
+- `backend/tests/test_stage_execution.py` only if workspace handoff fields change
 
 Required doc updates:
 - `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
@@ -1144,14 +1145,51 @@ Required doc updates:
 
 Validation:
 - `git diff --check -- <touched paths>`
-- `./.venv_local/bin/pytest -q backend/tests/test_neon_mirror_integration.py backend/tests/test_post_run_publish.py backend/tests/test_stage_execution.py`
+- `./.venv_local/bin/pytest -q backend/tests/test_neon_mirror_integration.py backend/tests/test_stage_execution.py`
+- add direct tests for any new mirror-reporting owner introduced in this slice
 - `make doctor`
 
 Commit boundary:
-- finalize/post-run/parity consumer rewiring only
+- live finalization consumer rewiring only
 
 Execution note:
-- parity ownership lives in this slice, not slice 17A or 17B
+- do not move `post_run_publish.py`'s offline parity-repair/report logic in this commit
+
+#### Slice 18B2: Neon Post-Run Parity Repair And Report Rewiring
+
+Goal:
+- move the offline parity-repair/report helpers onto the explicit mirror/parity owners after Slice 18B1 stabilizes the live finalization consumer path
+
+Study first:
+- map how `post_run_publish.py` repairs a prior artifact/workspace
+- preserve current artifact, report, and fail-closed behavior for the repair path
+- preserve the `repair_neon_sync_health_from_existing_workspace()` contract for scripts/operators
+
+Primary surfaces:
+- `backend/orchestration/post_run_publish.py`
+- `backend/scripts/repair_neon_sync_health.py`
+- `backend/services/neon_mirror.py`
+- any extracted mirror-report/parity-repair helper modules
+- `backend/tests/test_post_run_publish.py`
+
+Required doc updates:
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/architecture/maintainer-guide.md`
+- `docs/operations/CLOUD_NATIVE_RUNBOOK.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+
+Validation:
+- `git diff --check -- <touched paths>`
+- `./.venv_local/bin/pytest -q backend/tests/test_post_run_publish.py backend/tests/test_neon_mirror_integration.py`
+- add direct tests for any extracted parity-repair/report owner introduced in this slice
+- `make doctor`
+
+Commit boundary:
+- offline parity-repair/report consumer rewiring only
+
+Execution note:
+- parity repair moves here, not in Slice 18B1
 
 #### Slice 19: Final Doc Sweep And Acceptance
 

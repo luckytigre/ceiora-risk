@@ -150,7 +150,8 @@ Rule:
 - Only `local-ingest` should publish broad source/model updates into Neon.
 - `backend/data/source_reads.py` stays the public source-read facade, with lower registry-first authority helpers isolated in `backend/data/source_read_authority.py`.
 - `backend/services/neon_source_sync_cycle.py` now owns the source-only Neon publish cycle used by `source_sync`; `backend/services/neon_stage2.py` stays the public lower source-sync/parity facade, with metadata/status lifecycle helpers isolated in `backend/services/neon_source_sync_metadata.py` and per-table overlap/backfill transfer helpers isolated in `backend/services/neon_source_sync_transfer.py`.
-- `backend/services/neon_mirror.py` remains the public broad mirror/parity/prune owner consumed after stage execution during finalization; Slice `18A` did not move that downstream contract.
+- `backend/services/neon_mirror.py` remains the public broad mirror/parity/prune owner and still defines the `sync + factor_returns_sync + prune + parity` envelope plus parity audit execution.
+- `backend/services/neon_mirror_reporting.py` now owns mirror artifact persistence and runtime-health publication consumed after stage execution during finalization.
 
 ### 3) Core cUSE4 Model Layer
 

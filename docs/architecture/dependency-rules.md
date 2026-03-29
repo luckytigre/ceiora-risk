@@ -89,7 +89,8 @@ Current Neon source-sync owner exception:
 - `backend/services/neon_source_sync_metadata.py` owns the lower source-sync metadata/status lifecycle helpers
 - `backend/services/neon_source_sync_transfer.py` owns the lower per-table overlap-reload, copy, and identifier-backfill helpers
 - `backend/services/neon_stage2.py` remains the public lower source-sync/parity facade and keeps schema alignment, outward per-table payload assembly, and the public `sync_from_sqlite_to_neon()` / parity entrypoints
-- `backend/services/neon_mirror.py` remains the public broad mirror/parity/prune owner for finalization and post-run consumers until that downstream contract is rewired explicitly
+- `backend/services/neon_mirror.py` remains the public broad mirror/parity/prune owner and still owns parity audit execution plus the broad envelope shape
+- `backend/services/neon_mirror_reporting.py` owns mirror artifact persistence and runtime-health publication consumed by the live finalization path
 
 ## Entrypoint Rules
 

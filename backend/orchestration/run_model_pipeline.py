@@ -35,7 +35,7 @@ from backend.risk_model import (
 )
 from backend.services.neon_source_sync_cycle import run_neon_source_sync_cycle
 from backend.services.neon_mirror import run_neon_mirror_cycle
-from backend.services import neon_authority
+from backend.services import neon_authority, neon_mirror_reporting
 from backend.services.holdings_runtime_state import mark_refresh_finished
 from backend.universe import bootstrap_cuse4_source_tables, build_and_persist_estu_membership
 from backend.trading_calendar import is_xnys_session, previous_or_same_xnys_session
@@ -522,8 +522,8 @@ def run_model_pipeline(
         run_neon_mirror_cycle_fn=run_neon_mirror_cycle,
         sync_workspace_derivatives_to_local_mirror_fn=neon_authority.sync_workspace_derivatives_to_local_mirror,
         prune_rebuild_workspaces_fn=neon_authority.prune_rebuild_workspaces,
-        write_neon_mirror_artifact_fn=post_run_publish.write_neon_mirror_artifact,
-        publish_neon_sync_health_fn=post_run_publish.publish_neon_sync_health,
+        write_neon_mirror_artifact_fn=neon_mirror_reporting.write_neon_mirror_artifact,
+        publish_neon_sync_health_fn=neon_mirror_reporting.publish_neon_sync_health,
         publish_neon_serving_write_health_fn=post_run_publish.publish_neon_serving_write_health,
         mark_refresh_finished_fn=mark_refresh_finished,
         serving_payload_neon_write_required_fn=_serving_payload_neon_write_required,

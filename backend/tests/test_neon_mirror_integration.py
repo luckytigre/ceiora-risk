@@ -33,7 +33,7 @@ def _patch_lightweight_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(run_model_pipeline.job_runs, "finish_stage", lambda **_kwargs: None)
     monkeypatch.setattr(run_model_pipeline.job_runs, "run_rows", lambda **_kwargs: [])
     monkeypatch.setattr(
-        run_model_pipeline.post_run_publish,
+        run_model_pipeline.neon_mirror_reporting,
         "write_neon_mirror_artifact",
         lambda **_kwargs: "/tmp/neon_mirror_report.json",
     )
