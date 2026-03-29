@@ -570,3 +570,26 @@ Validation:
 Validation blockers:
 - `backend/tests/test_architecture_boundaries.py::test_backend_does_not_add_new_vague_module_names` still fails on the unrelated existing file `backend/tests/test_lseg_session_manager.py`, so Slice 12 keeps that repo-hygiene blocker recorded instead of widening scope into unrelated renaming
 - `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 12 keeps the blocker recorded instead of widening scope into a repair
+
+## Rebaseline After Slices 11A-12
+
+Context:
+- multiple adversarial reviewers re-checked the landed Slice 11A and Slice 12 boundaries against the still-broad worktree before continuing
+- the landed slices remain valid and rollback-safe, but the review found that the original Slice 13 plan was too broad for the current repo state
+
+Findings:
+- `serving_outputs.py` is the actual mixed-state hotspot; `runtime_state.py` is materially narrower and should not share the same immediate rollback boundary
+- the original Slice 13 validation bundle is noisy before any new work: the current combined bundle finishes with 42 passed and 4 failed
+- the four pre-existing failures are:
+  - `backend/tests/test_cloud_bootstrap_proof.py::test_cloud_bootstrap_reads_from_neon_without_local_sqlite`
+  - `backend/tests/test_cloud_bootstrap_proof.py::test_cloud_bootstrap_fails_closed_without_local_fallbacks`
+  - `backend/tests/test_cloud_auth_and_runtime_roles.py::test_cloud_runtime_role_allows_only_serve_refresh`
+  - `backend/tests/test_architecture_boundaries.py::test_backend_does_not_add_new_vague_module_names`
+- the cloud-bootstrap failures still patch a missing `_load_current_payload_sqlite` seam, and the refresh-role failure is not a safe prerequisite to couple into the same serving/runtime-state refactor commit
+
+Revision:
+- the old combined Slice 13 has been replaced in the active plan with:
+  - Slice 13A: serving-output read authority split only
+  - Slice 13B: serving-output write/verify/manifest split only
+  - Slice 13C: runtime-state split only
+- Slice 14 and later remain in the same order, but now depend on the 13A/13B/13C sequence instead of one combined Slice 13

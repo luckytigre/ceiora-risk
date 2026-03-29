@@ -798,19 +798,49 @@ Validation:
 Commit boundary:
 - lower registry-first source authority extraction only
 
-#### Slice 13: Mixed-State Read-Layer Split Part B2
+#### Slice 13A: Serving-Output Read Authority Split
 
 Goal:
-- split `serving_outputs.py` and paired runtime-state authority helpers by responsibility
-- make cloud-serving fallback policy explicit and narrow
+- extract serving-output read authority and fallback helpers out of `serving_outputs.py`
+- preserve the public `serving_outputs.py` read entrypoints and route-facing read semantics
 
 Study first:
-- map serving-payload readers and writers by authority mode and fallback rules
+- map read-path callers of `load_current_payload`, `load_current_payloads`, `load_runtime_payload`, and `load_runtime_payloads`
+- identify compatibility seams that must stay stable, including the dashboard batching identity check and the cloud-bootstrap read seam
 
 Primary surfaces:
 - `backend/data/serving_outputs.py`
-- `backend/data/runtime_state.py`
-- any extracted narrow helper modules
+- any extracted narrow serving-output read helper modules
+
+Required doc updates:
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/operations/CLOUD_NATIVE_RUNBOOK.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+
+Validation:
+- `git diff --check -- <touched paths>`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_serving_outputs.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_serving_output_route_preference.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_cloud_bootstrap_proof.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_cloud_auth_and_runtime_roles.py::test_serving_outputs_cloud_mode_does_not_fallback_to_sqlite`
+- `make doctor`
+
+Commit boundary:
+- serving-output read authority extraction only
+
+#### Slice 13B: Serving-Output Write/Verify Split
+
+Goal:
+- split serving-output writes, Neon verification, and manifest drift helpers by responsibility
+- keep the read contract from Slice 13A unchanged
+
+Study first:
+- separate durable write sequencing from manifest collection/diff helpers and from the read-path compatibility surface
+
+Primary surfaces:
+- `backend/data/serving_outputs.py`
+- any extracted narrow serving-output write or manifest helper modules
 
 Required doc updates:
 - `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
@@ -821,11 +851,42 @@ Required doc updates:
 
 Validation:
 - `git diff --check -- <touched paths>`
-- `./.venv_local/bin/pytest -q backend/tests/test_serving_outputs.py backend/tests/test_runtime_state.py backend/tests/test_serving_output_route_fallbacks.py backend/tests/test_serving_output_route_preference.py backend/tests/test_cloud_bootstrap_proof.py backend/tests/test_cloud_auth_and_runtime_roles.py backend/tests/test_architecture_boundaries.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_serving_outputs.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_serving_output_route_preference.py`
 - `make doctor`
 
 Commit boundary:
-- serving-output and runtime-state authority split only
+- serving-output write/verify/manifest split only
+
+#### Slice 13C: Runtime-State Authority Split
+
+Goal:
+- split `runtime_state.py` only if ambiguity remains after the serving-output read/write slices
+- keep the operator-state read/persist/publish contract explicit without coupling it to serving-output cleanup
+
+Study first:
+- map runtime-state read, persist, and active-snapshot publish call sites after Slice 13A/13B land
+- confirm that a separate `runtime_state.py` split still buys clarity before changing its ownership
+
+Primary surfaces:
+- `backend/data/runtime_state.py`
+- any extracted narrow runtime-state helper modules
+
+Required doc updates:
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/architecture-invariants.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/operations/CLOUD_NATIVE_RUNBOOK.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+
+Validation:
+- `git diff --check -- <touched paths>`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_runtime_state.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_cloud_bootstrap_proof.py`
+- `make doctor`
+
+Commit boundary:
+- runtime-state split only
 
 #### Slice 14: Security-Master Code Containment
 
@@ -835,7 +896,7 @@ Goal:
 
 Study first:
 - map every active import of `security_master_sync`
-- separate true compatibility behavior from still-live authority behavior after slices 11-13 land
+- separate true compatibility behavior from still-live authority behavior after slices 11-13C land
 - if projection-selector rewiring needs `pipeline.py`, defer that rewiring into slice 16 instead of widening this slice
 
 Primary surfaces:
