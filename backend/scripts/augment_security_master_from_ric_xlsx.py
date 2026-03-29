@@ -17,7 +17,11 @@ from backend.universe.registry_sync import (
     upsert_security_policy_rows,
     upsert_security_registry_rows,
 )
-from backend.universe.schema import SECURITY_MASTER_TABLE, SECURITY_REGISTRY_TABLE, ensure_cuse4_schema
+from backend.universe.schema import (
+    SECURITY_MASTER_COMPAT_CURRENT_TABLE,
+    SECURITY_REGISTRY_TABLE,
+    ensure_cuse4_schema,
+)
 from backend.universe.source_observation import refresh_security_source_observation_daily
 from backend.universe.taxonomy_builder import (
     materialize_security_master_compat_current,
@@ -96,9 +100,6 @@ def run(
             for r in conn.execute(
                 f"""
                 SELECT UPPER(ric)
-                FROM {SECURITY_MASTER_TABLE}
-                UNION
-                SELECT UPPER(ric)
                 FROM {SECURITY_REGISTRY_TABLE}
                 """
             )
@@ -153,25 +154,7 @@ def run(
                 job_run_id=job_run_id,
                 updated_at=now_iso,
             )
-            conn.executemany(
-                f"""
-                INSERT OR IGNORE INTO {SECURITY_MASTER_TABLE} (
-                    ric, ticker, classification_ok, is_equity_eligible, source, job_run_id, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        row["ric"],
-                        row["ticker"],
-                        row["classification_ok"],
-                        row["is_equity_eligible"],
-                        row["source"],
-                        row["job_run_id"],
-                        row["updated_at"],
-                    )
-                    for row in new_rows
-                ],
-            )
+            materialize_security_master_compat_current(conn, rics=new_rics)
             refresh_security_taxonomy_current(conn, rics=new_rics)
             reconcile_default_security_policy_rows(conn, rics=new_rics)
             refresh_security_source_observation_daily(conn, rics=new_rics)
@@ -196,7 +179,7 @@ def run(
                 )
                 conn.execute(
                     f"""
-                    UPDATE {SECURITY_MASTER_TABLE}
+                    UPDATE {SECURITY_MASTER_COMPAT_CURRENT_TABLE}
                     SET
                         updated_at = ?,
                         source = COALESCE(source, ?),

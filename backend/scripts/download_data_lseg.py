@@ -720,10 +720,10 @@ def download_from_lseg(
     n_f = 0
     n_p = 0
     n_c = 0
-    n_compat = 0
+    n_runtime_rows = 0
     touched_rics = sorted({str(row.get("ric") or "").strip().upper() for row in compat_rows if row.get("ric")})
     try:
-        n_compat = upsert_security_master_rows(
+        n_runtime_rows = upsert_security_master_rows(
             conn,
             compat_rows,
             refresh_runtime_surfaces=False,
@@ -754,8 +754,11 @@ def download_from_lseg(
         "as_of": as_of,
         "universe": len(universe_rows),
         "price_volume_metric": PRICE_VOLUME_FIELD,
-        "compat_rows_upserted": int(n_compat),
-        "security_master_rows_upserted": int(n_compat),
+        "registry_rows_upserted": int(n_runtime_rows),
+        "compat_rows_upserted": int(n_runtime_rows),
+        # Retained as a compatibility alias for existing callers; live ingest no longer
+        # writes physical security_master in the runtime sync path.
+        "security_master_rows_upserted": 0,
         "fundamental_rows_inserted": int(n_f),
         "price_rows_inserted": int(n_p),
         "price_rows_skipped_missing_close": int(prices_rows_skipped_missing_close),

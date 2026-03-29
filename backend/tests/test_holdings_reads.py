@@ -112,9 +112,9 @@ def test_load_holdings_positions_normalizes_request_and_shapes_rows(
 
     assert captured["params"] == ("acct_main",)
     assert "NULLIF(TRIM(reg.ticker), '')" in str(captured["sql"])
-    assert "NULLIF(TRIM(comp.ticker), '')" in str(captured["sql"])
+    assert "NULLIF(TRIM(comp.ticker), '')" not in str(captured["sql"])
     assert "LEFT JOIN security_registry reg" in str(captured["sql"])
-    assert "LEFT JOIN security_master_compat_current comp" in str(captured["sql"])
+    assert "LEFT JOIN security_master_compat_current comp" not in str(captured["sql"])
     assert "LEFT JOIN security_master sm" not in str(captured["sql"])
     assert "ORDER BY p.account_id, COALESCE(" in str(captured["sql"])
     assert rows == [
@@ -164,7 +164,7 @@ def test_load_all_holdings_positions_shapes_rows_without_account_filter(
     assert "FROM holdings_positions_current p" in str(captured["sql"])
     assert "WHERE p.account_id = %s" not in str(captured["sql"])
     assert "LEFT JOIN security_registry reg" in str(captured["sql"])
-    assert "LEFT JOIN security_master_compat_current comp" in str(captured["sql"])
+    assert "LEFT JOIN security_master_compat_current comp" not in str(captured["sql"])
     assert "LEFT JOIN security_master sm" not in str(captured["sql"])
     assert "ORDER BY p.account_id, COALESCE(" in str(captured["sql"])
     assert rows == [
@@ -253,6 +253,7 @@ def test_load_aggregate_holdings_positions_nets_quantities_and_uses_expected_sql
     assert "ARRAY_AGG(" in str(captured["sql"])
     assert "SUM(CAST(p.quantity AS DOUBLE PRECISION)) AS quantity" in str(captured["sql"])
     assert "HAVING ABS(SUM(CAST(p.quantity AS DOUBLE PRECISION))) > %s" in str(captured["sql"])
+    assert "LEFT JOIN security_master_compat_current comp" not in str(captured["sql"])
     assert "ORDER BY COALESCE(agg.ticker, agg.ric), agg.ric" in str(captured["sql"])
     assert rows == [
         {

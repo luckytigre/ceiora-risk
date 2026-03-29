@@ -18,7 +18,6 @@ from backend.universe.schema import (
     PRICES_TABLE,
     FUNDAMENTALS_HISTORY_TABLE,
     SECURITY_INGEST_AUDIT_TABLE,
-    SECURITY_MASTER_TABLE,
     SECURITY_REGISTRY_TABLE,
     TRBC_HISTORY_TABLE,
     ensure_cuse4_schema,
@@ -38,7 +37,9 @@ REMAP_TABLE_SPECS: tuple[RemapTableSpec, ...] = (
     RemapTableSpec(name=SECURITY_INGEST_AUDIT_TABLE, pk_cols=("job_run_id", "ric", "artifact_name")),
 )
 
-CLEANUP_TABLES_WITH_RIC = tuple(spec.name for spec in REMAP_TABLE_SPECS) + (SECURITY_MASTER_TABLE,)
+# This tool canonicalizes retained source-history tables onto registry RICs.
+# Physical security_master is intentionally out of scope during Phase 9 demotion.
+CLEANUP_TABLES_WITH_RIC = tuple(spec.name for spec in REMAP_TABLE_SPECS)
 
 
 def _timestamp() -> str:
@@ -227,24 +228,6 @@ def _rebuild_remap_table(
     }
 
 
-def _purge_security_master_orphans(conn: sqlite3.Connection) -> int:
-    if not (_table_exists(conn, SECURITY_MASTER_TABLE) and _table_exists(conn, SECURITY_REGISTRY_TABLE)):
-        return 0
-    before = int(conn.execute(f"SELECT COUNT(*) FROM {SECURITY_MASTER_TABLE}").fetchone()[0] or 0)
-    conn.execute(
-        f"""
-        DELETE FROM {SECURITY_MASTER_TABLE}
-        WHERE UPPER(TRIM(ric)) NOT IN (
-            SELECT UPPER(TRIM(ric))
-            FROM {SECURITY_REGISTRY_TABLE}
-            WHERE ric IS NOT NULL AND TRIM(ric) <> ''
-        )
-        """
-    )
-    after = int(conn.execute(f"SELECT COUNT(*) FROM {SECURITY_MASTER_TABLE}").fetchone()[0] or 0)
-    return before - after
-
-
 def _orphan_count(conn: sqlite3.Connection, table: str) -> int:
     if not (_table_exists(conn, table) and _table_exists(conn, SECURITY_REGISTRY_TABLE)):
         return 0
@@ -304,7 +287,6 @@ def canonicalize_registry_source_history_in_place(conn: sqlite3.Connection) -> d
     table_stats: dict[str, Any] = {}
     for spec in REMAP_TABLE_SPECS:
         table_stats[spec.name] = _rebuild_remap_table(conn, spec=spec)
-    security_master_rows_deleted = _purge_security_master_orphans(conn)
     conn.execute("DROP TABLE IF EXISTS alias_mapping_temp")
 
     validation = {
@@ -317,12 +299,6 @@ def canonicalize_registry_source_history_in_place(conn: sqlite3.Connection) -> d
     for spec in REMAP_TABLE_SPECS:
         if spec.name in validation:
             validation[spec.name]["duplicate_groups"] = _duplicate_group_count(conn, table=spec.name, pk_cols=spec.pk_cols)
-    if _table_exists(conn, SECURITY_MASTER_TABLE):
-        validation[SECURITY_MASTER_TABLE]["duplicate_groups"] = _duplicate_group_count(
-            conn,
-            table=SECURITY_MASTER_TABLE,
-            pk_cols=("ric",),
-        )
 
     return {
         "status": "ok",
@@ -332,7 +308,7 @@ def canonicalize_registry_source_history_in_place(conn: sqlite3.Connection) -> d
         "unresolved_no_candidate": list(mapping_result["unresolved_no_candidate"]),
         "unresolved_ambiguous": list(mapping_result["unresolved_ambiguous"]),
         "table_stats": table_stats,
-        "security_master_rows_deleted": int(security_master_rows_deleted),
+        "security_master_rows_deleted": 0,
         "validation": validation,
     }
 

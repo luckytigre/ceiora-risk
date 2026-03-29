@@ -93,18 +93,21 @@ def export_seed(*, data_db: Path, output_path: Path) -> int:
                 for ric, ticker, isin, exchange_name in registry_rows
             ]
         else:
-            rows = conn.execute(
-                """
-                SELECT
-                    ric,
-                    ticker,
-                    isin,
-                    exchange_name,
-                    COALESCE(coverage_role, 'native_equity') AS coverage_role
-                FROM security_master
-                ORDER BY ric
-                """
-            ).fetchall()
+            if _table_exists(conn, SECURITY_MASTER_COMPAT_CURRENT_TABLE):
+                rows = conn.execute(
+                    f"""
+                    SELECT
+                        ric,
+                        ticker,
+                        isin,
+                        exchange_name,
+                        COALESCE(coverage_role, 'native_equity') AS coverage_role
+                    FROM {SECURITY_MASTER_COMPAT_CURRENT_TABLE}
+                    ORDER BY ric
+                    """
+                ).fetchall()
+            else:
+                rows = []
     finally:
         conn.close()
 

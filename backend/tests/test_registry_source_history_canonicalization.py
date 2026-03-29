@@ -8,7 +8,9 @@ from backend.scripts.canonicalize_registry_source_history import canonicalize_re
 from backend.universe.schema import ensure_cuse4_schema
 
 
-def test_registry_source_history_canonicalization_remaps_unique_aliases_and_purges_unresolved(tmp_path: Path) -> None:
+def test_registry_source_history_canonicalization_remaps_unique_aliases_without_mutating_security_master(
+    tmp_path: Path,
+) -> None:
     data_db = tmp_path / "data.db"
     conn = sqlite3.connect(str(data_db))
     ensure_cuse4_schema(conn)
@@ -84,6 +86,7 @@ def test_registry_source_history_canonicalization_remaps_unique_aliases_and_purg
     assert result["mapped_alias_ric_count"] == 1
     assert ("ABG", "ABG.N") in result["mapped_aliases"]
     assert result["unresolved_no_candidate"] == ["STEC.O"]
+    assert result["security_master_rows_deleted"] == 0
 
     conn = sqlite3.connect(str(data_db))
     try:
@@ -132,4 +135,4 @@ def test_registry_source_history_canonicalization_remaps_unique_aliases_and_purg
     assert fundamentals_rows == [("ABG.N", "2026-03-24")]
     assert classification_rows == [("ABG.N", "2026-03-24")]
     assert audit_rows == [("job_1", "ABG.N", "prices")]
-    assert security_master_rics == ["ABG.N"]
+    assert security_master_rics == ["ABG", "ABG.N", "STEC.O"]

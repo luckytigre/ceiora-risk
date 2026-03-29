@@ -27,15 +27,12 @@ def _normalize_ticker(value: str | None) -> str | None:
 _REGISTRY_TICKER_EXPR = (
     "COALESCE("
     "NULLIF(TRIM(p.ticker), ''), "
-    "NULLIF(TRIM(reg.ticker), ''), "
-    "NULLIF(TRIM(comp.ticker), '')"
+    "NULLIF(TRIM(reg.ticker), '')"
     ")"
 )
 _REGISTRY_JOIN_SQL = """
                 LEFT JOIN security_registry reg
                   ON reg.ric = p.ric
-                LEFT JOIN security_master_compat_current comp
-                  ON comp.ric = p.ric
 """
 
 
