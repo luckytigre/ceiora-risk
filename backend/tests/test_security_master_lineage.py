@@ -12,6 +12,7 @@ import pytest
 from backend.scripts import augment_security_master_from_ric_xlsx
 from backend.scripts import download_data_lseg
 from backend.scripts.export_security_master_seed import export_seed
+from backend.risk_model import raw_cross_section_history
 from backend.risk_model.raw_cross_section_history import rebuild_raw_cross_section_history
 from backend.universe.bootstrap import bootstrap_cuse4_source_tables
 from backend.universe.schema import ensure_cuse4_schema
@@ -26,6 +27,42 @@ def _row_by_ric(db_path: Path, ric: str) -> sqlite3.Row:
             """
             SELECT *
             FROM security_master
+            WHERE ric = ?
+            """,
+            (ric,),
+        ).fetchone()
+        assert row is not None
+        return row
+    finally:
+        conn.close()
+
+
+def _registry_row_by_ric(db_path: Path, ric: str) -> sqlite3.Row:
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM security_registry
+            WHERE ric = ?
+            """,
+            (ric,),
+        ).fetchone()
+        assert row is not None
+        return row
+    finally:
+        conn.close()
+
+
+def _compat_row_by_ric(db_path: Path, ric: str) -> sqlite3.Row:
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM security_master_compat_current
             WHERE ric = ?
             """,
             (ric,),
@@ -101,7 +138,16 @@ def test_bootstrap_syncs_seed_registry_without_trusting_seed_flags(tmp_path: Pat
     assert int(existing["is_equity_eligible"]) == 1
     assert existing["source"] == "lseg_toolkit"
 
-    seeded = _row_by_ric(data_db, "BABA.N")
+    conn = sqlite3.connect(str(data_db))
+    try:
+        seeded_master = conn.execute(
+            "SELECT COUNT(*) FROM security_master WHERE ric = 'BABA.N'"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert seeded_master == (0,)
+
+    seeded = _compat_row_by_ric(data_db, "BABA.N")
     assert seeded["ticker"] == "BABA"
     assert seeded["isin"] == "US01609W1027"
     assert seeded["exchange_name"] == "NYSE"
@@ -110,7 +156,7 @@ def test_bootstrap_syncs_seed_registry_without_trusting_seed_flags(tmp_path: Pat
     assert seeded["source"] == "security_master_seed"
 
 
-def test_download_from_lseg_updates_security_master_for_pending_explicit_ric(
+def test_download_from_lseg_updates_registry_first_surfaces_for_pending_explicit_ric(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -184,25 +230,31 @@ def test_download_from_lseg_updates_security_master_for_pending_explicit_ric(
     )
 
     assert out["status"] == "ok"
-    assert out["security_master_rows_upserted"] == 1
+    assert out["registry_rows_upserted"] == 1
+    assert out["security_master_rows_upserted"] == 0
     assert out["compat_rows_upserted"] == 1
     assert out["price_rows_inserted"] == 1
     assert out["classification_rows_inserted"] == 1
     assert out["matched_requested_ric_count"] == 1
     assert out["missing_requested_rics"] == ["MISS.OQ"]
 
-    master = _row_by_ric(data_db, "TEST.OQ")
-    assert master["ticker"] == "TEST"
-    assert master["isin"] == "US0000000001"
-    assert master["exchange_name"] == "NASDAQ"
-    assert int(master["classification_ok"]) == 1
-    assert int(master["is_equity_eligible"]) == 1
-    assert master["source"] == "lseg_toolkit"
+    registry = _registry_row_by_ric(data_db, "TEST.OQ")
+    assert registry["ticker"] == "TEST"
+    assert registry["isin"] == "US0000000001"
+    assert registry["exchange_name"] == "NASDAQ"
+    assert registry["source"] == "lseg_toolkit"
     conn = sqlite3.connect(str(data_db))
     try:
+        legacy_master = conn.execute(
+            """
+            SELECT ticker, source
+            FROM security_master
+            WHERE ric = 'TEST.OQ'
+            """
+        ).fetchone()
         compat = conn.execute(
             """
-            SELECT classification_ok, is_equity_eligible, coverage_role
+            SELECT isin, exchange_name, classification_ok, is_equity_eligible, coverage_role
             FROM security_master_compat_current
             WHERE ric = 'TEST.OQ'
             """
@@ -217,11 +269,12 @@ def test_download_from_lseg_updates_security_master_for_pending_explicit_ric(
     finally:
         conn.close()
 
-    assert compat == (1, 1, "native_equity")
+    assert legacy_master == ("TEST", "security_master_seed")
+    assert compat == ("US0000000001", "NASDAQ", 1, 1, "native_equity")
     assert taxonomy == ("single_name_equity", 1, 1)
 
 
-def test_download_from_lseg_default_universe_includes_seeded_pending_rows(
+def test_download_from_lseg_default_universe_updates_registry_first_surfaces_for_seeded_pending_rows(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -327,15 +380,28 @@ def test_download_from_lseg_default_universe_includes_seeded_pending_rows(
 
     assert out["status"] == "ok"
     assert out["universe"] == 1
-    assert out["security_master_rows_upserted"] == 1
-    master = _row_by_ric(data_db, "AAPL.OQ")
-    assert master["ticker"] == "AAPL"
-    assert master["isin"] == "US0378331005"
-    assert master["exchange_name"] == "NASDAQ"
-    assert int(master["classification_ok"]) == 1
-    assert int(master["is_equity_eligible"]) == 1
+    assert out["registry_rows_upserted"] == 1
+    assert out["security_master_rows_upserted"] == 0
+    registry = _registry_row_by_ric(data_db, "AAPL.OQ")
+    assert registry["ticker"] == "AAPL"
+    assert registry["isin"] == "US0378331005"
+    assert registry["exchange_name"] == "NASDAQ"
     conn = sqlite3.connect(str(data_db))
     try:
+        legacy_master = conn.execute(
+            """
+            SELECT ticker, source
+            FROM security_master
+            WHERE ric = 'AAPL.OQ'
+            """
+        ).fetchone()
+        compat = conn.execute(
+            """
+            SELECT isin, exchange_name, classification_ok, is_equity_eligible, coverage_role
+            FROM security_master_compat_current
+            WHERE ric = 'AAPL.OQ'
+            """
+        ).fetchone()
         taxonomy = conn.execute(
             """
             SELECT instrument_kind, is_single_name_equity, classification_ready
@@ -346,6 +412,8 @@ def test_download_from_lseg_default_universe_includes_seeded_pending_rows(
     finally:
         conn.close()
 
+    assert legacy_master == ("AAPL", "security_master_seed")
+    assert compat == ("US0378331005", "NASDAQ", 1, 1, "native_equity")
     assert taxonomy == ("single_name_equity", 1, 1)
 
 
@@ -535,6 +603,13 @@ def test_raw_cross_section_history_uses_date_specific_runtime_eligibility(tmp_pa
         ) VALUES ('TEST.OQ', 'TEST', 1, 1, 'native_equity', 'seed', '2026-03-01T00:00:00+00:00')
         """
     )
+    conn.execute(
+        """
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('TEST.OQ', 'TEST', 'active', 'security_registry_seed', '2026-03-01T00:00:00+00:00')
+        """
+    )
     conn.executemany(
         """
         INSERT INTO security_prices_eod (
@@ -618,6 +693,114 @@ def test_raw_cross_section_history_uses_date_specific_runtime_eligibility(tmp_pa
         conn.close()
 
     assert rows == [("2026-03-06", "TEST.OQ")]
+
+
+def test_raw_cross_section_history_does_not_fallback_to_compat_when_registry_empty(
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    ensure_cuse4_schema(conn)
+    conn.execute(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES ('TEST.OQ', 'TEST', 1, 1, 'native_equity', 'seed', '2026-03-01T00:00:00+00:00')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_prices_eod (
+            ric, date, close, volume, currency, source, updated_at
+        ) VALUES ('TEST.OQ', '2026-03-13', 100.0, 1000.0, 'USD', 'lseg_toolkit', '2026-03-13T00:00:00+00:00')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_fundamentals_pit (
+            ric, as_of_date, stat_date, period_end_date, market_cap, shares_outstanding,
+            book_value_per_share, forward_eps, trailing_eps, total_debt, operating_cashflow,
+            revenue, total_assets, roe_pct, operating_margin_pct, common_name, source, job_run_id, updated_at
+        ) VALUES (
+            'TEST.OQ', '2026-02-27', '2026-02-27', '2025-12-31', 1000000.0, 100000.0,
+            5.0, 1.2, 1.1, 10000.0, 5000.0, 25000.0, 80000.0, 12.0, 10.0,
+            'Test Co', 'lseg_toolkit', 'job_1', '2026-03-01T00:00:00+00:00'
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    out = rebuild_raw_cross_section_history(
+        data_db,
+        start_date="2026-03-13",
+        end_date="2026-03-13",
+        frequency="latest",
+    )
+
+    assert out["status"] == "no-runtime-identity"
+
+
+def test_raw_cross_section_history_loads_runtime_identity_once(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    ensure_cuse4_schema(conn)
+    conn.execute(
+        """
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('TEST.OQ', 'TEST', 'active', 'security_registry_seed', '2026-03-01T00:00:00+00:00')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_prices_eod (
+            ric, date, close, volume, currency, source, updated_at
+        ) VALUES ('TEST.OQ', '2026-03-13', 100.0, 1000.0, 'USD', 'lseg_toolkit', '2026-03-13T00:00:00+00:00')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_fundamentals_pit (
+            ric, as_of_date, stat_date, period_end_date, market_cap, shares_outstanding,
+            book_value_per_share, forward_eps, trailing_eps, total_debt, operating_cashflow,
+            revenue, total_assets, roe_pct, operating_margin_pct, common_name, source, job_run_id, updated_at
+        ) VALUES (
+            'TEST.OQ', '2026-02-27', '2026-02-27', '2025-12-31', 1000000.0, 100000.0,
+            5.0, 1.2, 1.1, 10000.0, 5000.0, 25000.0, 80000.0, 12.0, 10.0,
+            'Test Co', 'lseg_toolkit', 'job_1', '2026-03-01T00:00:00+00:00'
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    calls: list[dict[str, object]] = []
+
+    def _load_security_runtime_rows(conn, **kwargs):
+        calls.append(dict(kwargs))
+        return [{"ric": "TEST.OQ", "ticker": "TEST"}]
+
+    monkeypatch.setattr(raw_cross_section_history, "load_security_runtime_rows", _load_security_runtime_rows)
+    monkeypatch.setattr(raw_cross_section_history, "load_default_source_universe_rows", lambda *_args, **_kwargs: [])
+
+    out = raw_cross_section_history.rebuild_raw_cross_section_history(
+        data_db,
+        start_date="2026-03-13",
+        end_date="2026-03-13",
+        frequency="latest",
+    )
+
+    assert out["status"] == "no-structural-eligible-rows"
+    assert calls == [
+        {
+            "include_disabled": False,
+            "allow_empty_registry_fallback": False,
+        }
+    ]
 
 
 def test_backfill_prices_allows_explicit_pending_ric(monkeypatch, tmp_path: Path) -> None:
@@ -1111,10 +1294,7 @@ def test_legacy_augment_security_master_from_xlsx_keeps_new_rows_pending(monkeyp
     finally:
         conn.close()
 
-    assert master_rows == [
-        ("NEW1.OQ", "NEW1", 0, 0),
-        ("NEW2.N", "NEW2", 0, 0),
-    ]
+    assert master_rows == []
     assert registry_rows == [
         ("NEW1.OQ", "NEW1", "active"),
         ("NEW2.N", "NEW2", "active"),
@@ -1127,6 +1307,138 @@ def test_legacy_augment_security_master_from_xlsx_keeps_new_rows_pending(monkeyp
         ("NEW1.OQ", "NEW1", "native_equity"),
         ("NEW2.N", "NEW2", "native_equity"),
     ]
+
+
+def test_legacy_augment_security_master_from_xlsx_backfills_registry_for_legacy_master_only_rows(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    seed_xlsx = tmp_path / "legacy_universe.xlsx"
+    seed_xlsx.write_bytes(b"placeholder")
+    conn = sqlite3.connect(str(data_db))
+    ensure_cuse4_schema(conn)
+    conn.execute(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible, source, job_run_id, updated_at
+        ) VALUES ('LEGACY.OQ', 'LEGACY', 0, 0, 'legacy_master', 'job_legacy', '2026-03-27T00:00:00Z')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    class FakeExcelFile:
+        sheet_names = ["Sheet1"]
+
+        def __init__(self, _path):
+            self.sheet_names = ["Sheet1"]
+
+    monkeypatch.setattr(augment_security_master_from_ric_xlsx.pd, "ExcelFile", FakeExcelFile)
+    monkeypatch.setattr(
+        augment_security_master_from_ric_xlsx.pd,
+        "read_excel",
+        lambda *_args, **_kwargs: pd.DataFrame({"RIC": ["LEGACY.OQ"]}),
+    )
+
+    out = augment_security_master_from_ric_xlsx.run(
+        db_path=data_db,
+        xlsx_path=seed_xlsx,
+        sheet=None,
+        source="coverage_universe_xlsx",
+        output_new_rics=None,
+    )
+
+    assert out["status"] == "ok"
+    assert out["new_rics_inserted"] == 1
+
+    conn = sqlite3.connect(str(data_db))
+    try:
+        registry = conn.execute(
+            """
+            SELECT ticker, tracking_status
+            FROM security_registry
+            WHERE ric = 'LEGACY.OQ'
+            """
+        ).fetchone()
+        compat = conn.execute(
+            """
+            SELECT ticker, coverage_role
+            FROM security_master_compat_current
+            WHERE ric = 'LEGACY.OQ'
+            """
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert registry == ("LEGACY", "active")
+    assert compat == ("LEGACY", "native_equity")
+
+
+def test_legacy_augment_security_master_from_xlsx_backfills_registry_for_compat_only_rows(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    seed_xlsx = tmp_path / "compat_universe.xlsx"
+    seed_xlsx.write_bytes(b"placeholder")
+    conn = sqlite3.connect(str(data_db))
+    ensure_cuse4_schema(conn)
+    conn.execute(
+        """
+        INSERT INTO security_master_compat_current (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES ('COMPAT.OQ', 'COMPAT', 0, 0, 'native_equity', 'compat', '2026-03-27T00:00:00Z')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    class FakeExcelFile:
+        sheet_names = ["Sheet1"]
+
+        def __init__(self, _path):
+            self.sheet_names = ["Sheet1"]
+
+    monkeypatch.setattr(augment_security_master_from_ric_xlsx.pd, "ExcelFile", FakeExcelFile)
+    monkeypatch.setattr(
+        augment_security_master_from_ric_xlsx.pd,
+        "read_excel",
+        lambda *_args, **_kwargs: pd.DataFrame({"RIC": ["COMPAT.OQ"]}),
+    )
+
+    out = augment_security_master_from_ric_xlsx.run(
+        db_path=data_db,
+        xlsx_path=seed_xlsx,
+        sheet=None,
+        source="coverage_universe_xlsx",
+        output_new_rics=None,
+    )
+
+    assert out["status"] == "ok"
+    assert out["new_rics_inserted"] == 1
+
+    conn = sqlite3.connect(str(data_db))
+    try:
+        registry = conn.execute(
+            """
+            SELECT ticker, tracking_status
+            FROM security_registry
+            WHERE ric = 'COMPAT.OQ'
+            """
+        ).fetchone()
+        compat = conn.execute(
+            """
+            SELECT ticker, coverage_role
+            FROM security_master_compat_current
+            WHERE ric = 'COMPAT.OQ'
+            """
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert registry == ("COMPAT", "active")
+    assert compat == ("COMPAT", "native_equity")
 
 
 def test_legacy_augment_security_master_from_xlsx_rolls_back_multi_surface_seed_on_failure(
@@ -1337,13 +1649,13 @@ def test_download_from_lseg_default_price_refresh_uses_price_scope_not_pit_scope
     assert close == (38.25,)
 
 
-def test_export_security_master_seed_preserves_legacy_coverage_role_columns(tmp_path: Path) -> None:
+def test_export_security_master_seed_falls_back_to_compat_current_when_registry_absent(tmp_path: Path) -> None:
     data_db = tmp_path / "data.db"
     conn = sqlite3.connect(str(data_db))
     ensure_cuse4_schema(conn)
     conn.execute(
         """
-        INSERT INTO security_master (
+        INSERT INTO security_master_compat_current (
             ric, ticker, isin, exchange_name, classification_ok, is_equity_eligible, coverage_role, source, job_run_id, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,

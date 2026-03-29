@@ -27,7 +27,6 @@ from backend.universe.selectors import (
     load_pit_ingest_scope_rows,
     load_price_ingest_scope_rows,
 )
-from backend.universe.schema import SECURITY_MASTER_TABLE
 from backend.universe.source_observation import refresh_security_source_observation_daily
 from backend.universe.taxonomy_builder import (
     materialize_security_master_compat_current,
@@ -192,17 +191,31 @@ def derive_security_master_flags(
     return classification_ok, is_equity_eligible
 
 
-def upsert_security_master_rows(
+def _upsert_provisional_compat_rows(
     conn: sqlite3.Connection,
     rows: list[dict[str, Any]],
-    *,
-    refresh_runtime_surfaces: bool = True,
 ) -> int:
-    if not rows:
+    payload = [
+        (
+            normalize_ric(row.get("ric")),
+            normalize_ticker(row.get("ticker")) or ticker_from_ric(row.get("ric")),
+            normalize_optional_text(row.get("isin")),
+            normalize_optional_text(row.get("exchange_name")),
+            int(row.get("classification_ok") or 0),
+            int(row.get("is_equity_eligible") or 0),
+            normalize_optional_text(row.get("coverage_role")) or "native_equity",
+            normalize_optional_text(row.get("source")),
+            normalize_optional_text(row.get("job_run_id")),
+            normalize_optional_text(row.get("updated_at")),
+        )
+        for row in rows
+        if normalize_ric(row.get("ric"))
+    ]
+    if not payload:
         return 0
-
-    sql = f"""
-        INSERT INTO {SECURITY_MASTER_TABLE} (
+    conn.executemany(
+        """
+        INSERT INTO security_master_compat_current (
             ric,
             ticker,
             isin,
@@ -213,45 +226,66 @@ def upsert_security_master_rows(
             source,
             job_run_id,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, 'native_equity'), ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(ric) DO UPDATE SET
-            ticker = COALESCE(NULLIF(excluded.ticker, ''), {SECURITY_MASTER_TABLE}.ticker),
-            isin = COALESCE(NULLIF(excluded.isin, ''), {SECURITY_MASTER_TABLE}.isin),
-            exchange_name = COALESCE(NULLIF(excluded.exchange_name, ''), {SECURITY_MASTER_TABLE}.exchange_name),
-            classification_ok = COALESCE(excluded.classification_ok, {SECURITY_MASTER_TABLE}.classification_ok),
-            is_equity_eligible = COALESCE(excluded.is_equity_eligible, {SECURITY_MASTER_TABLE}.is_equity_eligible),
+            ticker = COALESCE(NULLIF(excluded.ticker, ''), security_master_compat_current.ticker),
+            isin = COALESCE(NULLIF(excluded.isin, ''), security_master_compat_current.isin),
+            exchange_name = COALESCE(NULLIF(excluded.exchange_name, ''), security_master_compat_current.exchange_name),
+            classification_ok = COALESCE(excluded.classification_ok, security_master_compat_current.classification_ok),
+            is_equity_eligible = COALESCE(excluded.is_equity_eligible, security_master_compat_current.is_equity_eligible),
             coverage_role = CASE
-                WHEN {SECURITY_MASTER_TABLE}.coverage_role = 'projection_only'
+                WHEN security_master_compat_current.coverage_role = 'projection_only'
                      AND COALESCE(NULLIF(excluded.coverage_role, ''), 'native_equity') = 'native_equity'
-                THEN {SECURITY_MASTER_TABLE}.coverage_role
-                ELSE COALESCE(NULLIF(excluded.coverage_role, ''), {SECURITY_MASTER_TABLE}.coverage_role)
+                THEN security_master_compat_current.coverage_role
+                ELSE COALESCE(NULLIF(excluded.coverage_role, ''), security_master_compat_current.coverage_role)
             END,
-            source = COALESCE(NULLIF(excluded.source, ''), {SECURITY_MASTER_TABLE}.source),
-            job_run_id = COALESCE(NULLIF(excluded.job_run_id, ''), {SECURITY_MASTER_TABLE}.job_run_id),
-            updated_at = COALESCE(NULLIF(excluded.updated_at, ''), {SECURITY_MASTER_TABLE}.updated_at)
+            source = COALESCE(NULLIF(excluded.source, ''), security_master_compat_current.source),
+            job_run_id = COALESCE(NULLIF(excluded.job_run_id, ''), security_master_compat_current.job_run_id),
+            updated_at = COALESCE(NULLIF(excluded.updated_at, ''), security_master_compat_current.updated_at)
+        """,
+        payload,
+    )
+    return len(payload)
+
+
+def upsert_security_master_rows(
+    conn: sqlite3.Connection,
+    rows: list[dict[str, Any]],
+    *,
+    refresh_runtime_surfaces: bool = True,
+) -> int:
+    """Legacy-named helper that now updates registry-first runtime surfaces only.
+
+    Physical `security_master` is no longer a normal write target for runtime,
+    bootstrap, or operator seed flows in this helper seam.
     """
+    if not rows:
+        return 0
+
     payload = [
-        (
-            normalize_ric(row.get("ric")),
-            normalize_ticker(row.get("ticker")),
-            normalize_optional_text(row.get("isin")),
-            normalize_optional_text(row.get("exchange_name")),
-            int(row.get("classification_ok") or 0),
-            int(row.get("is_equity_eligible") or 0),
-            normalize_optional_text(row.get("coverage_role")),
-            normalize_optional_text(row.get("source")),
-            normalize_optional_text(row.get("job_run_id")),
-            normalize_optional_text(row.get("updated_at")),
-        )
+        {
+            "ric": normalize_ric(row.get("ric")),
+            "ticker": normalize_ticker(row.get("ticker")),
+            "isin": normalize_optional_text(row.get("isin")),
+            "exchange_name": normalize_optional_text(row.get("exchange_name")),
+            "classification_ok": int(row.get("classification_ok") or 0),
+            "is_equity_eligible": int(row.get("is_equity_eligible") or 0),
+            "coverage_role": normalize_optional_text(row.get("coverage_role")),
+            "source": normalize_optional_text(row.get("source")),
+            "job_run_id": normalize_optional_text(row.get("job_run_id")),
+            "updated_at": normalize_optional_text(row.get("updated_at")),
+        }
         for row in rows
         if normalize_ric(row.get("ric"))
     ]
     if not payload:
         return 0
-    conn.executemany(sql, payload)
-    touched_rics = [str(item[0]) for item in payload if item and item[0]]
-    ensure_registry_rows_from_master_rows(conn, rows)
+
+    ensure_registry_rows_from_master_rows(conn, payload)
+    _upsert_provisional_compat_rows(conn, payload)
+    touched_rics = [str(item["ric"]) for item in payload if item.get("ric")]
     if refresh_runtime_surfaces:
+        refresh_security_source_observation_daily(conn, rics=touched_rics)
         refresh_security_taxonomy_current(conn, rics=touched_rics)
         reconcile_default_security_policy_rows(conn, rics=touched_rics)
         refresh_security_source_observation_daily(conn, rics=touched_rics)
@@ -297,71 +331,27 @@ def sync_security_master_seed(
 
     now_iso = datetime.now(timezone.utc).isoformat()
     job_run_id = f"{seed_source}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
-    insert_sql = f"""
-        INSERT OR IGNORE INTO {SECURITY_MASTER_TABLE} (
-            ric,
-            ticker,
-            isin,
-            exchange_name,
-            classification_ok,
-            is_equity_eligible,
-            coverage_role,
-            source,
-            job_run_id,
-            updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """
-    update_sql = f"""
-        UPDATE {SECURITY_MASTER_TABLE}
-        SET
-            ticker = COALESCE(NULLIF(ticker, ''), ?),
-            isin = COALESCE(NULLIF(isin, ''), ?),
-            exchange_name = COALESCE(NULLIF(exchange_name, ''), ?),
-            coverage_role = COALESCE(NULLIF(?, ''), coverage_role),
-            source = COALESCE(source, ?),
-            job_run_id = COALESCE(job_run_id, ?),
-            updated_at = COALESCE(NULLIF(updated_at, ''), ?)
-        WHERE ric = ?
-    """
-    before = conn.total_changes
-    conn.executemany(
-        insert_sql,
+    rows_upserted = _upsert_provisional_compat_rows(
+        conn,
         [
-            (
-                normalize_ric(row.get("ric")),
-                normalize_ticker(row.get("ticker")) or ticker_from_ric(row.get("ric")),
-                normalize_optional_text(row.get("isin")),
-                normalize_optional_text(row.get("exchange_name")),
-                0,
-                0,
-                normalize_optional_text(row.get("coverage_role")) or "native_equity",
-                seed_source,
-                job_run_id,
-                now_iso,
-            )
+            {
+                "ric": normalize_ric(row.get("ric")),
+                "ticker": normalize_ticker(row.get("ticker")) or ticker_from_ric(row.get("ric")),
+                "isin": normalize_optional_text(row.get("isin")),
+                "exchange_name": normalize_optional_text(row.get("exchange_name")),
+                "classification_ok": 0,
+                "is_equity_eligible": 0,
+                "coverage_role": normalize_optional_text(row.get("coverage_role")) or "native_equity",
+                "source": seed_source,
+                "job_run_id": job_run_id,
+                "updated_at": now_iso,
+            }
             for row in seed_rows
             if normalize_ric(row.get("ric"))
         ],
     )
-    conn.executemany(
-        update_sql,
-        [
-            (
-                normalize_ticker(row.get("ticker")) or ticker_from_ric(row.get("ric")),
-                normalize_optional_text(row.get("isin")),
-                normalize_optional_text(row.get("exchange_name")),
-                normalize_optional_text(row.get("coverage_role")) or "",
-                seed_source,
-                job_run_id,
-                now_iso,
-                normalize_ric(row.get("ric")),
-            )
-            for row in seed_rows
-            if normalize_ric(row.get("ric"))
-        ],
-    )
-    rows_upserted = int(conn.total_changes - before)
     touched_rics = [normalize_ric(row.get("ric")) for row in seed_rows if normalize_ric(row.get("ric"))]
+    refresh_security_source_observation_daily(conn, rics=touched_rics)
     refresh_security_taxonomy_current(conn, rics=touched_rics)
     reconcile_default_security_policy_rows(conn, rics=touched_rics)
     refresh_security_source_observation_daily(conn, rics=touched_rics)

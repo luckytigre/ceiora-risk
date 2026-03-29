@@ -95,6 +95,10 @@ Practical rule:
 - when touching canonical source reads, keep the split explicit:
   - `backend/data/source_read_authority.py` owns the lower registry-first source authority helpers
   - `backend/data/source_reads.py` stays the public source-read facade and keeps SQLite cache/compat logic plus raw cross-section exposure helpers
+- when touching legacy-named universe sync code, keep the containment explicit:
+  - `backend/universe/security_master_sync.py` is compatibility-named only
+  - runtime/bootstrap/seed/LSEG update flows through that seam should update registry-first current-state surfaces plus `security_master_compat_current`
+  - do not reintroduce physical `security_master` as the normal runtime write target through convenience edits
 - when touching default cUSE4 frontend imports, prefer the explicit cUSE4 surfaces:
   - `frontend/src/hooks/useCuse4Api.ts`
   - `frontend/src/lib/cuse4Api.ts`

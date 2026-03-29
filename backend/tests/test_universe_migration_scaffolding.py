@@ -14,6 +14,7 @@ from backend.universe.security_master_sync import (
     load_default_source_universe_rows,
     load_price_ingest_universe_rows,
     load_projection_only_universe_rows,
+    sync_security_master_seed,
     upsert_security_master_rows,
 )
 from backend.universe.source_observation import refresh_security_source_observation_daily
@@ -53,6 +54,7 @@ def test_bootstrap_populates_registry_policy_and_compat_tables(tmp_path: Path) -
     out = bootstrap_cuse4_source_tables(db_path=db_path, seed_path=seed_path)
 
     assert out["status"] == "ok"
+    assert out["security_master_rows"] == 0
     assert out["security_registry_rows"] == 2
     assert out["security_policy_current_rows"] == 2
     assert out["security_taxonomy_current_rows"] == 2
@@ -108,7 +110,7 @@ def test_runtime_rows_use_shared_legacy_policy_defaults_when_only_compat_rows_ex
     ensure_cuse4_schema(conn)
     conn.executemany(
         """
-        INSERT INTO security_master (
+        INSERT INTO security_master_compat_current (
             ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
@@ -143,6 +145,65 @@ def test_runtime_rows_use_shared_legacy_policy_defaults_when_only_compat_rows_ex
     assert rows["SPY.P"]["pit_fundamentals_enabled"] == projection_defaults["pit_fundamentals_enabled"]
     assert rows["SPY.P"]["pit_classification_enabled"] == projection_defaults["pit_classification_enabled"]
     assert rows["SPY.P"]["allow_cuse_returns_projection"] == projection_defaults["allow_cuse_returns_projection"]
+    conn.close()
+
+
+def test_sync_security_master_seed_preserves_projection_only_taxonomy_and_policy_without_preexisting_compat(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "data.db"
+    seed_path = tmp_path / "security_master_seed.csv"
+    seed_path.write_text(
+        "\n".join(
+            [
+                "ric,ticker,isin,exchange_name,coverage_role",
+                "SPY.P,SPY,US78462F1030,NYSE Arca,projection_only",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    conn = sqlite3.connect(str(db_path))
+    ensure_cuse4_schema(conn)
+
+    out = sync_security_master_seed(conn, seed_path=seed_path, source="security_master_seed")
+    conn.commit()
+
+    assert out["status"] == "ok"
+    master_rows = conn.execute("SELECT COUNT(*) FROM security_master").fetchone()
+    assert master_rows == (0,)
+    policy = _fetchone(
+        conn,
+        """
+        SELECT
+            pit_fundamentals_enabled,
+            pit_classification_enabled,
+            allow_cuse_returns_projection,
+            allow_cpar_extended_target
+        FROM security_policy_current
+        WHERE ric = 'SPY.P'
+        """,
+    )
+    taxonomy = _fetchone(
+        conn,
+        """
+        SELECT instrument_kind, vehicle_structure, is_single_name_equity
+        FROM security_taxonomy_current
+        WHERE ric = 'SPY.P'
+        """,
+    )
+    compat = _fetchone(
+        conn,
+        """
+        SELECT coverage_role
+        FROM security_master_compat_current
+        WHERE ric = 'SPY.P'
+        """,
+    )
+
+    assert tuple(policy) == (0, 0, 1, 1)
+    assert tuple(taxonomy) == ("fund_vehicle", "projection_only_vehicle", 0)
+    assert tuple(compat) == ("projection_only",)
     conn.close()
 
 
@@ -223,8 +284,17 @@ def test_upsert_security_master_rows_backfills_registry_taxonomy_source_observat
 
     assert rows_upserted == 2
 
+    master_count = conn.execute("SELECT COUNT(*) FROM security_master").fetchone()
+    assert master_count == (1,)
+    aapl_master = conn.execute(
+        "SELECT COUNT(*) FROM security_master WHERE ric = 'AAPL.OQ'"
+    ).fetchone()
+    assert aapl_master == (0,)
     registry_count = conn.execute("SELECT COUNT(*) FROM security_registry").fetchone()[0]
     assert int(registry_count or 0) == 2
+    assert conn.execute(
+        "SELECT COUNT(*) FROM security_master WHERE ric = 'AAPL.OQ'"
+    ).fetchone()[0] == 0
 
     spy_compat = _fetchone(
         conn,
@@ -399,6 +469,89 @@ def test_source_observation_requires_populated_registry_before_switching_authori
         """,
     )
     assert tuple(obs) == (1, 1)
+    conn.close()
+
+
+def test_source_observation_keeps_compat_only_rows_when_registry_is_populated_for_other_names(tmp_path: Path) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    ensure_cuse4_schema(conn)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    conn.execute(
+        """
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('AAPL.OQ', 'AAPL', 'active', 'security_registry_seed', ?)
+        """,
+        (now_iso,),
+    )
+    conn.execute(
+        """
+        INSERT INTO security_policy_current (
+            ric, price_ingest_enabled, pit_fundamentals_enabled, pit_classification_enabled,
+            allow_cuse_native_core, allow_cuse_fundamental_projection, allow_cuse_returns_projection,
+            allow_cpar_core_target, allow_cpar_extended_target, policy_source, updated_at
+        ) VALUES ('AAPL.OQ', 1, 1, 1, 1, 0, 0, 1, 1, 'registry_seed_defaults', ?)
+        """,
+        (now_iso,),
+    )
+    conn.execute(
+        """
+        INSERT INTO security_master_compat_current (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES ('ORPH.X', 'ORPH', 1, 1, 'native_equity', 'compat', ?)
+        """,
+        (now_iso,),
+    )
+    conn.executemany(
+        """
+        INSERT INTO security_prices_eod (ric, date, close, volume, currency, source, updated_at)
+        VALUES (?, '2026-03-14', 100.0, 1000.0, 'USD', 'lseg_toolkit', ?)
+        """,
+        [
+            ("AAPL.OQ", now_iso),
+            ("ORPH.X", now_iso),
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO security_classification_pit (ric, as_of_date, hq_country_code, source, updated_at)
+        VALUES (?, '2026-03-10', 'US', 'lseg_toolkit', ?)
+        """,
+        [
+            ("AAPL.OQ", now_iso),
+            ("ORPH.X", now_iso),
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO security_fundamentals_pit (ric, as_of_date, stat_date, source, updated_at)
+        VALUES (?, '2026-03-12', '2025-12-31', 'lseg_toolkit', ?)
+        """,
+        [
+            ("AAPL.OQ", now_iso),
+            ("ORPH.X", now_iso),
+        ],
+    )
+    conn.commit()
+
+    refreshed = refresh_security_source_observation_daily(conn, as_of_date="2026-03-15")
+    conn.commit()
+
+    assert refreshed == 2
+    rows = conn.execute(
+        """
+        SELECT ric, classification_ready, is_equity_eligible
+        FROM security_source_observation_daily
+        WHERE as_of_date = '2026-03-15'
+        ORDER BY ric
+        """
+    ).fetchall()
+    assert rows == [
+        ("AAPL.OQ", 1, 1),
+        ("ORPH.X", 1, 1),
+    ]
     conn.close()
 
 
@@ -776,6 +929,14 @@ def test_taxonomy_refresh_uses_latest_source_observation_per_ric(tmp_path: Path)
         """,
         (now_iso,),
     )
+    conn.execute(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES ('SPY.P', 'SPY', 0, 0, 'projection_only', 'security_master_seed', ?)
+        """,
+        (now_iso,),
+    )
     conn.executemany(
         """
         INSERT INTO security_source_observation_daily (
@@ -843,7 +1004,7 @@ def test_taxonomy_refresh_uses_latest_source_observation_per_ric(tmp_path: Path)
     conn.close()
 
 
-def test_runtime_rows_keep_compat_visible_when_registry_companions_are_incomplete(tmp_path: Path) -> None:
+def test_runtime_rows_do_not_surface_untracked_compat_rows_on_broad_reads(tmp_path: Path) -> None:
     db_path = tmp_path / "data.db"
     conn = sqlite3.connect(str(db_path))
     ensure_cuse4_schema(conn)
@@ -872,7 +1033,40 @@ def test_runtime_rows_keep_compat_visible_when_registry_companions_are_incomplet
 
     rows = load_security_runtime_rows(conn)
 
-    assert [row["ric"] for row in rows] == ["AAPL.OQ", "ORPH.X"]
+    assert [row["ric"] for row in rows] == ["AAPL.OQ"]
+    conn.close()
+
+
+def test_runtime_rows_can_fall_back_to_requested_compat_rows_without_broad_compat_resurrection(tmp_path: Path) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    ensure_cuse4_schema(conn)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    conn.execute(
+        """
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('AAPL.OQ', 'AAPL', 'active', 'security_registry_seed', ?)
+        """,
+        (now_iso,),
+    )
+    conn.executemany(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ("AAPL.OQ", "AAPL", 1, 1, "native_equity", "lseg_toolkit", now_iso),
+            ("ORPH.X", "ORPH", 1, 1, "native_equity", "lseg_toolkit", now_iso),
+        ],
+    )
+    conn.commit()
+
+    rows = load_security_runtime_rows(conn, tickers=["ORPH"])
+
+    assert [row["ric"] for row in rows] == ["ORPH.X"]
     conn.close()
 
 
@@ -1072,7 +1266,7 @@ def test_runtime_rows_historical_as_of_prefers_classification_snapshot_over_conf
     conn.close()
 
 
-def test_runtime_rows_fall_back_per_row_to_security_master_when_compat_is_partial(tmp_path: Path) -> None:
+def test_runtime_rows_do_not_fall_back_per_row_to_security_master_when_compat_is_partial(tmp_path: Path) -> None:
     db_path = tmp_path / "data.db"
     conn = sqlite3.connect(str(db_path))
     ensure_cuse4_schema(conn)
@@ -1102,7 +1296,7 @@ def test_runtime_rows_fall_back_per_row_to_security_master_when_compat_is_partia
 
     rows = load_security_runtime_rows(conn)
 
-    assert [row["ric"] for row in rows] == ["AAPL.OQ", "SPY.P"]
+    assert [row["ric"] for row in rows] == ["SPY.P"]
     conn.close()
 
 
@@ -1168,6 +1362,111 @@ def test_taxonomy_refresh_can_classify_registry_rows_without_security_master(tmp
         """,
     )
     assert tuple(row) == ("single_name_equity", "equity_security", 1, 1, "us")
+    conn.close()
+
+
+def test_taxonomy_refresh_ignores_conflicting_security_master_when_registry_and_compat_exist(tmp_path: Path) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    ensure_cuse4_schema(conn)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    conn.execute(
+        """
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('SPY.P', 'SPY', 'active', 'security_registry_seed', ?)
+        """,
+        (now_iso,),
+    )
+    conn.execute(
+        """
+        INSERT INTO security_master_compat_current (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES ('SPY.P', 'SPY', 0, 0, 'projection_only', 'compat', ?)
+        """,
+        (now_iso,),
+    )
+    conn.execute(
+        """
+        INSERT INTO security_master (
+            ric, ticker, classification_ok, is_equity_eligible, coverage_role, source, updated_at
+        ) VALUES ('SPY.P', 'SPY', 1, 1, 'native_equity', 'legacy_master', ?)
+        """,
+        (now_iso,),
+    )
+    conn.commit()
+
+    refreshed = refresh_security_taxonomy_current(conn, rics=["SPY.P"])
+    conn.commit()
+
+    assert refreshed == 1
+    row = _fetchone(
+        conn,
+        """
+        SELECT instrument_kind, vehicle_structure, is_single_name_equity, classification_ready
+        FROM security_taxonomy_current
+        WHERE ric = 'SPY.P'
+        """,
+    )
+    assert tuple(row) == ("fund_vehicle", "projection_only_vehicle", 0, 0)
+    conn.close()
+
+
+def test_taxonomy_refresh_does_not_default_unclassified_registry_rows_to_native_equity(tmp_path: Path) -> None:
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    ensure_cuse4_schema(conn)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    conn.execute(
+        """
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('TEST.X', 'TEST', 'active', 'security_registry_seed', ?)
+        """,
+        (now_iso,),
+    )
+    conn.execute(
+        """
+        INSERT INTO security_policy_current (
+            ric, price_ingest_enabled, pit_fundamentals_enabled, pit_classification_enabled,
+            allow_cuse_native_core, allow_cuse_fundamental_projection, allow_cuse_returns_projection,
+            allow_cpar_core_target, allow_cpar_extended_target, updated_at
+        ) VALUES ('TEST.X', 1, 1, 1, 1, 0, 0, 1, 1, ?)
+        """,
+        (now_iso,),
+    )
+    conn.execute(
+        """
+        INSERT INTO security_source_observation_daily (
+            as_of_date, ric, classification_ready, is_equity_eligible, price_ingest_enabled,
+            pit_fundamentals_enabled, pit_classification_enabled, has_price_history_as_of_date,
+            has_fundamentals_history_as_of_date, has_classification_history_as_of_date,
+            latest_price_date, latest_fundamentals_as_of_date, latest_classification_as_of_date,
+            source, job_run_id, updated_at
+        ) VALUES (
+            '2026-03-15', 'TEST.X', 0, 0, 1, 1, 1, 1, 0, 0,
+            '2026-03-14', NULL, NULL, 'source_observation', 'job_obs', ?
+        )
+        """,
+        (now_iso,),
+    )
+    conn.commit()
+
+    refreshed = refresh_security_taxonomy_current(conn, rics=["TEST.X"])
+    conn.commit()
+
+    assert refreshed == 1
+    row = _fetchone(
+        conn,
+        """
+        SELECT instrument_kind, vehicle_structure, is_single_name_equity, classification_ready
+        FROM security_taxonomy_current
+        WHERE ric = 'TEST.X'
+        """,
+    )
+    assert tuple(row) == ("other", "other", 0, 0)
     conn.close()
 
 
@@ -1304,7 +1603,7 @@ def test_legacy_selector_wrappers_match_named_selectors(tmp_path: Path) -> None:
     conn.close()
 
 
-def test_runtime_rows_reclassify_seed_default_native_equity_to_ex_us_projection(tmp_path: Path) -> None:
+def test_runtime_rows_keep_stored_default_policy_current_authoritative(tmp_path: Path) -> None:
     db_path = tmp_path / "data.db"
     conn = sqlite3.connect(str(db_path))
     ensure_cuse4_schema(conn)
@@ -1345,9 +1644,9 @@ def test_runtime_rows_reclassify_seed_default_native_equity_to_ex_us_projection(
 
     assert len(rows) == 1
     row = rows[0]
-    assert row["allow_cuse_native_core"] == 0
-    assert row["allow_cuse_fundamental_projection"] == 1
-    assert row["allow_cpar_core_target"] == 0
+    assert row["allow_cuse_native_core"] == 1
+    assert row["allow_cuse_fundamental_projection"] == 0
+    assert row["allow_cpar_core_target"] == 1
     assert row["allow_cpar_extended_target"] == 1
     conn.close()
 
