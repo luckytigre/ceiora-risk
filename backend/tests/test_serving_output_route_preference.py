@@ -8,13 +8,16 @@ from backend.api.routes import health as health_routes
 from backend.api.routes import portfolio as portfolio_routes
 from backend.api.routes import risk as risk_routes
 from backend.api.routes import universe as universe_routes
+import backend.services.cuse4_dashboard_payload_service as cuse4_dashboard_payload_service
+import backend.services.cuse4_health_diagnostics_service as cuse4_health_diagnostics_service
 
 
 def test_portfolio_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(
-        portfolio_routes.dashboard_payload_service,
-        "get_dashboard_payload_readers",
-        lambda: portfolio_routes.dashboard_payload_service.DashboardPayloadReaders(
+        portfolio_routes,
+        "load_portfolio_response",
+        lambda *, position_normalizer=None: cuse4_dashboard_payload_service.load_portfolio_response(
+            position_normalizer=position_normalizer,
             payload_loader=lambda name, *, fallback_loader=None: {"positions": [], "total_value": 1, "position_count": 0}
             if name == "portfolio"
             else None,
@@ -31,9 +34,10 @@ def test_portfolio_prefers_serving_payload_over_cache(monkeypatch) -> None:
 
 def test_exposures_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(
-        exposures_routes.dashboard_payload_service,
-        "get_dashboard_payload_readers",
-        lambda: exposures_routes.dashboard_payload_service.DashboardPayloadReaders(
+        exposures_routes,
+        "load_exposures_response",
+        lambda *, mode: cuse4_dashboard_payload_service.load_exposures_response(
+            mode=mode,
             payload_loader=lambda name, *, fallback_loader=None: {"raw": [{"factor_id": "style_size_score"}]}
             if name == "exposures"
             else None,
@@ -50,9 +54,10 @@ def test_exposures_prefers_serving_payload_over_cache(monkeypatch) -> None:
 
 def test_exposures_normalizes_legacy_factor_field(monkeypatch) -> None:
     monkeypatch.setattr(
-        exposures_routes.dashboard_payload_service,
-        "get_dashboard_payload_readers",
-        lambda: exposures_routes.dashboard_payload_service.DashboardPayloadReaders(
+        exposures_routes,
+        "load_exposures_response",
+        lambda *, mode: cuse4_dashboard_payload_service.load_exposures_response(
+            mode=mode,
             payload_loader=lambda name, *, fallback_loader=None: {
                 "raw": [{"factor": "Momentum", "value": 1.0}],
                 "sensitivity": [],
@@ -81,9 +86,9 @@ def test_risk_prefers_serving_payload_over_cache(monkeypatch) -> None:
         "risk_engine": {"specific_risk_ticker_count": 1},
     }
     monkeypatch.setattr(
-        risk_routes.dashboard_payload_service,
-        "get_dashboard_payload_readers",
-        lambda: risk_routes.dashboard_payload_service.DashboardPayloadReaders(
+        risk_routes,
+        "load_risk_response",
+        lambda: cuse4_dashboard_payload_service.load_risk_response(
             payload_loader=lambda name, *, fallback_loader=None: risk_payload
             if name == "risk"
             else {"status": "ok"}
@@ -110,9 +115,9 @@ def test_risk_normalizes_legacy_factor_and_country_fields(monkeypatch) -> None:
         "risk_engine": {"specific_risk_ticker_count": 1},
     }
     monkeypatch.setattr(
-        risk_routes.dashboard_payload_service,
-        "get_dashboard_payload_readers",
-        lambda: risk_routes.dashboard_payload_service.DashboardPayloadReaders(
+        risk_routes,
+        "load_risk_response",
+        lambda: cuse4_dashboard_payload_service.load_risk_response(
             payload_loader=lambda name, *, fallback_loader=None: risk_payload
             if name == "risk"
             else {"status": "ok"}
@@ -137,9 +142,9 @@ def test_risk_normalizes_legacy_factor_and_country_fields(monkeypatch) -> None:
 def test_health_prefers_serving_payload_over_cache(monkeypatch) -> None:
     monkeypatch.setattr(health_routes, "require_role", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        health_routes.health_diagnostics_service,
-        "get_health_diagnostics_readers",
-        lambda: health_routes.health_diagnostics_service.HealthDiagnosticsReaders(
+        health_routes,
+        "load_health_diagnostics_payload",
+        lambda: cuse4_health_diagnostics_service.load_health_diagnostics_payload(
             payload_loader=lambda name, *, fallback_loader=None: {"status": "ok", "as_of": "2026-03-03", "notes": ["fresh"]}
             if name == "health_diagnostics"
             else None,

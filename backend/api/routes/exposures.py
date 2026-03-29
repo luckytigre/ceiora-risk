@@ -5,15 +5,17 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from backend.api.routes.readiness import raise_cache_not_ready
-from backend.services import cuse4_dashboard_payload_service as dashboard_payload_service
-from backend.services import cuse4_factor_history_service as factor_history_service
+import backend.services.cuse4_dashboard_payload_service as dashboard_payload_service
+import backend.services.cuse4_factor_history_service as factor_history_service
 
 router = APIRouter()
+load_exposures_response = dashboard_payload_service.load_exposures_response
+load_factor_history_response = factor_history_service.load_factor_history_response
 
 @router.get("/exposures")
 async def get_exposures(mode: str = Query("raw", pattern="^(raw|sensitivity|risk_contribution)$")):
     try:
-        return dashboard_payload_service.load_exposures_response(mode=mode)
+        return load_exposures_response(mode=mode)
     except dashboard_payload_service.DashboardPayloadNotReady as exc:
         raise_cache_not_ready(
             cache_key=exc.cache_key,
@@ -28,7 +30,7 @@ async def get_exposure_history(
     years: int = Query(5, ge=1, le=10),
 ):
     try:
-        return factor_history_service.load_factor_history_response(
+        return load_factor_history_response(
             factor_token=factor_id,
             years=int(years),
         )
