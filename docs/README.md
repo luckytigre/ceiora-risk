@@ -39,7 +39,6 @@ Primary files:
 - `dependency-rules.md`
 - `maintainer-guide.md`
 - `MODEL_FAMILIES_AND_OWNERSHIP.md`
-- `REPO_TIGHTENING_PLAN.md`
 - `UNIVERSE_REGISTRY_AND_MODEL_GATING_PLAN.md`
 
 cPAR-specific active architecture docs stay in the same folder:
@@ -78,6 +77,8 @@ Historical material is preserved, but it is not active guidance.
 
 - `archive/implementation-trackers/`
   - completed rollout trackers, implementation trackers, and archived planning specs
+  - includes the archived repo-tightening tracker:
+    `archive/implementation-trackers/REPO_TIGHTENING_PLAN_2026-03-28.md`
 - `archive/one-time-protocols/`
   - procedures that were useful for a specific cleanup or migration slice and are no longer live runbooks
 - `archive/execution-logs/`
