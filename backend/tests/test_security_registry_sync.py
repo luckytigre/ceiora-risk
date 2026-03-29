@@ -5,8 +5,10 @@ from pathlib import Path
 
 from backend.universe.bootstrap import bootstrap_cuse4_source_tables
 from backend.universe.registry_sync import (
+    derive_policy_flags_from_structure,
     ensure_registry_rows_from_master_rows,
     legacy_coverage_role_from_policy_flags,
+    policy_defaults_for_legacy_coverage_role,
     reconcile_default_security_policy_rows,
 )
 from backend.universe.schema import ensure_cuse4_schema
@@ -213,6 +215,15 @@ def test_legacy_coverage_role_mapper_defaults_non_canonical_policy_combinations_
         )
         == "native_equity"
     )
+
+
+def test_derive_policy_flags_from_structure_preserves_defaults_for_other_unknown_non_equity() -> None:
+    assert derive_policy_flags_from_structure(
+        legacy_coverage_role="native_equity",
+        instrument_kind=" other ",
+        model_home_market_scope=" unknown ",
+        is_single_name_equity=0,
+    ) == policy_defaults_for_legacy_coverage_role("native_equity")
 
 
 def test_reconcile_default_security_policy_rows_derives_defaults_from_taxonomy_without_compat(
