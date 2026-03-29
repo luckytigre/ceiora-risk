@@ -10,6 +10,7 @@
   - data diagnostics should read only the local SQLite archive surface
 - Operator health/runtime truth now persists through the Neon-backed runtime-state surface for the core operator/control-room keys, while broader analytics cache state remains transitional.
 - The Neon-backed runtime-state surface is intentionally operator-facing: `risk_engine_meta`, `neon_sync_health`, `refresh_status`, `holdings_sync_state`, and the active snapshot pointer.
+- `backend/data/runtime_state.py` remains the public boundary for that surface, while lower Neon/fallback authority helpers stay isolated in `backend/data/runtime_state_authority.py`.
 - `/api/health` and `/api/operator/status` now expose runtime-state status/source fields so missing Neon runtime truth is visible instead of looking healthy by omission.
 - `RECALC`/holdings-dirty state is backend-persisted, not browser-local.
 - Risk engine recompute cadence: weekly (`RISK_RECOMPUTE_INTERVAL_DAYS=7` by default).

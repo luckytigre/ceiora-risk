@@ -21,7 +21,7 @@ These are the non-negotiable structural rules for this repository.
    Stage-family logic belongs in orchestration-local stage modules, not in one branch-heavy integration file.
 
 5. Data facades stay facades.
-   Files like `core_reads.py`, `model_outputs.py`, `cross_section_snapshot.py`, and `serving_outputs.py` should not reaccrete raw helper logic that was intentionally moved behind them.
+   Files like `core_reads.py`, `model_outputs.py`, `cross_section_snapshot.py`, `serving_outputs.py`, and `runtime_state.py` should not reaccrete raw helper logic that was intentionally moved behind them.
 
 6. New junk-drawer modules are forbidden.
    Do not add `shared.py`, `common.py`, or vague `*manager.py` modules unless there is an explicit reviewed lifecycle responsibility.

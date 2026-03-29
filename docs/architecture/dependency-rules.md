@@ -80,6 +80,10 @@ Current serving-output owner exception:
 - `backend/data/serving_output_manifest.py` owns the lower pure manifest drift helpers
 - `backend/data/serving_outputs.py` remains the public serving-payload facade and keeps route-facing read semantics plus the public write/manifest entrypoints
 
+Current runtime-state owner exception:
+- `backend/data/runtime_state_authority.py` owns the lower Neon and fallback runtime-state authority helpers
+- `backend/data/runtime_state.py` remains the public runtime-state facade and keeps the allowed-key policy, schema helper, public read/write entrypoints, and active-snapshot publish contract
+
 ## Entrypoint Rules
 
 Routes, CLI wrappers, and local scripts must stay thin.

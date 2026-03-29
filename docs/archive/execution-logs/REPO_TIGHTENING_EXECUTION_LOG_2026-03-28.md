@@ -658,3 +658,34 @@ Validation blockers:
 
 Notes:
 - adversarial review converged on one key boundary rule: the Neon/sqlite write helpers and Neon verification must move together, while the public `persist_current_payloads()` facade and manifest/repair entrypoints stay on `serving_outputs.py`
+
+## Slice 13C
+
+Scope:
+- `backend/data/runtime_state_authority.py`
+- `backend/data/runtime_state.py`
+- `backend/tests/test_runtime_state_authority_boundaries.py`
+- `docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md`
+- `docs/architecture/architecture-invariants.md`
+- `docs/architecture/dependency-rules.md`
+- `docs/operations/OPERATIONS_PLAYBOOK.md`
+- `docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+
+Outcome:
+- extracted the lower Neon and fallback runtime-state helper bodies into `backend/data/runtime_state_authority.py`
+- kept `backend/data/runtime_state.py` as the public runtime-state facade for allowed-key validation, schema ownership, public read/write entrypoints, and active-snapshot publish
+- preserved the patchable `_read_neon_runtime_state` and `_write_neon_runtime_state` shims on the facade so existing runtime-state and cloud-bootstrap tests still intercept the same names
+- kept `refresh_status_service.py` on the facade/schema contract instead of routing that Neon claim path through the lower module
+- added a dedicated runtime-state boundary test so higher layers stay pinned to `runtime_state.py` and the lower module stays below the public contract
+- updated the active architecture, invariants, dependency, and operations docs to name the new lower runtime-state owner
+
+Validation:
+- `git diff --check -- backend/data/runtime_state.py backend/data/runtime_state_authority.py backend/tests/test_runtime_state_authority_boundaries.py docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md docs/architecture/architecture-invariants.md docs/architecture/dependency-rules.md docs/operations/OPERATIONS_PLAYBOOK.md docs/archive/execution-logs/REPO_TIGHTENING_EXECUTION_LOG_2026-03-28.md`
+- `./.venv_local/bin/python -m py_compile backend/data/runtime_state.py backend/data/runtime_state_authority.py backend/tests/test_runtime_state_authority_boundaries.py`
+- `./.venv_local/bin/python -m pytest -q backend/tests/test_runtime_state.py backend/tests/test_cloud_bootstrap_proof.py backend/tests/test_runtime_state_authority_boundaries.py backend/tests/test_refresh_status_service.py`
+
+Validation blockers:
+- `make doctor` remains blocked by the pre-existing syntax error in `scripts/doctor.sh`'s inline Python (`SyntaxError: invalid syntax` at `finally:`), so Slice 13C keeps the blocker recorded instead of widening scope into a repair
+
+Notes:
+- the runtime-state slice stayed intentionally smaller than the serving-output slices because `runtime_state.py` already had a limited surface area and `refresh_status_service.py` still owns a direct Neon claim path against the same table contract

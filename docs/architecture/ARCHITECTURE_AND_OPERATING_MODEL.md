@@ -254,6 +254,7 @@ Key rule:
 - The currently active serving payload set should be durable and mirrorable (`serving_payload_current`), not only present in the local cache layer.
 - public serving-payload reads go through `backend/data/serving_outputs.py` (`load_current_payload(s)` / `load_runtime_payload(s)`), while lower Neon/SQLite read helpers stay isolated in `backend/data/serving_output_read_authority.py`
 - durable serving-payload writes, Neon verification, and manifest drift helpers also stay behind `backend/data/serving_outputs.py`, with lower write/manifest helpers isolated from higher layers
+- public operator/runtime-state reads and writes go through `backend/data/runtime_state.py`, while lower Neon/fallback authority helpers stay isolated in `backend/data/runtime_state_authority.py`
 - Full serving promotion now means the canonical payload set, not an arbitrary subset:
   - `eligibility`
   - `exposures`

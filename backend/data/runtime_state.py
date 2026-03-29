@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from psycopg.rows import dict_row
-
 from backend import config
 from backend.data.neon import connect, resolve_dsn
 from backend.data.neon_primary_write import execute_neon_primary_write
+from backend.data import runtime_state_authority
 
 SURFACE_NAME = "runtime_state"
 _ACTIVE_SNAPSHOT_KEY = "__cache_snapshot_active"
@@ -57,79 +55,21 @@ def _ensure_postgres_schema(pg_conn) -> None:
 
 
 def _read_neon_runtime_state(state_key: str) -> dict[str, Any]:
-    try:
-        conn = connect(dsn=resolve_dsn(None), autocommit=True)
-    except Exception as exc:
-        return {
-            "status": "error",
-            "source": "neon",
-            "error": {"type": type(exc).__name__, "message": str(exc)},
-            "value": None,
-        }
-    try:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT value_json
-                FROM runtime_state_current
-                WHERE state_key = %s
-                LIMIT 1
-                """,
-                (state_key,),
-            )
-            row = cur.fetchone()
-    except Exception as exc:
-        return {
-            "status": "error",
-            "source": "neon",
-            "error": {"type": type(exc).__name__, "message": str(exc)},
-            "value": None,
-        }
-    finally:
-        conn.close()
-    if not row:
-        return {"status": "missing", "source": "neon", "value": None}
-    raw = row.get("value_json")
-    if raw is None:
-        return {"status": "missing", "source": "neon", "value": None}
-    if isinstance(raw, (dict, list)):
-        return {"status": "ok", "source": "neon", "value": raw}
-    return {"status": "ok", "source": "neon", "value": json.loads(str(raw))}
+    return runtime_state_authority.read_neon_runtime_state(
+        state_key,
+        connect_fn=connect,
+        resolve_dsn_fn=resolve_dsn,
+    )
 
 
 def _write_neon_runtime_state(state_key: str, value: Any) -> dict[str, Any]:
-    payload_json = json.dumps(value, default=str, sort_keys=True, separators=(",", ":"))
-    updated_at = datetime.now(timezone.utc).isoformat()
-    try:
-        conn = connect(dsn=resolve_dsn(None), autocommit=False)
-    except Exception as exc:
-        return {
-            "status": "error",
-            "error": {"type": type(exc).__name__, "message": str(exc)},
-        }
-    try:
-        _ensure_postgres_schema(conn)
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO runtime_state_current (state_key, value_json, updated_at)
-                VALUES (%s, %s::jsonb, %s::timestamptz)
-                ON CONFLICT (state_key) DO UPDATE SET
-                    value_json = EXCLUDED.value_json,
-                    updated_at = EXCLUDED.updated_at
-                """,
-                (state_key, payload_json, updated_at),
-            )
-        conn.commit()
-        return {"status": "ok", "updated_at": updated_at}
-    except Exception as exc:
-        conn.rollback()
-        return {
-            "status": "error",
-            "error": {"type": type(exc).__name__, "message": str(exc)},
-        }
-    finally:
-        conn.close()
+    return runtime_state_authority.write_neon_runtime_state(
+        state_key,
+        value,
+        connect_fn=connect,
+        resolve_dsn_fn=resolve_dsn,
+        ensure_postgres_schema=_ensure_postgres_schema,
+    )
 
 
 def load_runtime_state(
@@ -207,14 +147,11 @@ def _write_fallback_runtime_state(
     *,
     fallback_writer,
 ) -> dict[str, Any]:
-    try:
-        fallback_writer(state_key, value)
-        return {"status": "ok"}
-    except Exception as exc:
-        return {
-            "status": "error",
-            "error": {"type": type(exc).__name__, "message": str(exc)},
-        }
+    return runtime_state_authority.write_fallback_runtime_state(
+        state_key,
+        value,
+        fallback_writer=fallback_writer,
+    )
 
 
 def publish_active_snapshot(
