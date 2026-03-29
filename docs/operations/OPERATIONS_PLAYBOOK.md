@@ -28,7 +28,7 @@
 - Compatibility-named universe sync helpers are not write-authority exceptions:
   - `backend/universe/security_master_sync.py` may still exist as the legacy seam name
   - seed/bootstrap/LSEG updates through that seam should update registry-first current-state surfaces plus `security_master_compat_current`, not treat physical `security_master` as the runtime write target
-- The historical implementation plan for moving deep `health_diagnostics` work off the quick refresh path lives in [HEALTH_DIAGNOSTICS_REFRESH_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/archive/legacy-plans/HEALTH_DIAGNOSTICS_REFRESH_PLAN.md).
+- The historical implementation plan for moving deep `health_diagnostics` work off the quick refresh path lives in [HEALTH_DIAGNOSTICS_REFRESH_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/archive/legacy-plans/HEALTH_DIAGNOSTICS_REFRESH_PLAN.md).
 - Current live factor set: 45 total factors, including 14 style factors. `Book-to-Price` and `Earnings Yield` remain; there is no standalone `Value` factor.
 - Execution model: one orchestrator framework with profile-specific cadence:
   - `serve-refresh`
@@ -55,7 +55,7 @@
 - Cloud-native prep entrypoints are now available but not required for the hobby profile:
   - serve app: `make backend-serve-prod`
   - control app: `make backend-control-prod`
-  - process split details live in [CLOUD_NATIVE_RUNBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/operations/CLOUD_NATIVE_RUNBOOK.md)
+  - process split details live in [CLOUD_NATIVE_RUNBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/operations/CLOUD_NATIVE_RUNBOOK.md)
 
 ## Fresh Machine Cloud-Serve Bootstrap
 - A fresh `cloud-serve` machine should not require a preexisting large local `backend/runtime/data.db` to serve the app.
@@ -156,7 +156,7 @@ Runtime-role rule:
 
 Parallel cPAR note:
 - cPAR has its own dedicated operating assumptions and does not share the cUSE4 refresh API/operator flow.
-- Current cPAR runtime-role, build-entrypoint, and authority behavior is documented in [CPAR_OPERATIONS_PLAYBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/operations/CPAR_OPERATIONS_PLAYBOOK.md).
+- Current cPAR runtime-role, build-entrypoint, and authority behavior is documented in [CPAR_OPERATIONS_PLAYBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/operations/CPAR_OPERATIONS_PLAYBOOK.md).
 
 ## Operator UI Policy
 - Health page is the primary control room.

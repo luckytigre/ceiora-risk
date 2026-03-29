@@ -69,7 +69,7 @@ Primary files:
 - `reference/protocols/TRBC_CLASSIFICATION_PIT_PROTOCOL.md`
 - `reference/protocols/UNIVERSE_ADD_RUNBOOK.md`
 - `reference/migrations/`
-- `reference/DOC_INVENTORY.md`
+- `reference/migrations/README.md`
 
 ## Archive Taxonomy
 

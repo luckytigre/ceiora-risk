@@ -5,10 +5,10 @@ Owner: Codex
 Status: Active implementation tracker
 
 Related docs:
-- [Cloud-Native Implementation Plan](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/CLOUD_NATIVE_IMPLEMENTATION_PLAN.md)
-- [Cloud-Native Runbook](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/operations/CLOUD_NATIVE_RUNBOOK.md)
-- [Architecture And Operating Model](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md)
-- [Operations Playbook](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/docs/operations/OPERATIONS_PLAYBOOK.md)
+- [Cloud-Native Implementation Plan](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CLOUD_NATIVE_IMPLEMENTATION_PLAN.md)
+- [Cloud-Native Runbook](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/operations/CLOUD_NATIVE_RUNBOOK.md)
+- [Architecture And Operating Model](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md)
+- [Operations Playbook](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/operations/OPERATIONS_PLAYBOOK.md)
 
 ## Update Discipline
 
@@ -100,21 +100,21 @@ Target outcome:
 
 Already present:
 - FastAPI split entrypoints:
-  - [backend/main.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/main.py)
-  - [backend/serve_main.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/serve_main.py)
-  - [backend/control_main.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/control_main.py)
-- frozen route matrix in [router_registry.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/api/router_registry.py)
-- frontend split-origin helper in [_backend.ts](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/src/app/api/_backend.ts)
+  - [backend/main.py](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/main.py)
+  - [backend/serve_main.py](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/serve_main.py)
+  - [backend/control_main.py](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/control_main.py)
+- frozen route matrix in [router_registry.py](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/api/router_registry.py)
+- frontend split-origin helper in [_backend.ts](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/frontend/src/app/api/_backend.ts)
 - refresh-status read ownership already split into a dedicated service
 - refresh dispatch ownership already split into a dedicated service
 - current local app/runtime bootstrap now has concrete owners:
-  - [scripts/setup_local_env.sh](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/scripts/setup_local_env.sh)
-  - [scripts/local_app/up.sh](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/scripts/local_app/up.sh)
-  - [scripts/doctor.sh](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/scripts/doctor.sh)
+  - [scripts/setup_local_env.sh](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/scripts/setup_local_env.sh)
+  - [scripts/local_app/up.sh](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/scripts/local_app/up.sh)
+  - [scripts/doctor.sh](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/scripts/doctor.sh)
 - baseline container assets:
-  - [backend/Dockerfile.serve](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/Dockerfile.serve)
-  - [backend/Dockerfile.control](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/Dockerfile.control)
-  - [frontend/Dockerfile](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/Dockerfile)
+  - [backend/Dockerfile.serve](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/Dockerfile.serve)
+  - [backend/Dockerfile.control](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/Dockerfile.control)
+  - [frontend/Dockerfile](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/frontend/Dockerfile)
 
 Important remaining caveat from the current codebase:
 - the control plane still owns process-local background refresh execution through `refresh_manager`
@@ -131,7 +131,7 @@ Purpose:
 - preserve current all-in-one operational fallback
 
 Entrypoint:
-- [backend.main:app](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/main.py)
+- [backend.main:app](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/main.py)
 
 Ownership:
 - not managed by Terraform
@@ -153,7 +153,7 @@ Purpose:
 - proxies operator/control traffic to `control.ceiora.com`
 
 Entrypoint:
-- [frontend/Dockerfile](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/frontend/Dockerfile)
+- [frontend/Dockerfile](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/frontend/Dockerfile)
 
 ### Cloud Serve API
 
@@ -162,7 +162,7 @@ Purpose:
 - stateless and Neon-backed
 
 Entrypoint:
-- [backend.serve_main:app](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/serve_main.py)
+- [backend.serve_main:app](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/serve_main.py)
 
 Hostname:
 - `api.ceiora.com`
@@ -174,7 +174,7 @@ Purpose:
 - status, diagnostics, refresh dispatch
 
 Entrypoint:
-- [backend.control_main:app](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/control_main.py)
+- [backend.control_main:app](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/control_main.py)
 
 Hostname:
 - `control.ceiora.com`

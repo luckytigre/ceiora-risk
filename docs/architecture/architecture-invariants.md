@@ -65,7 +65,7 @@ These are the non-negotiable structural rules for this repository.
 
 ## Existing Guardrails
 
-The repository already enforces several of these with lightweight tests in [test_architecture_boundaries.py](/Users/shaun/Library/CloudStorage/Dropbox/040%20-%20Creating/ceiora-risk/backend/tests/test_architecture_boundaries.py):
+The repository already enforces several of these with lightweight tests in [test_architecture_boundaries.py](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/backend/tests/test_architecture_boundaries.py):
 - routes may not import `backend.data` directly
 - `cuse4_operator_status_service.py` and the legacy `operator_status_service.py` shim may not import `backend.orchestration.run_model_pipeline`
 - new `shared.py`, `common.py`, and vague `*manager.py` files are rejected under `backend/`
