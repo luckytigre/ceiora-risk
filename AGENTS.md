@@ -1,78 +1,72 @@
 # AGENTS.md
 
-## Architectural Intent
+This file is a short repo-local guardrail, not a second documentation system.
 
-This repository is a layered application, not a generic framework.
+Read the canonical docs first:
+- [docs/README.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/README.md)
+- [ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/ARCHITECTURE_AND_OPERATING_MODEL.md)
+- [OPERATIONS_PLAYBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/operations/OPERATIONS_PLAYBOOK.md)
+- [CLOUD_NATIVE_RUNBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/operations/CLOUD_NATIVE_RUNBOOK.md)
+- [CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md)
+- [CPAR_OPERATIONS_PLAYBOOK.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/operations/CPAR_OPERATIONS_PLAYBOOK.md)
 
-The intended structure is:
-- `backend/api`: thin transport entrypoints
-- `backend/services`: application-facing payload and mutation surfaces
-- `backend/orchestration`: refresh/rebuild workflows
-- `backend/analytics`, `backend/risk_model`, `backend/universe`, `backend/portfolio`: reusable domain and compute logic
-- `backend/data`: persistence and provider-specific adapters
+## Current Project Shape
 
-Prefer boring, explicit ownership over clever abstractions.
+This repo hosts two model families:
+- `cUSE4`
+  - incumbent/default model family
+  - core logic in `backend/risk_model/*`
+  - default app-facing routes and pages still largely map to cUSE
+- `cPAR`
+  - explicitly parallel model family
+  - pure model logic in `backend/cpar/*`
+  - integration surfaces stay explicitly namespaced
+
+Normal integration layers:
+- `backend/api/*`: thin transport
+- `backend/services/*`: application-facing assembly and mutations
+- `backend/orchestration/*`: staged workflows
+- `backend/data/*`: persistence and authority adapters
+- `frontend/src/features/cuse4/*`: cUSE-owned UI
+- `frontend/src/features/cpar/*`: cPAR-owned UI
+
+## Runtime And Data Authority
+
+- Neon is the operating source of truth for app/runtime reads when `DATA_BACKEND=neon`.
+- Local SQLite remains:
+  - the direct LSEG ingest landing zone
+  - the deep archive
+  - the mirror/repair surface
+  - workspace scratch during rebuilds
+- `cloud-serve` should be fail-closed and Neon-authoritative.
+- `local-ingest` is the only runtime that should own broad ingest/publish/rebuild work.
+
+Do not introduce new logic that silently falls back from Neon to local SQLite in cloud-serving behavior unless the active docs explicitly permit it.
 
 ## Boundary Rules
 
-1. Routes stay thin.
-   They may validate, authenticate, delegate, and translate errors.
-   They should not assemble cross-store truth inline.
+- Keep routes thin.
+- Let one service own each application-facing payload or mutation flow.
+- Keep persistence and authority handling in `backend/data/*`.
+- Keep long-running or staged job logic in `backend/orchestration/*`.
+- Do not create vague catch-all modules like `shared.py`, `common.py`, or new god-manager files.
 
-2. Services own application-facing assembly.
-   If multiple lower-layer reads are needed for one UI/API surface, one service module should own that composition.
+If an ownership exception is justified, update the active architecture docs in the same change.
 
-3. Workflows coordinate long-running work.
-   `backend/orchestration` should sequence stages and pass execution context explicitly.
-   Do not reintroduce hidden module-global path mutation.
+## Documentation Rules
 
-4. Data modules own persistence.
-   `backend/data` must not import API or frontend semantics.
+- Project docs belong under `docs/`.
+- Root-level Markdown should stay minimal. `AGENTS.md` is allowed; planning notes and specs should not live at repo root.
+- Completed trackers, one-time procedures, and historical investigations belong in `docs/archive/*`, not in the active architecture or reference surface.
+- If behavior changes materially, update the relevant canonical docs instead of only adding a note somewhere else.
 
-## Dependency Direction
+## Validation Minimums
 
-Allowed:
-- `api` -> `services`
-- `services` -> `analytics` / `risk_model` / `universe` / `portfolio` / `data`
-- `orchestration` -> lower layers and narrow operational service surfaces
+Before commit, run the smallest meaningful validation for the touched surface.
 
-Avoid:
-- `routes` importing `backend.data`
-- `services` importing API layers
-- `services` importing full workflow modules only to inspect static metadata
+Common minimums:
+- `git diff --check`
+- targeted backend tests for touched services/routes
+- `cd frontend && npm run typecheck` for frontend changes
 
-## Placement Guidance
-
-Put new code:
-- in `services` when it defines one application-facing payload or mutation flow
-- in `orchestration` when it affects staged jobs or rebuild workflows
-- in `data` when it is a stable persistence or provider adapter
-- in domain packages when it is reusable compute logic
-
-Do not add:
-- `shared.py`
-- `common.py`
-- vague `*manager.py` files unless the module truly owns lifecycle control
-
-## Anti-Patterns To Avoid
-
-- route-local SQL or cache wiring
-- hidden workflow side effects through mutated globals
-- reaccumulating branch-heavy logic in `stage_runner.py` or `run_model_pipeline.py`
-- turning façade modules back into god files after they were split
-- creating a new generic abstraction layer to avoid choosing an owner
-
-## Change Strategy
-
-- prefer incremental changes over structural drift
-- preserve stable facades when they already exist
-- add the smallest helper/module that creates a clearer boundary
-- update `docs/architecture/` when ownership or semantics materially change
-- if you introduce a justified exception to these rules, document it in `docs/architecture/dependency-rules.md` and `docs/architecture/architecture-invariants.md`
-
-## The repository should not accumulate temporary artifacts.
-
-Rules:
-- scratch outputs must go to a temporary location and be removed
-- investigation artifacts should not remain in active directories
-- only durable, reusable assets belong in the main repo surface
+When runtime/ops contracts change, also check the relevant runbook/doc surface and any applicable smoke or repair path.
