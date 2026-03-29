@@ -101,7 +101,7 @@ def test_cloud_expensive_diagnostics_require_operator_token(monkeypatch) -> None
         lambda **_kwargs: {"status": "ok"},
     )
     monkeypatch.setattr(
-        health_routes.health_diagnostics_service,
+        health_routes,
         "load_health_diagnostics_payload",
         lambda: {"status": "ok"},
     )

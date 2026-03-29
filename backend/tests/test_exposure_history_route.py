@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from backend.api.routes import exposures as exposures_routes
 from backend.data import history_queries
 from backend.main import app
+import backend.services.cuse4_factor_history_service as cuse4_factor_history_service
 
 
 def test_exposure_history_route_resolves_factor_id_to_factor_name(monkeypatch) -> None:
@@ -24,16 +25,17 @@ def test_exposure_history_route_resolves_factor_id_to_factor_name(monkeypatch) -
         return None
 
     monkeypatch.setattr(
-        exposures_routes.factor_history_service,
-        "get_factor_history_dependencies",
-        lambda: exposures_routes.factor_history_service.FactorHistoryDependencies(
+        exposures_routes,
+        "load_factor_history_response",
+        lambda *, factor_token, years: cuse4_factor_history_service.load_factor_history_response(
+            factor_token=factor_token,
+            years=years,
             payload_loader=lambda name, *, fallback_loader=None: _load_payload(name),
             fallback_loader=lambda _key: None,
-            factor_resolver=exposures_routes.factor_history_service.resolve_factor_history_factor,
             history_loader=lambda cache_db, *, factor, years: ("2026-03-03", [("2026-03-02", 0.01)])
             if factor == "Beta" and years == 5
             else (None, []),
-            sqlite_path=exposures_routes.factor_history_service.config.SQLITE_PATH,
+            sqlite_path="unused.db",
         ),
     )
 
@@ -75,18 +77,17 @@ def test_exposure_history_route_resolves_factor_id_from_history_when_catalog_mis
     conn.commit()
     conn.close()
 
+    monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: False)
     monkeypatch.setattr(
-        exposures_routes.factor_history_service,
-        "get_factor_history_dependencies",
-        lambda: exposures_routes.factor_history_service.FactorHistoryDependencies(
-            payload_loader=lambda name, *, fallback_loader=None: None,
+        exposures_routes,
+        "load_factor_history_response",
+        lambda *, factor_token, years: cuse4_factor_history_service.load_factor_history_response(
+            factor_token=factor_token,
+            years=years,
             fallback_loader=lambda _key: None,
-            factor_resolver=exposures_routes.factor_history_service.resolve_factor_history_factor,
-            history_loader=exposures_routes.factor_history_service.load_factor_return_history,
             sqlite_path=str(cache_db),
         ),
     )
-    monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: False)
 
     client = TestClient(app)
     res = client.get("/api/exposures/history?factor_id=style_beta_score&years=5")
@@ -126,18 +127,17 @@ def test_exposure_history_route_resolves_punctuated_industry_name_from_history(
     conn.commit()
     conn.close()
 
+    monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: False)
     monkeypatch.setattr(
-        exposures_routes.factor_history_service,
-        "get_factor_history_dependencies",
-        lambda: exposures_routes.factor_history_service.FactorHistoryDependencies(
-            payload_loader=lambda name, *, fallback_loader=None: None,
+        exposures_routes,
+        "load_factor_history_response",
+        lambda *, factor_token, years: cuse4_factor_history_service.load_factor_history_response(
+            factor_token=factor_token,
+            years=years,
             fallback_loader=lambda _key: None,
-            factor_resolver=exposures_routes.factor_history_service.resolve_factor_history_factor,
-            history_loader=exposures_routes.factor_history_service.load_factor_return_history,
             sqlite_path=str(cache_db),
         ),
     )
-    monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: False)
 
     client = TestClient(app)
     res = client.get("/api/exposures/history?factor_id=industry_software_services&years=5")
@@ -206,23 +206,23 @@ def test_exposure_history_route_returns_market_history_when_neon_surface_is_stal
         def close(self) -> None:
             return None
 
-    monkeypatch.setattr(
-        exposures_routes.factor_history_service,
-        "get_factor_history_dependencies",
-        lambda: exposures_routes.factor_history_service.FactorHistoryDependencies(
-            payload_loader=lambda name, *, fallback_loader=None: {"factor_catalog": [{"factor_id": "market", "factor_name": "Market"}]}
-            if name == "risk"
-            else None,
-            fallback_loader=lambda _key: None,
-            factor_resolver=exposures_routes.factor_history_service.resolve_factor_history_factor,
-            history_loader=exposures_routes.factor_history_service.load_factor_return_history,
-            sqlite_path=str(cache_db),
-        ),
-    )
     monkeypatch.setattr(history_queries, "_use_neon_surface", lambda surface: True)
     monkeypatch.setattr(history_queries, "_path_matches_config", lambda path, configured: True)
     monkeypatch.setattr(history_queries, "resolve_dsn", lambda _dsn=None: "postgresql://example")
     monkeypatch.setattr(history_queries, "connect", lambda dsn=None, autocommit=True: _FakeConn())
+    monkeypatch.setattr(
+        exposures_routes,
+        "load_factor_history_response",
+        lambda *, factor_token, years: cuse4_factor_history_service.load_factor_history_response(
+            factor_token=factor_token,
+            years=years,
+            payload_loader=lambda name, *, fallback_loader=None: {"factor_catalog": [{"factor_id": "market", "factor_name": "Market"}]}
+            if name == "risk"
+            else None,
+            fallback_loader=lambda _key: None,
+            sqlite_path=str(cache_db),
+        ),
+    )
 
     client = TestClient(app)
     res = client.get("/api/exposures/history?factor_id=market&years=5")
