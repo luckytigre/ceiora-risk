@@ -9,6 +9,7 @@ PROD_TERRAFORM_OUTPUT_JSON="${PROD_TERRAFORM_OUTPUT_JSON:-}"
 OPERATOR_CHECK_SCRIPT="${OPERATOR_CHECK_SCRIPT:-./scripts/operator_check.sh}"
 TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH="${TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH:-0}"
 TOPOLOGY_CHECK_DISPATCH_SURFACE="${TOPOLOGY_CHECK_DISPATCH_SURFACE:-active}"
+TOPOLOGY_CHECK_REFRESH_EXPECTED_OUTCOME="${TOPOLOGY_CHECK_REFRESH_EXPECTED_OUTCOME:-success}"
 
 load_terraform_outputs() {
   local destination="$1"
@@ -91,6 +92,7 @@ run_operator_check() {
   OPERATOR_CHECK_REQUIRE_LIVE=1 \
   OPERATOR_CHECK_SKIP_LOCAL="${skip_local}" \
   RUN_REFRESH_DISPATCH="${run_refresh_dispatch}" \
+  RUN_REFRESH_EXPECTED_OUTCOME="${TOPOLOGY_CHECK_REFRESH_EXPECTED_OUTCOME}" \
   "${OPERATOR_CHECK_SCRIPT}"
 }
 
@@ -115,6 +117,15 @@ case "${TOPOLOGY_CHECK_DISPATCH_SURFACE}" in
     ;;
   *)
     printf 'TOPOLOGY_CHECK_DISPATCH_SURFACE must be one of: active, run_app, edge.\n' >&2
+    exit 1
+    ;;
+esac
+
+case "${TOPOLOGY_CHECK_REFRESH_EXPECTED_OUTCOME}" in
+  success|core_due_refusal|terminal_only)
+    ;;
+  *)
+    printf 'TOPOLOGY_CHECK_REFRESH_EXPECTED_OUTCOME must be one of: success, core_due_refusal, terminal_only.\n' >&2
     exit 1
     ;;
 esac

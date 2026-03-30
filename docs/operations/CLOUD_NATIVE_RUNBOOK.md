@@ -427,6 +427,8 @@ For the request-based billing rollout specifically:
   - when dispatch is enabled, it dispatches against one chosen surface only instead of every checked path
   - default `TOPOLOGY_CHECK_DISPATCH_SURFACE=active`
   - set `TOPOLOGY_CHECK_DISPATCH_SURFACE=run_app` or `edge` when you want to force the real dispatch to a specific soak surface
+  - default `TOPOLOGY_CHECK_REFRESH_EXPECTED_OUTCOME=success` requires a successful terminal `serve-refresh`
+  - set `TOPOLOGY_CHECK_REFRESH_EXPECTED_OUTCOME=core_due_refusal` when the operating-model-correct result is a fail-closed refusal because the stable core package is due
 - that check now validates both the frontend-proxied and direct control paths:
   - anonymous `/api/operator/status` and `/api/refresh/status` must return `401`
   - legacy `X-Refresh-Token` and invalid-token `/api/operator/status`, `/api/refresh/status`, and `POST /api/refresh` must return `401`
@@ -437,6 +439,8 @@ For the request-based billing rollout specifically:
 - the real `POST /api/refresh` dispatch is exercised for the selected target only:
   - default `RUN_REFRESH_DISPATCH_TARGET=proxy`
   - set `RUN_REFRESH_DISPATCH_TARGET=direct` when you want that real dispatch to hit `control` directly instead of the frontend proxy
+  - default `RUN_REFRESH_EXPECTED_OUTCOME=success` requires the dispatch to finish with `refresh.status=ok`
+  - set `RUN_REFRESH_EXPECTED_OUTCOME=core_due_refusal` when a real dispatch should prove the fail-closed core-due guard instead of a successful refresh
 
 Topology guardrails:
 - always confirm `terraform output endpoint_mode`, `terraform output edge_enabled`, and `terraform output public_origins` match the intended rollout path
@@ -483,6 +487,7 @@ Topology guardrails:
 - control `/api/refresh/status` with `X-Operator-Token`
 - verify the control service can dispatch the `serve-refresh` Cloud Run Job
   - the control service's job IAM must allow execution overrides because the dispatch path sets env overrides on the Cloud Run Job request
+  - if operator status reports `.core_due.due=true`, use the stronger live check with `RUN_REFRESH_EXPECTED_OUTCOME=core_due_refusal` or `TOPOLOGY_CHECK_REFRESH_EXPECTED_OUTCOME=core_due_refusal` so the rollout proves the fail-closed guard instead of expecting a successful serving refresh
 
 5. Soak with the edge still enabled
 - plan the soak contract:

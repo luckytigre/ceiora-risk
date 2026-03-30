@@ -11,6 +11,7 @@ OPERATOR_CHECK_SKIP_LOCAL="${OPERATOR_CHECK_SKIP_LOCAL:-0}"
 INVALID_OPERATOR_TOKEN="${INVALID_OPERATOR_TOKEN:-not-the-real-token}"
 RUN_REFRESH_DISPATCH="${RUN_REFRESH_DISPATCH:-0}"
 RUN_REFRESH_DISPATCH_TARGET="${RUN_REFRESH_DISPATCH_TARGET:-proxy}"
+RUN_REFRESH_EXPECTED_OUTCOME="${RUN_REFRESH_EXPECTED_OUTCOME:-success}"
 REFRESH_POLL_SECONDS="${REFRESH_POLL_SECONDS:-5}"
 REFRESH_POLL_ATTEMPTS="${REFRESH_POLL_ATTEMPTS:-36}"
 
@@ -47,6 +48,15 @@ if [[ -z "${CONTROL_BASE_URL}" ]]; then
   printf 'CONTROL_BASE_URL is required when APP_BASE_URL is set.\n' >&2
   exit 1
 fi
+
+case "${RUN_REFRESH_EXPECTED_OUTCOME}" in
+  success|core_due_refusal|terminal_only)
+    ;;
+  *)
+    printf 'RUN_REFRESH_EXPECTED_OUTCOME must be one of: success, core_due_refusal, terminal_only.\n' >&2
+    exit 1
+    ;;
+esac
 
 curl_status() {
   local output_path="$1"
@@ -319,6 +329,65 @@ fi
 
 printf '%s: %s\n' "${dispatch_label}" "$(tr -d '\n' <"${dispatch_output}")"
 
+validate_refresh_terminal_outcome() {
+  python3 - "${RUN_REFRESH_EXPECTED_OUTCOME}" <<'PY'
+import json
+import sys
+
+expected = sys.argv[1]
+checks = [
+    ("proxied", "/tmp/ceiora_refresh_poll.json", "/tmp/ceiora_operator_status.json"),
+    ("direct", "/tmp/ceiora_control_refresh_poll.json", "/tmp/ceiora_control_operator_status.json"),
+]
+
+errors: list[str] = []
+for label, refresh_path, operator_path in checks:
+    refresh_payload = json.load(open(refresh_path, "r", encoding="utf-8"))
+    operator_payload = json.load(open(operator_path, "r", encoding="utf-8"))
+    refresh = refresh_payload.get("refresh", {}) if isinstance(refresh_payload, dict) else {}
+    result = refresh.get("result", {}) if isinstance(refresh.get("result"), dict) else {}
+    error = refresh.get("error", {}) if isinstance(refresh.get("error"), dict) else {}
+    status = str(refresh.get("status") or "")
+    result_status = str(result.get("status") or "")
+    core_due = operator_payload.get("core_due", {}) if isinstance(operator_payload, dict) else {}
+    core_due_reason = str(core_due.get("reason") or "")
+    run_rows = result.get("run_rows") if isinstance(result.get("run_rows"), list) else []
+    row_error = ""
+    if run_rows:
+        first_row = run_rows[0] if isinstance(run_rows[0], dict) else {}
+        row_error = str(first_row.get("error_message") or "")
+    message = str(error.get("message") or row_error or "")
+
+    if expected == "terminal_only":
+        if status == "running":
+            errors.append(f"{label}: refresh remained running")
+        continue
+
+    if expected == "success":
+        if status != "ok" or result_status != "ok":
+            errors.append(
+                f"{label}: expected successful refresh, got status={status!r} result.status={result_status!r} message={message!r}"
+            )
+        continue
+
+    if expected == "core_due_refusal":
+        if status != "failed" or result_status != "failed":
+            errors.append(
+                f"{label}: expected core_due refusal, got status={status!r} result.status={result_status!r} message={message!r}"
+            )
+            continue
+        if "serve-refresh requires a current stable core package" not in message:
+            errors.append(f"{label}: refusal message did not match current-stable-core contract: {message!r}")
+        if not bool(core_due.get("due")):
+            errors.append(f"{label}: operator status did not report core_due=true")
+        if not core_due_reason.startswith("interval_elapsed") and not core_due_reason.startswith("method_changed"):
+            errors.append(f"{label}: operator status core_due reason was not explicit: {core_due_reason!r}")
+
+if errors:
+    raise SystemExit("\n".join(errors))
+PY
+}
+
 attempt=1
 while (( attempt <= REFRESH_POLL_ATTEMPTS )); do
   curl -fsS \
@@ -359,6 +428,7 @@ PY
   fi
 
   if [[ "${refresh_status}" != "running" && "${control_refresh_status}" != "running" ]]; then
+    validate_refresh_terminal_outcome
     exit 0
   fi
 

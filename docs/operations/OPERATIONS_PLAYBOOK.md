@@ -368,6 +368,8 @@ Parallel cPAR note:
     - `APP_BASE_URL=https://app.ceiora.com CONTROL_BASE_URL=https://control.ceiora.com OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 RUN_REFRESH_DISPATCH=1 make operator-check`
   - direct-control dispatch variant:
     - `APP_BASE_URL=https://app.ceiora.com CONTROL_BASE_URL=https://control.ceiora.com OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 RUN_REFRESH_DISPATCH=1 RUN_REFRESH_DISPATCH_TARGET=direct make operator-check`
+  - expected-refusal dispatch variant for cloud-serve when `.core_due.due=true`:
+    - `APP_BASE_URL=https://<frontend-url> CONTROL_BASE_URL=https://<control-url> OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 RUN_REFRESH_DISPATCH=1 RUN_REFRESH_EXPECTED_OUTCOME=core_due_refusal make operator-check`
   - choose the URLs that match `terraform output endpoint_mode` / `terraform output edge_enabled` / `terraform output public_origins`
   - if `endpoint_mode=run_app` and `edge_enabled=true`, validate both:
     - the `run.app` URLs from `public_origins`
@@ -382,6 +384,8 @@ Parallel cPAR note:
     - real `POST /api/refresh` dispatch is exercised for the selected target only:
       - default `RUN_REFRESH_DISPATCH_TARGET=proxy`
       - set `RUN_REFRESH_DISPATCH_TARGET=direct` to positively exercise the direct control dispatch path
+      - default `RUN_REFRESH_EXPECTED_OUTCOME=success` requires the dispatch to finish with `refresh.status=ok`
+      - set `RUN_REFRESH_EXPECTED_OUTCOME=core_due_refusal` when the operating-model-correct outcome is a fail-closed `serve-refresh` refusal because the stable core package is due
   - If Neon auto-sync is disabled, this check degrades gracefully instead of failing on missing parity artifacts.
 - Verify latest refresh metadata:
   - `curl -s "http://localhost:8000/api/data/diagnostics" | jq '.cache_outputs[] | select(.key==\"refresh_meta\")'`
