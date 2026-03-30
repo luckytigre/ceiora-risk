@@ -113,6 +113,13 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     return row is not None
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    if not _table_exists(conn, table):
+        return set()
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(row[1]) for row in rows}
+
+
 def _table_has_rows(conn: sqlite3.Connection, table: str) -> bool:
     if not _table_exists(conn, table):
         return False
@@ -123,16 +130,22 @@ def _table_has_rows(conn: sqlite3.Connection, table: str) -> bool:
 def _load_legacy_selector_runtime_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     if not _table_exists(conn, SECURITY_MASTER_TABLE):
         return []
+    cols = _table_columns(conn, SECURITY_MASTER_TABLE)
+    exchange_expr = "exchange_name" if "exchange_name" in cols else "NULL"
+    classification_expr = "COALESCE(classification_ok, 0)" if "classification_ok" in cols else "0"
+    equity_expr = "COALESCE(is_equity_eligible, 0)" if "is_equity_eligible" in cols else "0"
+    coverage_expr = "COALESCE(coverage_role, 'native_equity')" if "coverage_role" in cols else "'native_equity'"
+    source_expr = "source" if "source" in cols else "NULL"
     rows = conn.execute(
         f"""
         SELECT
             UPPER(TRIM(ric)) AS ric,
             UPPER(TRIM(COALESCE(ticker, ''))) AS ticker,
-            exchange_name,
-            COALESCE(classification_ok, 0) AS classification_ok,
-            COALESCE(is_equity_eligible, 0) AS is_equity_eligible,
-            COALESCE(coverage_role, 'native_equity') AS coverage_role,
-            source
+            {exchange_expr} AS exchange_name,
+            {classification_expr} AS classification_ok,
+            {equity_expr} AS is_equity_eligible,
+            {coverage_expr} AS coverage_role,
+            {source_expr} AS source
         FROM {SECURITY_MASTER_TABLE}
         WHERE ric IS NOT NULL
           AND TRIM(ric) <> ''

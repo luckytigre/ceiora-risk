@@ -396,6 +396,117 @@ def test_build_positions_from_snapshot_preserves_persisted_membership_truth_with
     assert positions[0]["projection_output_status"] == "available"
 
 
+def test_build_cuse_membership_payloads_promotes_returns_projection_unavailable_reason_from_policy(
+    tmp_path: Path,
+) -> None:
+    from backend.risk_model.cuse_membership import build_cuse_membership_payloads, membership_row_to_overlay
+
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    ensure_cuse4_schema(conn)
+    conn.execute(
+        """
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('SPY.P', 'SPY', 'active', 'security_registry_seed', '2026-03-13T00:00:00Z')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_policy_current (
+            ric, price_ingest_enabled, pit_fundamentals_enabled, pit_classification_enabled,
+            allow_cuse_native_core, allow_cuse_fundamental_projection, allow_cuse_returns_projection,
+            allow_cpar_core_target, allow_cpar_extended_target, policy_source, updated_at
+        ) VALUES (
+            'SPY.P', 1, 0, 0,
+            0, 0, 1,
+            0, 1, 'registry_seed_defaults', '2026-03-13T00:00:00Z'
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_taxonomy_current (
+            ric, instrument_kind, vehicle_structure, issuer_country_code, model_home_market_scope,
+            is_single_name_equity, classification_ready, source, updated_at
+        ) VALUES (
+            'SPY.P', 'fund_vehicle', 'projection_only_vehicle', 'US', 'us',
+            0, 0, 'security_registry_seed', '2026-03-13T00:00:00Z'
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    membership_payload, _stage_payload = build_cuse_membership_payloads(
+        data_db=data_db,
+        universe_payload={
+            "by_ticker": {
+                "SPY": {
+                    "ticker": "SPY",
+                    "ric": "SPY.P",
+                    "as_of_date": "2026-03-13",
+                    "model_status": "ineligible",
+                    "model_status_reason": "ineligible",
+                    "exposure_origin": "native",
+                    "exposures": {},
+                },
+            }
+        },
+        risk_engine_state={"core_state_through_date": "2026-03-13"},
+        run_id="run_1",
+        updated_at="2026-03-16T00:01:00Z",
+    )
+
+    assert membership_payload[0][3] == "returns_projection_candidate"
+    assert membership_payload[0][5] == "projection_unavailable"
+    assert membership_payload[0][8] == "projection_unavailable"
+
+    overlay = membership_row_to_overlay(
+        {
+            "policy_path": membership_payload[0][3],
+            "realized_role": membership_payload[0][4],
+            "output_status": membership_payload[0][5],
+            "projection_candidate_status": membership_payload[0][6],
+            "projection_output_status": membership_payload[0][7],
+            "reason_code": membership_payload[0][8],
+            "quality_label": membership_payload[0][9],
+            "source_snapshot_status": membership_payload[0][10],
+            "projection_method": membership_payload[0][11],
+            "projection_basis_status": membership_payload[0][12],
+            "projection_source_package_date": membership_payload[0][13],
+            "served_exposure_available": membership_payload[0][14],
+        }
+    )
+    assert overlay["exposure_origin"] == "projected_returns"
+    assert overlay["model_status_reason"] == "projection_unavailable"
+
+
+def test_membership_row_to_overlay_preserves_fundamental_projection_intent_when_unavailable() -> None:
+    from backend.risk_model.cuse_membership import membership_row_to_overlay
+
+    overlay = membership_row_to_overlay(
+        {
+            "policy_path": "fundamental_projection_candidate",
+            "realized_role": "ineligible",
+            "output_status": "unavailable",
+            "projection_candidate_status": "candidate",
+            "projection_output_status": "unavailable",
+            "reason_code": "unavailable",
+            "quality_label": "blocked",
+            "source_snapshot_status": "served_snapshot",
+            "projection_method": None,
+            "projection_basis_status": "not_applicable",
+            "projection_source_package_date": None,
+            "served_exposure_available": 0,
+        }
+    )
+
+    assert overlay["exposure_origin"] == "projected_fundamental"
+    assert overlay["model_status"] == "ineligible"
+    assert overlay["model_status_reason"] == "unavailable"
+
+
 def test_build_cuse_membership_payloads_use_runtime_state_by_row_as_of_date(tmp_path: Path) -> None:
     from backend.risk_model.cuse_membership import build_cuse_membership_payloads
 

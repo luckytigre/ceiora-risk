@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -38,6 +39,12 @@ def run_serving_stage(
         Path(data_db).resolve() != canonical_data_db.resolve()
         or Path(cache_db).resolve() != canonical_cache_db.resolve()
     )
+    neon_core_read_session = getattr(core_reads_module, "neon_core_read_session", None)
+
+    def _neon_core_session():
+        if callable(neon_core_read_session):
+            return neon_core_read_session()
+        return nullcontext()
 
     def _run_refresh_inner() -> dict[str, Any]:
         today_utc = datetime.fromisoformat(
@@ -56,7 +63,7 @@ def run_serving_stage(
             )
         if force_local_core_reads:
             with core_reads_module.core_read_backend("local"):
-                with core_reads_module.neon_core_read_session():
+                with _neon_core_session():
                     out = run_refresh_fn(
                         data_db=data_db,
                         cache_db=cache_db,
@@ -74,7 +81,7 @@ def run_serving_stage(
                 out["_skip_risk_engine_reason"] = str(skip_reason)
                 out["_skip_risk_engine"] = bool(skip_risk_engine)
                 return out
-        with core_reads_module.neon_core_read_session():
+        with _neon_core_session():
             out = run_refresh_fn(
                 data_db=data_db,
                 cache_db=cache_db,

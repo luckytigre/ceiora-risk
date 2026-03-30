@@ -166,13 +166,29 @@ def _compat_model_status(realized_role: str) -> str:
     return "ineligible"
 
 
-def _compat_exposure_origin(realized_role: str, existing_origin: str) -> str:
+def _compat_exposure_origin(
+    *,
+    realized_role: str,
+    existing_origin: str,
+    policy_path: str,
+    output_status: str,
+    projection_method: str,
+) -> str:
     if realized_role == "projected_returns":
-        return "projected"
+        return "projected_returns"
     if realized_role == "projected_fundamental":
-        return "native"
-    if existing_origin:
-        return existing_origin
+        return "projected_fundamental"
+    normalized_existing_origin = existing_origin or ""
+    if normalized_existing_origin == "projected":
+        normalized_existing_origin = "projected_returns"
+    if policy_path == "returns_projection_candidate" or output_status == "projection_unavailable":
+        return "projected_returns"
+    if policy_path == "fundamental_projection_candidate":
+        return "projected_fundamental"
+    if projection_method:
+        return "projected_returns"
+    if normalized_existing_origin:
+        return normalized_existing_origin
     return "native"
 
 
@@ -317,7 +333,6 @@ def build_cuse_membership_payloads(
         estu_candidate = core_country_eligible
         estu_row = estu_rows.get((as_of_date, ric), {}) if ric and as_of_date else {}
         estu_member = bool(estu_candidate and int(estu_row.get("estu_flag") or 0) == 1)
-        effective_reason_code = reason_code or structural_reason or _text(estu_row.get("drop_reason"))
         fundamental_projection_candidate = bool(allow_fundamental_projection or (structural_eligible and not core_country_eligible))
         returns_projection_candidate = bool(
             allow_returns_projection
@@ -326,6 +341,20 @@ def build_cuse_membership_payloads(
             or _text(row.get("projection_method"))
             or reason_code == "projection_unavailable"
         )
+        effective_reason_code = reason_code
+        if returns_projection_candidate and not served_exposure_available and effective_reason_code in {
+            "",
+            "ineligible",
+            "missing_factor_exposures",
+        }:
+            effective_reason_code = "projection_unavailable"
+        elif fundamental_projection_candidate and not served_exposure_available and effective_reason_code in {
+            "",
+            "ineligible",
+            "missing_factor_exposures",
+        }:
+            effective_reason_code = "unavailable"
+        effective_reason_code = effective_reason_code or structural_reason or _text(estu_row.get("drop_reason"))
         projection_basis_available = bool(
             returns_projection_candidate
             and (
@@ -336,7 +365,11 @@ def build_cuse_membership_payloads(
         output_status = (
             "served"
             if served_exposure_available
-            else ("projection_unavailable" if reason_code == "projection_unavailable" else "unavailable")
+            else (
+                "projection_unavailable"
+                if returns_projection_candidate
+                else "unavailable"
+            )
         )
         projection_candidate_status = (
             "candidate"
@@ -411,7 +444,13 @@ def build_cuse_membership_payloads(
             "model_status": model_status,
             "realized_role": realized_role,
             "compat_model_status": _compat_model_status(realized_role),
-            "compat_exposure_origin": _compat_exposure_origin(realized_role, exposure_origin),
+            "compat_exposure_origin": _compat_exposure_origin(
+                realized_role=realized_role,
+                existing_origin=exposure_origin,
+                policy_path=policy_path,
+                output_status=output_status,
+                projection_method=projection_method,
+            ),
         }
         _append_stage(
             stage_payload,
@@ -572,14 +611,23 @@ def build_cuse_membership_payloads(
 def membership_row_to_overlay(row: dict[str, Any]) -> dict[str, Any]:
     realized_role = _text(row.get("realized_role"))
     reason_code = _text(row.get("reason_code"))
+    policy_path = _text(row.get("policy_path"))
+    output_status = _text(row.get("output_status"))
+    projection_method = _text(row.get("projection_method"))
     compat_model_status = _compat_model_status(realized_role)
     return {
         "model_status": compat_model_status,
         "model_status_reason": reason_code,
         "eligibility_reason": reason_code,
-        "exposure_origin": _compat_exposure_origin(realized_role, _text(row.get("exposure_origin"))),
+        "exposure_origin": _compat_exposure_origin(
+            realized_role=realized_role,
+            existing_origin=_text(row.get("exposure_origin")),
+            policy_path=policy_path,
+            output_status=output_status,
+            projection_method=projection_method,
+        ),
         "cuse_realized_role": realized_role,
-        "cuse_output_status": _text(row.get("output_status")),
+        "cuse_output_status": output_status,
         "cuse_reason_code": reason_code,
         "quality_label": _text(row.get("quality_label")),
         "projection_basis_status": _text(row.get("projection_basis_status")),

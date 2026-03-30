@@ -268,7 +268,8 @@ Parallel cPAR note:
     - `universe_loadings`
   - partial updates like the health/refresh-meta patch path remain explicit `replace_all=false` writes and must not be treated as a full publish.
 - projection-only publish invariant:
-  - if persisted projected loadings exist for a `projection_only` ticker at the active core date, serving publish must fail unless that ticker lands as `model_status=projected_only` and `exposure_origin=projected` in both `portfolio` and `universe_loadings`.
+  - if persisted projected loadings exist for a `projection_only` ticker at the active core date, serving publish must fail unless that ticker lands as `model_status=projected_only` and `exposure_origin=projected_returns` or `projected_fundamental` in both `portfolio` and `universe_loadings`.
+  - serving publish now overlays the current run's persisted cUSE membership truth onto `universe_loadings`, `portfolio`, and exposure drilldowns before writing the canonical payload set; if projected names still show generic `ineligible` labels after a successful run, treat that as a membership persistence/read issue rather than a frontend-only issue.
 - operator repair path for serving payload drift:
   - dry-run diff local mirror vs Neon:
     - `python3 -m backend.scripts.repair_serving_payloads_neon --dry-run --json`

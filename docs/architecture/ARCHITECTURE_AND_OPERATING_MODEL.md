@@ -193,11 +193,11 @@ Purpose:
 Rules:
 - Served exposure methodology is explicit:
   - `Core` = `model_status = core_estimated` with `exposure_origin = native`
-  - `Projected` = `model_status = projected_only` with `exposure_origin = projected`
+  - `Projected` = `model_status = projected_only` with `exposure_origin = projected_fundamental` or `projected_returns`
 - Projection methodology can still differ internally:
   - single-name equities may arrive through descriptor/fundamental-style projection outside the US core ESTU
   - ETFs/ETPs and similar vehicles may arrive through returns-based projection onto core factor returns
-- Those methodology distinctions do not produce different served `exposure_origin` values anymore.
+- Those methodology distinctions stay visible in served compatibility fields and must not be collapsed back to generic `projected` or `native` when a name is still a projection candidate.
 - Projection-only instruments remain outside native factor-return, covariance, and specific-risk estimation.
 - Their projected outputs are derived from durable `model_factor_returns_daily`, not cache-era factor-return tables.
 - They refresh only on core lanes, persist once per active `core_state_through_date`, and are then read by serving as a durable surface.
@@ -276,7 +276,8 @@ Key rule:
   - `replace_all=true` is reserved for that canonical set only.
   - targeted metadata patches such as `health_diagnostics` or `refresh_meta` remain explicit partial writes and must not masquerade as a full publish.
 - Projection-only serving rows are protected at publish time.
-  - If persisted projected loadings exist for a ticker at the active core date, the live serving payloads must publish that ticker as `projected_only` with `exposure_origin=projected`, or the publish fails.
+  - If persisted projected loadings exist for a ticker at the active core date, the live serving payloads must publish that ticker as `projected_only` with `exposure_origin=projected_returns` or `projected_fundamental`, or the publish fails.
+  - During refresh persistence, the current run's `cuse_security_membership_daily` truth is overlaid onto `universe_loadings`, `portfolio`, and exposure drilldowns before the canonical serving payload set is written, so the just-computed run does not lag one publish behind.
 
 ## Canonical Event Types
 

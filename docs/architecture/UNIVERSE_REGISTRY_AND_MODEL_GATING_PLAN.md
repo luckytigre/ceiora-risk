@@ -1066,6 +1066,10 @@ Behavior changes:
 Payload contract:
 
 - keep `model_status`, `model_status_reason`, and `exposure_origin` for existing frontend code
+- serving publish must overlay the current run's persisted `cuse_security_membership_daily` truth into `universe_loadings`, `portfolio`, and exposure drilldowns before the canonical payload set is written, so app/runtime reads do not lag one refresh behind
+- compatibility `exposure_origin` must preserve projection intent for unavailable candidates:
+  - returns-projection candidates surface as `projected_returns`
+  - fundamental-projection candidates surface as `projected_fundamental`
 - add richer fields alongside them:
   - `cuse_realized_role`
   - `cuse_output_status`
