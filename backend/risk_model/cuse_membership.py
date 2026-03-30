@@ -608,12 +608,51 @@ def build_cuse_membership_payloads(
     return membership_payload, stage_payload
 
 
-def membership_row_to_overlay(row: dict[str, Any]) -> dict[str, Any]:
+def membership_row_to_overlay(
+    row: dict[str, Any],
+    *,
+    payload_exposures: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     realized_role = _text(row.get("realized_role"))
     reason_code = _text(row.get("reason_code"))
     policy_path = _text(row.get("policy_path"))
     output_status = _text(row.get("output_status"))
     projection_method = _text(row.get("projection_method"))
+    projection_basis_status = _text(row.get("projection_basis_status"))
+    projection_candidate_status = _text(row.get("projection_candidate_status"))
+    projection_output_status = _text(row.get("projection_output_status"))
+    served_exposure_available = bool(int(row.get("served_exposure_available") or 0))
+
+    if payload_exposures is not None and not bool(payload_exposures):
+        if policy_path == "returns_projection_candidate" and (
+            served_exposure_available
+            or output_status == "served"
+            or projection_output_status == "available"
+        ):
+            realized_role = "ineligible"
+            reason_code = "projection_unavailable"
+            output_status = "projection_unavailable"
+            projection_output_status = "unavailable"
+            served_exposure_available = False
+            if not projection_candidate_status:
+                projection_candidate_status = "candidate"
+            if not projection_basis_status:
+                projection_basis_status = "unavailable"
+        elif policy_path == "fundamental_projection_candidate" and (
+            served_exposure_available
+            or output_status == "served"
+            or projection_output_status == "available"
+        ):
+            realized_role = "ineligible"
+            reason_code = "unavailable"
+            output_status = "unavailable"
+            projection_output_status = "unavailable"
+            served_exposure_available = False
+            if not projection_candidate_status:
+                projection_candidate_status = "candidate"
+            if not projection_basis_status:
+                projection_basis_status = "not_applicable"
+
     compat_model_status = _compat_model_status(realized_role)
     return {
         "model_status": compat_model_status,
@@ -630,8 +669,8 @@ def membership_row_to_overlay(row: dict[str, Any]) -> dict[str, Any]:
         "cuse_output_status": output_status,
         "cuse_reason_code": reason_code,
         "quality_label": _text(row.get("quality_label")),
-        "projection_basis_status": _text(row.get("projection_basis_status")),
-        "projection_candidate_status": _text(row.get("projection_candidate_status")),
-        "projection_output_status": _text(row.get("projection_output_status")),
-        "served_exposure_available": bool(int(row.get("served_exposure_available") or 0)),
+        "projection_basis_status": projection_basis_status,
+        "projection_candidate_status": projection_candidate_status,
+        "projection_output_status": projection_output_status,
+        "served_exposure_available": served_exposure_available,
     }

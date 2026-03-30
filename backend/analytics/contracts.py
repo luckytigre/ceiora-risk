@@ -96,6 +96,14 @@ class PositionPayload(TypedDict, total=False):
     model_status_reason: str
     eligibility_reason: str
     exposure_origin: str  # "native" | "projected_fundamental" | "projected_returns"
+    projection_method: str | None
+    projection_r_squared: float | None
+    projection_obs_count: int | None
+    projection_asof: str | None
+    projection_basis_status: str
+    projection_candidate_status: str
+    projection_output_status: str
+    served_exposure_available: bool
     risk_mix: PositionRiskMixPayload
 
 

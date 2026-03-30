@@ -159,7 +159,10 @@ export default function TickerQuoteCard({
     { label: "Specific Var", value: formatFixed(item.specific_var, 6) },
     {
       label: "Exposure Method",
-      value: exposureMethodLabel(exposureOrigin, modelStatus),
+      value: exposureMethodLabel(exposureOrigin, modelStatus, {
+        projectionOutputStatus: item.projection_output_status,
+        servedExposureAvailable: item.served_exposure_available,
+      }),
     },
     ...(exposureOrigin === "projected_returns" && item.projection_r_squared != null
       ? [{ label: "Projection R\u00B2", value: formatFixed(item.projection_r_squared, 4) }]

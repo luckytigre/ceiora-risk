@@ -12,6 +12,7 @@ from backend.risk_model.projected_loadings import (
     ProjectedLoadingResult,
     _run_ols,
     compute_projected_loadings,
+    latest_persisted_projection_asof,
     load_persisted_projected_loadings,
 )
 
@@ -335,3 +336,76 @@ class TestComputeProjectedLoadings:
         )
 
         assert loaded == {}
+
+    def test_load_persisted_projected_loadings_prefers_neon_authority_when_enabled(self, monkeypatch):
+        class _Cursor:
+            def __init__(self):
+                self.rows = [
+                    ("SPY.P", "SPY", "Market", 1.0, 252, 180, 0.97, 0.01, 0.1),
+                    ("SPY.P", "SPY", "Beta", 0.2, 252, 180, 0.97, 0.01, 0.1),
+                ]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def execute(self, _query, _params):
+                return None
+
+            def fetchall(self):
+                return list(self.rows)
+
+        class _Conn:
+            def cursor(self):
+                return _Cursor()
+
+            def close(self):
+                return None
+
+        monkeypatch.setattr("backend.risk_model.projected_loadings._neon_projection_reads_enabled", lambda: True)
+        monkeypatch.setattr("backend.risk_model.projected_loadings.connect", lambda **_kwargs: _Conn())
+        monkeypatch.setattr("backend.risk_model.projected_loadings.resolve_dsn", lambda _dsn: "postgresql://example")
+
+        loaded = load_persisted_projected_loadings(
+            data_db=Path("/tmp/unused.db"),
+            projection_rics=[{"ric": "SPY.P", "ticker": "SPY"}],
+            as_of_date="2026-03-26",
+        )
+
+        assert sorted(loaded["SPY"].exposures.items()) == [("Beta", 0.2), ("Market", 1.0)]
+        assert loaded["SPY"].projection_asof == "2026-03-26"
+        assert loaded["SPY"].obs_count == 180
+
+    def test_latest_persisted_projection_asof_prefers_neon_authority_when_enabled(self, monkeypatch):
+        class _Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def execute(self, _query, _params):
+                return None
+
+            def fetchone(self):
+                return ("2026-03-26",)
+
+        class _Conn:
+            def cursor(self):
+                return _Cursor()
+
+            def close(self):
+                return None
+
+        monkeypatch.setattr("backend.risk_model.projected_loadings._neon_projection_reads_enabled", lambda: True)
+        monkeypatch.setattr("backend.risk_model.projected_loadings.connect", lambda **_kwargs: _Conn())
+        monkeypatch.setattr("backend.risk_model.projected_loadings.resolve_dsn", lambda _dsn: "postgresql://example")
+
+        latest = latest_persisted_projection_asof(
+            data_db=Path("/tmp/unused.db"),
+            projection_rics=[{"ric": "SPY.P", "ticker": "SPY"}],
+        )
+
+        assert latest == "2026-03-26"

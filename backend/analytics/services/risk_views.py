@@ -140,6 +140,18 @@ def build_positions_from_snapshot(
             "cuse_output_status": str(base.get("cuse_output_status") or ""),
             "cuse_reason_code": str(base.get("cuse_reason_code") or model_status_reason),
             "quality_label": str(base.get("quality_label") or ""),
+            "projection_method": str(base.get("projection_method") or "") or None,
+            "projection_r_squared": (
+                _finite_float(base.get("projection_r_squared"), 0.0)
+                if np.isfinite(_finite_float(base.get("projection_r_squared"), np.nan))
+                else None
+            ),
+            "projection_obs_count": (
+                int(base.get("projection_obs_count") or 0)
+                if str(base.get("projection_obs_count") or "").strip()
+                else None
+            ),
+            "projection_asof": str(base.get("projection_asof") or "") or None,
             "projection_basis_status": str(base.get("projection_basis_status") or ""),
             "projection_candidate_status": str(base.get("projection_candidate_status") or ""),
             "projection_output_status": str(base.get("projection_output_status") or ""),

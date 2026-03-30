@@ -10,6 +10,8 @@ from backend.analytics.services.risk_views import build_positions_from_snapshot
 from backend.analytics.services.universe_loadings import build_universe_ticker_loadings
 from backend.data.cuse_membership_reads import load_cuse_membership_rows, load_cuse_stage_result_rows
 from backend.data.model_outputs import persist_model_outputs
+from backend.risk_model.factor_catalog import build_factor_catalog_for_factors
+from backend.risk_model.projected_loadings import ProjectedLoadingResult
 from backend.risk_model.risk_attribution import STYLE_COLUMN_TO_LABEL
 from backend.universe.schema import ensure_cuse4_schema
 
@@ -350,9 +352,23 @@ def test_build_universe_ticker_loadings_overlays_persisted_membership_truth(tmp_
         exposures_df=pd.DataFrame(),
         fundamentals_df=pd.DataFrame(),
         prices_df=pd.DataFrame([{"ric": "SPY.P", "ticker": "SPY", "close": 500.0}]),
-        cov=pd.DataFrame(),
+        cov=pd.DataFrame([[1.0]], index=["Market"], columns=["Market"]),
         data_db=data_db,
-        projected_loadings={},
+        factor_catalog_by_name=build_factor_catalog_for_factors(["Market"]),
+        projected_loadings={
+            "SPY": ProjectedLoadingResult(
+                ric="SPY.P",
+                ticker="SPY",
+                exposures={"Market": 1.0},
+                specific_var=0.01,
+                specific_vol=0.1,
+                r_squared=0.95,
+                obs_count=180,
+                lookback_days=252,
+                projection_asof="2026-03-13",
+                status="ok",
+            )
+        },
         projection_universe_rows=[{"ric": "SPY.P", "ticker": "SPY"}],
         projection_core_state_through_date="2026-03-13",
     )
@@ -364,6 +380,7 @@ def test_build_universe_ticker_loadings_overlays_persisted_membership_truth(tmp_
     assert spy["cuse_output_status"] == "served"
     assert spy["projection_basis_status"] == "available"
     assert spy["served_exposure_available"] is True
+    assert spy["exposures"] == {"market": 1.0}
 
 
 def test_build_positions_from_snapshot_preserves_persisted_membership_truth_without_exposures() -> None:
@@ -381,6 +398,10 @@ def test_build_positions_from_snapshot_preserves_persisted_membership_truth_with
                 "projection_candidate_status": "candidate",
                 "projection_output_status": "available",
                 "projection_basis_status": "available",
+                "projection_method": "ols_returns_regression",
+                "projection_r_squared": 0.95,
+                "projection_obs_count": 180,
+                "projection_asof": "2026-03-13",
                 "served_exposure_available": True,
                 "exposure_origin": "projected",
                 "exposures": {},
@@ -394,6 +415,77 @@ def test_build_positions_from_snapshot_preserves_persisted_membership_truth_with
     assert positions[0]["cuse_realized_role"] == "projected_returns"
     assert positions[0]["cuse_output_status"] == "served"
     assert positions[0]["projection_output_status"] == "available"
+    assert positions[0]["projection_method"] == "ols_returns_regression"
+    assert positions[0]["projection_r_squared"] == 0.95
+    assert positions[0]["projection_obs_count"] == 180
+    assert positions[0]["projection_asof"] == "2026-03-13"
+
+
+def test_build_universe_ticker_loadings_downgrades_inconsistent_served_projection_without_exposures(
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    conn.execute(
+        """
+        CREATE TABLE cuse_security_membership_daily (
+            as_of_date TEXT NOT NULL,
+            ric TEXT,
+            ticker TEXT NOT NULL,
+            policy_path TEXT NOT NULL,
+            realized_role TEXT NOT NULL,
+            output_status TEXT NOT NULL,
+            projection_candidate_status TEXT NOT NULL,
+            projection_output_status TEXT NOT NULL,
+            reason_code TEXT,
+            quality_label TEXT NOT NULL,
+            source_snapshot_status TEXT NOT NULL,
+            projection_method TEXT,
+            projection_basis_status TEXT NOT NULL,
+            projection_source_package_date TEXT,
+            served_exposure_available INTEGER NOT NULL DEFAULT 0,
+            run_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO cuse_security_membership_daily (
+            as_of_date, ric, ticker, policy_path, realized_role, output_status,
+            projection_candidate_status, projection_output_status, reason_code,
+            quality_label, source_snapshot_status, projection_method,
+            projection_basis_status, projection_source_package_date,
+            served_exposure_available, run_id, updated_at
+        ) VALUES (
+            '2026-03-13', 'SPY.P', 'SPY', 'returns_projection_candidate', 'projected_returns', 'served',
+            'candidate', 'available', 'returns_projection',
+            'returns_projection', 'served_snapshot', 'ols_returns_regression',
+            'available', '2026-03-13',
+            1, 'run_1', '2026-03-16T00:01:00Z'
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    out = build_universe_ticker_loadings(
+        exposures_df=pd.DataFrame(),
+        fundamentals_df=pd.DataFrame(),
+        prices_df=pd.DataFrame([{"ric": "SPY.P", "ticker": "SPY", "close": 500.0}]),
+        cov=pd.DataFrame(),
+        data_db=data_db,
+        projected_loadings={},
+        projection_universe_rows=[{"ric": "SPY.P", "ticker": "SPY"}],
+        projection_core_state_through_date="2026-03-13",
+    )
+
+    spy = out["by_ticker"]["SPY"]
+    assert spy["model_status"] == "ineligible"
+    assert spy["model_status_reason"] == "projection_unavailable"
+    assert spy["projection_output_status"] == "unavailable"
+    assert spy["served_exposure_available"] is False
+    assert spy["exposure_origin"] == "projected_returns"
 
 
 def test_build_cuse_membership_payloads_promotes_returns_projection_unavailable_reason_from_policy(

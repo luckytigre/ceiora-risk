@@ -42,6 +42,14 @@ export interface Position {
   model_status_reason?: string;
   eligibility_reason?: string;
   exposure_origin?: ExposureOrigin;
+  projection_method?: string | null;
+  projection_r_squared?: number | null;
+  projection_obs_count?: number | null;
+  projection_asof?: string | null;
+  projection_basis_status?: string | null;
+  projection_candidate_status?: string | null;
+  projection_output_status?: string | null;
+  served_exposure_available?: boolean;
   risk_mix?: {
     market: number;
     industry: number;
@@ -202,6 +210,10 @@ export interface UniverseTickerItem {
   projection_r_squared?: number | null;
   projection_obs_count?: number | null;
   projection_asof?: string | null;
+  projection_basis_status?: string | null;
+  projection_candidate_status?: string | null;
+  projection_output_status?: string | null;
+  served_exposure_available?: boolean;
   risk_tier?: string | null;
   risk_tier_label?: string | null;
   risk_tier_detail?: string | null;

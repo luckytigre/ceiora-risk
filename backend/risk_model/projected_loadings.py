@@ -17,6 +17,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from backend import config
+from backend.data.neon import connect, resolve_dsn
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,6 +68,10 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(_LOADINGS_SCHEMA)
     conn.execute(_META_SCHEMA)
     conn.commit()
+
+
+def _neon_projection_reads_enabled() -> bool:
+    return bool(str(config.neon_dsn() or "").strip()) and config.neon_primary_model_data_enabled()
 
 
 def _load_factor_returns_wide(
@@ -320,6 +327,14 @@ def load_persisted_projected_loadings(
     if not requested_rics:
         return {}
 
+    if _neon_projection_reads_enabled():
+        loaded = _load_persisted_projected_loadings_postgres(
+            projection_rics=requested_rics,
+            as_of_date=as_of_date,
+        )
+        if loaded:
+            return loaded
+
     conn = sqlite3.connect(str(data_db))
     try:
         _ensure_schema(conn)
@@ -375,6 +390,70 @@ def load_persisted_projected_loadings(
     return out
 
 
+def _load_persisted_projected_loadings_postgres(
+    *,
+    projection_rics: list[str],
+    as_of_date: str,
+) -> dict[str, ProjectedLoadingResult]:
+    conn = connect(dsn=resolve_dsn(None), autocommit=True)
+    try:
+        placeholders = ",".join("%s" for _ in projection_rics)
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    l.ric,
+                    l.ticker,
+                    l.factor_name,
+                    l.exposure,
+                    m.lookback_days,
+                    m.obs_count,
+                    m.r_squared,
+                    m.projected_specific_var,
+                    m.projected_specific_vol
+                FROM projected_instrument_loadings l
+                JOIN projected_instrument_meta m
+                  ON m.ric = l.ric
+                 AND m.as_of_date = l.as_of_date
+                WHERE l.as_of_date = %s
+                  AND l.ric IN ({placeholders})
+                ORDER BY l.ticker, l.factor_name
+                """,
+                (as_of_date, *projection_rics),
+            )
+            rows = cur.fetchall()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Postgres projected-loadings read failed; falling back to sqlite: %s", exc)
+        return {}
+    finally:
+        conn.close()
+
+    out: dict[str, ProjectedLoadingResult] = {}
+    for ric, ticker, factor_name, exposure, lookback_days, obs_count, r_squared, projected_specific_var, projected_specific_vol in rows:
+        ticker_txt = str(ticker or "").strip().upper()
+        ric_txt = str(ric or "").strip().upper()
+        factor_txt = str(factor_name or "").strip()
+        if not ticker_txt or not ric_txt or not factor_txt:
+            continue
+        existing = out.get(ticker_txt)
+        if existing is None:
+            existing = ProjectedLoadingResult(
+                ric=ric_txt,
+                ticker=ticker_txt,
+                exposures={},
+                specific_var=float(projected_specific_var or 0.0),
+                specific_vol=float(projected_specific_vol or 0.0),
+                r_squared=float(r_squared or 0.0),
+                obs_count=int(obs_count or 0),
+                lookback_days=int(lookback_days or 0),
+                projection_asof=as_of_date,
+                status="ok",
+            )
+            out[ticker_txt] = existing
+        existing.exposures[factor_txt] = round(float(exposure or 0.0), 8)
+    return out
+
+
 def latest_persisted_projection_asof(
     *,
     data_db: Path,
@@ -391,6 +470,11 @@ def latest_persisted_projection_asof(
     if not requested_rics:
         return None
 
+    if _neon_projection_reads_enabled():
+        latest = _latest_persisted_projection_asof_postgres(projection_rics=requested_rics)
+        if latest:
+            return latest
+
     conn = sqlite3.connect(str(data_db))
     try:
         _ensure_schema(conn)
@@ -403,6 +487,32 @@ def latest_persisted_projection_asof(
             """,
             requested_rics,
         ).fetchone()
+    finally:
+        conn.close()
+    latest = str((row or [None])[0] or "").strip()
+    return latest or None
+
+
+def _latest_persisted_projection_asof_postgres(
+    *,
+    projection_rics: list[str],
+) -> str | None:
+    conn = connect(dsn=resolve_dsn(None), autocommit=True)
+    try:
+        placeholders = ",".join("%s" for _ in projection_rics)
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT MAX(as_of_date)::text
+                FROM projected_instrument_meta
+                WHERE ric IN ({placeholders})
+                """,
+                projection_rics,
+            )
+            row = cur.fetchone()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Postgres projection-asof read failed; falling back to sqlite: %s", exc)
+        return None
     finally:
         conn.close()
     latest = str((row or [None])[0] or "").strip()

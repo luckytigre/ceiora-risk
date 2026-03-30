@@ -157,8 +157,14 @@ export default function ExposurePositionsTable({
               <td>{pos.ticker}</td>
               <td>
                 <MethodLabel
-                  label={exposureMethodDisplayLabel(pos.exposure_origin, pos.model_status)}
-                  tone={exposureMethodTone(pos.exposure_origin, pos.model_status)}
+                  label={exposureMethodDisplayLabel(pos.exposure_origin, pos.model_status, {
+                    projectionOutputStatus: pos.projection_output_status,
+                    servedExposureAvailable: pos.served_exposure_available,
+                  })}
+                  tone={exposureMethodTone(pos.exposure_origin, pos.model_status, {
+                    projectionOutputStatus: pos.projection_output_status,
+                    servedExposureAvailable: pos.served_exposure_available,
+                  })}
                 />
               </td>
               <td>{pos.trbc_industry_group || "Unmapped"}</td>

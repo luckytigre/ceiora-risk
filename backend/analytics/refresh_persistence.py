@@ -19,6 +19,10 @@ _UNIVERSE_OVERLAY_FIELDS = (
     "model_status_reason",
     "eligibility_reason",
     "exposure_origin",
+    "projection_method",
+    "projection_r_squared",
+    "projection_obs_count",
+    "projection_asof",
     "cuse_realized_role",
     "cuse_output_status",
     "cuse_reason_code",
@@ -139,7 +143,10 @@ def _apply_current_membership_to_universe_payload(
             updated_by_ticker[ticker] = row
             continue
 
-        overlay = membership_row_to_overlay(membership_row)
+        overlay = membership_row_to_overlay(
+            membership_row,
+            payload_exposures=dict(row.get("exposures") or {}),
+        )
         row.update(overlay)
         if membership_row.get("projection_method") and not row.get("projection_method"):
             row["projection_method"] = membership_row.get("projection_method")

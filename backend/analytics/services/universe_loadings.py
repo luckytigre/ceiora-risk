@@ -87,7 +87,12 @@ def _overlay_persisted_cuse_membership(
             membership_row = membership_lookup.get((as_of_date, ric))
         if membership_row is None:
             continue
-        row.update(membership_row_to_overlay(membership_row))
+        row.update(
+            membership_row_to_overlay(
+                membership_row,
+                payload_exposures=dict(row.get("exposures") or {}),
+            )
+        )
 
 
 def _load_admitted_runtime_tickers(data_db: Path) -> set[str] | None:

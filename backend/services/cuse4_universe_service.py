@@ -87,6 +87,27 @@ def _normalize_registry_ticker_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _cuse_risk_tier(row: dict[str, Any]) -> tuple[str, str, str]:
+    projection_output_status = str(row.get("projection_output_status") or "").strip()
+    served_exposure_available = bool(row.get("served_exposure_available"))
+    if (
+        projection_output_status == "unavailable"
+        or (
+            str(row.get("exposure_origin") or "").strip().startswith("projected")
+            and not served_exposure_available
+        )
+    ):
+        if str(row.get("exposure_origin") or "").strip() == "projected_fundamental":
+            return (
+                "fundamental_projection_candidate",
+                "Projected (Fundamental Candidate)",
+                "cUSE policy admits this security to the fundamental-projection path, but no served projected loadings are currently available.",
+            )
+        if str(row.get("exposure_origin") or "").strip() == "projected_returns":
+            return (
+                "returns_projection_candidate",
+                "Projected (Returns Candidate)",
+                "cUSE policy admits this security to the returns-projection path, but no served projected loadings are currently available.",
+            )
     if str(row.get("model_status") or "").strip() == "core_estimated" and str(row.get("quote_source") or "") == "served_payload":
         return (
             "live_core",

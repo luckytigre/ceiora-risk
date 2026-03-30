@@ -2,6 +2,10 @@ import type { ExposureOrigin, ModelStatus } from "@/lib/types/cuse4";
 import type { MethodLabelTone } from "@/components/MethodLabel";
 
 export type ExposureTier = "core" | "fundamental" | "returns";
+export interface ExposureMethodContext {
+  projectionOutputStatus?: string | null;
+  servedExposureAvailable?: boolean | null;
+}
 
 export function hasExposureMethodMetadata(
   origin?: ExposureOrigin | null,
@@ -43,7 +47,17 @@ export function exposureTier(
 export function exposureMethodLabel(
   origin?: ExposureOrigin | null,
   modelStatus?: ModelStatus | null,
+  context?: ExposureMethodContext,
 ): string {
+  const normalized = normalizeExposureOrigin(origin, modelStatus);
+  const projectionUnavailable = (
+    normalized !== "native"
+    && (
+      String(context?.projectionOutputStatus || "").trim() === "unavailable"
+      || context?.servedExposureAvailable === false
+    )
+  );
+  if (projectionUnavailable) return "Projection Unavailable";
   if (modelStatus === "core_estimated") return "Core";
   if (modelStatus === "ineligible" && !origin) return "Ineligible";
   const tier = exposureTier(origin, modelStatus);
@@ -55,9 +69,10 @@ export function exposureMethodLabel(
 export function exposureMethodDisplayLabel(
   origin?: ExposureOrigin | null,
   modelStatus?: ModelStatus | null,
+  context?: ExposureMethodContext,
 ): string {
   return hasExposureMethodMetadata(origin, modelStatus)
-    ? exposureMethodLabel(origin, modelStatus)
+    ? exposureMethodLabel(origin, modelStatus, context)
     : "\u2014";
 }
 
@@ -76,8 +91,19 @@ export function exposureMethodRank(
 export function exposureMethodTone(
   origin?: ExposureOrigin | null,
   modelStatus?: ModelStatus | null,
+  context?: ExposureMethodContext,
 ): MethodLabelTone {
   if (!hasExposureMethodMetadata(origin, modelStatus)) return "neutral";
+  const normalized = normalizeExposureOrigin(origin, modelStatus);
+  if (
+    normalized !== "native"
+    && (
+      String(context?.projectionOutputStatus || "").trim() === "unavailable"
+      || context?.servedExposureAvailable === false
+    )
+  ) {
+    return "error";
+  }
   if (modelStatus === "ineligible") return "error";
   const tier = exposureTier(origin, modelStatus);
   if (tier === "fundamental" || tier === "returns") return "projection";
