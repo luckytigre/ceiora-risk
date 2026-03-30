@@ -26,7 +26,7 @@ Use this checklist before and after backend/frontend refreshes to keep runtime s
 - Pass criteria:
   - backend endpoints are `200`
   - root route redirects cleanly (`/`)
-  - compatibility redirects resolve cleanly from the `next.config.js`-owned legacy roots (`/exposures`, `/explore`, `/health`)
+  - compatibility redirects resolve cleanly from the `next.config.js`-owned legacy roots (`/dashboard`, `/exposures`, `/explore`, `/health`)
   - canonical frontend routes render (`/cuse/exposures`, `/cuse/explore`, `/cuse/health`, `/data`, `/positions`)
   - frontend API proxies return expected keys (`refresh`, `positions`, `risk_shares`)
   - `/positions` keeps its explicit shared-owner contract across shared holdings owners plus cUSE and cPAR read overlays

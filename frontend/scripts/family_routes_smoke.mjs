@@ -107,6 +107,7 @@ try {
 
   await assertRedirect("/exposures", "/cuse/exposures");
   await assertRedirect("/exposures?mode=sensitivity", "/cuse/exposures?mode=sensitivity");
+  await assertRedirect("/dashboard", "/cuse/exposures");
   await assertRedirect("/explore", "/cuse/explore");
   await assertRedirect("/explore?q=AAPL", "/cuse/explore?q=AAPL");
   await assertRedirect("/health", "/cuse/health");

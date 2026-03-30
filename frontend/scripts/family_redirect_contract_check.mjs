@@ -13,6 +13,7 @@ const redirects = await nextConfig.redirects();
 
 const expectedLegacyRedirects = [
   { source: "/exposures", destination: "/cuse/exposures" },
+  { source: "/dashboard", destination: "/cuse/exposures" },
   { source: "/explore", destination: "/cuse/explore" },
   { source: "/health", destination: "/cuse/health" },
 ];

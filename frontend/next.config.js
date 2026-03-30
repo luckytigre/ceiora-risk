@@ -14,6 +14,11 @@ const nextConfig = {
         permanent: false,
       },
       {
+        source: "/dashboard",
+        destination: "/cuse/exposures",
+        permanent: false,
+      },
+      {
         source: "/explore",
         destination: "/cuse/explore",
         permanent: false,
