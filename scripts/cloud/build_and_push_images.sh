@@ -26,6 +26,27 @@ build_target() {
   esac
 }
 
+validate_build_targets() {
+  local seen=0
+  local target
+  for target in ${BUILD_TARGETS//,/ }; do
+    seen=1
+    case "${target}" in
+      frontend|serve|control)
+        ;;
+      *)
+        echo "BUILD_TARGETS must contain only 'frontend', 'serve', or 'control'." >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ "${seen}" -eq 0 ]]; then
+    echo "BUILD_TARGETS must include at least one of 'frontend', 'serve', or 'control'." >&2
+    exit 1
+  fi
+}
+
 require_origin_for_frontend_build() {
   if ! build_target frontend; then
     return 0
@@ -60,6 +81,7 @@ case "${ENDPOINT_MODE}" in
     ;;
 esac
 
+validate_build_targets
 require_origin_for_frontend_build
 
 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
