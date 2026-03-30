@@ -10,6 +10,8 @@ from typing import Any, Callable
 
 
 logger = logging.getLogger(__name__)
+_NEON_COMPUTE_STAGES = {"raw_history", "feature_build", "estu_audit", "factor_returns", "risk_model"}
+_CORE_PUBLICATION_STAGE = "risk_model"
 
 
 def _workspace_path_from_payload(
@@ -93,6 +95,7 @@ def run_selected_stages(
     neon_mirror_sqlite_path = db_path
     neon_mirror_cache_path = cache_db
     total_stages = len(selected)
+    upstream_core_recomputed = False
 
     for idx, stage in enumerate(selected, start=1):
         stage_t0 = time.perf_counter()
@@ -165,8 +168,7 @@ def run_selected_stages(
             stage_data_db = db_path
             stage_cache_db = cache_db
             stage_workspace_root: Path | None = None
-            neon_compute_stages = {"raw_history", "feature_build", "estu_audit", "factor_returns", "risk_model"}
-            if rebuild_backend == "neon" and stage in neon_compute_stages:
+            if rebuild_backend == "neon" and stage in _NEON_COMPUTE_STAGES:
                 if workspace_paths is None:
                     raise RuntimeError(
                         "Neon-authoritative rebuild requires neon_readiness before core stages. "
@@ -186,6 +188,7 @@ def run_selected_stages(
                 stage=stage,
                 as_of_date=as_of,
                 should_run_core=bool(should_run_core),
+                upstream_core_recomputed=bool(upstream_core_recomputed),
                 serving_mode=serving_mode,
                 data_db=stage_data_db,
                 cache_db=stage_cache_db,
@@ -207,6 +210,8 @@ def run_selected_stages(
                 neon_mirror_sqlite_path = workspace_paths.data_db
                 neon_mirror_cache_path = workspace_paths.cache_db
             stage_status = "skipped" if str(out.get("status")) == "skipped" else "completed"
+            if stage_status == "completed" and stage == _CORE_PUBLICATION_STAGE:
+                upstream_core_recomputed = True
             elapsed = time.perf_counter() - stage_t0
             stage_details = dict(out)
             stage_details["duration_seconds"] = round(float(elapsed), 3)

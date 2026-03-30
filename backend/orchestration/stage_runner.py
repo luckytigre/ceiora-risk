@@ -19,6 +19,7 @@ def run_stage(
     stage: str,
     as_of_date: str,
     should_run_core: bool,
+    upstream_core_recomputed: bool = False,
     serving_mode: str,
     force_core: bool,
     core_reason: str,
@@ -118,6 +119,7 @@ def run_stage(
         return stage_serving.run_serving_stage(
             stage=stage,
             should_run_core=should_run_core,
+            upstream_core_recomputed=bool(upstream_core_recomputed),
             serving_mode=serving_mode,
             data_db=data_db,
             cache_db=cache_db,

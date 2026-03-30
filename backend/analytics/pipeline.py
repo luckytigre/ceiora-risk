@@ -410,6 +410,7 @@ def run_refresh(
     skip_snapshot_rebuild: bool = False,
     skip_cuse4_foundation: bool = False,
     skip_risk_engine: bool = False,
+    upstream_core_recomputed: bool = False,
     enforce_stable_core_package: bool = False,
     refresh_projected_loadings: bool = False,
     refresh_deep_health_diagnostics: bool = False,
@@ -613,7 +614,7 @@ def run_refresh(
             f"advance core artifacts on the serving path ({recompute_reason}). Run a core lane instead."
         )
 
-    recomputed_this_refresh = False
+    recomputed_this_refresh = bool(upstream_core_recomputed)
     if should_recompute:
         _emit_refresh_progress(
             progress_callback,

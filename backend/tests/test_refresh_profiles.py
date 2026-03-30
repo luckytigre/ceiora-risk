@@ -921,16 +921,19 @@ def test_neon_readiness_stage_surfaces_workspace_preparation_failure(
 
 
 @pytest.mark.parametrize(
-    ("should_run_core", "expected_recompute"),
+    ("should_run_core", "upstream_core_recomputed", "expected_recompute", "expected_diagnostics"),
     [
-        (False, False),
-        (True, True),
+        (False, False, False, False),
+        (True, False, False, True),
+        (True, True, True, True),
     ],
 )
-def test_serving_refresh_stage_only_requests_deep_diagnostics_for_core_lanes(
+def test_serving_refresh_stage_separates_execution_recompute_from_core_lane_diagnostics(
     monkeypatch: pytest.MonkeyPatch,
     should_run_core: bool,
+    upstream_core_recomputed: bool,
     expected_recompute: bool,
+    expected_diagnostics: bool,
 ) -> None:
     captured: dict[str, object] = {}
 
@@ -947,6 +950,7 @@ def test_serving_refresh_stage_only_requests_deep_diagnostics_for_core_lanes(
         stage="serving_refresh",
         as_of_date="2026-03-14",
         should_run_core=should_run_core,
+        upstream_core_recomputed=upstream_core_recomputed,
         serving_mode="light",
         force_core=False,
         core_reason="within_interval",
@@ -957,8 +961,9 @@ def test_serving_refresh_stage_only_requests_deep_diagnostics_for_core_lanes(
     assert out["status"] == "ok"
     assert captured["data_db"] == run_model_pipeline.DATA_DB
     assert captured["cache_db"] == run_model_pipeline.CACHE_DB
-    assert captured["enforce_stable_core_package"] is (not should_run_core)
-    assert captured["refresh_deep_health_diagnostics"] is expected_recompute
+    assert captured["enforce_stable_core_package"] is (not expected_recompute)
+    assert captured["upstream_core_recomputed"] is expected_recompute
+    assert captured["refresh_deep_health_diagnostics"] is expected_diagnostics
 
 
 def test_serve_refresh_stage_fails_closed_when_current_core_package_is_not_reusable(

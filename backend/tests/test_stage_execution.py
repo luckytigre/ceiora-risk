@@ -39,6 +39,7 @@ def test_run_selected_stages_routes_neon_workspace_into_core_and_serving_refresh
                 "data_db": kwargs["data_db"],
                 "cache_db": kwargs["cache_db"],
                 "workspace_root": kwargs.get("workspace_root"),
+                "upstream_core_recomputed": kwargs.get("upstream_core_recomputed"),
             }
         )
         if kwargs["stage"] == "neon_readiness":
@@ -91,13 +92,18 @@ def test_run_selected_stages_routes_neon_workspace_into_core_and_serving_refresh
     assert all(item["run_id"] == "run_1" for item in captured)
     assert by_stage["source_sync"]["data_db"] == local_data_db
     assert by_stage["source_sync"]["cache_db"] == local_cache_db
+    assert by_stage["source_sync"]["upstream_core_recomputed"] is False
     assert by_stage["neon_readiness"]["workspace_root"] == tmp_path / "neon_rebuild_workspace" / "run_1"
+    assert by_stage["neon_readiness"]["upstream_core_recomputed"] is False
     assert by_stage["factor_returns"]["data_db"] == workspace_data_db.resolve()
     assert by_stage["factor_returns"]["cache_db"] == workspace_cache_db.resolve()
+    assert by_stage["factor_returns"]["upstream_core_recomputed"] is False
     assert by_stage["risk_model"]["data_db"] == workspace_data_db.resolve()
     assert by_stage["risk_model"]["cache_db"] == workspace_cache_db.resolve()
+    assert by_stage["risk_model"]["upstream_core_recomputed"] is False
     assert by_stage["serving_refresh"]["data_db"] == workspace_data_db.resolve()
     assert by_stage["serving_refresh"]["cache_db"] == workspace_cache_db.resolve()
+    assert by_stage["serving_refresh"]["upstream_core_recomputed"] is True
 
 
 def test_run_selected_stages_fails_closed_when_neon_readiness_workspace_is_malformed(tmp_path: Path) -> None:
@@ -153,3 +159,109 @@ def test_run_selected_stages_fails_closed_when_neon_readiness_workspace_is_malfo
     assert out["stage_results"][0]["stage"] == "neon_readiness"
     assert out["stage_results"][0]["status"] == "failed"
     assert "workspace.data_db" in out["stage_results"][0]["error"]["message"]
+
+
+def test_run_selected_stages_does_not_mark_upstream_core_recomputed_when_serving_refresh_runs_alone(
+    tmp_path: Path,
+) -> None:
+    local_data_db = tmp_path / "local_data.db"
+    local_cache_db = tmp_path / "local_cache.db"
+    local_data_db.touch()
+    local_cache_db.touch()
+
+    captured: list[dict[str, object]] = []
+
+    def _run_stage(**kwargs):
+        captured.append(
+            {
+                "stage": kwargs["stage"],
+                "upstream_core_recomputed": kwargs.get("upstream_core_recomputed"),
+                "data_db": kwargs["data_db"],
+                "cache_db": kwargs["cache_db"],
+            }
+        )
+        return {"status": "ok"}
+
+    out = stage_execution.run_selected_stages(
+        selected=["serving_refresh"],
+        stages=["source_sync", "factor_returns", "risk_model", "serving_refresh"],
+        db_path=local_data_db,
+        cache_db=local_cache_db,
+        profile_key="core-weekly",
+        effective_run_id="run_3",
+        as_of="2026-03-14",
+        should_run_core=True,
+        serving_mode="full",
+        force_core=False,
+        core_reason="due",
+        raw_history_policy="none",
+        reset_core_cache=False,
+        enable_ingest=False,
+        prefer_local_source_archive=False,
+        refresh_scope=None,
+        rebuild_backend="neon",
+        app_data_dir=str(tmp_path),
+        completed_stages=set(),
+        stage_callback=None,
+        run_stage_fn=_run_stage,
+        job_runs_module=_job_runs_stub(),
+        neon_authority_module=neon_authority,
+    )
+
+    assert out["overall_status"] == "ok"
+    assert len(captured) == 1
+    assert captured[0]["stage"] == "serving_refresh"
+    assert captured[0]["upstream_core_recomputed"] is False
+    assert captured[0]["data_db"] == local_data_db
+    assert captured[0]["cache_db"] == local_cache_db
+
+
+def test_run_selected_stages_does_not_treat_resumed_risk_model_as_current_invocation_recompute(
+    tmp_path: Path,
+) -> None:
+    local_data_db = tmp_path / "local_data.db"
+    local_cache_db = tmp_path / "local_cache.db"
+    local_data_db.touch()
+    local_cache_db.touch()
+
+    captured: list[dict[str, object]] = []
+
+    def _run_stage(**kwargs):
+        captured.append(
+            {
+                "stage": kwargs["stage"],
+                "upstream_core_recomputed": kwargs.get("upstream_core_recomputed"),
+            }
+        )
+        return {"status": "ok"}
+
+    out = stage_execution.run_selected_stages(
+        selected=["risk_model", "serving_refresh"],
+        stages=["factor_returns", "risk_model", "serving_refresh"],
+        db_path=local_data_db,
+        cache_db=local_cache_db,
+        profile_key="core-weekly",
+        effective_run_id="run_4",
+        as_of="2026-03-14",
+        should_run_core=True,
+        serving_mode="full",
+        force_core=False,
+        core_reason="due",
+        raw_history_policy="none",
+        reset_core_cache=False,
+        enable_ingest=False,
+        prefer_local_source_archive=False,
+        refresh_scope=None,
+        rebuild_backend="neon",
+        app_data_dir=str(tmp_path),
+        completed_stages={"risk_model"},
+        stage_callback=None,
+        run_stage_fn=_run_stage,
+        job_runs_module=_job_runs_stub(),
+        neon_authority_module=neon_authority,
+    )
+
+    assert out["overall_status"] == "ok"
+    assert len(captured) == 1
+    assert captured[0]["stage"] == "serving_refresh"
+    assert captured[0]["upstream_core_recomputed"] is False

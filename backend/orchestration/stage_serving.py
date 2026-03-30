@@ -12,6 +12,7 @@ def run_serving_stage(
     *,
     stage: str,
     should_run_core: bool,
+    upstream_core_recomputed: bool = False,
     serving_mode: str,
     data_db: Path,
     cache_db: Path,
@@ -33,7 +34,7 @@ def run_serving_stage(
 
     force_local_core_reads = bool(
         prefer_local_source_archive
-        or should_run_core
+        or upstream_core_recomputed
     )
     uses_workspace_paths = bool(
         Path(data_db).resolve() != canonical_data_db.resolve()
@@ -54,7 +55,7 @@ def run_serving_stage(
             today_utc=today_utc,
             cache_db=cache_db,
         )
-        enforce_stable_core_package = not bool(should_run_core)
+        enforce_stable_core_package = not bool(upstream_core_recomputed)
         if enforce_stable_core_package and not skip_risk_engine:
             raise RuntimeError(
                 "serve-refresh requires a current stable core package and will not recompute "
@@ -74,6 +75,7 @@ def run_serving_stage(
                         skip_cuse4_foundation=True,
                         skip_risk_engine=bool(skip_risk_engine),
                         enforce_stable_core_package=enforce_stable_core_package,
+                        upstream_core_recomputed=bool(upstream_core_recomputed),
                         refresh_projected_loadings=bool(should_run_core),
                         refresh_deep_health_diagnostics=bool(should_run_core),
                         prefer_local_source_archive=bool(prefer_local_source_archive),
@@ -92,6 +94,7 @@ def run_serving_stage(
                 skip_cuse4_foundation=True,
                 skip_risk_engine=bool(skip_risk_engine),
                 enforce_stable_core_package=enforce_stable_core_package,
+                upstream_core_recomputed=bool(upstream_core_recomputed),
                 refresh_projected_loadings=bool(should_run_core),
                 refresh_deep_health_diagnostics=bool(should_run_core),
                 prefer_local_source_archive=bool(prefer_local_source_archive),
