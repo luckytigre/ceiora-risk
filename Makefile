@@ -1,4 +1,4 @@
-.PHONY: dev backend backend-prod backend-serve backend-control backend-serve-prod backend-control-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup doctor cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status cloud-images-build cloud-images-push cloud-serve-deploy cloud-request-billing-check
+.PHONY: dev backend backend-prod backend-serve backend-control backend-serve-prod backend-control-prod frontend frontend-safe refresh refresh-serve refresh-cold-core setup doctor cuse4-bootstrap cuse4-estu prune-history prune-history-dry smoke-check operator-check clean-local app-up app-down app-restart app-check app-status cloud-images-build cloud-images-push cloud-serve-deploy cloud-request-billing-check cloud-run-app-contract cloud-topology-check
 
 setup:
 	./scripts/setup_local_env.sh
@@ -104,3 +104,9 @@ cloud-serve-deploy:
 
 cloud-request-billing-check:
 	./scripts/cloud/check_request_billing.sh
+
+cloud-run-app-contract:
+	./scripts/cloud/emit_run_app_contract.sh
+
+cloud-topology-check:
+	./scripts/cloud/topology_check.sh

@@ -349,6 +349,11 @@ Parallel cPAR note:
 - One-command operator check:
   - `make operator-check`
   - or `./scripts/operator_check.sh`
+  - topology-aware live wrapper:
+    - `OPERATOR_API_TOKEN=... make cloud-topology-check`
+    - real dispatch remains opt-in on that wrapper:
+      - `OPERATOR_API_TOKEN=... TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH=1 make cloud-topology-check`
+      - optional `TOPOLOGY_CHECK_DISPATCH_SURFACE=active|run_app|edge`
   - live cloud check:
     - `APP_BASE_URL=https://app.ceiora.com CONTROL_BASE_URL=https://control.ceiora.com OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 make operator-check`
   - live run.app check:
@@ -362,6 +367,7 @@ Parallel cPAR note:
     - the `run.app` URLs from `public_origins`
     - the still-live custom-domain rollback path on `app.ceiora.com` / `control.ceiora.com`
   - if `endpoint_mode=run_app` and `edge_enabled=false`, treat the `run.app` URLs from `public_origins` as the only live operator-check targets
+  - `cloud-topology-check` clears `RUN_REFRESH_DISPATCH` unless `TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH=1` is set explicitly
   - live cloud validation now checks both frontend-proxied and direct control routes:
     - anonymous `/api/operator/status` and `/api/refresh/status` must return `401`
     - legacy `X-Refresh-Token` and invalid-token `/api/operator/status`, `/api/refresh/status`, and `POST /api/refresh` must return `401`

@@ -258,9 +258,13 @@ Operator build entrypoints:
 - `make cloud-images-build`
 - `make cloud-images-push`
 - `ALLOW_DIRECT_SERVE_DEPLOY=1 make cloud-serve-deploy`
+- `make cloud-run-app-contract`
+- `make cloud-topology-check`
 - `scripts/cloud/build_images.sh`
 - `scripts/cloud/build_and_push_images.sh`
 - `ALLOW_DIRECT_SERVE_DEPLOY=1 scripts/cloud/deploy_serve.sh`
+- `scripts/cloud/emit_run_app_contract.sh`
+- `scripts/cloud/topology_check.sh`
 - the repo-owned Cloud Run image path now explicitly builds `linux/amd64` images via `docker buildx`; do not use the plain host-architecture Docker default for rollout images.
 - the same scripts also support `BUILD_TARGETS=frontend` when you need a frontend-only rebuild for an explicit `run_app` contract while keeping serve/control pinned to existing image refs.
 - the build scripts now read `ENDPOINT_MODE`:
@@ -285,6 +289,10 @@ Build-time contract:
 - `ENDPOINT_MODE=run_app` requires `BACKEND_API_ORIGIN` to be an explicit `https://<serve-service>.run.app` origin that matches the Terraform `frontend_build_contract.build_api_origin` / `frontend_backend_api_origin` input
 - `scripts/cloud/build_and_push_images.sh` passes the same `ENDPOINT_MODE` / `BACKEND_API_ORIGIN` contract through to `scripts/cloud/build_images.sh`; do not rely on one script defaulting differently from the other
 - the image-build scripts validate only the frontend build-side origin piece of the `run_app` contract; Terraform still owns the full topology contract, including `frontend_public_origin`, `frontend_backend_control_origin`, and pinned `*_image_ref` inputs
+- `scripts/cloud/emit_run_app_contract.sh` renders the full `run_app` Terraform snippet from current prod outputs:
+  - `RUN_APP_PHASE=soak` keeps `edge_enabled=true`
+  - `RUN_APP_PHASE=no-edge` renders the final `edge_enabled=false` contract
+- set `PROD_TERRAFORM_OUTPUT_JSON=/path/to/terraform-output.json` when you want the helper to read a saved `terraform output -json` bundle instead of shelling into the prod root
 - backend images do not copy repo-local `backend/.env` or the broad local backend tree into the image
 
 Runtime contract:
@@ -374,6 +382,15 @@ For the request-based billing rollout specifically:
 - require a clean `terraform plan` after the rollout so live state and Terraform state agree
 - use `make smoke-check` for repo-side contract checks
 - use `make operator-check` with `APP_BASE_URL`, `CONTROL_BASE_URL`, and `OPERATOR_API_TOKEN` set for live control-plane validation
+- use `make cloud-topology-check` when you want the repo to choose the live URLs from current Terraform outputs:
+  - `custom_domains`: checks only the custom-domain path
+  - `run_app + edge_enabled=true`: checks both the `run.app` path and the still-live custom-domain rollback path
+  - `run_app + edge_enabled=false`: checks only the `run.app` path
+- `cloud-topology-check` is safe-by-default for soak:
+  - it forces `RUN_REFRESH_DISPATCH=0` unless you explicitly set `TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH=1`
+  - when dispatch is enabled, it dispatches against one chosen surface only instead of every checked path
+  - default `TOPOLOGY_CHECK_DISPATCH_SURFACE=active`
+  - set `TOPOLOGY_CHECK_DISPATCH_SURFACE=run_app` or `edge` when you want to force the real dispatch to a specific soak surface
 - that check now validates both the frontend-proxied and direct control paths:
   - anonymous `/api/operator/status` and `/api/refresh/status` must return `401`
   - legacy `X-Refresh-Token` and invalid-token `/api/operator/status`, `/api/refresh/status`, and `POST /api/refresh` must return `401`
@@ -390,6 +407,7 @@ Topology guardrails:
 - `service_urls` remain the topology-neutral Cloud Run reference surface
 - `hostnames` remain the reserved custom-domain names even when the edge is disabled
 - `load_balancer_*` outputs are edge-only and may be `null` when `edge_enabled=false`
+- `cloud-topology-check` shells into `terraform output -json` by default; use `PROD_TERRAFORM_OUTPUT_JSON=...` when you want it to operate from a saved rollout bundle instead
 
 ## Rollout Order
 
@@ -416,6 +434,7 @@ Topology guardrails:
   - use the repo-owned scripts so the published images stay `linux/amd64` for Cloud Run
 - `endpoint_mode=run_app` soak or no-edge contract:
   - capture the current Cloud Run service URLs first
+    - or render the exact snippet with `make cloud-run-app-contract RUN_APP_PHASE=soak`
   - set `endpoint_mode=run_app`
   - set `edge_enabled=true` for soak, or `false` only after soak is clean
   - set `frontend_public_origin`, `frontend_backend_api_origin`, and `frontend_backend_control_origin` from the intended `run.app` URLs
@@ -431,14 +450,12 @@ Topology guardrails:
 
 5. Soak with the edge still enabled
 - apply `endpoint_mode=run_app` with `edge_enabled=true`
-- re-run smoke against both:
-  - the `run.app` URLs from `public_origins`
-  - the still-live custom-domain rollback path on `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com`
+- re-run smoke against both paths with `make cloud-topology-check`
 
 6. Disable the edge only after soak
 - apply `endpoint_mode=run_app` with `edge_enabled=false`
 - confirm `load_balancer_ip`, `load_balancer_dns_records`, and `load_balancer_host_routing` now return `null`
-- re-run the live smoke against the `run.app` URLs only
+- re-run the live smoke against the `run.app` URLs only with `make cloud-topology-check`
 
 ## Current Rollout Notes
 

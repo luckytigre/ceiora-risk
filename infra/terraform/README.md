@@ -86,6 +86,17 @@ Build/deploy operator rule:
 - `ENDPOINT_MODE=run_app` is fail-closed for frontend builds and requires an explicit `BACKEND_API_ORIGIN=https://<serve-service>.run.app`
 - `scripts/cloud/deploy_serve.sh` is intentionally guarded behind `ALLOW_DIRECT_SERVE_DEPLOY=1`
 - that script is a serve-only Cloud Run drift path, validates `SERVICE_NAME` by requiring a `-serve` suffix, and must not be used for topology changes, `endpoint_mode` changes, or `run_app` cutovers
+- `make cloud-run-app-contract` renders the exact `run_app` Terraform snippet from current prod outputs:
+  - `RUN_APP_PHASE=soak` keeps `edge_enabled=true`
+  - `RUN_APP_PHASE=no-edge` renders the final `edge_enabled=false` contract
+- `make cloud-topology-check` reads current prod outputs and runs the correct live operator checks automatically for:
+  - `custom_domains`
+  - `run_app` soak
+  - `run_app` no-edge
+- `make cloud-topology-check` clears `RUN_REFRESH_DISPATCH` unless `TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH=1` is set explicitly
+- when dispatch is enabled on that wrapper, `TOPOLOGY_CHECK_DISPATCH_SURFACE=active|run_app|edge` selects the one surface that receives the real refresh dispatch
+- both helper scripts can read a saved `terraform output -json` bundle through `PROD_TERRAFORM_OUTPUT_JSON=...` when the local prod root is not backend-initialized
+- `make cloud-topology-check` reuses `scripts/operator_check.sh`; during `run_app` soak it runs the local pytest gate once, then reuses the live-only path for the custom-domain rollback check
 
 Observability prep owned here:
 - `_Default` Cloud Logging retention
@@ -95,7 +106,7 @@ Observability prep owned here:
 Important Cloud Run billing rule:
 - when a service defines `template.containers.resources`, set `cpu_idle = true` explicitly to preserve request-based billing
 - direct `gcloud run deploy` workflows must also pass `--cpu-throttling`, or the live service can drift back to instance-based billing
-- rollout verification should include `terraform plan`, `make cloud-request-billing-check`, `make smoke-check`, and `RUN_REFRESH_DISPATCH=1 make operator-check`
+- rollout verification should include `terraform plan`, `make cloud-request-billing-check`, `make smoke-check`, and either `RUN_REFRESH_DISPATCH=1 make operator-check` or `TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH=1 make cloud-topology-check`
 - for config-only Terraform changes in production, pin `frontend_image_ref`, `serve_image_ref`, and `control_image_ref` to the currently deployed image refs so the plan does not drift to `:latest`
 
 Important frontend rule:

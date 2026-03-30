@@ -7,23 +7,26 @@ cd "${ROOT_DIR}"
 BACKEND_PYTHON="${BACKEND_PYTHON:-${ROOT_DIR}/backend/.venv/bin/python}"
 CONTROL_BASE_URL="${CONTROL_BASE_URL:-}"
 OPERATOR_CHECK_REQUIRE_LIVE="${OPERATOR_CHECK_REQUIRE_LIVE:-0}"
+OPERATOR_CHECK_SKIP_LOCAL="${OPERATOR_CHECK_SKIP_LOCAL:-0}"
 INVALID_OPERATOR_TOKEN="${INVALID_OPERATOR_TOKEN:-not-the-real-token}"
 RUN_REFRESH_DISPATCH="${RUN_REFRESH_DISPATCH:-0}"
 RUN_REFRESH_DISPATCH_TARGET="${RUN_REFRESH_DISPATCH_TARGET:-proxy}"
 REFRESH_POLL_SECONDS="${REFRESH_POLL_SECONDS:-5}"
 REFRESH_POLL_ATTEMPTS="${REFRESH_POLL_ATTEMPTS:-36}"
 
-if [[ ! -x "${BACKEND_PYTHON}" ]]; then
-  printf 'Missing backend Python executable: %s\n' "${BACKEND_PYTHON}" >&2
-  exit 1
-fi
+if [[ "${OPERATOR_CHECK_SKIP_LOCAL}" != "1" ]]; then
+  if [[ ! -x "${BACKEND_PYTHON}" ]]; then
+    printf 'Missing backend Python executable: %s\n' "${BACKEND_PYTHON}" >&2
+    exit 1
+  fi
 
-"${BACKEND_PYTHON}" -m pytest \
-  backend/tests/test_cloud_auth_and_runtime_roles.py \
-  backend/tests/test_operator_status_route.py \
-  backend/tests/test_refresh_auth.py \
-  backend/tests/test_refresh_control_service.py \
-  -q
+  "${BACKEND_PYTHON}" -m pytest \
+    backend/tests/test_cloud_auth_and_runtime_roles.py \
+    backend/tests/test_operator_status_route.py \
+    backend/tests/test_refresh_auth.py \
+    backend/tests/test_refresh_control_service.py \
+    -q
+fi
 
 if [[ -z "${APP_BASE_URL:-}" ]]; then
   if [[ "${OPERATOR_CHECK_REQUIRE_LIVE}" == "1" ]]; then
