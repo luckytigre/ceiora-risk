@@ -45,9 +45,27 @@ export interface CparSearchItem {
   ticker: string | null;
   ric: string;
   display_name: string | null;
-  fit_status: CparFitStatus;
+  fit_status?: CparFitStatus | null;
   warnings: CparWarning[];
   hq_country_code?: string | null;
+  target_scope?: string | null;
+  fit_family?: string | null;
+  price_on_package_date_status?: string | null;
+  fit_row_status?: string | null;
+  fit_quality_status?: string | null;
+  portfolio_use_status?: string | null;
+  ticker_detail_use_status?: string | null;
+  hedge_use_status?: string | null;
+  reason_code?: string | null;
+  quality_label?: string | null;
+  risk_tier?: string | null;
+  risk_tier_label?: string | null;
+  risk_tier_detail?: string | null;
+  quote_source?: string | null;
+  quote_source_label?: string | null;
+  quote_source_detail?: string | null;
+  scenario_stage_supported?: boolean;
+  scenario_stage_detail?: string | null;
 }
 
 export interface CparSearchData extends CparPackageMeta {
@@ -127,7 +145,7 @@ export interface CparTickerDetailData extends CparPackageMeta {
   ticker: string | null;
   ric: string;
   display_name: string | null;
-  fit_status: CparFitStatus;
+  fit_status?: CparFitStatus | null;
   warnings: CparWarning[];
   observed_weeks: number;
   lookback_weeks: number;
@@ -144,6 +162,24 @@ export interface CparTickerDetailData extends CparPackageMeta {
   pre_hedge_factor_variance_proxy?: number | null;
   pre_hedge_factor_volatility_proxy?: number | null;
   source_context: CparSourceContext;
+  target_scope?: string | null;
+  fit_family?: string | null;
+  price_on_package_date_status?: string | null;
+  fit_row_status?: string | null;
+  fit_quality_status?: string | null;
+  portfolio_use_status?: string | null;
+  ticker_detail_use_status?: string | null;
+  hedge_use_status?: string | null;
+  reason_code?: string | null;
+  quality_label?: string | null;
+  risk_tier?: string | null;
+  risk_tier_label?: string | null;
+  risk_tier_detail?: string | null;
+  quote_source?: string | null;
+  quote_source_label?: string | null;
+  quote_source_detail?: string | null;
+  scenario_stage_supported?: boolean;
+  scenario_stage_detail?: string | null;
 }
 
 export interface CparHedgeLeg {

@@ -106,7 +106,9 @@ export default function CparTickerQuoteCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [spotlight, setSpotlight] = useState(false);
-  const fit = describeCparFitStatus(item.fit_status);
+  const fit = item.fit_status ? describeCparFitStatus(item.fit_status) : null;
+  const tierLabel = item.risk_tier_label || fit?.label || "Unknown";
+  const tierTone = fit?.tone || "neutral";
 
   useEffect(() => {
     setExpanded(true);
@@ -134,7 +136,7 @@ export default function CparTickerQuoteCard({
     : "—";
   const metrics: Array<{ label: string; value: string; tone?: string }> = [
     { label: "Price", value: formatMoney(item.source_context.latest_price_context?.price ?? null), tone: "strong" },
-    { label: "Fit", value: fit.label, tone: metricToneFromBadgeTone(fit.tone) },
+    { label: "Tier", value: tierLabel, tone: metricToneFromBadgeTone(tierTone) },
     { label: "Obs", value: String(item.observed_weeks || 0) },
   ];
   if (selectedPosition) {
@@ -151,11 +153,14 @@ export default function CparTickerQuoteCard({
 
   const detailRows: Array<{ label: string; value: string }> = [
     { label: "RIC", value: item.ric },
+    { label: "Risk Tier", value: tierLabel },
+    { label: "Tier Detail", value: item.risk_tier_detail || "—" },
+    { label: "Quote Source", value: item.quote_source_label || "—" },
     { label: "TRBC Industry", value: item.source_context.classification_snapshot?.trbc_industry_group || "Unmapped" },
     { label: "HQ Country", value: item.hq_country_code || "—" },
     { label: "Package Date", value: formatCparPackageDate(item.package_date) },
     { label: "Price Date", value: formatCparPackageDate(item.source_context.latest_price_context?.price_date || null) },
-    { label: "Fit Status", value: fit.label },
+    { label: "Fit Status", value: fit?.label || "Not in active package" },
     { label: "Observed Weeks", value: String(item.observed_weeks || 0) },
     { label: "Longest Gap", value: String(item.longest_gap_weeks || 0) },
     { label: "Market β", value: formatFixed(item.beta_market_step1 ?? item.beta_spy_trade, 4) },
@@ -256,7 +261,7 @@ export default function CparTickerQuoteCard({
             <div className="explore-quote-chart-panel">
               <div className="explore-quote-chart-head">
                 <span>Factor Exposures</span>
-                <span className={`cpar-detail-chip ${chipClassFromBadgeTone(fit.tone)}`.trim()}>{fit.label}</span>
+                <span className={`cpar-detail-chip ${chipClassFromBadgeTone(tierTone)}`.trim()}>{tierLabel}</span>
               </div>
               {factors.length > 0 ? (
                 <CparExposureBarChart factors={factors} mode="raw" factorCatalog={catalog} />

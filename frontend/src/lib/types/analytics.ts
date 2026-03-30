@@ -186,7 +186,7 @@ export interface UniverseTickerItem {
   trbc_economic_sector_short_abbr: string;
   trbc_industry_group: string;
   market_cap: number | null;
-  price: number;
+  price: number | null;
   exposures: Record<string, number>;
   sensitivities: Record<string, number>;
   risk_loading: number | null;
@@ -202,6 +202,12 @@ export interface UniverseTickerItem {
   projection_r_squared?: number | null;
   projection_obs_count?: number | null;
   projection_asof?: string | null;
+  risk_tier?: string | null;
+  risk_tier_label?: string | null;
+  risk_tier_detail?: string | null;
+  quote_source?: string | null;
+  quote_source_label?: string | null;
+  quote_source_detail?: string | null;
 }
 
 export interface UniverseTickerData {
@@ -235,6 +241,12 @@ export interface UniverseSearchItem {
   model_status_reason?: string;
   eligibility_reason?: string;
   exposure_origin?: ExposureOrigin;
+  risk_tier?: string | null;
+  risk_tier_label?: string | null;
+  risk_tier_detail?: string | null;
+  quote_source?: string | null;
+  quote_source_label?: string | null;
+  quote_source_detail?: string | null;
 }
 
 export interface UniverseSearchData {

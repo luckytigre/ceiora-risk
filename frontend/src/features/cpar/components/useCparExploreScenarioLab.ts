@@ -196,6 +196,13 @@ export function useCparExploreScenarioLab({
       setErrorMessage("Choose an active-package cPAR search hit before staging the what-if row.");
       return;
     }
+    if (selectedInstrument.scenario_stage_supported === false) {
+      setErrorMessage(
+        selectedInstrument.scenario_stage_detail
+          || "This cPAR quote is visible from the registry, but staging stays limited to active-package names.",
+      );
+      return;
+    }
     if (qty === null) {
       setErrorMessage("Quantity must be numeric and non-zero.");
       return;

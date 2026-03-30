@@ -286,6 +286,54 @@ def test_cpar_search_service_returns_active_package_hits(
     assert next(row for row in payload["results"] if row["ric"] == "AAPL.NA")["ticker"] is None
 
 
+def test_cpar_search_service_includes_registry_only_hits(monkeypatch: pytest.MonkeyPatch) -> None:
+    package = _package_run("run_meta", "2026-03-14", universe_count=1)
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: package)
+    monkeypatch.setattr(
+        cpar_outputs,
+        "search_package_instrument_fits",
+        lambda *args, **kwargs: [
+            {
+                "ticker": "AAPL",
+                "ric": "AAPL.OQ",
+                "display_name": "Apple Inc.",
+                "target_scope": "core_us_equity",
+                "fit_status": "ok",
+                "warnings": [],
+                "hq_country_code": "US",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        cpar_search_service.registry_quote_reads,
+        "search_registry_quote_rows",
+        lambda *args, **kwargs: [
+            {
+                "ticker": "AAPL",
+                "ric": "AAPL.OQ",
+                "common_name": "Apple Inc.",
+                "allow_cpar_core_target": 1,
+            },
+            {
+                "ticker": "URA",
+                "ric": "URA.P",
+                "common_name": "Global X Uranium ETF",
+                "allow_cpar_extended_target": 1,
+                "hq_country_code": "US",
+                "price": 32.5,
+            },
+        ],
+    )
+
+    payload = cpar_search_service.load_cpar_search_payload(q="a", limit=10)
+
+    assert {row["ric"] for row in payload["results"]} == {"AAPL.OQ", "URA.P"}
+    ura = next(row for row in payload["results"] if row["ric"] == "URA.P")
+    assert ura["risk_tier_label"] == "Extended Target"
+    assert ura["quote_source_label"] == "Registry Runtime"
+    assert ura["scenario_stage_supported"] is False
+
+
 def test_cpar_meta_service_fails_closed_when_no_package_exists(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

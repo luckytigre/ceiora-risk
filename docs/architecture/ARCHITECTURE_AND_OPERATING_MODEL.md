@@ -279,6 +279,7 @@ Key rule:
   - If persisted projected loadings exist for a ticker at the active core date, the live serving payloads must publish that ticker as `projected_only` with `exposure_origin=projected_returns` or `projected_fundamental`, or the publish fails.
   - During refresh persistence, the current run's `cuse_security_membership_daily` truth is overlaid onto `universe_loadings`, `portfolio`, and exposure drilldowns before the canonical serving payload set is written, so the just-computed run does not lag one publish behind.
   - `universe_loadings` and the app-facing universe search/detail surfaces are runtime-admitted only; raw source names without current registry/runtime identity must not appear there just because prices, fundamentals, or classifications exist.
+  - Explore/what-if quote search and detail may augment the live `universe_loadings` payload with registry/runtime-admitted rows when a ticker has no current published cUSE loadings row, but those fallback rows must be clearly labeled as registry/runtime coverage rather than live factor payload coverage.
 
 ## Canonical Event Types
 

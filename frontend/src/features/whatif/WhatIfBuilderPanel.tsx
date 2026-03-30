@@ -136,19 +136,24 @@ export default function WhatIfBuilderPanel({
             <div className="explore-typeahead whatif-typeahead">
               {searchResults.map((row, index) => {
                 const pos = positionMap.get(row.ticker.toUpperCase());
+                const tierLabel = row.risk_tier_label || row.model_status || "Unknown Tier";
+                const contextLabel = row.quote_source_label || row.trbc_economic_sector_short_abbr || row.trbc_economic_sector_short || "—";
                 return (
                   <button
                     key={row.ticker}
                     className={`explore-typeahead-item${index === activeIndex ? " active" : ""}${pos ? " held" : ""}`}
                     onMouseEnter={() => onSetActiveIndex(index)}
                     onClick={() => onTickerSelect(row.ticker)}
+                    title={row.risk_tier_detail || undefined}
                   >
                     <span className="ticker">{highlightMatch(row.ticker, searchQuery)}</span>
                     <span className="name">{highlightMatch(row.name, searchQuery)}</span>
                     <span className="explore-typeahead-classifications">
-                      <span>{row.trbc_economic_sector_short_abbr || row.trbc_economic_sector_short || "—"}</span>
-                      {row.trbc_industry_group && row.trbc_industry_group !== row.trbc_economic_sector_short && (
-                        <span className="explore-typeahead-ig">{row.trbc_industry_group}</span>
+                      <span>{tierLabel}</span>
+                      {(row.quote_source_label || row.trbc_industry_group || contextLabel) && (
+                        <span className="explore-typeahead-ig">
+                          {row.trbc_industry_group || contextLabel}
+                        </span>
                       )}
                     </span>
                     {pos && (
@@ -158,7 +163,9 @@ export default function WhatIfBuilderPanel({
                       </span>
                     )}
                     <span className="risk">
-                      {typeof row.risk_loading === "number" ? row.risk_loading.toFixed(4) : "N/A"}
+                      {typeof row.risk_loading === "number"
+                        ? row.risk_loading.toFixed(4)
+                        : (row.quote_source_label || "registry")}
                     </span>
                   </button>
                 );

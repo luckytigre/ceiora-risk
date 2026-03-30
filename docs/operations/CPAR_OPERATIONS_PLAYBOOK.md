@@ -102,7 +102,9 @@ Current frontend-backed read surfaces:
 - `POST /api/cpar/portfolio/whatif`
 
 `/cpar/health` and `/cpar/hedge` are still lightweight placeholder surfaces.
-`/cpar/explore` now serves single-name persisted fit detail plus preview-only scenario analysis.
+`/cpar/explore` now serves single-name cPAR quote detail plus preview-only scenario analysis.
+Active-package names still show persisted fit detail, while registry-admitted names outside the active package may render registry/runtime quote context with explicit "not in active package" labeling.
+That broader quote surface does not widen cPAR what-if staging: staged additions still remain limited to active-package names.
 `/cpar/risk` is aggregate and read-only: it reuses the shared Neon-backed adapter in `backend/data/holdings_reads.py` plus latest shared-source prices, but it does not reuse cUSE4 risk or what-if payload semantics.
 The route-facing `/api/cpar/risk` service in `backend/services/cpar_risk_service.py` is now a thin shim over `backend/services/cpar_aggregate_risk_service.py`.
 That aggregate owner still reuses the shared support/core in `backend/services/cpar_portfolio_snapshot_service.py`, which underpins:

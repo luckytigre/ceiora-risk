@@ -113,6 +113,52 @@ def test_cpar_ticker_service_maps_source_failures_to_unavailable(monkeypatch: py
         cpar_ticker_service.load_cpar_ticker_payload(ticker="AAPL")
 
 
+def test_cpar_ticker_service_falls_back_to_registry_only_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cpar_meta_service, "require_active_package", lambda **kwargs: _package())
+    monkeypatch.setattr(
+        cpar_ticker_service.cpar_outputs,
+        "load_active_package_instrument_fit",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        cpar_ticker_service.registry_quote_reads,
+        "load_registry_quote_rows_for_tickers",
+        lambda *args, **kwargs: [
+            {
+                "ric": "URA.P",
+                "ticker": "URA",
+                "common_name": "Global X Uranium ETF",
+                "allow_cpar_extended_target": 1,
+                "hq_country_code": "US",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        cpar_ticker_service.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda *args, **kwargs: [{"ric": "URA.P", "date": "2026-03-14", "adj_close": 32.5, "close": 32.5, "currency": "USD"}],
+    )
+    monkeypatch.setattr(
+        cpar_ticker_service.cpar_source_reads,
+        "load_latest_classification_rows",
+        lambda *args, **kwargs: [{"ric": "URA.P", "as_of_date": "2026-03-14", "trbc_economic_sector": "Funds", "trbc_business_sector": "Funds", "trbc_industry_group": "Exchange Traded Funds", "trbc_industry": "Funds", "trbc_activity": "ETF", "hq_country_code": "US"}],
+    )
+    monkeypatch.setattr(
+        cpar_ticker_service.cpar_source_reads,
+        "load_latest_common_name_rows",
+        lambda *args, **kwargs: [{"ric": "URA.P", "as_of_date": "2026-03-14", "common_name": "Global X Uranium ETF"}],
+    )
+
+    payload = cpar_ticker_service.load_cpar_ticker_payload(ticker="URA")
+
+    assert payload["ticker"] == "URA"
+    assert payload["ric"] == "URA.P"
+    assert payload["fit_status"] is None
+    assert payload["ticker_detail_use_status"] == "registry_only"
+    assert payload["risk_tier_label"] == "Extended Target"
+    assert payload["scenario_stage_supported"] is False
+
+
 def test_cpar_ticker_history_service_builds_weekly_points(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         cpar_ticker_history_service.cpar_ticker_service,

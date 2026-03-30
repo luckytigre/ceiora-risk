@@ -179,6 +179,7 @@ Current read behavior:
   - backed by daily proxy-price history with fresh daily market residualization over the displayed window for non-market factors
   - degradeable without suppressing the primary aggregate risk payload
 - account-level what-if additionally requires one account hedge baseline, one active package, and staged signed share deltas that reference either existing holdings rows or active-package search hits
+- `/cpar/explore` search/detail may surface registry-admitted names that are outside the active package, but those quote rows must stay clearly labeled as registry/runtime-only and must not silently broaden the stage/apply contract beyond active-package names
 - aggregate explore what-if additionally reuses the same package-pinned aggregate snapshot core for both current and hypothetical comparison states
 - missing required relational coverage fails closed with cPAR-specific `503 not_ready`
 - the account-level what-if envelope and its nested `current` / `hypothetical` snapshots are part of the same package-scoped flow as the shared banner and baseline portfolio hedge payload

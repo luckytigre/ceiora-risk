@@ -149,6 +149,9 @@ export default function TickerQuoteCard({
   }
 
   const detailRows: Array<{ label: string; value: string }> = [
+    { label: "Risk Tier", value: String(item.risk_tier_label || "—") },
+    { label: "Tier Detail", value: String(item.risk_tier_detail || "—") },
+    { label: "Quote Source", value: String(item.quote_source_label || "—") },
     { label: "Market Cap", value: formatCompactCurrency(item.market_cap) },
     { label: "Shares Out", value: formatCompactNumber(sharesOutstanding) },
     { label: "As Of", value: formatDateLabel(item.as_of_date) },

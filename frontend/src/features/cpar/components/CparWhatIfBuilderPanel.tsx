@@ -135,7 +135,7 @@ export default function CparWhatIfBuilderPanel({
             disabled={controlsBusy}
             spellCheck={false}
             autoComplete="off"
-            title="Search for an active-package cPAR instrument"
+            title="Search the cPAR registry and active package"
           />
           {dropdownOpen && searchQuery.trim().length > 0 && (
             <div className="explore-typeahead whatif-typeahead">
@@ -143,6 +143,8 @@ export default function CparWhatIfBuilderPanel({
                 const pos = row.ticker ? positionMap.get(normalizeTicker(row.ticker)) : undefined;
                 const fit = describeCparFitStatus(row.fit_status);
                 const disabled = !canNavigateCparSearchResult(row);
+                const tierLabel = row.risk_tier_label || fit.label;
+                const contextLabel = row.quote_source_label || row.hq_country_code || row.ric;
                 return (
                   <button
                     key={`${row.ric}:${row.ticker || "ric"}`}
@@ -151,13 +153,17 @@ export default function CparWhatIfBuilderPanel({
                     onClick={() => onTickerSelect(row)}
                     type="button"
                     disabled={disabled}
-                    title={disabled ? "Ticker required for cPAR explore staging" : undefined}
+                    title={
+                      disabled
+                        ? "Ticker required for cPAR explore quote selection"
+                        : (row.risk_tier_detail || row.scenario_stage_detail || undefined)
+                    }
                   >
                     <span className="ticker">{highlightMatch(row.ticker || row.ric, searchQuery)}</span>
                     <span className="name">{highlightMatch(row.display_name || row.ric, searchQuery)}</span>
                     <span className="explore-typeahead-classifications">
-                      <span>{fit.label}</span>
-                      <span className="explore-typeahead-ig">{row.hq_country_code || row.ric}</span>
+                      <span>{tierLabel}</span>
+                      <span className="explore-typeahead-ig">{contextLabel}</span>
                     </span>
                     {pos && (
                       <span className="explore-typeahead-held">
@@ -165,12 +171,14 @@ export default function CparWhatIfBuilderPanel({
                         <span>{(pos.weight * 100).toFixed(1)}% wt</span>
                       </span>
                     )}
-                    <span className="risk">{row.ric}</span>
+                    <span className="risk">
+                      {row.scenario_stage_supported === false ? "quote only" : row.ric}
+                    </span>
                   </button>
                 );
               }) : (
                 <div className="explore-typeahead-item disabled" aria-live="polite">
-                  {searchLoading ? "Searching active cPAR package…" : "No active-package matches yet."}
+                  {searchLoading ? "Searching cPAR registry and active package…" : "No cPAR registry matches yet."}
                 </div>
               )}
             </div>
