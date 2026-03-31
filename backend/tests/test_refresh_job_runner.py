@@ -33,3 +33,13 @@ def test_run_refresh_job_main_executes_refresh_flow(monkeypatch: pytest.MonkeyPa
     assert state_store["status"] == "running"
     assert state_store["dispatch_backend"] == "cloud_run_job"
     assert started_calls[0]["run_id"] == "crj_abc"
+
+
+def test_run_refresh_job_requires_explicit_profile_in_cloud_job_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("REFRESH_PROFILE", raising=False)
+    monkeypatch.setattr(run_refresh_job.config, "APP_RUNTIME_ROLE", "cloud-job")
+
+    with pytest.raises(RuntimeError, match="REFRESH_PROFILE"):
+        run_refresh_job.main()

@@ -166,6 +166,23 @@ def test_cloud_mode_persistence_is_blocked(monkeypatch: pytest.MonkeyPatch, tmp_
         )
 
 
+def test_cloud_job_mode_allows_persistence(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(cpar_outputs.config, "APP_RUNTIME_ROLE", "cloud-job")
+    monkeypatch.setattr(cpar_outputs.config, "DATA_BACKEND", "sqlite")
+    monkeypatch.setattr(cpar_outputs.config, "neon_dsn", lambda: "")
+
+    out = cpar_outputs.persist_cpar_package(
+        data_db=tmp_path / "data.db",
+        package_run=_package_run(),
+        proxy_returns=_proxy_returns(),
+        proxy_transforms=_proxy_transforms(),
+        covariance_rows=_covariance_rows(),
+        instrument_fits=_instrument_fits(),
+    )
+
+    assert out["status"] == "ok"
+
+
 def test_cloud_mode_raises_authority_read_error_when_neon_read_path_breaks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

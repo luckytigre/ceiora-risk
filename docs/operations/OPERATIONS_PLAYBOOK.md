@@ -150,10 +150,12 @@ Rebuild-authority rule:
 
 Runtime-role rule:
 - `local-ingest`: all lanes may be used.
-- `cloud-serve`: only `serve-refresh` is allowed.
+- `cloud-serve`: only `serve-refresh`, `core-weekly`, and `cold-core` are allowed (dispatched as Cloud Run Jobs).
+- `cloud-job`: the mode for running Cloud Run Jobs. `source_sync` is auto-skipped (no local SQLite); `neon_readiness` still runs.
 - In `cloud-serve`, a bare `POST /api/refresh` now defaults safely to `serve-refresh`.
-- Explicit deeper lanes remain blocked in `cloud-serve` even if requested by old mode-based callers.
-- In the split app model, `/api/refresh` and `/api/refresh/status` belong to the control app, not the serve app.
+- `core-weekly` and `cold-core` are dispatched as Cloud Run Jobs when the control app has the job name env vars configured and those jobs are provisioned.
+- cPAR builds are dispatched via `POST /api/cpar/build` on the control app (not the serve app) once the `cpar-build` Cloud Run Job is provisioned.
+- In the split app model, `/api/refresh`, `/api/refresh/status`, and `/api/cpar/build` belong to the control app, not the serve app.
 
 Parallel cPAR note:
 - cPAR has its own dedicated operating assumptions and does not share the cUSE4 refresh API/operator flow.
@@ -197,6 +199,13 @@ Parallel cPAR note:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=serve-refresh" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
 - Split-control authenticated serve-refresh:
   - `curl -X POST "http://localhost:8001/api/refresh?profile=serve-refresh" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
+- Cloud-dispatched core-weekly (via control API):
+  - `curl -X POST "<control-origin>/api/refresh?profile=core-weekly" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
+- Cloud-dispatched cold-core (via control API):
+  - `curl -X POST "<control-origin>/api/refresh?profile=cold-core" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
+- Cloud-dispatched cPAR build (via control API):
+  - `curl -X POST "<control-origin>/api/cpar/build?profile=cpar-weekly" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
+  - resolve `<control-origin>` from `terraform output service_urls` for the active topology
 - API refresh explicit source-daily profile:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=source-daily"`
 - API refresh explicit weekly core recompute:

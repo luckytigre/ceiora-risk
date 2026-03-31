@@ -135,9 +135,13 @@ Required:
 - `CLOUD_RUN_PROJECT_ID=project-4e18de12-63a3-4206-aaa`
 - `CLOUD_RUN_REGION=us-east4`
 - `SERVE_REFRESH_CLOUD_RUN_JOB_NAME=ceiora-prod-serve-refresh`
+- `CORE_WEEKLY_CLOUD_RUN_JOB_NAME=ceiora-prod-core-weekly`
+- `COLD_CORE_CLOUD_RUN_JOB_NAME=ceiora-prod-cold-core`
+- `CPAR_BUILD_CLOUD_RUN_JOB_NAME=ceiora-prod-cpar-build`
 
 Expected behavior:
-- dispatches `serve-refresh` to the Cloud Run Job surface
+- dispatches `serve-refresh`, `core-weekly`, and `cold-core` to their respective Cloud Run Jobs
+- dispatches cPAR builds via `POST /api/cpar/build` (control-only route)
 - does not need to expose public dashboard read routes
 - uses Neon-backed runtime/control truth and should fail closed when that authority is unavailable
 - serving publication sequencing lives in `backend/analytics/refresh_publication.py`; do not split publish-only republish, durable publish, and post-publish health patch back across ad hoc `pipeline.py` branches
@@ -203,7 +207,13 @@ Refresh execution ownership is deliberately split:
 - `backend/ops/cloud_run_jobs.py`
   - Cloud Run Jobs dispatch adapter for the control-plane app
 - `backend/scripts/run_refresh_job.py`
-  - Cloud Run Job entrypoint for synchronous `serve-refresh` execution
+  - Cloud Run Job entrypoint for `serve-refresh`, `core-weekly`, and `cold-core` execution
+- `backend/scripts/run_cpar_pipeline_job.py`
+  - Cloud Run Job entrypoint for cPAR package-build execution
+- `backend/services/cpar_build_service.py`
+  - Control-plane dispatch service for cPAR builds
+- `backend/api/routes/cpar_control.py`
+  - Control-only `POST /api/cpar/build` route (operator-token protected)
 
 This prevents a serve-only process from reconciling or mutating shared refresh state as though it owned the worker.
 
@@ -302,15 +312,21 @@ Runtime contract:
 - runtime secrets are not baked into the images
 
 Current Cloud Run Job prep:
-- the Terraform `prod` root now defines a `serve-refresh` Cloud Run Job resource
-- the control service is expected to dispatch to that job via:
-  - `CLOUD_RUN_JOBS_ENABLED=true`
-  - `CLOUD_RUN_PROJECT_ID`
-  - `CLOUD_RUN_REGION`
-  - `SERVE_REFRESH_CLOUD_RUN_JOB_NAME`
+- the Terraform `prod` root defines four Cloud Run Job resources:
+  - `serve-refresh` — rebuilds frontend-facing caches (short, 1 CPU / 4Gi / 3600s)
+  - `core-weekly` — recomputes factor returns, covariance, and specific risk (2 CPU / 4Gi / 7200s)
+  - `cold-core` — full structural rebuild from Neon scratch workspace (2 CPU / 8Gi / 14400s)
+  - `cpar-build` — builds cPAR weekly packages from Neon source tables (1 CPU / 2Gi / 3600s)
+- `serve-refresh` uses `APP_RUNTIME_ROLE=cloud-serve`; the three compute jobs use `APP_RUNTIME_ROLE=cloud-job`
+- in `cloud-job` mode: `source_sync` is automatically skipped (no local SQLite); `neon_readiness` stage still runs to hydrate an ephemeral scratch workspace from Neon
+- the control service dispatches jobs via:
+  - `CLOUD_RUN_JOBS_ENABLED=true`, `CLOUD_RUN_PROJECT_ID`, `CLOUD_RUN_REGION`
+  - `SERVE_REFRESH_CLOUD_RUN_JOB_NAME`, `CORE_WEEKLY_CLOUD_RUN_JOB_NAME`, `COLD_CORE_CLOUD_RUN_JOB_NAME`, `CPAR_BUILD_CLOUD_RUN_JOB_NAME`
+- cPAR builds are dispatched via `POST /api/cpar/build` (control-only, operator-token protected)
 - in `cloud-serve`, missing Cloud Run Job dispatch env is now a fail-closed control-plane error:
   - the control service must not fall back to the local in-process `refresh_manager` path
   - status continues to read the persisted refresh state instead of switching owners
+- **local operator workflow after migration**: run `source-daily` locally (LSEG pull → Neon sync) then dispatch compute jobs via control API; no local model compute needed
 
 Current Cloud Run service prep:
 - the Terraform `prod` root now defines frontend, serve, and control service resources
@@ -407,7 +423,7 @@ Execution contract:
 ## Remaining Out Of Scope
 
 - queue-based refresh execution
-- dedicated worker surface for deeper local-ingest/core/cold-core lanes
+- Cloud Scheduler automation for compute jobs (manual dispatch via CLI for now)
 - autoscaling or multi-region strategy
 
 ## Validation Expectations

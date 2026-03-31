@@ -96,7 +96,7 @@ def run_cpar_pipeline(
     effective_run_id = str(run_id).strip() if run_id and str(run_id).strip() else _default_run_id()
     requested_as_of_date = str(as_of_date).strip() if as_of_date and str(as_of_date).strip() else None
 
-    if config.cloud_mode():
+    if config.cloud_mode() and not config.cloud_job_mode():
         return {
             "status": "failed",
             "run_id": effective_run_id,

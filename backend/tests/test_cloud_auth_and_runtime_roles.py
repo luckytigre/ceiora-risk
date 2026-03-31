@@ -5,6 +5,7 @@ import os
 
 from fastapi.testclient import TestClient
 
+from backend.app_factory import create_app
 from backend.main import app
 from backend.api import auth as auth_module
 from backend.api.routes import data as data_routes
@@ -15,6 +16,8 @@ from backend.api.routes import refresh as refresh_routes
 
 orchestrator = importlib.import_module("backend.orchestration.run_model_pipeline")
 refresh_manager = importlib.import_module("backend.services.refresh_manager")
+refresh_request_policy = importlib.import_module("backend.services.refresh_request_policy")
+refresh_profile_policy = importlib.import_module("backend.services.refresh_profile_policy")
 
 
 def _config_snapshot_with_env(**updates: str | None) -> dict[str, object]:
@@ -165,17 +168,97 @@ def test_cloud_runtime_role_blocks_ingest_stage(monkeypatch) -> None:
     assert out["reason"] == "runtime_role_disallows_ingest"
 
 
-def test_cloud_runtime_role_allows_only_serve_refresh(monkeypatch) -> None:
+def test_cloud_runtime_role_allows_core_rebuild_profiles(monkeypatch) -> None:
     monkeypatch.setattr(refresh_routes.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(refresh_routes.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(refresh_manager.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(refresh_manager.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(
+        refresh_routes,
+        "start_refresh",
+        lambda **kwargs: (
+            True,
+            {
+                "status": "running",
+                "profile": kwargs.get("profile"),
+                "mode": "full",
+            },
+        ),
+    )
 
     with TestClient(app) as client:
         res = client.post("/api/refresh?profile=core-weekly", headers={"X-Operator-Token": "op-secret"})
 
+    assert res.status_code == 202
+    assert res.json()["refresh"]["profile"] == "core-weekly"
+
+
+def test_control_surface_exposes_cpar_build_route_with_operator_token(monkeypatch) -> None:
+    control_app = create_app(surface="control")
+    monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(
+        "backend.services.cpar_build_service.dispatch_cpar_build",
+        lambda **kwargs: (
+            True,
+            {
+                "status": "dispatched",
+                "profile": kwargs["profile"],
+                "pipeline_run_id": "cpar_crj_123",
+                "execution_name": "projects/p/locations/r/jobs/j/executions/e",
+            },
+        ),
+    )
+
+    with TestClient(control_app) as client:
+        unauthorized = client.post("/api/cpar/build?profile=cpar-weekly")
+        authorized = client.post(
+            "/api/cpar/build?profile=cpar-weekly",
+            headers={"X-Operator-Token": "op-secret"},
+        )
+
+    assert unauthorized.status_code == 401
+    assert authorized.status_code == 202
+
+
+def test_control_surface_rejects_invalid_cpar_build_profile_with_400(monkeypatch) -> None:
+    control_app = create_app(surface="control")
+    monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
+
+    with TestClient(control_app) as client:
+        res = client.post(
+            "/api/cpar/build?profile=not-a-real-profile",
+            headers={"X-Operator-Token": "op-secret"},
+        )
+
     assert res.status_code == 400
-    assert "Allowed profiles: serve-refresh" in res.json()["message"]
+    assert "Unsupported cPAR profile" in res.json()["detail"]
+
+
+def test_control_surface_rejects_invalid_cpar_package_date_with_400(monkeypatch) -> None:
+    control_app = create_app(surface="control")
+    monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
+
+    with TestClient(control_app) as client:
+        res = client.post(
+            "/api/cpar/build?profile=cpar-package-date&as_of_date=2026-03-26",
+            headers={"X-Operator-Token": "op-secret"},
+        )
+
+    assert res.status_code == 400
+    assert "requires one explicit XNYS weekly package date" in res.json()["detail"]
+
+
+def test_full_surface_does_not_mount_cpar_build_route(monkeypatch) -> None:
+    monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
+
+    with TestClient(app) as client:
+        res = client.post("/api/cpar/build?profile=cpar-weekly", headers={"X-Operator-Token": "op-secret"})
+
+    assert res.status_code == 404
 
 
 def test_cloud_refresh_defaults_to_serve_refresh_when_profile_omitted(monkeypatch) -> None:
@@ -202,6 +285,26 @@ def test_cloud_refresh_defaults_to_serve_refresh_when_profile_omitted(monkeypatc
     body = res.json()
     assert body["refresh"]["profile"] == "serve-refresh"
     assert body["refresh"]["mode"] == "light"
+
+
+def test_cloud_job_runtime_role_allows_core_weekly_resolution(monkeypatch) -> None:
+    monkeypatch.setattr(refresh_profile_policy.config, "APP_RUNTIME_ROLE", "cloud-job")
+    monkeypatch.setattr(refresh_profile_policy.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(refresh_profile_policy.config, "NEON_AUTHORITATIVE_REBUILDS", True)
+    monkeypatch.setattr(orchestrator.config, "APP_RUNTIME_ROLE", "cloud-job")
+    monkeypatch.setattr(orchestrator.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(orchestrator.config, "NEON_AUTHORITATIVE_REBUILDS", True)
+
+    request = refresh_request_policy.resolve_refresh_request(profile="core-weekly")
+
+    assert request["profile"] == "core-weekly"
+    assert request["mode"] == "full"
+
+
+def test_cloud_job_runtime_role_requires_explicit_profile_in_job_runner(monkeypatch) -> None:
+    monkeypatch.setattr(refresh_profile_policy.config, "APP_RUNTIME_ROLE", "cloud-job")
+
+    assert refresh_profile_policy.runtime_allowed_profiles() == {"serve-refresh", "core-weekly", "cold-core"}
 
 
 def test_invalid_runtime_role_defaults_fail_closed() -> None:

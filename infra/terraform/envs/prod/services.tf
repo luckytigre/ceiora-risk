@@ -224,6 +224,21 @@ resource "google_cloud_run_v2_service" "control" {
       }
 
       env {
+        name  = "CORE_WEEKLY_CLOUD_RUN_JOB_NAME"
+        value = google_cloud_run_v2_job.core_weekly.name
+      }
+
+      env {
+        name  = "COLD_CORE_CLOUD_RUN_JOB_NAME"
+        value = google_cloud_run_v2_job.cold_core.name
+      }
+
+      env {
+        name  = "CPAR_BUILD_CLOUD_RUN_JOB_NAME"
+        value = google_cloud_run_v2_job.cpar_build.name
+      }
+
+      env {
         name = "NEON_DATABASE_URL"
         value_source {
           secret_key_ref {
@@ -269,17 +284,31 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
 }
 
 resource "google_cloud_run_v2_job_iam_member" "control_dispatch_invoker" {
+  for_each = {
+    serve_refresh = google_cloud_run_v2_job.serve_refresh.name
+    core_weekly   = google_cloud_run_v2_job.core_weekly.name
+    cold_core     = google_cloud_run_v2_job.cold_core.name
+    cpar_build    = google_cloud_run_v2_job.cpar_build.name
+  }
+
   project  = var.project_id
   location = var.region
-  name     = google_cloud_run_v2_job.serve_refresh.name
+  name     = each.value
   role     = "roles/run.jobsExecutorWithOverrides"
   member   = "serviceAccount:${module.service_accounts.email_by_key["control"]}"
 }
 
 resource "google_cloud_run_v2_job_iam_member" "control_execution_viewer" {
+  for_each = {
+    serve_refresh = google_cloud_run_v2_job.serve_refresh.name
+    core_weekly   = google_cloud_run_v2_job.core_weekly.name
+    cold_core     = google_cloud_run_v2_job.cold_core.name
+    cpar_build    = google_cloud_run_v2_job.cpar_build.name
+  }
+
   project  = var.project_id
   location = var.region
-  name     = google_cloud_run_v2_job.serve_refresh.name
+  name     = each.value
   role     = "roles/run.viewer"
   member   = "serviceAccount:${module.service_accounts.email_by_key["control"]}"
 }

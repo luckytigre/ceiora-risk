@@ -111,6 +111,96 @@ def test_describe_execution_raises_file_not_found_on_404(monkeypatch: pytest.Mon
         cloud_run_jobs.describe_execution("exec-1")
 
 
+def test_dispatch_core_weekly_builds_expected_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(cloud_run_jobs.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_JOBS_ENABLED", True)
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_PROJECT_ID", "proj")
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_REGION", "us-east4")
+    monkeypatch.setattr(cloud_run_jobs.config, "CORE_WEEKLY_CLOUD_RUN_JOB_NAME", "ceiora-prod-core-weekly")
+    monkeypatch.setattr(cloud_run_jobs, "_google_auth_default", lambda *, scopes: (_FakeCreds(), "proj"))
+    monkeypatch.setattr(cloud_run_jobs, "_google_auth_request", lambda: object())
+
+    def _urlopen(req, timeout: int):
+        captured["url"] = req.full_url
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        captured["timeout"] = timeout
+        return _FakeResponse({"name": "projects/proj/locations/us-east4/jobs/x/executions/exec-core"})
+
+    monkeypatch.setattr(cloud_run_jobs.urllib.request, "urlopen", _urlopen)
+
+    out = cloud_run_jobs.dispatch_core_weekly(pipeline_run_id="crj_core")
+
+    assert captured["url"].endswith("/jobs/ceiora-prod-core-weekly:run")
+    env = captured["body"]["overrides"]["containerOverrides"][0]["env"]
+    assert env == [{"name": "REFRESH_PIPELINE_RUN_ID", "value": "crj_core"}]
+    assert captured["timeout"] == 30
+    assert out["execution_name"].endswith("exec-core")
+
+
+def test_dispatch_cold_core_builds_expected_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(cloud_run_jobs.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_JOBS_ENABLED", True)
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_PROJECT_ID", "proj")
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_REGION", "us-east4")
+    monkeypatch.setattr(cloud_run_jobs.config, "COLD_CORE_CLOUD_RUN_JOB_NAME", "ceiora-prod-cold-core")
+    monkeypatch.setattr(cloud_run_jobs, "_google_auth_default", lambda *, scopes: (_FakeCreds(), "proj"))
+    monkeypatch.setattr(cloud_run_jobs, "_google_auth_request", lambda: object())
+
+    def _urlopen(req, timeout: int):
+        captured["url"] = req.full_url
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        captured["timeout"] = timeout
+        return _FakeResponse({"name": "projects/proj/locations/us-east4/jobs/x/executions/exec-cold"})
+
+    monkeypatch.setattr(cloud_run_jobs.urllib.request, "urlopen", _urlopen)
+
+    out = cloud_run_jobs.dispatch_cold_core(pipeline_run_id="crj_cold")
+
+    assert captured["url"].endswith("/jobs/ceiora-prod-cold-core:run")
+    env = captured["body"]["overrides"]["containerOverrides"][0]["env"]
+    assert env == [{"name": "REFRESH_PIPELINE_RUN_ID", "value": "crj_cold"}]
+    assert captured["timeout"] == 30
+    assert out["execution_name"].endswith("exec-cold")
+
+
+def test_dispatch_cpar_build_builds_expected_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(cloud_run_jobs.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_JOBS_ENABLED", True)
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_PROJECT_ID", "proj")
+    monkeypatch.setattr(cloud_run_jobs.config, "CLOUD_RUN_REGION", "us-east4")
+    monkeypatch.setattr(cloud_run_jobs.config, "CPAR_BUILD_CLOUD_RUN_JOB_NAME", "ceiora-prod-cpar-build")
+    monkeypatch.setattr(cloud_run_jobs, "_google_auth_default", lambda *, scopes: (_FakeCreds(), "proj"))
+    monkeypatch.setattr(cloud_run_jobs, "_google_auth_request", lambda: object())
+
+    def _urlopen(req, timeout: int):
+        captured["url"] = req.full_url
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        captured["timeout"] = timeout
+        return _FakeResponse({"name": "projects/proj/locations/us-east4/jobs/x/executions/exec-cpar"})
+
+    monkeypatch.setattr(cloud_run_jobs.urllib.request, "urlopen", _urlopen)
+
+    out = cloud_run_jobs.dispatch_cpar_build(
+        pipeline_run_id="cpar_crj_123",
+        profile="cpar-package-date",
+        as_of_date="2026-03-27",
+    )
+
+    assert captured["url"].endswith("/jobs/ceiora-prod-cpar-build:run")
+    env = captured["body"]["overrides"]["containerOverrides"][0]["env"]
+    assert {"name": "CPAR_PIPELINE_RUN_ID", "value": "cpar_crj_123"} in env
+    assert {"name": "CPAR_PROFILE", "value": "cpar-package-date"} in env
+    assert {"name": "CPAR_AS_OF_DATE", "value": "2026-03-27"} in env
+    assert captured["timeout"] == 30
+    assert out["execution_name"].endswith("exec-cpar")
+
+
 def test_execution_terminal_summary_recognizes_failed_completion() -> None:
     out = cloud_run_jobs.execution_terminal_summary(
         {

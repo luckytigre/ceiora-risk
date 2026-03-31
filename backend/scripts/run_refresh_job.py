@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from backend import config
 from backend.orchestration.refresh_execution import run_refresh_execution
 from backend.services.holdings_runtime_state import mark_refresh_started
 from backend.services.refresh_request_policy import resolve_refresh_request
@@ -37,8 +38,12 @@ def _set_state(**updates: Any) -> dict[str, Any]:
 
 
 def main() -> int:
+    profile_env = str(os.getenv("REFRESH_PROFILE", "")).strip()
+    if config.cloud_job_mode() and not profile_env:
+        raise RuntimeError("cloud-job refresh execution requires REFRESH_PROFILE to be set explicitly.")
+
     request = resolve_refresh_request(
-        profile=os.getenv("REFRESH_PROFILE"),
+        profile=profile_env or None,
         from_stage=os.getenv("REFRESH_FROM_STAGE"),
         to_stage=os.getenv("REFRESH_TO_STAGE"),
         force_core=_env_bool("REFRESH_FORCE_CORE"),

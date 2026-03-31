@@ -11,8 +11,10 @@ def default_refresh_profile() -> str:
 
 
 def runtime_allowed_profiles() -> set[str]:
+    if config.cloud_job_mode():
+        return {"serve-refresh", "core-weekly", "cold-core"}
     if config.cloud_mode():
-        return {"serve-refresh"}
+        return {"serve-refresh", "core-weekly", "cold-core"}
     return set(PROFILE_CONFIG.keys())
 
 

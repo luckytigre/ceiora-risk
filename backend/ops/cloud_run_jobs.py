@@ -138,6 +138,61 @@ def dispatch_serve_refresh(
     }
 
 
+def _job_run_url(job_name: str) -> str:
+    return (
+        "https://run.googleapis.com/v2/"
+        f"projects/{config.CLOUD_RUN_PROJECT_ID}/locations/{config.CLOUD_RUN_REGION}/"
+        f"jobs/{job_name}:run"
+    )
+
+
+def dispatch_core_weekly(*, pipeline_run_id: str) -> dict[str, Any]:
+    if not config.core_weekly_cloud_job_configured():
+        raise RuntimeError("Cloud Run Jobs dispatch is not configured for core-weekly.")
+    payload = {
+        "overrides": {
+            "containerOverrides": [
+                {"env": [{"name": "REFRESH_PIPELINE_RUN_ID", "value": pipeline_run_id}]}
+            ]
+        }
+    }
+    body = _request_json(_job_run_url(config.CORE_WEEKLY_CLOUD_RUN_JOB_NAME), method="POST", payload=payload)
+    return {"execution_name": body.get("name"), "metadata": body}
+
+
+def dispatch_cold_core(*, pipeline_run_id: str) -> dict[str, Any]:
+    if not config.cold_core_cloud_job_configured():
+        raise RuntimeError("Cloud Run Jobs dispatch is not configured for cold-core.")
+    payload = {
+        "overrides": {
+            "containerOverrides": [
+                {"env": [{"name": "REFRESH_PIPELINE_RUN_ID", "value": pipeline_run_id}]}
+            ]
+        }
+    }
+    body = _request_json(_job_run_url(config.COLD_CORE_CLOUD_RUN_JOB_NAME), method="POST", payload=payload)
+    return {"execution_name": body.get("name"), "metadata": body}
+
+
+def dispatch_cpar_build(
+    *,
+    pipeline_run_id: str,
+    profile: str,
+    as_of_date: str | None = None,
+) -> dict[str, Any]:
+    if not config.cpar_build_cloud_job_configured():
+        raise RuntimeError("Cloud Run Jobs dispatch is not configured for cpar-build.")
+    env: list[dict[str, str]] = [
+        {"name": "CPAR_PIPELINE_RUN_ID", "value": pipeline_run_id},
+        {"name": "CPAR_PROFILE", "value": profile},
+    ]
+    if as_of_date:
+        env.append({"name": "CPAR_AS_OF_DATE", "value": str(as_of_date).strip()})
+    payload = {"overrides": {"containerOverrides": [{"env": env}]}}
+    body = _request_json(_job_run_url(config.CPAR_BUILD_CLOUD_RUN_JOB_NAME), method="POST", payload=payload)
+    return {"execution_name": body.get("name"), "metadata": body}
+
+
 def describe_execution(execution_name: str) -> dict[str, Any]:
     resource_name = _execution_resource_name(execution_name)
     try:

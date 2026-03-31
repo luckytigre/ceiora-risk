@@ -31,9 +31,16 @@ It does not describe:
 
 `cloud-serve`
 - read-only for cPAR
-- must not build cPAR packages
+- must not build cPAR packages directly
 - must not trigger request-time fitting
 - must fail closed when no successful active package exists in the authority store
+- dispatches cPAR builds via `POST /api/cpar/build` to the `cloud-job` surface
+
+`cloud-job`
+- runs the cPAR build pipeline as a Cloud Run Job
+- reads shared source tables from Neon (not local SQLite; `DATA_BACKEND=neon`)
+- may persist cPAR package outputs to Neon
+- `source_sync` is not run in `cloud-job` mode
 
 ## Build Entrypoints
 
@@ -41,9 +48,17 @@ Supported cPAR build profiles:
 - `cpar-weekly`
 - `cpar-package-date`
 
-Entrypoints:
+Local entrypoints:
 - `python -m backend.scripts.run_cpar_pipeline --profile cpar-weekly`
 - `python -m backend.scripts.run_cpar_pipeline --profile cpar-package-date --as-of-date YYYY-MM-DD`
+
+Cloud Job entrypoint:
+- `python -m backend.scripts.run_cpar_pipeline_job` (reads `CPAR_PROFILE`, `CPAR_AS_OF_DATE`, `CPAR_PIPELINE_RUN_ID` from env)
+
+Cloud dispatch (via control API):
+- `POST /api/cpar/build?profile=cpar-weekly` with `X-Operator-Token` header
+- Control API at `<control-origin>/api/cpar/build`
+- resolve `<control-origin>` from `terraform output service_urls` for the active topology
 
 There is no cPAR `serve-refresh` equivalent in the current implementation.
 The current cPAR CLI returns a non-zero exit code when a build is blocked or fails.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from backend.api.routes.cpar import router as cpar_router
+from backend.api.routes.cpar_control import router as cpar_control_router
 from backend.api.routes.data import router as data_router
 from backend.api.routes.exposures import router as exposures_router
 from backend.api.routes.health import router as health_router
@@ -27,6 +28,7 @@ CONTROL_API_ROUTERS = [
     operator_router,
     health_router,
     data_router,
+    cpar_control_router,
 ]
 
 API_ROUTERS = [

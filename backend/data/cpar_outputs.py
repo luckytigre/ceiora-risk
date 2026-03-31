@@ -107,7 +107,7 @@ def _neon_fetch_rows(
 
 
 def _neon_fetch(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
-    return _neon_fetch_rows(sql, params, raise_on_error=config.cloud_mode())
+    return _neon_fetch_rows(sql, params, raise_on_error=config.cloud_mode() and not config.cloud_job_mode())
 
 
 def _now_iso() -> str:
@@ -404,7 +404,7 @@ def persist_cpar_package(
     covariance_rows: list[dict[str, Any]],
     instrument_fits: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    if config.cloud_mode():
+    if config.cloud_mode() and not config.cloud_job_mode():
         raise CparPersistenceNotAllowed("cPAR persistence is not allowed in cloud-serve runtime role.")
 
     now_iso = _now_iso()

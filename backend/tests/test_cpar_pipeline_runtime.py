@@ -407,6 +407,31 @@ def test_cloud_serve_blocks_cpar_build(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert out["run_rows"] == []
 
 
+def test_cloud_job_allows_cpar_build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    data_db = tmp_path / "data.db"
+    monkeypatch.setattr(run_cpar_pipeline.config, "APP_RUNTIME_ROLE", "cloud-job")
+    monkeypatch.setattr(
+        run_cpar_pipeline.cpar_profiles,
+        "resolve_package_date",
+        lambda **kwargs: "2026-03-18",
+    )
+    monkeypatch.setattr(
+        run_cpar_pipeline.cpar_stages,
+        "run_stage",
+        lambda **kwargs: {"status": "completed"},
+    )
+
+    out = run_cpar_pipeline.run_cpar_pipeline(
+        profile="cpar-weekly",
+        as_of_date="2026-03-18",
+        data_db=data_db,
+    )
+
+    assert out["status"] == "ok"
+    assert out.get("reason") is None
+    assert [row["stage_name"] for row in out["run_rows"]] == ["source_read", "package_build", "persist_package"]
+
+
 def test_cpar_cli_returns_nonzero_when_pipeline_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         run_cpar_pipeline,

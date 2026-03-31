@@ -262,6 +262,7 @@ def planned_stages_for_profile(
             f"Unsupported profile '{profile}'. Expected one of: {', '.join(sorted(PROFILE_CONFIG))}"
         )
     cfg = PROFILE_CONFIG[profile_key]
+    skip_source_sync = skip_source_sync or config.cloud_job_mode()
     if skip_source_sync:
         if from_stage or to_stage:
             raise ValueError("--skip-source-sync cannot be combined with explicit --from-stage/--to-stage.")

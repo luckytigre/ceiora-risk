@@ -61,8 +61,11 @@ Related docs:
   - the frontend's server-side proxy routes, and
   - explicit operator or automation clients
   It is not intended for anonymous browser-direct usage.
-- The first durable cloud job migration moves `serve-refresh` only.
-- `core-weekly` and `cold-core` remain outside the first cloud job cutover unless this file is explicitly amended later.
+- The durable cloud job migration sequence is:
+  - `serve-refresh` first,
+  - then `core-weekly`, `cold-core`, and `cpar-build`.
+- This tracker currently includes the implementation slice for those additional compute jobs; treat them as planned until the corresponding Terraform apply and live validation complete.
+- Local operator workflow after compute migration is intended to be: run `source-daily` locally (LSEG pull → Neon sync), then dispatch compute jobs via control API. No local model compute required once the jobs are provisioned and validated.
 - Cloud `serve-refresh` cutover is valid only after the repo's stable-core, source-sync, Neon-readiness, and `security_master` parity prerequisites are frozen and documented for cloud execution.
 - Initial image publishing will start from the verified operator workstation:
   - local Docker build
@@ -184,13 +187,14 @@ Hostname:
 Purpose:
 - durable background execution for control-plane work that should not live inside a request/response service
 
-Initial expectation:
-- Cloud Run Jobs are the likely long-running execution surface for:
-  - `serve-refresh`
-  - later, possibly `core-weekly`
-  - later, possibly `cold-core`
-
-This remains a migration phase, not yet a completed implementation.
+Target state for this slice:
+- Cloud Run Jobs are the execution surface for all model compute:
+  - `serve-refresh` — cache rebuild (1 CPU / 4Gi / 3600s)
+  - `core-weekly` — factor returns + risk recompute (2 CPU / 4Gi / 7200s)
+  - `cold-core` — full structural rebuild (2 CPU / 8Gi / 14400s)
+  - `cpar-build` — cPAR weekly package build (1 CPU / 2Gi / 3600s)
+- All four jobs use `APP_RUNTIME_ROLE=cloud-job` (except serve-refresh which uses `cloud-serve`).
+- All four jobs should be provisioned in the Terraform `prod` root once this slice is applied.
 
 ## Region And Naming Strategy
 

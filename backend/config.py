@@ -50,7 +50,7 @@ NEON_DATABASE_URL = str(os.getenv("NEON_DATABASE_URL", "")).strip()
 _DEFAULT_DATA_BACKEND = "neon" if NEON_DATABASE_URL or os.getenv("DATABASE_URL", "").strip() else "sqlite"
 DATA_BACKEND = str(os.getenv("DATA_BACKEND", _DEFAULT_DATA_BACKEND)).strip().lower()
 APP_RUNTIME_ROLE = str(os.getenv("APP_RUNTIME_ROLE", "local-ingest")).strip().lower()
-if APP_RUNTIME_ROLE not in {"local-ingest", "cloud-serve"}:
+if APP_RUNTIME_ROLE not in {"local-ingest", "cloud-serve", "cloud-job"}:
     APP_RUNTIME_ROLE = "cloud-serve"
 
 # Analytics
@@ -134,6 +134,9 @@ CLOUD_RUN_PROJECT_ID = str(
 ).strip()
 CLOUD_RUN_REGION = str(os.getenv("CLOUD_RUN_REGION", "")).strip()
 SERVE_REFRESH_CLOUD_RUN_JOB_NAME = str(os.getenv("SERVE_REFRESH_CLOUD_RUN_JOB_NAME", "")).strip()
+CORE_WEEKLY_CLOUD_RUN_JOB_NAME = str(os.getenv("CORE_WEEKLY_CLOUD_RUN_JOB_NAME", "")).strip()
+COLD_CORE_CLOUD_RUN_JOB_NAME = str(os.getenv("COLD_CORE_CLOUD_RUN_JOB_NAME", "")).strip()
+CPAR_BUILD_CLOUD_RUN_JOB_NAME = str(os.getenv("CPAR_BUILD_CLOUD_RUN_JOB_NAME", "")).strip()
 
 
 def neon_dsn() -> str:
@@ -158,7 +161,11 @@ def runtime_role_allows_ingest() -> bool:
 
 
 def cloud_mode() -> bool:
-    return APP_RUNTIME_ROLE == "cloud-serve"
+    return APP_RUNTIME_ROLE in {"cloud-serve", "cloud-job"}
+
+
+def cloud_job_mode() -> bool:
+    return APP_RUNTIME_ROLE == "cloud-job"
 
 
 def neon_primary_model_data_enabled() -> bool:
@@ -207,7 +214,7 @@ def runtime_state_neon_write_required() -> bool:
 
 
 def cloud_run_jobs_enabled() -> bool:
-    return bool(CLOUD_RUN_JOBS_ENABLED and cloud_mode())
+    return bool(CLOUD_RUN_JOBS_ENABLED and cloud_mode() and not cloud_job_mode())
 
 
 def serve_refresh_cloud_job_configured() -> bool:
@@ -216,6 +223,33 @@ def serve_refresh_cloud_job_configured() -> bool:
         and CLOUD_RUN_PROJECT_ID
         and CLOUD_RUN_REGION
         and SERVE_REFRESH_CLOUD_RUN_JOB_NAME
+    )
+
+
+def core_weekly_cloud_job_configured() -> bool:
+    return bool(
+        cloud_run_jobs_enabled()
+        and CLOUD_RUN_PROJECT_ID
+        and CLOUD_RUN_REGION
+        and CORE_WEEKLY_CLOUD_RUN_JOB_NAME
+    )
+
+
+def cold_core_cloud_job_configured() -> bool:
+    return bool(
+        cloud_run_jobs_enabled()
+        and CLOUD_RUN_PROJECT_ID
+        and CLOUD_RUN_REGION
+        and COLD_CORE_CLOUD_RUN_JOB_NAME
+    )
+
+
+def cpar_build_cloud_job_configured() -> bool:
+    return bool(
+        cloud_run_jobs_enabled()
+        and CLOUD_RUN_PROJECT_ID
+        and CLOUD_RUN_REGION
+        and CPAR_BUILD_CLOUD_RUN_JOB_NAME
     )
 
 

@@ -359,35 +359,34 @@ def run_source_read_stage(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     factor_specs = build_cpar1_factor_registry()
     price_anchors = generate_weekly_price_anchors(package_date, lookback_weeks=DEFAULT_LOOKBACK_WEEKS)
-    _emit_progress(progress_callback, message="Resolving cPAR factor proxies from local source archive.", progress_kind="io")
-    with core_read_backend.core_read_backend("local"):
-        proxy_rows = cpar_source_reads.resolve_factor_proxy_rows(
-            [spec.ticker for spec in factor_specs],
-            data_db=data_db,
-        )
-        factor_proxy_by_id = _resolve_factor_proxy_map(factor_specs, proxy_rows)
-        universe_rows = cpar_source_reads.load_build_universe_rows(data_db=data_db)
-        if not universe_rows:
-            raise ValueError("No cPAR build-universe rows are available.")
-        universe_rics = [str(row["ric"]) for row in universe_rows if row.get("ric")]
-        all_rics = sorted({*universe_rics, *(str(row["ric"]) for row in factor_proxy_by_id.values())})
-        _emit_progress(progress_callback, message="Loading cPAR package-window prices from local source archive.", progress_kind="io")
-        price_rows = cpar_source_reads.load_price_rows_for_rics(
-            all_rics,
-            date_from=price_anchors[0],
-            date_to=price_anchors[-1],
-            data_db=data_db,
-        )
-        classification_rows = cpar_source_reads.load_latest_classification_rows(
-            universe_rics,
-            as_of_date=package_date,
-            data_db=data_db,
-        )
-        common_name_rows = cpar_source_reads.load_latest_common_name_rows(
-            universe_rics,
-            as_of_date=package_date,
-            data_db=data_db,
-        )
+    _emit_progress(progress_callback, message="Resolving cPAR factor proxies from source archive.", progress_kind="io")
+    proxy_rows = cpar_source_reads.resolve_factor_proxy_rows(
+        [spec.ticker for spec in factor_specs],
+        data_db=data_db,
+    )
+    factor_proxy_by_id = _resolve_factor_proxy_map(factor_specs, proxy_rows)
+    universe_rows = cpar_source_reads.load_build_universe_rows(data_db=data_db)
+    if not universe_rows:
+        raise ValueError("No cPAR build-universe rows are available.")
+    universe_rics = [str(row["ric"]) for row in universe_rows if row.get("ric")]
+    all_rics = sorted({*universe_rics, *(str(row["ric"]) for row in factor_proxy_by_id.values())})
+    _emit_progress(progress_callback, message="Loading cPAR package-window prices from source archive.", progress_kind="io")
+    price_rows = cpar_source_reads.load_price_rows_for_rics(
+        all_rics,
+        date_from=price_anchors[0],
+        date_to=price_anchors[-1],
+        data_db=data_db,
+    )
+    classification_rows = cpar_source_reads.load_latest_classification_rows(
+        universe_rics,
+        as_of_date=package_date,
+        data_db=data_db,
+    )
+    common_name_rows = cpar_source_reads.load_latest_common_name_rows(
+        universe_rics,
+        as_of_date=package_date,
+        data_db=data_db,
+    )
     if not price_rows:
         raise ValueError("No cPAR price rows are available for the requested package window.")
     price_rows_by_ric = _group_rows_by_key(price_rows, key="ric")

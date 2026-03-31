@@ -58,7 +58,7 @@ def test_start_refresh_fails_closed_when_cloud_jobs_disabled_in_cloud_mode(
     assert state["error"]["type"] == "cloud_run_job_unconfigured"
 
 
-def test_start_refresh_rejects_disallowed_profile_before_cloud_unconfigured_check(
+def test_start_refresh_reports_unconfigured_core_weekly_job_in_cloud_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_JOBS_ENABLED", False)
@@ -68,11 +68,37 @@ def test_start_refresh_rejects_disallowed_profile_before_cloud_unconfigured_chec
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("local refresh manager should not be used")),
     )
 
-    with pytest.raises(ValueError, match="Allowed profiles: serve-refresh"):
-        refresh_control_service.start_refresh(
-            force_risk_recompute=False,
-            profile="core-weekly",
-        )
+    started, state = refresh_control_service.start_refresh(
+        force_risk_recompute=False,
+        profile="core-weekly",
+    )
+
+    assert started is False
+    assert state["status"] == "idle"
+    assert state["dispatch_backend"] == "cloud_run_job"
+    assert "core-weekly" in state["error"]["message"]
+
+
+def test_get_refresh_status_uses_any_refresh_job_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(refresh_control_service.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_JOBS_ENABLED", True)
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_PROJECT_ID", "proj")
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_REGION", "us-east4")
+    monkeypatch.setattr(refresh_control_service.config, "SERVE_REFRESH_CLOUD_RUN_JOB_NAME", "")
+    monkeypatch.setattr(refresh_control_service.config, "CORE_WEEKLY_CLOUD_RUN_JOB_NAME", "ceiora-prod-core-weekly")
+    monkeypatch.setattr(refresh_control_service.config, "COLD_CORE_CLOUD_RUN_JOB_NAME", "")
+    monkeypatch.setattr(
+        refresh_control_service,
+        "_load_reconciled_refresh_status",
+        lambda: {"status": "idle", "dispatch_backend": "cloud_run_job"},
+    )
+
+    out = refresh_control_service.get_refresh_status()
+
+    assert out["status"] == "idle"
+    assert out["dispatch_backend"] == "cloud_run_job"
 
 
 def test_start_refresh_dispatches_cloud_run_job_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,6 +145,92 @@ def test_start_refresh_dispatches_cloud_run_job_when_configured(monkeypatch: pyt
     assert state["profile"] == "serve-refresh"
     assert started_calls[0]["profile"] == "serve-refresh"
     assert str(started_calls[0]["run_id"]).startswith("crj_")
+
+
+def test_start_refresh_dispatches_core_weekly_job_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    state_store: dict[str, object] = {}
+    started_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(refresh_control_service.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_JOBS_ENABLED", True)
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_PROJECT_ID", "proj")
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_REGION", "us-east4")
+    monkeypatch.setattr(refresh_control_service.config, "CORE_WEEKLY_CLOUD_RUN_JOB_NAME", "ceiora-prod-core-weekly")
+    monkeypatch.setattr(refresh_control_service, "load_persisted_refresh_status", lambda: dict(state_store))
+    monkeypatch.setattr(
+        refresh_control_service,
+        "persist_refresh_status",
+        lambda state: state_store.update(state) or dict(state_store),
+    )
+    monkeypatch.setattr(
+        refresh_control_service,
+        "try_claim_refresh_status",
+        lambda updates: (state_store.update(updates) or True, dict(state_store)),
+    )
+    monkeypatch.setattr(
+        refresh_control_service,
+        "mark_refresh_started",
+        lambda **kwargs: started_calls.append(kwargs),
+    )
+    monkeypatch.setattr(
+        refresh_control_service.cloud_run_jobs,
+        "dispatch_core_weekly",
+        lambda **kwargs: {"execution_name": "executions/core-weekly", "metadata": kwargs},
+    )
+
+    started, state = refresh_control_service.start_refresh(
+        force_risk_recompute=False,
+        profile="core-weekly",
+    )
+
+    assert started is True
+    assert state["status"] == "running"
+    assert state["dispatch_id"] == "executions/core-weekly"
+    assert state["profile"] == "core-weekly"
+    assert started_calls[0]["profile"] == "core-weekly"
+
+
+def test_start_refresh_dispatches_cold_core_job_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    state_store: dict[str, object] = {}
+    started_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(refresh_control_service.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_JOBS_ENABLED", True)
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_PROJECT_ID", "proj")
+    monkeypatch.setattr(refresh_control_service.config, "CLOUD_RUN_REGION", "us-east4")
+    monkeypatch.setattr(refresh_control_service.config, "COLD_CORE_CLOUD_RUN_JOB_NAME", "ceiora-prod-cold-core")
+    monkeypatch.setattr(refresh_control_service, "load_persisted_refresh_status", lambda: dict(state_store))
+    monkeypatch.setattr(
+        refresh_control_service,
+        "persist_refresh_status",
+        lambda state: state_store.update(state) or dict(state_store),
+    )
+    monkeypatch.setattr(
+        refresh_control_service,
+        "try_claim_refresh_status",
+        lambda updates: (state_store.update(updates) or True, dict(state_store)),
+    )
+    monkeypatch.setattr(
+        refresh_control_service,
+        "mark_refresh_started",
+        lambda **kwargs: started_calls.append(kwargs),
+    )
+    monkeypatch.setattr(
+        refresh_control_service.cloud_run_jobs,
+        "dispatch_cold_core",
+        lambda **kwargs: {"execution_name": "executions/cold-core", "metadata": kwargs},
+    )
+
+    started, state = refresh_control_service.start_refresh(
+        force_risk_recompute=False,
+        profile="cold-core",
+    )
+
+    assert started is True
+    assert state["status"] == "running"
+    assert state["dispatch_id"] == "executions/cold-core"
+    assert state["profile"] == "cold-core"
+    assert started_calls[0]["profile"] == "cold-core"
 
 
 def test_start_refresh_reports_cloud_run_dispatch_failure(monkeypatch: pytest.MonkeyPatch) -> None:

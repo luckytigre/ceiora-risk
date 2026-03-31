@@ -113,14 +113,31 @@ def _load_reconciled_refresh_status() -> dict[str, Any]:
     return _reconcile_cloud_run_refresh_state(load_persisted_refresh_status())
 
 
-def _cloud_dispatch_unconfigured_state() -> dict[str, Any]:
+def _cloud_job_configured_for_profile(profile: str) -> bool:
+    if profile == "core-weekly":
+        return config.core_weekly_cloud_job_configured()
+    if profile == "cold-core":
+        return config.cold_core_cloud_job_configured()
+    return config.serve_refresh_cloud_job_configured()
+
+
+def _any_refresh_cloud_job_configured() -> bool:
+    return bool(
+        config.serve_refresh_cloud_job_configured()
+        or config.core_weekly_cloud_job_configured()
+        or config.cold_core_cloud_job_configured()
+    )
+
+
+def _cloud_dispatch_unconfigured_state(profile: str | None = None) -> dict[str, Any]:
     state = dict(load_persisted_refresh_status())
     state.setdefault("status", "unavailable")
+    profile_label = str(profile or "refresh").strip() or "refresh"
     state["dispatch_backend"] = "cloud_run_job"
     state["error"] = {
         "type": "cloud_run_job_unconfigured",
         "message": (
-            "Cloud serve-refresh dispatch is unavailable because the Cloud Run Job "
+            f"Cloud {profile_label} dispatch is unavailable because the Cloud Run Job "
             "environment contract is incomplete."
         ),
     }
@@ -146,10 +163,10 @@ def start_refresh(
         force_risk_recompute=force_risk_recompute,
     )
 
-    if config.cloud_mode() and not config.serve_refresh_cloud_job_configured():
-        return False, _cloud_dispatch_unconfigured_state()
+    if config.cloud_mode() and not _cloud_job_configured_for_profile(request["profile"]):
+        return False, _cloud_dispatch_unconfigured_state(request["profile"])
 
-    if not config.serve_refresh_cloud_job_configured():
+    if not _cloud_job_configured_for_profile(request["profile"]):
         from backend.services.refresh_manager import start_refresh as _start_refresh
 
         return _start_refresh(
@@ -184,7 +201,7 @@ def start_refresh(
             "force_core": bool(request["force_core"]),
             "force_risk_recompute": bool(force_risk_recompute),
             "current_stage": "dispatch",
-            "current_stage_message": "Dispatching serve-refresh to Cloud Run Job.",
+            "current_stage_message": f"Dispatching {request['profile']} to Cloud Run Job.",
             "current_stage_heartbeat_at": now,
             "requested_at": now,
             "started_at": now,
@@ -203,15 +220,21 @@ def start_refresh(
     except Exception:
         pass
     try:
-        dispatch = cloud_run_jobs.dispatch_serve_refresh(
-            pipeline_run_id=pipeline_run_id,
-            profile=request["profile"],
-            as_of_date=(str(as_of_date).strip() if as_of_date else None),
-            from_stage=request["from_stage"],
-            to_stage=request["to_stage"],
-            force_core=bool(request["force_core"]),
-            refresh_scope=(str(refresh_scope).strip().lower() if refresh_scope else None),
-        )
+        _profile = request["profile"]
+        if _profile == "core-weekly":
+            dispatch = cloud_run_jobs.dispatch_core_weekly(pipeline_run_id=pipeline_run_id)
+        elif _profile == "cold-core":
+            dispatch = cloud_run_jobs.dispatch_cold_core(pipeline_run_id=pipeline_run_id)
+        else:
+            dispatch = cloud_run_jobs.dispatch_serve_refresh(
+                pipeline_run_id=pipeline_run_id,
+                profile=_profile,
+                as_of_date=(str(as_of_date).strip() if as_of_date else None),
+                from_stage=request["from_stage"],
+                to_stage=request["to_stage"],
+                force_core=bool(request["force_core"]),
+                refresh_scope=(str(refresh_scope).strip().lower() if refresh_scope else None),
+            )
     except Exception as exc:  # noqa: BLE001
         try:
             mark_refresh_finished(
@@ -245,10 +268,10 @@ def start_refresh(
 
 
 def get_refresh_status() -> dict[str, Any]:
-    if config.cloud_mode() and not config.serve_refresh_cloud_job_configured():
-        return _cloud_dispatch_unconfigured_state()
+    if config.cloud_mode() and not _any_refresh_cloud_job_configured():
+        return _cloud_dispatch_unconfigured_state("refresh")
 
-    if config.serve_refresh_cloud_job_configured():
+    if _any_refresh_cloud_job_configured():
         return _load_reconciled_refresh_status()
 
     from backend.services.refresh_manager import get_refresh_status as _get_refresh_status
