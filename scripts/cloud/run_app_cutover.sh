@@ -215,15 +215,24 @@ live_outputs = json.load(open(sys.argv[2], "r", encoding="utf-8"))
 phase = sys.argv[3]
 
 live_control_surfaces = live_outputs.get("control_surface_image_refs_applied", {}).get("value")
-if live_control_surfaces and live_control_surfaces["service"] != live_control_surfaces["serve_refresh_job"]:
+if live_control_surfaces:
+    control_surface_mismatches = {
+        key: value
+        for key, value in live_control_surfaces.items()
+        if key != "service" and value != live_control_surfaces["service"]
+    }
+else:
+    control_surface_mismatches = {}
+if control_surface_mismatches:
     raise SystemExit(
-        "Live control service image and serve-refresh job image differ. "
+        "Live control service image and one or more control-surface job images differ. "
         "Reconcile them before using a shared control-image rollout bundle.\n"
         f"control service: {live_control_surfaces['service']}\n"
-        f"serve-refresh job: {live_control_surfaces['serve_refresh_job']}"
+        + "\n".join(f"{key}: {value}" for key, value in sorted(control_surface_mismatches.items()))
     )
 
 live_images = live_outputs.get("service_image_refs_applied", {}).get("value") or live_outputs["service_image_refs"]["value"]
+live_control_job_images = live_control_surfaces or {}
 live_topology = {
     "endpoint_mode": live_outputs["endpoint_mode"]["value"],
     "edge_enabled": bool(live_outputs["edge_enabled"]["value"]),
@@ -231,6 +240,7 @@ live_topology = {
 }
 bundle_topology = manifest["source_topology"]
 bundle_images = manifest["service_image_refs"]
+bundle_control_job_images = manifest.get("control_surface_image_refs") or {}
 
 mismatches = []
 if phase in {"soak", "no-edge"}:
@@ -252,6 +262,12 @@ if phase in {"soak", "no-edge"}:
 for key in ("frontend", "serve", "control"):
     if bundle_images[key] != live_images[key]:
         mismatches.append(f"{key}_image bundle={bundle_images[key]} live={live_images[key]}")
+for key, live_value in sorted(live_control_job_images.items()):
+    if key == "service":
+        continue
+    bundle_value = bundle_control_job_images.get(key)
+    if bundle_value and bundle_value != live_value:
+        mismatches.append(f"{key}_image bundle={bundle_value} live={live_value}")
 
 if mismatches:
     raise SystemExit(

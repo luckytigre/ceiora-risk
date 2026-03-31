@@ -137,7 +137,7 @@ custom_control_url="https://$(json_value "${tmp_output}" "hostnames.value.contro
 
 case "${endpoint_mode}:${edge_enabled}" in
   custom_domains:true)
-    run_operator_check "custom-domains" "edge" "${runapp_app_url}" "${runapp_control_url}" "0"
+    run_operator_check "custom-domains" "edge" "${custom_app_url}" "${custom_control_url}" "0"
     ;;
   run_app:true)
     run_operator_check "run-app-soak" "run_app" "${runapp_app_url}" "${runapp_control_url}" "0"

@@ -204,8 +204,10 @@ def test_control_surface_exposes_cpar_build_route_with_operator_token(monkeypatc
             {
                 "status": "dispatched",
                 "profile": kwargs["profile"],
+                "package_date": "2026-03-27",
                 "pipeline_run_id": "cpar_crj_123",
                 "execution_name": "projects/p/locations/r/jobs/j/executions/e",
+                "dispatch_backend": "cloud_run_job",
             },
         ),
     )
@@ -216,9 +218,22 @@ def test_control_surface_exposes_cpar_build_route_with_operator_token(monkeypatc
             "/api/cpar/build?profile=cpar-weekly",
             headers={"X-Operator-Token": "op-secret"},
         )
+        bearer = client.post(
+            "/api/cpar/build?profile=cpar-weekly",
+            headers={"Authorization": "Bearer op-secret"},
+        )
+        invalid = client.post(
+            "/api/cpar/build?profile=cpar-weekly",
+            headers={"X-Operator-Token": "wrong-secret"},
+        )
 
     assert unauthorized.status_code == 401
     assert authorized.status_code == 202
+    assert bearer.status_code == 202
+    assert invalid.status_code == 401
+    assert authorized.json()["dispatch_backend"] == "cloud_run_job"
+    assert authorized.json()["execution_name"] == "projects/p/locations/r/jobs/j/executions/e"
+    assert authorized.json()["package_date"] == "2026-03-27"
 
 
 def test_control_surface_rejects_invalid_cpar_build_profile_with_400(monkeypatch) -> None:
@@ -259,6 +274,45 @@ def test_full_surface_does_not_mount_cpar_build_route(monkeypatch) -> None:
         res = client.post("/api/cpar/build?profile=cpar-weekly", headers={"X-Operator-Token": "op-secret"})
 
     assert res.status_code == 404
+
+
+def test_serve_surface_does_not_mount_cpar_build_route(monkeypatch) -> None:
+    serve_app = create_app(surface="serve")
+    monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
+
+    with TestClient(serve_app) as client:
+        res = client.post("/api/cpar/build?profile=cpar-weekly", headers={"X-Operator-Token": "op-secret"})
+
+    assert res.status_code == 404
+
+
+def test_control_surface_maps_unavailable_cpar_build_to_503(monkeypatch) -> None:
+    control_app = create_app(surface="control")
+    monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(
+        "backend.services.cpar_build_service.dispatch_cpar_build",
+        lambda **_kwargs: (
+            False,
+            {
+                "status": "unavailable",
+                "error": {
+                    "type": "cloud_run_job_unconfigured",
+                    "message": "missing cpar build job env",
+                },
+            },
+        ),
+    )
+
+    with TestClient(control_app) as client:
+        res = client.post(
+            "/api/cpar/build?profile=cpar-weekly",
+            headers={"X-Operator-Token": "op-secret"},
+        )
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["error"]["type"] == "cloud_run_job_unconfigured"
 
 
 def test_cloud_refresh_defaults_to_serve_refresh_when_profile_omitted(monkeypatch) -> None:

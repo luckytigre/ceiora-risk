@@ -59,6 +59,12 @@ Cloud dispatch (via control API):
 - `POST /api/cpar/build?profile=cpar-weekly` with `X-Operator-Token` header
 - Control API at `<control-origin>/api/cpar/build`
 - resolve `<control-origin>` from `terraform output service_urls` for the active topology
+- post-dispatch verification:
+  - anonymous `POST /api/cpar/build?profile=cpar-weekly` must return `401`
+  - tokened `POST /api/cpar/build?profile=not-a-profile` must return `400`
+  - successful tokened dispatch should return `202` with `dispatch_backend="cloud_run_job"` and an execution identifier
+  - confirm the Cloud Run execution with `gcloud run jobs executions list --job ceiora-prod-cpar-build --region us-east4`
+  - confirm a fresh `cpar_package_runs` row exists in Neon before declaring the build healthy
 
 There is no cPAR `serve-refresh` equivalent in the current implementation.
 The current cPAR CLI returns a non-zero exit code when a build is blocked or fails.

@@ -2,7 +2,7 @@
 
 Date: 2026-03-22
 Owner: Codex
-Status: Active implementation tracker
+Status: Active tracker; `run_app` no-edge production is live and the compute-job rollout is applied
 
 Related docs:
 - [Cloud-Native Implementation Plan](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CLOUD_NATIVE_IMPLEMENTATION_PLAN.md)
@@ -47,7 +47,7 @@ Related docs:
 - `NEON_AUTHORITATIVE_REBUILDS` is a separate contract from Neon serving reads:
   - default-on when Neon is the active backend and a Neon DSN is configured,
   - set `NEON_AUTHORITATIVE_REBUILDS=false` only as an explicit rollback to local-SQLite rebuild authority.
-- Custom domain family:
+- Custom domain family remains the rollback/reference edge contract:
   - `app.ceiora.com` for the frontend
   - `api.ceiora.com` for the serve API
   - `control.ceiora.com` for the control API
@@ -56,7 +56,7 @@ Related docs:
   - internet-reachable serve API
   - internet-reachable control API, but still protected by operator credentials and not anonymous
 - Production custom-domain routing will use a global external HTTPS load balancer with serverless NEGs, not Cloud Run preview domain mapping.
-- Temporary smoke validation will use Cloud Run `run.app` hostnames before cutover to `app.ceiora.com`.
+- Current production topology is `endpoint_mode=run_app` with `edge_enabled=false`; resolve live origins from Terraform `public_origins`.
 - The control API is intended for:
   - the frontend's server-side proxy routes, and
   - explicit operator or automation clients
@@ -64,7 +64,7 @@ Related docs:
 - The durable cloud job migration sequence is:
   - `serve-refresh` first,
   - then `core-weekly`, `cold-core`, and `cpar-build`.
-- This tracker currently includes the implementation slice for those additional compute jobs; treat them as planned until the corresponding Terraform apply and live validation complete.
+- The additional compute-job slice is now applied in Terraform; treat post-apply execution/durable-output verification as the remaining operational validation step when checking this tracker.
 - Local operator workflow after compute migration is intended to be: run `source-daily` locally (LSEG pull → Neon sync), then dispatch compute jobs via control API. No local model compute required once the jobs are provisioned and validated.
 - Cloud `serve-refresh` cutover is valid only after the repo's stable-core, source-sync, Neon-readiness, and `security_master` parity prerequisites are frozen and documented for cloud execution.
 - Initial image publishing will start from the verified operator workstation:

@@ -90,12 +90,17 @@ service_urls = outputs["service_urls"]["value"]
 service_image_refs = outputs.get("service_image_refs_applied", {}).get("value") or outputs["service_image_refs"]["value"]
 control_surface_image_refs = outputs.get("control_surface_image_refs_applied", {}).get("value")
 if control_surface_image_refs:
-    if control_surface_image_refs["service"] != control_surface_image_refs["serve_refresh_job"]:
+    control_surface_mismatches = {
+        key: value
+        for key, value in control_surface_image_refs.items()
+        if key != "service" and value != control_surface_image_refs["service"]
+    }
+    if control_surface_mismatches:
         raise SystemExit(
-            "Live control service image and serve-refresh job image differ. "
+            "Live control service image and one or more control-surface job images differ. "
             "Reconcile them before capturing a shared control-image bundle.\n"
             f"control service: {control_surface_image_refs['service']}\n"
-            f"serve-refresh job: {control_surface_image_refs['serve_refresh_job']}"
+            + "\n".join(f"{key}: {value}" for key, value in sorted(control_surface_mismatches.items()))
         )
 service_names = outputs["service_names"]["value"]
 public_origins = outputs["public_origins"]["value"]
@@ -129,6 +134,7 @@ manifest = {
     "service_names": service_names,
     "service_urls": service_urls,
     "service_image_refs": service_image_refs,
+    "control_surface_image_refs": control_surface_image_refs,
     "bundle_files": {
         "terraform_output_json": "terraform-output.json",
         "run_app_frontend_image_ref": "run_app_frontend_image_ref.txt",

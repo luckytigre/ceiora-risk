@@ -371,13 +371,13 @@ Parallel cPAR note:
       - `OPERATOR_API_TOKEN=... TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH=1 make cloud-topology-check`
       - optional `TOPOLOGY_CHECK_DISPATCH_SURFACE=active|run_app|edge`
   - live cloud check:
-    - `APP_BASE_URL=https://app.ceiora.com CONTROL_BASE_URL=https://control.ceiora.com OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 make operator-check`
+    - `APP_BASE_URL=https://<frontend-origin> CONTROL_BASE_URL=https://<control-origin> OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 make operator-check`
   - live run.app check:
     - `APP_BASE_URL=https://<frontend-service>.run.app CONTROL_BASE_URL=https://<control-service>.run.app OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 make operator-check`
   - live cloud dispatch + reconciliation:
-    - `APP_BASE_URL=https://app.ceiora.com CONTROL_BASE_URL=https://control.ceiora.com OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 RUN_REFRESH_DISPATCH=1 make operator-check`
+    - `APP_BASE_URL=https://<frontend-origin> CONTROL_BASE_URL=https://<control-origin> OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 RUN_REFRESH_DISPATCH=1 make operator-check`
   - direct-control dispatch variant:
-    - `APP_BASE_URL=https://app.ceiora.com CONTROL_BASE_URL=https://control.ceiora.com OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 RUN_REFRESH_DISPATCH=1 RUN_REFRESH_DISPATCH_TARGET=direct make operator-check`
+    - `APP_BASE_URL=https://<frontend-origin> CONTROL_BASE_URL=https://<control-origin> OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 RUN_REFRESH_DISPATCH=1 RUN_REFRESH_DISPATCH_TARGET=direct make operator-check`
   - expected-refusal dispatch variant for cloud-serve when `.core_due.due=true`:
     - `APP_BASE_URL=https://<frontend-url> CONTROL_BASE_URL=https://<control-url> OPERATOR_API_TOKEN=... OPERATOR_CHECK_REQUIRE_LIVE=1 RUN_REFRESH_DISPATCH=1 RUN_REFRESH_EXPECTED_OUTCOME=core_due_refusal make operator-check`
   - choose the URLs that match `terraform output endpoint_mode` / `terraform output edge_enabled` / `terraform output public_origins`
@@ -394,10 +394,15 @@ Parallel cPAR note:
     - legacy `X-Refresh-Token` and invalid-token `/api/operator/status`, `/api/refresh/status`, and `POST /api/refresh` must return `401`
     - tokened `/api/operator/status`, `/api/refresh/status`, `/api/health/diagnostics`, and gated `/api/data/diagnostics?include_paths=true` must return `200`
     - `Authorization: Bearer <OPERATOR_API_TOKEN>` is also validated on the status routes
+    - direct control-route checks also validate the new compute-job endpoints without dispatch by default:
+      - anonymous/invalid-token `POST /api/refresh?profile=core-weekly` and `POST /api/refresh?profile=cold-core` must return `401`
+      - anonymous/invalid-token `POST /api/cpar/build?profile=cpar-weekly` must return `401`
+      - tokened `POST /api/cpar/build?profile=not-a-profile` must return `400`
     - real `POST /api/refresh` dispatch is exercised for the selected target only:
       - default `RUN_REFRESH_DISPATCH_TARGET=proxy`
       - set `RUN_REFRESH_DISPATCH_TARGET=direct` to positively exercise the direct control dispatch path
       - default `RUN_REFRESH_EXPECTED_OUTCOME=success` requires the dispatch to finish with `refresh.status=ok`
+  - resolve `<frontend-origin>` and `<control-origin>` from `terraform output public_origins` for the active topology; current prod is `endpoint_mode=run_app` and `edge_enabled=false`
       - set `RUN_REFRESH_EXPECTED_OUTCOME=core_due_refusal` when the operating-model-correct outcome is a fail-closed `serve-refresh` refusal because the stable core package is due
   - If Neon auto-sync is disabled, this check degrades gracefully instead of failing on missing parity artifacts.
 - Verify latest refresh metadata:

@@ -2,24 +2,24 @@
 
 Date: 2026-03-27
 Owner: Codex
-Status: custom-domain rollout live and validated on `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com`
+Status: `run_app` no-edge production is live; custom-domain edge remains a rollback/reference path only
 
 ## Purpose
 
 Define the process split and environment contract needed to run the app in a cloud-native shape without relying on one all-in-one web process.
 
-This runbook now covers the live Cloud Run rollout path as well as the rollback/reference path.
-The `run.app` rollout remains a valid reference path, but the production cutover is now live on the final custom domains.
+This runbook covers the live `run_app` Cloud Run production shape as well as the rollback/reference path for the retired custom-domain edge.
+Resolve the current live origins from `terraform output endpoint_mode`, `terraform output edge_enabled`, and `terraform output public_origins`; do not assume `app.ceiora.com` / `control.ceiora.com` are live.
 
 ## Topology Modes
 
 - `endpoint_mode=custom_domains`
-  - current default
+  - rollback/reference mode
   - requires `edge_enabled=true`
   - canonical public origins are the frozen `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com` hostnames
   - no explicit origin/image overrides are required beyond the normal custom-domain rollout inputs
 - `endpoint_mode=run_app`
-  - explicit run.app public contract
+  - current production mode
   - requires explicit `frontend_public_origin`, `frontend_backend_api_origin`, `frontend_backend_control_origin`, and pinned frontend/serve/control image refs
   - `edge_enabled=true` is the soak state that keeps rollback paths and custom-domain validation alive
   - `edge_enabled=false` is the no-edge steady state
@@ -327,6 +327,12 @@ Current Cloud Run Job prep:
   - the control service must not fall back to the local in-process `refresh_manager` path
   - status continues to read the persisted refresh state instead of switching owners
 - **local operator workflow after migration**: run `source-daily` locally (LSEG pull → Neon sync) then dispatch compute jobs via control API; no local model compute needed
+- post-apply verification for the compute-job surface:
+  - anonymous `POST /api/refresh?profile=core-weekly`, `POST /api/refresh?profile=cold-core`, and `POST /api/cpar/build?profile=cpar-weekly` must return `401`
+  - tokened `POST /api/cpar/build?profile=not-a-profile` must return `400`
+  - tokened dispatch for `core-weekly` / `cold-core` / `cpar-build` should return `202` when the refresh lock is free; `409` is expected if another refresh job is already running
+  - confirm Cloud Run executions with `gcloud run jobs executions list --job <job-name> --region us-east4`
+  - confirm `cpar_package_runs` persistence in Neon after `cpar-build` reaches terminal success
 
 Current Cloud Run service prep:
 - the Terraform `prod` root now defines frontend, serve, and control service resources

@@ -9,6 +9,7 @@ CONTROL_BASE_URL="${CONTROL_BASE_URL:-}"
 OPERATOR_CHECK_REQUIRE_LIVE="${OPERATOR_CHECK_REQUIRE_LIVE:-0}"
 OPERATOR_CHECK_SKIP_LOCAL="${OPERATOR_CHECK_SKIP_LOCAL:-0}"
 INVALID_OPERATOR_TOKEN="${INVALID_OPERATOR_TOKEN:-not-the-real-token}"
+RUN_COMPUTE_ROUTE_CHECKS="${RUN_COMPUTE_ROUTE_CHECKS:-1}"
 RUN_REFRESH_DISPATCH="${RUN_REFRESH_DISPATCH:-0}"
 RUN_REFRESH_DISPATCH_TARGET="${RUN_REFRESH_DISPATCH_TARGET:-proxy}"
 RUN_REFRESH_EXPECTED_OUTCOME="${RUN_REFRESH_EXPECTED_OUTCOME:-success}"
@@ -23,6 +24,7 @@ if [[ "${OPERATOR_CHECK_SKIP_LOCAL}" != "1" ]]; then
 
   "${BACKEND_PYTHON}" -m pytest \
     backend/tests/test_cloud_auth_and_runtime_roles.py \
+    backend/tests/test_cpar_build_service.py \
     backend/tests/test_operator_status_route.py \
     backend/tests/test_refresh_auth.py \
     backend/tests/test_refresh_control_service.py \
@@ -54,6 +56,15 @@ case "${RUN_REFRESH_EXPECTED_OUTCOME}" in
     ;;
   *)
     printf 'RUN_REFRESH_EXPECTED_OUTCOME must be one of: success, core_due_refusal, terminal_only.\n' >&2
+    exit 1
+    ;;
+esac
+
+case "${RUN_COMPUTE_ROUTE_CHECKS}" in
+  0|1)
+    ;;
+  *)
+    printf 'RUN_COMPUTE_ROUTE_CHECKS must be 0 or 1.\n' >&2
     exit 1
     ;;
 esac
@@ -290,6 +301,54 @@ printf 'direct refresh status: %s\n' "$(tr -d '\n' </tmp/ceiora_control_refresh_
 assert_json_equal "operator status parity" /tmp/ceiora_operator_status.json /tmp/ceiora_control_operator_status.json "runtime.app_runtime_role"
 assert_json_equal "operator status parity" /tmp/ceiora_operator_status.json /tmp/ceiora_control_operator_status.json "runtime.allowed_profiles"
 assert_json_equal "refresh status parity" /tmp/ceiora_refresh_status.json /tmp/ceiora_control_refresh_status.json "refresh.status"
+
+if [[ "${RUN_COMPUTE_ROUTE_CHECKS}" == "1" ]]; then
+  expect_status "401" "$(
+    curl_status /tmp/ceiora_control_core_weekly_anon.json \
+      -X POST \
+      "${CONTROL_BASE_URL%/}/api/refresh?profile=core-weekly"
+  )" "direct core-weekly dispatch without token" /tmp/ceiora_control_core_weekly_anon.json
+  expect_status "401" "$(
+    curl_status /tmp/ceiora_control_core_weekly_bad_token.json \
+      -X POST \
+      -H "X-Operator-Token: ${INVALID_OPERATOR_TOKEN}" \
+      "${CONTROL_BASE_URL%/}/api/refresh?profile=core-weekly"
+  )" "direct core-weekly dispatch with invalid token" /tmp/ceiora_control_core_weekly_bad_token.json
+  expect_status "401" "$(
+    curl_status /tmp/ceiora_control_cold_core_anon.json \
+      -X POST \
+      "${CONTROL_BASE_URL%/}/api/refresh?profile=cold-core"
+  )" "direct cold-core dispatch without token" /tmp/ceiora_control_cold_core_anon.json
+  expect_status "401" "$(
+    curl_status /tmp/ceiora_control_cold_core_bad_token.json \
+      -X POST \
+      -H "X-Operator-Token: ${INVALID_OPERATOR_TOKEN}" \
+      "${CONTROL_BASE_URL%/}/api/refresh?profile=cold-core"
+  )" "direct cold-core dispatch with invalid token" /tmp/ceiora_control_cold_core_bad_token.json
+  expect_status "401" "$(
+    curl_status /tmp/ceiora_control_cpar_build_anon.json \
+      -X POST \
+      "${CONTROL_BASE_URL%/}/api/cpar/build?profile=cpar-weekly"
+  )" "direct cpar-build dispatch without token" /tmp/ceiora_control_cpar_build_anon.json
+  expect_status "401" "$(
+    curl_status /tmp/ceiora_control_cpar_build_bad_token.json \
+      -X POST \
+      -H "X-Operator-Token: ${INVALID_OPERATOR_TOKEN}" \
+      "${CONTROL_BASE_URL%/}/api/cpar/build?profile=cpar-weekly"
+  )" "direct cpar-build dispatch with invalid token" /tmp/ceiora_control_cpar_build_bad_token.json
+  expect_status "400" "$(
+    curl_status /tmp/ceiora_control_cpar_build_invalid_profile.json \
+      -X POST \
+      -H "X-Operator-Token: ${OPERATOR_API_TOKEN}" \
+      "${CONTROL_BASE_URL%/}/api/cpar/build?profile=not-a-profile"
+  )" "direct cpar-build invalid profile with token" /tmp/ceiora_control_cpar_build_invalid_profile.json
+  expect_status "400" "$(
+    curl_status /tmp/ceiora_control_cpar_build_invalid_profile_bearer.json \
+      -X POST \
+      -H "Authorization: Bearer ${OPERATOR_API_TOKEN}" \
+      "${CONTROL_BASE_URL%/}/api/cpar/build?profile=not-a-profile"
+  )" "direct cpar-build invalid profile with bearer token" /tmp/ceiora_control_cpar_build_invalid_profile_bearer.json
+fi
 
 if [[ "${RUN_REFRESH_DISPATCH}" != "1" ]]; then
   exit 0

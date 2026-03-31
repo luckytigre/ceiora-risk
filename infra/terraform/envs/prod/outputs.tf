@@ -70,10 +70,13 @@ output "service_image_refs_applied" {
 }
 
 output "control_surface_image_refs_applied" {
-  description = "Applied image refs for the control service and the serve-refresh job. These should normally match because they are driven by the same control image input."
+  description = "Applied image refs for the control service and every control-surface Cloud Run Job. These should normally match because they are driven by the same control image input."
   value = {
     service           = google_cloud_run_v2_service.control.template[0].containers[0].image
     serve_refresh_job = google_cloud_run_v2_job.serve_refresh.template[0].template[0].containers[0].image
+    core_weekly_job   = google_cloud_run_v2_job.core_weekly.template[0].template[0].containers[0].image
+    cold_core_job     = google_cloud_run_v2_job.cold_core.template[0].template[0].containers[0].image
+    cpar_build_job    = google_cloud_run_v2_job.cpar_build.template[0].template[0].containers[0].image
   }
 }
 
@@ -91,6 +94,16 @@ output "frontend_build_contract" {
 output "serve_refresh_job_name" {
   description = "Cloud Run Job name for serve-refresh execution."
   value       = google_cloud_run_v2_job.serve_refresh.name
+}
+
+output "control_job_names" {
+  description = "Cloud Run Job names owned by the control surface."
+  value = {
+    serve_refresh = google_cloud_run_v2_job.serve_refresh.name
+    core_weekly   = google_cloud_run_v2_job.core_weekly.name
+    cold_core     = google_cloud_run_v2_job.cold_core.name
+    cpar_build    = google_cloud_run_v2_job.cpar_build.name
+  }
 }
 
 output "load_balancer_ip" {
@@ -115,5 +128,8 @@ output "control_service_job_env" {
     CLOUD_RUN_PROJECT_ID             = var.project_id
     CLOUD_RUN_REGION                 = var.region
     SERVE_REFRESH_CLOUD_RUN_JOB_NAME = google_cloud_run_v2_job.serve_refresh.name
+    CORE_WEEKLY_CLOUD_RUN_JOB_NAME   = google_cloud_run_v2_job.core_weekly.name
+    COLD_CORE_CLOUD_RUN_JOB_NAME     = google_cloud_run_v2_job.cold_core.name
+    CPAR_BUILD_CLOUD_RUN_JOB_NAME    = google_cloud_run_v2_job.cpar_build.name
   }
 }

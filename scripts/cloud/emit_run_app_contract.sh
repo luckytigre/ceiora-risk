@@ -93,13 +93,17 @@ control_surfaces = outputs.get("control_surface_image_refs_applied", {}).get("va
 if not control_surfaces:
     raise SystemExit(0)
 service_image = control_surfaces["service"]
-job_image = control_surfaces["serve_refresh_job"]
-if service_image != job_image:
+mismatches = {
+    key: value
+    for key, value in control_surfaces.items()
+    if key != "service" and value != service_image
+}
+if mismatches:
     raise SystemExit(
-        "Live control service image and serve-refresh job image differ. "
+        "Live control service image and one or more control-surface job images differ. "
         "Reconcile them before emitting a shared control_image_ref contract.\n"
         f"control service: {service_image}\n"
-        f"serve-refresh job: {job_image}"
+        + "\n".join(f"{key}: {value}" for key, value in sorted(mismatches.items()))
     )
 PY
 }
