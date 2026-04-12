@@ -54,8 +54,8 @@ def _infer_country_from_ric(ric: str) -> str:
     return ""
 
 
-def _load_security_frame(conn: sqlite3.Connection) -> pd.DataFrame:
-    rows = load_security_runtime_rows(conn, include_disabled=False)
+def _load_security_frame(conn: sqlite3.Connection, *, as_of_date: str) -> pd.DataFrame:
+    rows = load_security_runtime_rows(conn, as_of_date=as_of_date, include_disabled=False)
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
@@ -236,7 +236,7 @@ def build_and_persist_estu_membership(
 
     try:
         ensure_cuse4_schema(conn)
-        security = _load_security_frame(conn)
+        security = _load_security_frame(conn, as_of_date=selected_date)
         if security.empty:
             return {
                 "status": "no-security-master",
