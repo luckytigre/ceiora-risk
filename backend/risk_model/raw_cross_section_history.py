@@ -925,43 +925,50 @@ def rebuild_raw_cross_section_history(
             "job_run_id",
             "updated_at",
         ]
-        payload = out[target_cols].where(pd.notna(out[target_cols]), None).copy()
-        delete_dates = sorted(set(payload["as_of_date"].astype(str).tolist()))
+        delete_dates = sorted({str(as_of) for as_of, _ in eligibility_groups})
         logger.info(
             "Persisting raw cross-section payload: rows=%s dates=%s",
-            len(payload),
+            len(out),
             len(delete_dates),
         )
         if progress_callback is not None:
             progress_callback(
                 {
-                    "message": f"Persisting {len(payload)} raw cross-section rows",
+                    "message": f"Persisting {len(out)} raw cross-section rows",
                     "items_processed": 4,
                     "items_total": 4,
                     "unit": "setup_steps",
                     "progress_pct": 100.0,
-                    "rows_upserted": int(len(payload)),
+                    "rows_upserted": int(len(out)),
                     "dates_processed": int(len(delete_dates)),
                     "progress_kind": "persist",
                 }
             )
         for d in delete_dates:
             conn.execute(f"DELETE FROM {TABLE} WHERE as_of_date = ?", (d,))
-        conn.executemany(
-            f"""
+        insert_sql = f"""
             INSERT OR REPLACE INTO {TABLE}
             ({", ".join(target_cols)})
             VALUES ({", ".join(["?"] * len(target_cols))})
-            """,
-            payload.itertuples(index=False, name=None),
-        )
+            """
+        rows_upserted = 0
+        for group_i, (_, idx) in enumerate(eligibility_groups, start=1):
+            chunk_source = out.loc[idx, target_cols]
+            chunk = chunk_source.where(pd.notna(chunk_source), None)
+            conn.executemany(
+                insert_sql,
+                chunk.itertuples(index=False, name=None),
+            )
+            rows_upserted += int(len(chunk))
+            if group_i % 250 == 0 or group_i == total_eligibility_groups:
+                conn.commit()
         conn.commit()
         elapsed = time.perf_counter() - stage_t0
         logger.info("Raw cross-section rebuild completed in %.1fs", elapsed)
         return {
             "status": "ok",
             "table": TABLE,
-            "rows_upserted": int(len(payload)),
+            "rows_upserted": int(rows_upserted),
             "dates_processed": int(len(delete_dates)),
             "assumption_set_version": assumption_set_version,
             "job_run_id": job_run_id,
