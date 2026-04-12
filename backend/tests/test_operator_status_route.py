@@ -138,7 +138,7 @@ def test_operator_status_reports_cloud_allowed_profiles(monkeypatch) -> None:
     res = client.get("/api/operator/status", headers={"X-Operator-Token": "op-secret"})
 
     assert res.status_code == 200
-    assert res.json()["runtime"]["allowed_profiles"] == ["serve-refresh"]
+    assert res.json()["runtime"]["allowed_profiles"] == ["cold-core", "core-weekly", "serve-refresh"]
     assert "source-daily" in res.json()["runtime"]["local_only_profiles"]
 
 
