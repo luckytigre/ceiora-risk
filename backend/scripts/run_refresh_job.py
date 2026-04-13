@@ -6,6 +6,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from backend import config
@@ -35,6 +36,24 @@ def _set_state(**updates: Any) -> dict[str, Any]:
     state.update(updates)
     persist_refresh_status(state)
     return state
+
+
+def _required_runtime_asset_paths() -> list[Path]:
+    base = Path(__file__).resolve().parents[2] / "docs" / "reference" / "migrations" / "neon"
+    return [
+        base / "NEON_CANONICAL_SCHEMA.sql",
+        base / "NEON_CPAR_SCHEMA.sql",
+        base / "NEON_HOLDINGS_SCHEMA.sql",
+        base / "NEON_REGISTRY_FIRST_CLEANUP.sql",
+    ]
+
+
+def _validate_runtime_assets() -> None:
+    missing = [str(p) for p in _required_runtime_asset_paths() if not p.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Missing required runtime schema assets in container: " + ", ".join(sorted(missing))
+        )
 
 
 def main() -> int:
@@ -76,6 +95,8 @@ def main() -> int:
         dispatch_backend="cloud_run_job",
         dispatch_id=str(os.getenv("CLOUD_RUN_EXECUTION", "")).strip() or None,
     )
+    if config.cloud_job_mode():
+        _validate_runtime_assets()
     try:
         mark_refresh_started(profile=request["profile"], run_id=pipeline_run_id)
     except Exception:
