@@ -177,6 +177,11 @@ def test_universe_search_prefers_serving_payload_over_cache(monkeypatch) -> None
         "cache_get",
         lambda key: {"index": [], "by_ticker": {}},
     )
+    monkeypatch.setattr(
+        universe_routes.universe_service,
+        "_registry_search_rows",
+        lambda **_kwargs: [],
+    )
 
     client = TestClient(app)
     res = client.get("/api/universe/search?q=JPM")
