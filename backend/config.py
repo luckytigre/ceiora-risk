@@ -114,6 +114,7 @@ CUSE4_AUTO_BOOTSTRAP = _env_bool("CUSE4_AUTO_BOOTSTRAP", False)
 
 # Orchestrator ingest stage controls.
 ORCHESTRATOR_ENABLE_INGEST = _env_bool("ORCHESTRATOR_ENABLE_INGEST", False)
+ORCHESTRATOR_ALLOW_EMERGENCY_SYNC = _env_bool("ORCHESTRATOR_ALLOW_EMERGENCY_SYNC", False)
 SOURCE_DAILY_PIT_FREQUENCY = str(os.getenv("SOURCE_DAILY_PIT_FREQUENCY", "monthly")).strip().lower()
 if SOURCE_DAILY_PIT_FREQUENCY not in {"monthly", "quarterly"}:
     SOURCE_DAILY_PIT_FREQUENCY = "monthly"

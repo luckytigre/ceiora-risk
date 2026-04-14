@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+import logging
 import sqlite3
 from typing import Any
 
 from psycopg.rows import dict_row
+
+logger = logging.getLogger(__name__)
 
 
 def load_current_payloads_sqlite(
@@ -61,7 +64,12 @@ def load_current_payloads_neon(
             connect_timeout=5,
             options={"options": "-c statement_timeout=8000"},
         )
-    except Exception:
+    except Exception as exc:
+        # Sanitize message to prevent DSN leakage
+        msg = str(exc)
+        if "postgres://" in msg or "postgresql://" in msg:
+            msg = "<sanitized postgres error>"
+        logger.error("Neon connection failed during serving payload read: %s: %s", type(exc).__name__, msg)
         return {name: None for name in clean_names}
     try:
         with conn.cursor(row_factory=dict_row) as cur:
@@ -74,7 +82,8 @@ def load_current_payloads_neon(
                 (clean_names,),
             )
             rows = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        logger.error("Neon query failed during serving payload read: %s: %s", type(exc).__name__, exc)
         return {name: None for name in clean_names}
     finally:
         conn.close()

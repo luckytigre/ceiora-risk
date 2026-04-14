@@ -33,7 +33,31 @@ def _sanitize_validation_payload(value):
     return value
 
 
+def _validate_cloud_dispatch_config() -> None:
+    if not config.cloud_mode():
+        return
+    if config.DATA_BACKEND != "neon":
+        return
+    if not config.cloud_run_jobs_enabled():
+        return
+
+    missing: list[str] = []
+    if not config.CLOUD_RUN_PROJECT_ID:
+        missing.append("CLOUD_RUN_PROJECT_ID")
+    if not config.CLOUD_RUN_REGION:
+        missing.append("CLOUD_RUN_REGION")
+    if not config.SERVE_REFRESH_CLOUD_RUN_JOB_NAME:
+        missing.append("SERVE_REFRESH_CLOUD_RUN_JOB_NAME")
+
+    if missing:
+        raise RuntimeError(
+            f"Step 3 Cutover Guardrail: Cloud dispatch is enabled but missing critical configuration: {', '.join(missing)}. "
+            "Ensure these are set in the environment or .env before starting in cloud-serve mode."
+        )
+
+
 def create_app(*, surface: str = "full") -> FastAPI:
+    _validate_cloud_dispatch_config()
     app = FastAPI(title=_surface_title(surface), version="0.1.0")
     app.state.app_surface = str(surface or "full").strip().lower() or "full"
 

@@ -389,6 +389,38 @@ def _run_stage(
     )
 
 
+def _validate_cloud_job_role(
+    *,
+    selected: list[str] | None = None,
+    from_stage: str | None = None,
+    to_stage: str | None = None,
+) -> None:
+    if not config.cloud_job_mode():
+        return
+
+    # Cloud jobs are forbidden from running ingest or source_sync by default.
+    # source_sync can be explicitly allowed via ORCHESTRATOR_ALLOW_EMERGENCY_SYNC for self-healing.
+    # ingest is ALWAYS forbidden in cloud-job mode.
+    strictly_forbidden = {"ingest"}
+    sync_forbidden = {"source_sync"} if not config.ORCHESTRATOR_ALLOW_EMERGENCY_SYNC else set()
+    all_forbidden = strictly_forbidden.union(sync_forbidden)
+
+    requested = {s for s in (from_stage, to_stage) if s}
+    if requested.intersection(all_forbidden):
+        raise RuntimeError(
+            f"Step 3 Cutover Guardrail: APP_RUNTIME_ROLE=cloud-job is forbidden from requesting stages: {sorted(requested.intersection(all_forbidden))}. "
+            "Ingest and Neon source-sync must be performed by a local-ingest host (unless ORCHESTRATOR_ALLOW_EMERGENCY_SYNC is set for sync)."
+        )
+
+    if selected:
+        intersect = all_forbidden.intersection(set(selected))
+        if intersect:
+            raise RuntimeError(
+                f"Step 3 Cutover Guardrail: APP_RUNTIME_ROLE=cloud-job is forbidden from running stages: {sorted(intersect)}. "
+                "Ingest and Neon source-sync must be performed by a local-ingest host (unless ORCHESTRATOR_ALLOW_EMERGENCY_SYNC is set for sync)."
+            )
+
+
 def run_model_pipeline(
     *,
     profile: str,
@@ -406,6 +438,7 @@ def run_model_pipeline(
 ) -> dict[str, Any]:
     resolved_data_db = Path(data_db or DATA_DB).expanduser().resolve()
     resolved_cache_db = Path(cache_db or CACHE_DB).expanduser().resolve()
+    _validate_cloud_job_role(from_stage=from_stage, to_stage=to_stage)
     profile_key, cfg, selected = planned_stages_for_profile(
         profile=profile,
         from_stage=from_stage,
@@ -413,6 +446,7 @@ def run_model_pipeline(
         force_core=bool(force_core),
         skip_source_sync=bool(skip_source_sync),
     )
+    _validate_cloud_job_role(selected=selected)
     prefer_local_source_archive = runtime_support.profile_prefers_local_source_archive(profile_key)
     effective_run_id = (
         str(resume_run_id).strip()
