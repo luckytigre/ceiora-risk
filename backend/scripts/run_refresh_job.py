@@ -56,6 +56,18 @@ def _validate_runtime_assets() -> None:
         )
 
 
+def _validate_cold_core_request(request: dict[str, Any]) -> None:
+    profile = str(request.get("profile") or "").strip().lower()
+    if profile != "cold-core":
+        return
+    from_stage = str(request.get("from_stage") or "").strip()
+    to_stage = str(request.get("to_stage") or "").strip()
+    if from_stage or to_stage:
+        raise RuntimeError(
+            "cold-core does not support partial stage windows in Cloud Run Jobs; use core-weekly or another profile."
+        )
+
+
 def main() -> int:
     profile_env = str(os.getenv("REFRESH_PROFILE", "")).strip()
     if config.cloud_job_mode() and not profile_env:
@@ -68,6 +80,7 @@ def main() -> int:
         force_core=_env_bool("REFRESH_FORCE_CORE"),
         force_risk_recompute=False,
     )
+    _validate_cold_core_request(request)
     pipeline_run_id = str(os.getenv("REFRESH_PIPELINE_RUN_ID", "")).strip() or f"job_{uuid.uuid4().hex[:12]}"
     now = _now_iso()
     _set_state(

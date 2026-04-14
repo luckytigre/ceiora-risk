@@ -112,6 +112,16 @@ def test_invalid_stage_window_is_rejected_before_worker_start() -> None:
         )
 
 
+def test_cold_core_stage_window_is_rejected_before_worker_start() -> None:
+    with pytest.raises(ValueError, match="cold-core does not support partial stage windows"):
+        refresh_manager.start_refresh(
+            force_risk_recompute=False,
+            profile="cold-core",
+            from_stage="factor_returns",
+            to_stage="risk_model",
+        )
+
+
 def test_force_core_conflict_is_rejected_before_worker_start() -> None:
     with pytest.raises(ValueError, match="force_core requires a stage window"):
         refresh_manager.start_refresh(

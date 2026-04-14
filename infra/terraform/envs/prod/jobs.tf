@@ -10,6 +10,7 @@ resource "google_cloud_run_v2_job" "core_weekly" {
   template {
     template {
       service_account = module.service_accounts.email_by_key["jobs"]
+      max_retries     = 1
       timeout         = "7200s"
 
       containers {
@@ -69,7 +70,8 @@ resource "google_cloud_run_v2_job" "cold_core" {
   template {
     template {
       service_account = module.service_accounts.email_by_key["jobs"]
-      timeout         = "14400s"
+      max_retries     = 1
+      timeout         = "9000s"
 
       containers {
         image   = local.control_image_ref
