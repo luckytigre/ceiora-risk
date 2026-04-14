@@ -13,4 +13,4 @@ edge_enabled                    = true
 # serve and control pinned to 2012c3a (Phase 3 Step 3 guardrail + diagnostics fixes).
 frontend_image_ref = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/frontend:latest"
 serve_image_ref    = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/serve:2012c3a"
-control_image_ref  = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:070e442"
+control_image_ref  = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:dfc2352"
