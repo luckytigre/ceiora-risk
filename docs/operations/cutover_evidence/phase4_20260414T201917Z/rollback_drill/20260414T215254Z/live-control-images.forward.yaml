@@ -1,0 +1,91 @@
+== service ==
+spec:
+  template:
+    spec:
+      containers:
+      - env:
+        - name: CLOUD_RUN_JOBS_ENABLED
+          value: 'true'
+        - name: SERVE_REFRESH_CLOUD_RUN_JOB_NAME
+          value: ceiora-prod-serve-refresh
+        - name: COLD_CORE_CLOUD_RUN_JOB_NAME
+          value: ceiora-prod-cold-core
+        - name: CLOUD_RUN_PROJECT_ID
+          value: project-4e18de12-63a3-4206-aaa
+        - name: APP_RUNTIME_ROLE
+          value: cloud-serve
+        - name: CLOUD_RUN_REGION
+          value: us-east4
+        - name: CORE_WEEKLY_CLOUD_RUN_JOB_NAME
+          value: ceiora-prod-core-weekly
+        - name: NEON_AUTHORITATIVE_REBUILDS
+          value: 'true'
+        - name: CPAR_BUILD_CLOUD_RUN_JOB_NAME
+          value: ceiora-prod-cpar-build
+        - name: DATA_BACKEND
+          value: neon
+        - name: OPERATOR_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ceiora-prod-operator-api-token
+        - name: NEON_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ceiora-prod-neon-database-url
+        - name: CORS_ALLOW_ORIGINS
+          value: https://app.ceiora.com,https://api.ceiora.com,https://control.ceiora.com
+        image: us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:8458353-coldcoreguard1
+        ports:
+        - containerPort: 8000
+          name: http1
+        resources:
+          limits:
+            cpu: '1'
+            memory: 1Gi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8000
+          timeoutSeconds: 240
+status:
+  latestReadyRevisionName: ceiora-prod-control-00027-9gv
+  url: https://ceiora-prod-control-i5znti5joq-uk.a.run.app
+== ceiora-prod-serve-refresh ==
+metadata:
+  generation: 28
+status:
+  latestCreatedExecution:
+    completionStatus: EXECUTION_SUCCEEDED
+    completionTimestamp: '2026-04-14T18:51:00.637395Z'
+    creationTimestamp: '2026-04-14T18:47:08.519677Z'
+    name: ceiora-prod-serve-refresh-zbgm5
+== ceiora-prod-core-weekly ==
+metadata:
+  generation: 16
+status:
+  latestCreatedExecution:
+    completionStatus: EXECUTION_SUCCEEDED
+    completionTimestamp: '2026-04-14T20:49:46.973657Z'
+    creationTimestamp: '2026-04-14T20:20:18.887940Z'
+    name: ceiora-prod-core-weekly-pv25b
+== ceiora-prod-cold-core ==
+metadata:
+  generation: 15
+status:
+  latestCreatedExecution:
+    completionStatus: EXECUTION_SUCCEEDED
+    completionTimestamp: '2026-04-14T17:44:46.476917Z'
+    creationTimestamp: '2026-04-14T16:43:23.268752Z'
+    name: ceiora-prod-cold-core-jj7kk
+== ceiora-prod-cpar-build ==
+metadata:
+  generation: 16
+status:
+  latestCreatedExecution:
+    completionStatus: EXECUTION_SUCCEEDED
+    completionTimestamp: '2026-04-13T07:39:14.136355Z'
+    creationTimestamp: '2026-04-13T07:35:41.195449Z'
+    name: ceiora-prod-cpar-build-24f82

@@ -1,0 +1,26 @@
+metadata:
+  creationTimestamp: '2026-04-14T21:50:49.939134Z'
+status:
+  conditions:
+  - lastTransitionTime: '2026-04-14T21:51:01.932657Z'
+    message: Deploying revision succeeded in 11.99s.
+    status: 'True'
+    type: Ready
+  - lastTransitionTime: '2026-04-14T21:51:02.005884Z'
+    severity: Info
+    status: 'True'
+    type: Active
+  - lastTransitionTime: '2026-04-14T21:51:01.895194Z'
+    message: Containers became healthy in 8.03s.
+    status: 'True'
+    type: ContainerHealthy
+  - lastTransitionTime: '2026-04-14T21:50:50.532450Z'
+    message: Container image import completed.
+    status: 'True'
+    type: ContainerReady
+  - lastTransitionTime: '2026-04-14T21:50:53.554088Z'
+    message: Provisioning imported containers completed in 3.02s. Checking container
+      health. This will wait for up to 4m for the configured startup probe, including
+      an initial delay of 0s.
+    status: 'True'
+    type: ResourcesAvailable
