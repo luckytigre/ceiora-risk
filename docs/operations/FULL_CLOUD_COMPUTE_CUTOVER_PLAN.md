@@ -238,6 +238,10 @@ Gate to proceed:
 - topology/operator checks green,
 - current topology contract and runtime truth captured.
 
+This gate only authorizes Day 1 of the stability window.
+It does **not** mean the phase is clean or signoff-ready.
+Any degraded-but-reachable state discovered during the entry capture, such as stale diagnostics, a failed core lane, or disabled parity automation, must be recorded immediately as a Day 1 incident and cleared during the window.
+
 ### 4B. Daily Stability Window (5 business days)
 
 For each business day in the window:

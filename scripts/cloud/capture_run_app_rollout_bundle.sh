@@ -75,6 +75,7 @@ python3 - "${ROLLOUT_BUNDLE_DIR}" "${ROLLOUT_CAPTURE_MODE}" <<'PY'
 import json
 import os
 import pathlib
+import subprocess
 import sys
 from datetime import datetime, timezone
 
@@ -87,8 +88,104 @@ endpoint_mode = outputs["endpoint_mode"]["value"]
 edge_enabled = bool(outputs["edge_enabled"]["value"])
 
 service_urls = outputs["service_urls"]["value"]
-service_image_refs = outputs.get("service_image_refs_applied", {}).get("value") or outputs["service_image_refs"]["value"]
-control_surface_image_refs = outputs.get("control_surface_image_refs_applied", {}).get("value")
+service_names = outputs["service_names"]["value"]
+control_job_names = outputs.get("control_job_names", {}).get("value") or {}
+control_service_job_env = outputs.get("control_service_job_env", {}).get("value") or {}
+public_origins = outputs["public_origins"]["value"]
+hostnames = outputs["hostnames"]["value"]
+
+captured_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _run_json_command(command: list[str]) -> dict:
+    try:
+        raw = subprocess.check_output(command, text=True, stderr=subprocess.STDOUT)
+    except FileNotFoundError as exc:
+        raise SystemExit(
+            "gcloud is required to capture live Cloud Run service/job images from the active deployment."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(
+            "Unable to capture live Cloud Run service/job metadata.\n"
+            f"Command: {' '.join(command)}\n"
+            f"Output:\n{exc.output}"
+        ) from exc
+    return json.loads(raw)
+
+
+def _capture_live_cloud_run_images() -> tuple[dict, dict, dict]:
+    project_id = control_service_job_env.get("CLOUD_RUN_PROJECT_ID")
+    region = control_service_job_env.get("CLOUD_RUN_REGION")
+    if not project_id or not region:
+        raise SystemExit(
+            "Terraform outputs are missing control_service_job_env.CLOUD_RUN_PROJECT_ID/CLOUD_RUN_REGION; "
+            "cannot capture live Cloud Run metadata."
+        )
+
+    service_image_refs = {}
+    service_revisions = {}
+    for key, name in service_names.items():
+        payload = _run_json_command(
+            [
+                "gcloud",
+                "run",
+                "services",
+                "describe",
+                name,
+                f"--project={project_id}",
+                f"--region={region}",
+                "--format=json",
+            ]
+        )
+        service_image_refs[key] = payload["spec"]["template"]["spec"]["containers"][0]["image"]
+        service_revisions[key] = {
+            "latest_created_revision": payload["status"].get("latestCreatedRevisionName"),
+            "latest_ready_revision": payload["status"].get("latestReadyRevisionName"),
+            "observed_generation": payload["status"].get("observedGeneration"),
+        }
+
+    control_surface_image_refs = {
+        "service": service_image_refs["control"],
+    }
+    job_revisions = {}
+    for key, name in control_job_names.items():
+        payload = _run_json_command(
+            [
+                "gcloud",
+                "run",
+                "jobs",
+                "describe",
+                name,
+                f"--project={project_id}",
+                f"--region={region}",
+                "--format=json",
+            ]
+        )
+        manifest_key = f"{key}_job"
+        control_surface_image_refs[manifest_key] = payload["spec"]["template"]["spec"]["template"]["spec"]["containers"][0]["image"]
+        latest_execution = payload.get("status", {}).get("latestCreatedExecution") or {}
+        job_revisions[manifest_key] = {
+            "observed_generation": payload.get("status", {}).get("observedGeneration"),
+            "latest_execution": latest_execution.get("name"),
+            "latest_completion_status": latest_execution.get("completionStatus"),
+        }
+
+    return service_image_refs, control_surface_image_refs, {
+        "services": service_revisions,
+        "jobs": job_revisions,
+    }
+
+
+if "ROLLOUT_SOURCE_OUTPUT_JSON" in os.environ:
+    service_image_refs = outputs.get("service_image_refs_applied", {}).get("value") or outputs["service_image_refs"]["value"]
+    control_surface_image_refs = outputs.get("control_surface_image_refs_applied", {}).get("value")
+    revision_snapshot = {
+        "services": {},
+        "jobs": {},
+    }
+else:
+    service_image_refs, control_surface_image_refs, revision_snapshot = _capture_live_cloud_run_images()
+
 if control_surface_image_refs:
     control_surface_mismatches = {
         key: value
@@ -102,11 +199,6 @@ if control_surface_image_refs:
             f"control service: {control_surface_image_refs['service']}\n"
             + "\n".join(f"{key}: {value}" for key, value in sorted(control_surface_mismatches.items()))
         )
-service_names = outputs["service_names"]["value"]
-public_origins = outputs["public_origins"]["value"]
-hostnames = outputs["hostnames"]["value"]
-
-captured_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 if capture_mode == "cutover-source":
     if not (endpoint_mode == "custom_domains" and edge_enabled):
@@ -135,9 +227,9 @@ manifest = {
     "service_urls": service_urls,
     "service_image_refs": service_image_refs,
     "control_surface_image_refs": control_surface_image_refs,
+    "revision_snapshot": revision_snapshot,
     "bundle_files": {
         "terraform_output_json": "terraform-output.json",
-        "run_app_frontend_image_ref": "run_app_frontend_image_ref.txt",
     },
 }
 
@@ -147,6 +239,9 @@ if capture_mode == "cutover-source":
         "run_app_soak_base_tfvars": "run_app_soak.base.tfvars",
         "run_app_no_edge_base_tfvars": "run_app_no_edge.base.tfvars",
     })
+    manifest["optional_generated_files"] = {
+        "run_app_frontend_image_ref": "run_app_frontend_image_ref.txt",
+    }
 
     rollback_tfvars = f"""# Captured from {outputs_path.name} at {captured_at}
 # Roll back to the pre-cutover custom-domain topology with pinned image refs.
@@ -211,6 +306,7 @@ Recommended next steps:
 
 Important:
 - run_app plan/apply will fail closed until a run.app-built frontend image ref is supplied.
+- run_app_frontend_image_ref.txt is not part of the initial bundle capture; it is created later by CUTOVER_ACTION=build-frontend.
 - rollback_custom_domains.tfvars is the pinned rollback contract captured from the pre-cutover state.
 """
 
@@ -223,6 +319,9 @@ else:
         "rollback_tfvars": "rollback_custom_domains.tfvars",
         "run_app_no_edge_base_tfvars": "run_app_no_edge.base.tfvars",
     })
+    manifest["optional_generated_files"] = {
+        "run_app_frontend_image_ref": "run_app_frontend_image_ref.txt",
+    }
 
     current_topology_tfvars = f"""# Captured from {outputs_path.name} at {captured_at}
 # Current run_app topology pin file for post-cutover config-only changes and rebundling.

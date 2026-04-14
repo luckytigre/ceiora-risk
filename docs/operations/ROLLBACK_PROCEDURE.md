@@ -58,22 +58,77 @@ Record all of the following in the current Phase 4 evidence log:
    - identify the prior known-good service/job revisions if needed
    - confirm the bundle matches the intended topology contract
 3. Restore the cloud deployment to the target bundle
-   - update pinned image refs / rollout inputs to the target known-good values
-   - apply the deployment change using the normal production deployment path
+   - use the repo rollback helper, not an ad hoc Terraform invocation:
+
+```bash
+CUTOVER_ACTION=plan \
+CUTOVER_PHASE=rollback \
+ROLLOUT_BUNDLE_DIR=<bundle_dir> \
+make cloud-run-app-cutover
+```
+
+```bash
+CUTOVER_ACTION=apply \
+CUTOVER_PHASE=rollback \
+ROLLOUT_BUNDLE_DIR=<bundle_dir> \
+ALLOW_TERRAFORM_APPLY=1 \
+make cloud-run-app-cutover
+```
+
+   - this path renders `rollback_custom_domains.tfvars` from the bundle and applies it through `scripts/cloud/run_app_cutover.sh`
+   - if the bundle is not self-consistent with the current live state, stop and recapture a fresh bundle rather than overriding drift by hand
 4. Re-verify topology
-   - run `make cloud-topology-check`
+   - run:
+
+```bash
+APP_BASE_URL=https://app.ceiora.com \
+CONTROL_BASE_URL=https://control.ceiora.com \
+OPERATOR_API_TOKEN=<operator-token> \
+make cloud-topology-check
+```
+
    - confirm `endpoint_mode`, `edge_enabled`, and `public_origins`
    - confirm service/job image digests match the target bundle
 5. Re-verify operator/runtime behavior
-   - run `make operator-check`
+   - run:
+
+```bash
+APP_BASE_URL=https://app.ceiora.com \
+CONTROL_BASE_URL=https://control.ceiora.com \
+OPERATOR_API_TOKEN=<operator-token> \
+make operator-check
+```
+
    - capture:
      - `/api/operator/status`
      - `/api/refresh/status`
      - `/api/health/diagnostics`
      - `/api/cpar/meta`
 6. Only after rollback is green, execute forward recovery
-   - restore the intended current bundle
-   - rerun the same topology/operator checks
+   - if forward recovery is still intended, use the same helper path against the forward bundle:
+
+```bash
+CUTOVER_ACTION=plan \
+CUTOVER_PHASE=<soak|no-edge> \
+ROLLOUT_BUNDLE_DIR=<forward_bundle_dir> \
+make cloud-run-app-cutover
+```
+
+```bash
+CUTOVER_ACTION=apply \
+CUTOVER_PHASE=<soak|no-edge> \
+ROLLOUT_BUNDLE_DIR=<forward_bundle_dir> \
+ALLOW_TERRAFORM_APPLY=1 \
+make cloud-run-app-cutover
+```
+
+   - rerun the same topology/operator checks after forward recovery
+
+### Operator Notes
+
+- `CUTOVER_ACTION=verify ROLLOUT_BUNDLE_DIR=<bundle_dir> OPERATOR_API_TOKEN=<operator-token> make cloud-run-app-cutover` is the preferred wrapper when you want the helper to execute the topology-aware live verification path directly.
+- The rollback bundle must reflect the **live** service and job image refs at capture time. A bundle derived only from stale Terraform state is not sufficient for a rollback drill.
+- A Phase 4 entry-gate evidence file is not a rollback drill artifact. The rollback section must be populated with real command transcripts and restored-state evidence before the drill counts.
 
 ### Success Criteria
 
