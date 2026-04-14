@@ -1,0 +1,102 @@
+{
+  "apiVersion": "run.googleapis.com/v1",
+  "kind": "Job",
+  "metadata": {
+    "annotations": {
+      "run.googleapis.com/creator": "shaun.skc@gmail.com",
+      "run.googleapis.com/lastModifier": "shaun.skc@gmail.com",
+      "run.googleapis.com/operation-id": "8b751503-1bf5-4ee6-8c65-9a5f353452c0"
+    },
+    "creationTimestamp": "2026-03-31T00:35:55.532807Z",
+    "generation": 12,
+    "labels": {
+      "cloud.googleapis.com/location": "us-east4",
+      "goog-terraform-provisioned": "true",
+      "run.googleapis.com/lastUpdatedTime": "2026-04-14T18:46:19.062749Z",
+      "run.googleapis.com/satisfiesPzs": "true"
+    },
+    "name": "ceiora-prod-cold-core",
+    "namespace": "799021330046",
+    "resourceVersion": "AAZPcAPRN6U",
+    "selfLink": "/apis/run.googleapis.com/v1/namespaces/799021330046/jobs/ceiora-prod-cold-core",
+    "uid": "3ca9db03-6caa-4ce7-bd0e-ee8be5f83fa3"
+  },
+  "spec": {
+    "template": {
+      "metadata": {
+        "annotations": {
+          "run.googleapis.com/execution-environment": "gen2"
+        }
+      },
+      "spec": {
+        "taskCount": 1,
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "command": [
+                  "python",
+                  "-m",
+                  "backend.scripts.run_refresh_job"
+                ],
+                "env": [
+                  {
+                    "name": "REFRESH_PROFILE",
+                    "value": "cold-core"
+                  },
+                  {
+                    "name": "APP_RUNTIME_ROLE",
+                    "value": "cloud-job"
+                  },
+                  {
+                    "name": "NEON_AUTHORITATIVE_REBUILDS",
+                    "value": "true"
+                  },
+                  {
+                    "name": "DATA_BACKEND",
+                    "value": "neon"
+                  },
+                  {
+                    "name": "NEON_DATABASE_URL",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "key": "latest",
+                        "name": "ceiora-prod-neon-database-url"
+                      }
+                    }
+                  }
+                ],
+                "image": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:2d8b11f",
+                "resources": {
+                  "limits": {
+                    "cpu": "8",
+                    "memory": "32Gi"
+                  }
+                }
+              }
+            ],
+            "maxRetries": 3,
+            "serviceAccountName": "ceioraprodjobs@project-4e18de12-63a3-4206-aaa.iam.gserviceaccount.com",
+            "timeoutSeconds": "14400"
+          }
+        }
+      }
+    }
+  },
+  "status": {
+    "conditions": [
+      {
+        "status": "True",
+        "type": "Ready"
+      }
+    ],
+    "executionCount": 10,
+    "latestCreatedExecution": {
+      "completionStatus": "EXECUTION_SUCCEEDED",
+      "completionTimestamp": "2026-04-14T17:44:46.476917Z",
+      "creationTimestamp": "2026-04-14T16:43:23.268752Z",
+      "name": "ceiora-prod-cold-core-jj7kk"
+    },
+    "observedGeneration": 12
+  }
+}
