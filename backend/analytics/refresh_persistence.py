@@ -120,14 +120,17 @@ def _apply_current_membership_to_universe_payload(
         data_db=data_db,
         universe_payload=universe_payload,
     )
-    _assert_current_membership_coverage(
-        universe_payload=universe_payload,
-        membership_lookup=membership_lookup,
-    )
     if not membership_lookup:
+        # Membership is completely absent — fail hard so the publish is blocked
+        # rather than serving a universe with no membership truth applied.
+        _assert_current_membership_coverage(
+            universe_payload=universe_payload,
+            membership_lookup=membership_lookup,
+        )
         return universe_payload, False
 
     updated = False
+    dropped: list[str] = []
     updated_by_ticker: dict[str, dict[str, Any]] = {}
     for ticker, raw_row in by_ticker.items():
         row = dict(raw_row or {})
@@ -140,7 +143,12 @@ def _apply_current_membership_to_universe_payload(
         if membership_row is None and as_of_date and clean_ric:
             membership_row = membership_lookup.get((as_of_date, clean_ric))
         if membership_row is None:
-            updated_by_ticker[ticker] = row
+            # Membership exists for the core set but this ticker has no row —
+            # it is outside the modelled universe (e.g. an ETF price ticker that
+            # was never admitted by security_registry). Drop it from the serving
+            # payload so the universe stays consistent with what was modelled.
+            dropped.append(clean_ticker or clean_ric or ticker)
+            updated = True
             continue
 
         overlay = membership_row_to_overlay(
@@ -161,17 +169,28 @@ def _apply_current_membership_to_universe_payload(
         updated_by_ticker[ticker] = row
         updated = True
 
+    if dropped:
+        logger.warning(
+            "Dropped %d tickers from serving universe with no cUSE membership coverage: %s%s",
+            len(dropped),
+            ", ".join(sorted(dropped)[:20]),
+            "" if len(dropped) <= 20 else f" ... (+{len(dropped) - 20} more)",
+        )
+
     if not updated:
         return universe_payload, False
 
     updated_payload = dict(universe_payload)
     updated_payload["by_ticker"] = updated_by_ticker
 
+    dropped_set = set(dropped)
     if isinstance(updated_payload.get("index"), list):
         updated_index: list[dict[str, Any]] = []
         for raw_index_row in updated_payload["index"]:
             index_row = dict(raw_index_row or {})
             clean_ticker = str(index_row.get("ticker") or "").strip().upper()
+            if clean_ticker in dropped_set:
+                continue
             source_row = updated_by_ticker.get(clean_ticker)
             if source_row is not None:
                 for field in _UNIVERSE_OVERLAY_FIELDS:

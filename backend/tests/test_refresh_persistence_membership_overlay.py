@@ -321,3 +321,119 @@ def test_persist_refresh_outputs_fails_closed_when_membership_truth_is_missing(
             specific_risk_by_security={},
             persisted_payloads=persisted_payloads,
         )
+
+
+def test_persist_refresh_outputs_drops_tickers_not_in_membership_when_membership_is_present(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Tickers with no membership row are silently dropped when the membership table
+    is non-empty — e.g. ETF price tickers admitted by Neon prices but never modelled.
+    Contrast with the fully-absent case above, which should fail hard."""
+    data_db = tmp_path / "data.db"
+    cache_db = tmp_path / "cache.db"
+    # Seed membership for SPY and QQQ only; AAXJ has no membership row.
+    conn = sqlite3.connect(str(data_db))
+    conn.execute(
+        """
+        CREATE TABLE cuse_security_membership_daily (
+            as_of_date TEXT NOT NULL, ric TEXT, ticker TEXT NOT NULL,
+            policy_path TEXT NOT NULL, realized_role TEXT NOT NULL,
+            output_status TEXT NOT NULL, projection_candidate_status TEXT NOT NULL,
+            projection_output_status TEXT NOT NULL, reason_code TEXT,
+            quality_label TEXT NOT NULL, source_snapshot_status TEXT NOT NULL,
+            projection_method TEXT, projection_basis_status TEXT NOT NULL,
+            projection_source_package_date TEXT,
+            served_exposure_available INTEGER NOT NULL DEFAULT 0,
+            run_id TEXT NOT NULL, updated_at TEXT NOT NULL,
+            PRIMARY KEY (as_of_date, ticker)
+        )
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO cuse_security_membership_daily (
+            as_of_date, ric, ticker, policy_path, realized_role, output_status,
+            projection_candidate_status, projection_output_status, reason_code,
+            quality_label, source_snapshot_status, projection_method,
+            projection_basis_status, projection_source_package_date,
+            served_exposure_available, run_id, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ("2026-03-26", "SPY.P", "SPY", "core", "core_estimated", "served",
+             "not_applicable", "not_applicable", None, "core", "served_snapshot",
+             None, "not_applicable", None, 1, "run_1", "2026-03-26T00:01:00Z"),
+            ("2026-03-26", "QQQ.OQ", "QQQ", "returns_projection_candidate",
+             "projected_returns", "served", "candidate", "available",
+             "projected_returns_regression", "projected", "served_snapshot",
+             "peer_returns_regression", "available", "2026-03-26", 1, "run_1",
+             "2026-03-26T00:01:00Z"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        refresh_persistence.model_outputs,
+        "persist_model_outputs",
+        lambda **kwargs: {"status": "ok", "run_id": kwargs["run_id"]},
+    )
+    monkeypatch.setattr(
+        refresh_persistence.serving_outputs,
+        "persist_current_payloads",
+        lambda **kwargs: captured.update({"payloads": kwargs["payloads"]}) or {"status": "ok"},
+    )
+    monkeypatch.setattr(refresh_persistence.runtime_state, "persist_runtime_state", lambda *a, **kw: {"status": "ok"})
+    monkeypatch.setattr(refresh_persistence.runtime_state, "publish_active_snapshot", lambda *a, **kw: {"status": "ok"})
+
+    persisted_payloads = {
+        "universe_loadings": {
+            "as_of_date": "2026-03-26",
+            "index": [
+                {"ticker": "SPY", "ric": "SPY.P"},
+                {"ticker": "QQQ", "ric": "QQQ.OQ"},
+                {"ticker": "AAXJ", "ric": "AAXJ.O"},  # ETF — no membership row
+            ],
+            "by_ticker": {
+                "SPY": {"ticker": "SPY", "ric": "SPY.P", "as_of_date": "2026-03-26",
+                        "model_status": "core_estimated", "exposure_origin": "native",
+                        "model_warning": "", "exposures": {"market": 0.9}},
+                "QQQ": {"ticker": "QQQ", "ric": "QQQ.OQ", "as_of_date": "2026-03-26",
+                        "model_status": "projected_only", "exposure_origin": "projected_returns",
+                        "model_warning": "", "exposures": {"market": 1.0}},
+                "AAXJ": {"ticker": "AAXJ", "ric": "AAXJ.O", "as_of_date": "2026-03-26",
+                         "model_status": "ineligible", "exposure_origin": "native",
+                         "model_warning": "", "exposures": {}},
+            },
+        },
+        "portfolio": {"positions": [], "position_count": 0, "total_value": 0.0},
+        "exposures": {"raw": [], "sensitivity": [], "risk_contribution": []},
+    }
+
+    refresh_persistence.persist_refresh_outputs(
+        data_db=data_db,
+        cache_db=cache_db,
+        run_id="run_1",
+        snapshot_id="run_1",
+        refresh_mode="light",
+        refresh_started_at="2026-03-26T00:00:00Z",
+        recomputed_this_refresh=True,
+        params={},
+        source_dates={"exposures_asof": "2026-03-26"},
+        risk_engine_state={"core_state_through_date": "2026-03-26"},
+        cov=None,
+        specific_risk_by_security={},
+        persisted_payloads=persisted_payloads,
+    )
+
+    published_universe = captured["payloads"]["universe_loadings"]["by_ticker"]
+    assert "SPY" in published_universe
+    assert "QQQ" in published_universe
+    assert "AAXJ" not in published_universe, "ETF ticker with no membership row must be dropped"
+
+    published_index_tickers = {
+        row["ticker"] for row in captured["payloads"]["universe_loadings"].get("index", [])
+    }
+    assert "AAXJ" not in published_index_tickers, "ETF ticker must also be dropped from index"
