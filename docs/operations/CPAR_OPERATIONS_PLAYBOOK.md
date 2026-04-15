@@ -6,6 +6,17 @@ Owner: Codex
 
 This document describes the current cPAR runtime and operating assumptions.
 
+## 2026-04-15 Recovery Note
+
+The April 15, 2026 production repair is now part of the current cPAR operating baseline.
+
+- The root defect was not a bad active package fit set. It was broken runtime coverage: package-date price presence had been derived from the wrong authority, so healthy fit rows were exposed as `missing_price`.
+- The repair moved package-time price presence back onto the authoritative shared-source read path and kept holdings/package identifier mismatch separate from true missing-price states.
+- Post-recovery production validation:
+  - active package-date coverage is healthy for names such as `SPY.P`, `QQQ.OQ`, `URA.P`, `ASML.OQ`, `APO.N`, and `IBKR.OQ`
+  - aggregate cPAR risk is healthy with `portfolio_status = ok`, `covered_positions_count = 24`, `missing_price = 0`, and `missing_cpar_fit = 0`
+- The full cross-model remediation record, including the cUSE side of the same recovery window, lives in [CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN.md).
+
 Related references:
 - [CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md)
 - [CPAR_ORCHESTRATION.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CPAR_ORCHESTRATION.md)

@@ -38,6 +38,17 @@
   - `cold-core` (full historical rebuild path)
   - `universe-add` (post-onboarding finalization lane)
 
+## 2026-04-15 Authority Recovery
+- The April 15, 2026 production recovery repaired two separate cUSE authority defects:
+  - serving publish must use the candidate run's cUSE membership artifact, not `MAX(as_of_date)` membership history
+  - serving-only projected ETF reloads must use authoritative persisted projection scope and factor identity mapping, not SQLite selector state or brittle factor-label text matching
+- The same recovery also repaired the cPAR package/runtime-coverage defect by deriving package-date price presence from the shared-source authority path instead of a stale local-only path.
+- Healthy post-recovery production state:
+  - cUSE live universe: `4159` tickers, `2983` `core_estimated`, `258` `projected_only`
+  - returns-projected ETF cohort restored: `SPY`, `QQQ`, `URA`, `XLE`, `SMH`
+  - cPAR aggregate risk restored with `covered_positions_count = 24`, `missing_price = 0`, `missing_cpar_fit = 0`
+- The full implementation record and validation trail live in [CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN.md).
+
 ## Hobby Launch Profile (Low Cost, 1-2 Users)
 - Run a single backend process/worker only.
 - Keep SQLite local and persistent on disk (no shared multi-node writes).
@@ -119,9 +130,10 @@
   - existing identifiers that are already fully initialized in Neon continue to use the normal overlap-window sync
   - newly introduced or partially initialized identifiers receive retained-history backfill from local SQLite up to Neon's retained-history floor
 - This prevents the Neon-primary app from seeing truncated history after a local ticker add/backfill.
-- `source-daily-plus-core-if-due`: default daily maintenance lane; local ingest + Neon source-sync first, then recompute core only when cadence/version says due.
-- `core-weekly`: force core recompute without rebuilding full raw history.
+- `source-daily-plus-core-if-due`: default daily maintenance lane; local ingest + Neon source-sync first, then refresh a recent daily slice of `barra_raw_cross_section_history` so fresh prices can propagate into served loadings, and recompute factor returns/risk only when cadence/version says due.
+- `core-weekly`: force core recompute with a recent-window raw-history rebuild, without rebuilding full raw history.
   - factor-return recompute now determines uncached dates before loading prices and only reads the bounded price window needed for those dates plus the immediately prior session.
+  - it also refreshes a recent daily slice of `barra_raw_cross_section_history` before factor returns/risk so refreshed prices can propagate into served loadings without requiring `cold-core`
   - when projection-only instruments are registered, this lane also refreshes their persisted projected outputs from durable `model_factor_returns_daily` for the active core package date.
   - this lane now owns deep `health_diagnostics` recompute for the current weekly core model state.
   - during the `serving_refresh` stage inside this lane, app-facing payloads still publish before deep diagnostics; the rest of the stage is diagnostics tail work plus diagnostics persistence

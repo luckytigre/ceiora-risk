@@ -1,10 +1,10 @@
 # cUSE / cPAR Authority And Read-Surface Plan
 
 Date: 2026-04-14
-Status: Active implementation plan for cUSE/cPAR authority, serving, projection, and coverage remediation
+Status: Implemented remediation record and residual hardening plan for cUSE/cPAR authority, serving, projection, and coverage semantics
 Owner: Codex
 
-This document is the implementation anchor for the current cUSE and cPAR fixes.
+This document is the implementation anchor and permanent remediation record for the 2026-04-15 cUSE/cPAR authority recovery.
 
 It exists to prevent the repo from solving these issues by adding more late-stage conditionals and compatibility branches. The work should instead tighten artifact ownership, identifier semantics, date semantics, and publication/read-path contracts so the system becomes easier to reason about and harder to degrade silently.
 
@@ -215,15 +215,31 @@ Completed on 2026-04-15:
   - `AAL` and `AAPL` remain healthy `core_estimated` names
   - `ASML` remains healthy as `projected_only` with `projection_method = native_characteristic_projection`
 
-Next in sequence:
-- implement the cUSE membership-authority refactor below
-- deploy that refactor
-- run a serving-lane recovery using the already rebuilt core artifacts rather than another `cold-core`
-- verify that live `universe_loadings` recovers modeled core and projected ETF coverage without rerunning the expensive bootstrap lane
-- keep package-time coverage semantics separate from live valuation semantics when assembling dashboard/portfolio payloads
-- finish replacing the cUSE exact-date membership overlay with a current-authority join that no longer depends on the served exposure date matching the current membership date
-- enforce projection-output presence as a first-class publish prerequisite for returns-projected and fundamental-projected cUSE names
-- decide whether the next shared identity seam should live as a cPAR-specific package resolver or a broader `security_identity_service`
+## Recovery Summary
+
+The 2026-04-15 recovery is complete.
+
+- cPAR is healthy again because package-time runtime coverage now uses the authoritative shared-source price path, portfolio coverage no longer collapses identifier-mismatch and no-fit cases into `missing_price`, and the repaired control image was used to rebuild the active `2026-04-10` package.
+- cUSE is healthy again because serving publish now uses the candidate run's membership artifact rather than `MAX(as_of_date)` history, projected ETF outputs persist durably to Neon, serving-only lanes honor the latest projection package date, returns-projection scope is sourced from authoritative persisted membership truth, and projected factor tokens are resolved through the factor identity catalog before serving assembly.
+- Normal maintenance lanes no longer depend on `cold-core` just to advance served loadings freshness:
+  - `source-daily-plus-core-if-due` and `core-weekly` now rebuild a recent daily raw-history window before serving
+  - the raw-history builder now gates date slices through date-appropriate runtime/source-observation membership when that history exists, rather than reusing one current runtime universe across every historical date in the batch
+- The live end state after `ceiora-prod-serve-refresh-jzkb5` is the intended one:
+  - `ticker_count = 4159`
+  - `core_estimated_ticker_count = 2983`
+  - `projected_only_ticker_count = 258`
+  - `SPY`, `QQQ`, `URA`, `XLE`, and `SMH` serve as `projected_only` via `projected_returns`
+  - `AAL` and `AAPL` serve as `core_estimated`
+  - `ASML` serves as `projected_only` via `native_characteristic_projection`
+
+## Residual Hardening
+
+The following items remain worthwhile, but they are not blockers for the repaired production state:
+
+- harden non-production workspace/canonical fallback so projection artifacts cannot blend just because they share an `as_of_date`
+- add stricter fail-closed checks for partial projected factor-vector loss or factor-label drift
+- decide whether the next identity seam should remain cPAR-package-specific or move into a broader shared `security_identity_service`
+- keep package-time coverage semantics and live valuation semantics separate in future dashboard/read-surface expansions
 
 ## Goals
 
