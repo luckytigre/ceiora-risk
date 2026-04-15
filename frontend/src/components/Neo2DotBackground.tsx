@@ -189,6 +189,7 @@ const RENDERERS: Record<BgMode, (ctx: CanvasRenderingContext2D, w: number, h: nu
 /* Parallax: viewport-sized canvas (position:fixed), shifted via GPU transform */
 const PARALLAX_RATE = 0.18;
 const OVERSCAN = 0.7;
+const DRAW_PADDING = 96;
 
 export default function Neo2DotBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -202,7 +203,14 @@ export default function Neo2DotBackground() {
 
     const draw = () => {
       const w = window.innerWidth;
-      const h = Math.ceil(window.innerHeight * (1 + OVERSCAN));
+      const viewportH = window.innerHeight;
+      const docH = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+        viewportH,
+      );
+      const scrollExtent = Math.max(docH - viewportH, 0);
+      const h = Math.ceil(viewportH * (1 + OVERSCAN) + scrollExtent * PARALLAX_RATE + DRAW_PADDING);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
@@ -219,7 +227,14 @@ export default function Neo2DotBackground() {
 
     const onResize = () => requestAnimationFrame(draw);
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
+    resizeObserver.observe(document.documentElement);
+    resizeObserver.observe(document.body);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      resizeObserver.disconnect();
+    };
   }, [mode]);
 
   /* Scroll-driven parallax — pure GPU transform, no re-rendering */

@@ -5552,7 +5552,7 @@ main {
 }
 
 .public-text-shell {
-  width: min(1040px, 100%);
+  width: 100%;
   margin: 0 auto;
   padding: 0 32px;
 }
@@ -5612,7 +5612,7 @@ main {
 
 .public-text-intro {
   gap: 16px;
-  max-width: 900px;
+  max-width: 1180px;
 }
 
 .public-text-headline,
@@ -5624,7 +5624,7 @@ main {
 }
 
 .public-text-headline {
-  max-width: 24ch;
+  max-width: 18ch;
   font-size: clamp(26px, 3.8vw, 40px);
 }
 
@@ -5635,15 +5635,19 @@ main {
 
 .public-text-copy,
 .public-login-copy,
-.public-engine-content p {
+.public-engine-card p {
   margin: 0;
-  color: rgba(210, 217, 228, 0.78);
   font-size: 16px;
   line-height: 1.7;
 }
 
 .public-text-copy {
-  max-width: 78ch;
+  color: rgba(210, 217, 228, 0.78);
+  max-width: 72ch;
+}
+
+.public-login-copy {
+  color: rgba(210, 217, 228, 0.78);
 }
 
 .public-text-actions,
@@ -5680,48 +5684,121 @@ main {
 
 .public-engine-copy {
   margin-top: 56px;
-  border-top: 1px solid rgba(154, 171, 214, 0.12);
-}
-
-.public-engine-line {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 28px;
-  padding: 26px 0;
-  border-bottom: 1px solid rgba(154, 171, 214, 0.12);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
-.public-engine-name {
-  color: rgba(236, 240, 249, 0.95);
-  font-size: 28px;
-  font-weight: 300;
-  letter-spacing: -0.04em;
+.public-engine-card {
+  display: grid;
+  grid-template-rows: 76px auto minmax(232px, 1fr);
+  gap: 18px;
+  min-height: 100%;
+  padding: 18px 18px 20px;
+  background: rgba(242, 241, 241, 0.96);
+  color: #111318;
+  box-shadow: 0 10px 28px rgba(2, 6, 14, 0.18);
+  overflow: visible;
+}
+
+.public-engine-step {
+  min-height: 72px;
+  display: flex;
+  align-items: flex-start;
+  overflow: visible;
+}
+
+.public-engine-step-number {
+  color: #111318;
+  font-size: clamp(3rem, 5vw, 4.1rem);
+  letter-spacing: -0.06em;
   line-height: 1;
-}
-
-.public-engine-prefix {
+  font-weight: 300;
+  white-space: nowrap;
   display: inline-block;
-  margin-right: 0.04em;
-  transform: translateY(0.06em);
+  width: fit-content;
+  padding: 4px 4px 6px 0;
 }
 
-.public-engine-content {
+.public-engine-preview {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1.55 / 0.86;
+  background: #05070c;
   display: grid;
-  gap: 8px;
-  max-width: 62ch;
+  place-items: center;
 }
 
-.public-engine-content h2 {
+.public-engine-card-copy {
+  display: grid;
+  grid-template-rows: 92px 1px minmax(128px, 1fr);
+  gap: 12px;
+  align-content: start;
+}
+
+.public-engine-card-copy h2 {
   margin: 0;
-  color: rgba(244, 247, 255, 0.96);
-  font-size: 20px;
-  font-weight: 560;
-  letter-spacing: -0.03em;
+  color: #111318;
+  font-size: clamp(1.9rem, 3vw, 2.4rem);
+  font-weight: 420;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  align-self: start;
+}
+
+.public-engine-rule {
+  width: 100%;
+  height: 1px;
+  background: rgba(17, 19, 24, 0.26);
 }
 
 .public-login-form {
-  gap: 14px;
   width: min(420px, 100%);
+}
+
+.public-engine-card p {
+  color: rgba(17, 19, 24, 0.88);
+  font-size: 14px;
+  line-height: 1.34;
+  align-self: start;
+}
+
+.public-engine-preview-placeholder {
+  position: relative;
+  width: min(108px, 34%);
+  aspect-ratio: 1.28 / 1;
+  border: 1.5px solid rgba(209, 215, 227, 0.54);
+  border-radius: 2px;
+}
+
+.public-engine-preview-sun {
+  position: absolute;
+  top: 16%;
+  right: 14%;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid rgba(209, 215, 227, 0.54);
+  border-radius: 999px;
+}
+
+.public-engine-preview-ridge {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  border-bottom: 1.5px solid rgba(209, 215, 227, 0.54);
+  transform-origin: left center;
+}
+
+.public-engine-preview-ridge-back {
+  bottom: 28%;
+  height: 26%;
+  clip-path: polygon(0 100%, 22% 52%, 43% 72%, 60% 30%, 82% 64%, 100% 42%, 100% 100%);
+}
+
+.public-engine-preview-ridge-front {
+  bottom: 18%;
+  height: 20%;
+  clip-path: polygon(0 100%, 18% 58%, 38% 78%, 56% 46%, 74% 68%, 100% 28%, 100% 100%);
 }
 
 .public-login-loader-wrap {
@@ -6087,6 +6164,12 @@ main {
   pointer-events: none;
 }
 
+@media (max-width: 1180px) {
+  .public-engine-copy {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .dash-tabs-brand-cluster {
     min-width: 120px;
@@ -6122,8 +6205,8 @@ main {
     padding: 32px 28px 36px;
   }
 
-  .public-engine-line {
-    grid-template-columns: 150px minmax(0, 1fr);
+  .public-engine-copy {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -6185,20 +6268,37 @@ main {
     padding-right: 16px;
   }
 
-  .public-intro-header {
-    margin-bottom: 28px;
-  }
-
   .public-text-headline,
   .public-login-headline {
     max-width: none;
     font-size: clamp(2.5rem, 12vw, 4rem);
   }
 
-  .public-engine-line {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 20px 0;
+  .public-engine-copy {
+    gap: 14px;
+    margin-top: 42px;
+  }
+
+  .public-engine-card {
+    grid-template-rows: 64px auto minmax(204px, 1fr);
+    gap: 14px;
+    padding: 14px 14px 18px;
+  }
+
+  .public-engine-step {
+    min-height: 60px;
+  }
+
+  .public-engine-step-number {
+    font-size: clamp(2.7rem, 12vw, 3.5rem);
+  }
+
+  .public-engine-card-copy {
+    grid-template-rows: 92px 1px minmax(120px, 1fr);
+  }
+
+  .public-engine-card-copy h2 {
+    font-size: clamp(1.65rem, 8vw, 2.1rem);
   }
 
   .public-text-actions,
