@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useMemo, useState } from "react";
+import LandingBackgroundLock from "@/components/LandingBackgroundLock";
 import { DEFAULT_APP_HOME_PATH, normalizeReturnTo } from "@/lib/appAccess";
+
+const LOGIN_CAPABILITIES = [
+  "cUSE exposure reading and factor decomposition",
+  "cPAR portfolio risk, hedging, and what-if workflows",
+  "Operator health, refresh state, and package publication controls",
+] as const;
 
 export default function LoginPage() {
   return (
@@ -50,17 +57,19 @@ function LoginPageInner() {
     }
   }
 
-  return <LoginShell
-    username={username}
-    password={password}
-    status={status}
-    errorMessage={errorMessage}
-    configError={configError}
-    returnTo={returnTo}
-    onUsernameChange={setUsername}
-    onPasswordChange={setPassword}
-    onSubmit={handleSubmit}
-  />;
+  return (
+    <LoginShell
+      username={username}
+      password={password}
+      status={status}
+      errorMessage={errorMessage}
+      configError={configError}
+      returnTo={returnTo}
+      onUsernameChange={setUsername}
+      onPasswordChange={setPassword}
+      onSubmit={handleSubmit}
+    />
+  );
 }
 
 type LoginShellProps = {
@@ -87,62 +96,79 @@ function LoginShell({
   onSubmit,
 }: LoginShellProps) {
   return (
-    <div className="settings-page">
-      <div className="settings-shell chart-card" style={{ maxWidth: 560 }}>
-        <div className="settings-header">
-          <div className="settings-kicker">Sign in</div>
-          <div className="settings-section-desc">
-            Shared app login for the protected Ceiora dashboard surfaces.
-          </div>
-        </div>
+    <>
+      <LandingBackgroundLock />
+      <div className="public-auth-page">
+        <div className="public-auth-shell">
+          <section className="public-auth-aside chart-card" aria-label="Ceiora access overview">
+            <div className="public-kicker">Shared access</div>
+            <h1 className="public-auth-headline">Sign in to the Ceiora operator surface.</h1>
+            <p className="public-auth-copy">
+              The protected app combines the cUSE and cPAR families with portfolio workflows, diagnostics, and serving controls
+              behind one shared login.
+            </p>
 
-        <form onSubmit={onSubmit} className="settings-section">
-          <div className="settings-auth-grid">
-            <label className="settings-auth-card">
-              <span className="settings-option-label">Username</span>
-              <input
-                type="text"
-                autoComplete="username"
-                className="settings-auth-input"
-                value={username}
-                onChange={(event) => onUsernameChange?.(event.target.value)}
-                placeholder="Shared account username"
-              />
-            </label>
-            <label className="settings-auth-card">
-              <span className="settings-option-label">Password</span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                className="settings-auth-input"
-                value={password}
-                onChange={(event) => onPasswordChange?.(event.target.value)}
-                placeholder="Shared account password"
-              />
-            </label>
-          </div>
-
-          {(configError || errorMessage) && (
-            <div style={{ marginTop: 14, color: "rgba(204,53,88,0.95)" }}>
-              {configError ? "App auth is not configured yet." : errorMessage}
+            <div className="public-auth-capability-list">
+              {LOGIN_CAPABILITIES.map((capability) => (
+                <div key={capability} className="public-auth-capability">
+                  {capability}
+                </div>
+              ))}
             </div>
-          )}
 
-          <div className="settings-auth-footer" style={{ marginTop: 18 }}>
-            <div className="settings-option-help">
-              After sign-in you will be returned to <code>{returnTo}</code>.
+            <div className="public-auth-return">
+              <span className="public-panel-kicker">Return target</span>
+              <code>{returnTo}</code>
             </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <Link href="/" className="settings-auth-clear">
-                Back
+          </section>
+
+          <form onSubmit={onSubmit} className="public-auth-card chart-card">
+            <div className="public-panel-kicker">Authentication</div>
+            <h2 className="public-auth-form-title">Use the shared app credentials.</h2>
+            <p className="public-auth-form-copy">
+              After sign-in you will be routed directly to the requested protected surface.
+            </p>
+
+            <div className="public-auth-form-grid">
+              <label className="public-auth-field">
+                <span>Username</span>
+                <input
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => onUsernameChange?.(event.target.value)}
+                  placeholder="Shared account username"
+                />
+              </label>
+              <label className="public-auth-field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => onPasswordChange?.(event.target.value)}
+                  placeholder="Shared account password"
+                />
+              </label>
+            </div>
+
+            {(configError || errorMessage) && (
+              <div className="public-auth-message" aria-live="polite">
+                {configError ? "App auth is not configured yet." : errorMessage}
+              </div>
+            )}
+
+            <div className="public-auth-actions">
+              <Link href="/" className="public-secondary-link">
+                Back to overview
               </Link>
               <button type="submit" className="btn btn-secondary" disabled={status === "submitting"}>
                 {status === "submitting" ? "Signing in..." : "Sign in"}
               </button>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
