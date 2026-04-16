@@ -128,7 +128,7 @@ def test_portfolio_whatif_apply_route_returns_service_payload(monkeypatch) -> No
     assert body["row_results"][0]["action"] == "replace"
 
 
-def test_portfolio_whatif_preview_requires_operator_token_in_cloud(monkeypatch) -> None:
+def test_portfolio_whatif_preview_does_not_require_operator_token_in_cloud(monkeypatch) -> None:
     monkeypatch.setattr(portfolio_routes.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(portfolio_routes.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
@@ -138,8 +138,8 @@ def test_portfolio_whatif_preview_requires_operator_token_in_cloud(monkeypatch) 
     client = TestClient(app)
     payload = {"scenario_rows": [{"account_id": "acct_a", "ticker": "AAA", "quantity": 20}]}
 
-    assert client.post("/api/portfolio/whatif", json=payload).status_code == 401
-    assert client.post("/api/portfolio/whatif", json=payload, headers={"X-Refresh-Token": "op-secret"}).status_code == 401
+    assert client.post("/api/portfolio/whatif", json=payload).status_code == 200
+    assert client.post("/api/portfolio/whatif", json=payload, headers={"X-Refresh-Token": "op-secret"}).status_code == 200
     assert client.post("/api/portfolio/whatif", json=payload, headers={"X-Operator-Token": "op-secret"}).status_code == 200
 
 

@@ -55,15 +55,7 @@ async def get_portfolio():
 @router.post("/portfolio/whatif")
 async def post_portfolio_whatif(
     payload: WhatIfPreviewRequest,
-    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
-    authorization: str | None = Header(default=None),
 ):
-    if config.cloud_mode():
-        require_role(
-            "operator",
-            x_operator_token=x_operator_token,
-            authorization=authorization,
-        )
     scenario_rows = [dict(row) for row in payload.model_dump().get("scenario_rows", [])]
     if len(scenario_rows) > MAX_WHATIF_SCENARIO_ROWS:
         raise HTTPException(status_code=400, detail=f"Too many what-if rows. Max {MAX_WHATIF_SCENARIO_ROWS}.")
