@@ -5524,6 +5524,14 @@ main {
   line-height: 1.52;
 }
 
+.public-page-shell {
+  min-height: calc(100vh - 48px);
+  min-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  margin-bottom: -16px;
+}
+
 .public-text-page,
 .public-login-page {
   position: relative;
@@ -5794,6 +5802,7 @@ main {
   position: relative;
   z-index: 1;
   width: 100vw;
+  margin-top: auto;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
   background: rgb(172, 173, 177);

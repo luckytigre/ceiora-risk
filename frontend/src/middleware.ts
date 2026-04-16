@@ -11,9 +11,22 @@ export async function middleware(req: NextRequest) {
   const protectedPage = isProtectedPagePath(pathname);
   const protectedApi = isProtectedApiPath(pathname);
   const onLoginPage = pathname === "/login";
+  const loginReturnTo = normalizeReturnTo(req.nextUrl.searchParams.get("returnTo"));
+  const loginHasDefaultReturnTo =
+    onLoginPage &&
+    req.nextUrl.searchParams.has("returnTo") &&
+    loginReturnTo === DEFAULT_APP_HOME_PATH &&
+    !req.nextUrl.searchParams.has("error");
 
   if (!protectedPage && !protectedApi && !onLoginPage) {
     return NextResponse.next();
+  }
+
+  if (loginHasDefaultReturnTo) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
 
   if (!isAppAuthConfigured()) {
@@ -32,7 +45,7 @@ export async function middleware(req: NextRequest) {
   const session = await readSessionFromRequest(req);
   if (onLoginPage && session) {
     const url = req.nextUrl.clone();
-    url.pathname = normalizeReturnTo(req.nextUrl.searchParams.get("returnTo"));
+    url.pathname = loginReturnTo;
     url.search = "";
     return NextResponse.redirect(url);
   }
@@ -48,7 +61,10 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
-    url.searchParams.set("returnTo", normalizeReturnTo(`${pathname}${search}`));
+    const requestedReturnTo = normalizeReturnTo(`${pathname}${search}`);
+    if (requestedReturnTo !== DEFAULT_APP_HOME_PATH) {
+      url.searchParams.set("returnTo", requestedReturnTo);
+    }
     return NextResponse.redirect(url);
   }
 
