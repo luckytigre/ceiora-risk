@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { Instrument_Serif } from "next/font/google";
 import LandingBackgroundLock from "@/components/LandingBackgroundLock";
 import { readSessionFromCookieStore } from "@/lib/appAuth";
+
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+});
 
 const RISK_ENGINES = [
   {
@@ -46,7 +53,15 @@ export default async function PublicLandingPage() {
           <Link href={appHref} className="public-intro-link">
             Go to App
             <span className="public-intro-link-icon" aria-hidden="true">
-              ↗
+              <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M2 10L10 2M2 2H10V10"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="square"
+                  strokeLinejoin="miter"
+                />
+              </svg>
             </span>
           </Link>
         </div>
@@ -55,7 +70,10 @@ export default async function PublicLandingPage() {
         <div className="public-text-page">
           <div className="public-text-shell">
             <section className="public-text-intro">
-              <h1 className="public-text-headline">Institutional risk models for the individual investor</h1>
+              <h1 className="public-text-headline">
+                Institutional risk models for the{" "}
+                <em className={`public-text-headline-em ${instrumentSerif.className}`}>individual</em> investor
+              </h1>
               <p className="public-text-copy">
                 Ceiora is a portfolio risk management platform built on a family of bespoke factor models that decompose risk
                 exposures. Ceiora distinguishes itself from traditional factor models by focusing on the unique needs of
@@ -106,7 +124,10 @@ export default async function PublicLandingPage() {
               <a href="#" className="public-site-footer-link">
                 Contact
               </a>
-              <span className="public-site-footer-meta">Copyright 2026 Ceiora</span>
+              <a href="#" className="public-site-footer-link">
+                Careers
+              </a>
+              <span className="public-site-footer-meta">Copyright © 2026 Ceiora</span>
             </nav>
           </div>
         </footer>

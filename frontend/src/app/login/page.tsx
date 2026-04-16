@@ -3,7 +3,6 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import LandingBackgroundLock from "@/components/LandingBackgroundLock";
 import { DEFAULT_APP_HOME_PATH, normalizeReturnTo } from "@/lib/appAccess";
 
@@ -102,7 +101,7 @@ function LoginShell({
 }: LoginShellProps) {
   return (
     <>
-      <LandingBackgroundLock />
+      <LandingBackgroundLock bodyClassName="public-topo-boost" />
       <header className="dash-tabs">
         <div className="dash-tabs-brand-cluster">
           <Link href="/" className="dash-tabs-brand">
@@ -113,44 +112,55 @@ function LoginShell({
         <div className="dash-tabs-actions public-header-empty" aria-hidden="true" />
       </header>
       <div className="public-login-page">
-        <div className="public-login-shell">
-          <div className="public-login-loader-wrap">
-            <AnalyticsLoadingViz message={null} animate={false} />
-          </div>
+        <div className="public-login-stage">
+          <aside className="public-login-masthead">
+            <span className="public-login-masthead-rule" aria-hidden="true" />
+            <h1 className="public-login-headline">
+              <em>Resume</em> where<br />
+              you left off
+            </h1>
+            <p className="public-login-copy">
+              Portfolio factor risk &mdash; covariance, exposures, decomposition.
+              Opened in a single private session.
+            </p>
+          </aside>
 
-          <form onSubmit={onSubmit} className="public-login-form">
-            <label className="public-login-field">
-              <input
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(event) => onUsernameChange?.(event.target.value)}
-                placeholder="Username"
-              />
-            </label>
+          <section className="public-login-shell">
+            <form onSubmit={onSubmit} className="public-login-form">
+              <label className="public-login-field">
+                <input
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => onUsernameChange?.(event.target.value)}
+                  placeholder="Username"
+                />
+              </label>
 
-            <label className="public-login-field">
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => onPasswordChange?.(event.target.value)}
-                placeholder="Password"
-              />
-            </label>
+              <label className="public-login-field">
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => onPasswordChange?.(event.target.value)}
+                  placeholder="Password"
+                />
+              </label>
 
-            {(configError || errorMessage) && (
-              <div className="public-login-message" aria-live="polite">
-                {configError ? "App auth is not configured yet." : errorMessage}
+              {(configError || errorMessage) && (
+                <div className="public-login-message" aria-live="polite">
+                  {configError ? "App auth is not configured yet." : errorMessage}
+                </div>
+              )}
+
+              <div className="public-login-actions">
+                <button type="submit" className="public-login-submit" disabled={status === "submitting"}>
+                  {status === "submitting" ? "Signing in" : "Sign in"}
+                  <span className="public-login-submit-arrow" aria-hidden="true">&rarr;</span>
+                </button>
               </div>
-            )}
-
-            <div className="public-login-actions">
-              <button type="submit" className="public-login-submit" disabled={status === "submitting"}>
-                {status === "submitting" ? "Signing in..." : "Sign in"}
-              </button>
-            </div>
-          </form>
+            </form>
+          </section>
         </div>
       </div>
     </>
