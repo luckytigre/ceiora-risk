@@ -77,6 +77,7 @@ Stable specs, protocols, and schema docs live under `docs/reference/`.
 Primary files:
 - `reference/specs/cUSE4_engine_spec.md`
 - `reference/specs/USE4_US_CORE_MARKET_ADR_2026-03-15.md`
+- `reference/specs/FRONTEND_PALETTE_AND_THEME_SYSTEM.md`
 - `reference/protocols/TRBC_CLASSIFICATION_PIT_PROTOCOL.md`
 - `reference/protocols/UNIVERSE_ADD_RUNBOOK.md`
 - `reference/migrations/`

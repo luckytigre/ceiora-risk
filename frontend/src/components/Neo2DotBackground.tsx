@@ -69,7 +69,7 @@ function drawTopo(ctx: CanvasRenderingContext2D, w: number, h: number) {
 
       const alpha = clamp(0.16 + (bandTol - band) * 0.58, 0.1, 0.36);
       const size = 0.78 + dense * 0.1;
-      ctx.fillStyle = `rgba(152,152,156,${alpha.toFixed(3)})`;
+      ctx.fillStyle = `rgba(145,147,151,${alpha.toFixed(3)})`;
       ctx.beginPath();
       ctx.arc(sx, sy, size, 0, Math.PI * 2);
       ctx.fill();

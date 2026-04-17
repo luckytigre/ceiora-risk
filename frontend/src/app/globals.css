@@ -4,9 +4,9 @@
 
 :root {
   --bg-primary: #1f1f21;
-  --bg-primary-top: #252529;
-  --bg-primary-mid: #202024;
-  --bg-primary-bottom: #19191d;
+  --bg-primary-top: #242429;
+  --bg-primary-mid: #1f1f24;
+  --bg-primary-bottom: #18181d;
   --bg-secondary: #111111;
   --bg-card: rgba(14, 19, 33, 0.7);
   --bg-card-hover: rgba(19, 25, 43, 0.78);
@@ -31,8 +31,6 @@
   --exposure-long-color: #4fa074;
   --exposure-short-color: #c43f74;
   --chart-grid: rgba(215, 87, 186, 0.2);
-  --positive: var(--text-positive);
-  --negative: var(--text-negative);
   --chart-1: #f5bae4;
   --chart-2: #d757ba;
   --chart-3: #ff8f2a;
@@ -42,6 +40,9 @@
   --chart-7: #e98dd3;
   --chart-8: #bf4ea0;
   --chart-9: #7af8ff;
+  --positive: var(--text-positive);
+  --negative: var(--text-negative);
+  --public-intro-card-surface: rgba(247, 247, 245, 0.975);
 }
 
 html,
@@ -158,7 +159,7 @@ main {
 }
 
 .dash-tabs-brand {
-  color: #eef2fa;
+  color: rgba(246, 245, 242, 0.96);
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -5623,7 +5624,7 @@ main {
   align-items: center;
   gap: 8px;
   line-height: 1;
-  color: rgba(210, 217, 228, 0.72);
+  color: rgba(220, 221, 218, 0.76);
   text-decoration: none;
   font-size: 12px;
   font-weight: 400;
@@ -5633,7 +5634,7 @@ main {
 }
 
 .public-intro-link:hover {
-  color: rgba(242, 246, 255, 0.92);
+  color: rgba(247, 246, 242, 0.92);
 }
 
 .public-intro-link-icon {
@@ -5669,7 +5670,7 @@ main {
 }
 
 .public-kicker {
-  color: rgba(169, 182, 210, 0.74);
+  color: rgba(173, 183, 199, 0.74);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -5692,7 +5693,7 @@ main {
 
 .public-engine-heading {
   margin: 0;
-  color: rgba(244, 247, 255, 0.96);
+  color: rgba(245, 245, 243, 0.96);
   font-size: clamp(1.6rem, 2.2vw, 2rem);
   font-weight: 420;
   letter-spacing: -0.012em;
@@ -5702,7 +5703,7 @@ main {
 .public-text-headline,
 .public-login-headline {
   margin: 0;
-  color: rgba(244, 247, 255, 0.98);
+  color: rgba(246, 246, 244, 0.98);
   letter-spacing: -0.016em;
   line-height: 0.99;
 }
@@ -5729,7 +5730,7 @@ main {
 .public-login-headline em {
   font-style: normal;
   font-weight: 420;
-  color: rgba(244, 247, 255, 0.98);
+  color: rgba(246, 246, 244, 0.98);
 }
 
 .public-text-copy,
@@ -5741,14 +5742,14 @@ main {
 }
 
 .public-text-copy {
-  color: rgba(220, 226, 236, 0.84);
+  color: rgba(222, 227, 233, 0.84);
   max-width: 72ch;
   font-weight: 280;
 }
 
 .public-login-copy {
   max-width: 42ch;
-  color: rgba(196, 206, 224, 0.72);
+  color: rgba(198, 207, 220, 0.72);
   font-size: 15px;
   line-height: 1.65;
   letter-spacing: 0.002em;
@@ -5800,7 +5801,7 @@ main {
   gap: 11px;
   min-height: 100%;
   padding: 12px 12px 13px;
-  background: rgba(239, 238, 236, 0.97);
+  background: var(--public-intro-card-surface);
   color: #111318;
   box-shadow: 0 10px 28px rgba(2, 6, 14, 0.18);
   overflow: visible;
@@ -5883,8 +5884,8 @@ main {
   margin-top: auto;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
-  background: rgb(172, 173, 177);
-  border-top: 1px solid rgba(28, 30, 34, 0.12);
+  background: rgb(164, 162, 157);
+  border-top: 1px solid rgba(32, 30, 27, 0.14);
 }
 
 .public-site-footer-inner {
@@ -5897,7 +5898,7 @@ main {
 }
 
 .public-footer-brand {
-  color: rgba(18, 19, 23, 0.94);
+  color: rgba(24, 22, 19, 0.94);
 }
 
 .public-site-footer-links {
@@ -5910,14 +5911,14 @@ main {
 
 .public-site-footer-link,
 .public-site-footer-meta {
-  color: rgba(32, 34, 39, 0.82);
+  color: rgba(42, 39, 35, 0.82);
   font-size: 13px;
   letter-spacing: 0.01em;
   text-decoration: none;
 }
 
 .public-site-footer-link:hover {
-  color: rgba(12, 13, 16, 0.96);
+  color: rgba(20, 18, 15, 0.96);
 }
 
 .public-login-copy code {
