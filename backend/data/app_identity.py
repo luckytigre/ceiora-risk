@@ -15,6 +15,14 @@ class MembershipRow:
     is_default: bool
 
 
+@dataclass(frozen=True)
+class NeonAuthUserRow:
+    auth_user_id: str
+    email: str | None
+    display_name: str | None
+    role: str | None
+
+
 def auth_bootstrap_enabled() -> bool:
     return bool(config.APP_AUTH_BOOTSTRAP_ENABLED)
 
@@ -41,6 +49,32 @@ def _personal_account_name(principal: AppPrincipal) -> str:
 
 def _personal_account_id() -> str:
     return f"acct_{uuid.uuid4().hex[:12]}"
+
+
+def load_neon_auth_user(pg_conn, *, auth_user_id: str) -> NeonAuthUserRow | None:
+    clean_user_id = str(auth_user_id or "").strip()
+    if not clean_user_id:
+        return None
+    with pg_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id::text, email, name, role
+              FROM neon_auth.user
+             WHERE id::text = %s
+             LIMIT 1
+            """,
+            (clean_user_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    auth_id, email, display_name, role = row
+    return NeonAuthUserRow(
+        auth_user_id=str(auth_id or "").strip(),
+        email=_normalize_email(email),
+        display_name=str(display_name or "").strip() or None,
+        role=str(role or "").strip().lower() or None,
+    )
 
 
 def load_membership_rows(pg_conn, *, principal: AppPrincipal) -> list[MembershipRow]:

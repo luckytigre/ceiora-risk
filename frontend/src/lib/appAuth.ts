@@ -239,22 +239,9 @@ export async function authenticateNeonLogin(idToken: string): Promise<AppSession
   const displayName = String(payload.name || payload.preferred_username || "").trim();
   if (!subject) return null;
 
-  const normalizedSubject = normalizeIdentity(subject);
-  const normalizedEmail = normalizeIdentity(email);
-  if (
-    cfg.neonAllowedIdentities.length > 0 &&
-    !cfg.neonAllowedIdentities.includes(normalizedEmail || "") &&
-    !cfg.neonAllowedIdentities.includes(normalizedSubject || "")
-  ) {
-    return null;
-  }
-
   const issuedAt = Math.floor(Date.now() / 1000);
   const tokenExpiry = Number(payload.exp || 0);
   const expiresAt = Number.isFinite(tokenExpiry) && tokenExpiry > issuedAt ? tokenExpiry : issuedAt + APP_SESSION_TTL_SECONDS;
-  const isAdmin =
-    cfg.neonAdminIdentities.includes(normalizedEmail || "") ||
-    cfg.neonAdminIdentities.includes(normalizedSubject || "");
 
   return {
     authProvider: "neon",
@@ -262,8 +249,8 @@ export async function authenticateNeonLogin(idToken: string): Promise<AppSession
     subject,
     email: email || undefined,
     displayName: displayName || undefined,
-    isAdmin,
-    primary: isAdmin,
+    isAdmin: false,
+    primary: false,
     issuedAt,
     expiresAt,
   };

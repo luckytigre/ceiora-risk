@@ -242,7 +242,10 @@ export async function middleware(req: NextRequest) {
     return shouldPreserveNeonSession(code) ? res : clearSessionCookies(res);
   }
 
-  if (protectedPage && isPrivilegedPagePath(pathname) && !session.isAdmin) {
+  const effectiveIsAdmin =
+    provider === "neon" && neonContextStatus?.ok ? neonContextStatus.isAdmin : session.isAdmin;
+
+  if (protectedPage && isPrivilegedPagePath(pathname) && !effectiveIsAdmin) {
     const url = req.nextUrl.clone();
     url.pathname = "/settings";
     url.search = "";
@@ -250,7 +253,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (protectedApi && isPrivilegedApiPath(pathname) && !session.isAdmin) {
+  if (protectedApi && isPrivilegedApiPath(pathname) && !effectiveIsAdmin) {
     return unauthorizedApi("Forbidden: admin session required.", 403);
   }
 

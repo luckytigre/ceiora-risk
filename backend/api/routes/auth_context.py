@@ -11,6 +11,7 @@ from backend.data.account_scope import AccountScopeBootstrapDisabled
 from backend.data.account_scope import AccountScopeDenied
 from backend.data.account_scope import AccountScopeProvisioningError
 from backend.data.account_scope import account_enforcement_enabled
+from backend.data.account_scope import resolve_effective_principal
 from backend.data.account_scope import resolve_account_scope
 from backend.data.neon import connect, resolve_dsn
 
@@ -25,6 +26,7 @@ def _resolve_auth_scope(*, x_app_session_token: str | None):
         return principal, resolve_account_scope(None, principal=principal)
     conn = connect(dsn=resolve_dsn(None), autocommit=True)
     try:
+        principal = resolve_effective_principal(conn, principal=principal)
         return principal, resolve_account_scope(conn, principal=principal)
     finally:
         conn.close()

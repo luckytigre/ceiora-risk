@@ -79,6 +79,10 @@ export async function POST(req: NextRequest) {
     return res;
   }
   if (provider === "neon") {
+    session.email = context?.email ?? session.email ?? undefined;
+    session.displayName = context?.display_name ?? session.displayName ?? undefined;
+    session.isAdmin = Boolean(context?.is_admin);
+    session.primary = session.isAdmin;
     session.defaultAccountId = context?.default_account_id ?? null;
     token = await createSessionToken(session);
   }

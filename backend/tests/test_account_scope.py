@@ -13,12 +13,24 @@ from backend.data import account_scope
 
 
 class _FakeCursor:
-    def __init__(self, rows: list[tuple[object, object]]) -> None:
+    def __init__(
+        self,
+        rows: list[tuple[object, object]],
+        *,
+        neon_user: tuple[object, object, object, object] | None = None,
+    ) -> None:
         self.rows = rows
+        self.neon_user = neon_user
         self.executed: list[tuple[str, tuple[object, ...] | None]] = []
 
     def execute(self, sql: str, params: tuple[object, ...] | None = None) -> None:
         self.executed.append((sql, params))
+
+    def fetchone(self):
+        sql, _ = self.executed[-1]
+        if "FROM neon_auth.user" in sql:
+            return self.neon_user
+        raise AssertionError(f"Unexpected fetchone for SQL: {sql}")
 
     def fetchall(self):
         return self.rows
@@ -31,8 +43,13 @@ class _FakeCursor:
 
 
 class _FakeConn:
-    def __init__(self, rows: list[tuple[object, object]]) -> None:
-        self.cursor_obj = _FakeCursor(rows)
+    def __init__(
+        self,
+        rows: list[tuple[object, object]],
+        *,
+        neon_user: tuple[object, object, object, object] | None = None,
+    ) -> None:
+        self.cursor_obj = _FakeCursor(rows, neon_user=neon_user)
 
     def cursor(self):
         return self.cursor_obj
@@ -159,7 +176,8 @@ def test_resolve_account_scope_scopes_admin_to_memberships(monkeypatch: pytest.M
         [
             ("acct_admin", True),
             ("acct_shared", False),
-        ]
+        ],
+        neon_user=("auth0|admin", "admin@example.com", "Admin", "user"),
     )
 
     scope = account_scope.resolve_account_scope(
@@ -204,6 +222,29 @@ def test_resolve_account_scope_raises_explicit_bootstrap_disabled_error(monkeypa
         account_scope.resolve_account_scope(
             _FakeConn([]),
             principal=AppPrincipal(provider="neon", subject="auth0|friend", is_admin=False, email="friend@example.com"),
+        )
+
+
+def test_resolve_effective_principal_uses_canonical_neon_email_and_admin_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(account_scope.config, "NEON_AUTH_ALLOWED_EMAILS", ("friend@example.com",))
+    monkeypatch.setattr(account_scope.config, "NEON_AUTH_BOOTSTRAP_ADMINS", ("friend@example.com",))
+    principal = account_scope.resolve_effective_principal(
+        _FakeConn([], neon_user=("auth0|friend", "friend@example.com", "Friend", "user")),
+        principal=AppPrincipal(provider="neon", subject="auth0|friend", is_admin=False, email=None),
+    )
+
+    assert principal.email == "friend@example.com"
+    assert principal.display_name == "Friend"
+    assert principal.is_admin is True
+
+
+def test_resolve_effective_principal_denies_neon_user_not_on_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(account_scope.config, "NEON_AUTH_ALLOWED_EMAILS", ("allowed@example.com",))
+
+    with pytest.raises(account_scope.AccountScopeDenied, match="not allowlisted"):
+        account_scope.resolve_effective_principal(
+            _FakeConn([], neon_user=("auth0|friend", "friend@example.com", "Friend", "user")),
+            principal=AppPrincipal(provider="neon", subject="auth0|friend", is_admin=False, email=None),
         )
 
 

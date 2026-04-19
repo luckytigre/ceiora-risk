@@ -117,6 +117,16 @@ APP_AUTH_BOOTSTRAP_ENABLED = _env_bool("APP_AUTH_BOOTSTRAP_ENABLED", False)
 APP_AUTH_BOOTSTRAP_REUSE_EXISTING_MEMBERSHIP = _env_bool("APP_AUTH_BOOTSTRAP_REUSE_EXISTING_MEMBERSHIP", False)
 APP_ADMIN_SETTINGS_ENABLED = _env_bool("APP_ADMIN_SETTINGS_ENABLED", False)
 APP_SHARED_AUTH_ACCEPT_LEGACY = _env_bool("APP_SHARED_AUTH_ACCEPT_LEGACY", False)
+NEON_AUTH_ALLOWED_EMAILS = tuple(
+    str(value).strip().lower()
+    for value in _env_csv("NEON_AUTH_ALLOWED_EMAILS", [])
+    if str(value).strip()
+)
+NEON_AUTH_BOOTSTRAP_ADMINS = tuple(
+    str(value).strip().lower()
+    for value in _env_csv("NEON_AUTH_BOOTSTRAP_ADMINS", [])
+    if str(value).strip()
+)
 
 # Orchestrator ingest stage controls.
 ORCHESTRATOR_ENABLE_INGEST = _env_bool("ORCHESTRATOR_ENABLE_INGEST", False)

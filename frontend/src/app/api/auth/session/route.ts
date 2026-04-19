@@ -77,18 +77,19 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json({
     authenticated: true,
-    session: {
-      authProvider: session.authProvider,
-      username: session.username,
-      email: session.email ?? null,
-      defaultAccountId:
-        session.authProvider === "neon" && context
-          ? context.default_account_id ?? null
-          : session.defaultAccountId ?? null,
-      isAdmin: session.isAdmin,
-      primary: session.primary,
-      expiresAt: session.expiresAt,
-    },
-    context,
+      session: {
+        authProvider: session.authProvider,
+        username: session.username,
+        email: context?.email ?? session.email ?? null,
+        defaultAccountId:
+          session.authProvider === "neon" && context
+            ? context.default_account_id ?? null
+            : session.defaultAccountId ?? null,
+        isAdmin: session.authProvider === "neon" && context ? Boolean(context.is_admin) : session.isAdmin,
+        primary:
+          session.authProvider === "neon" && context ? Boolean(context.is_admin) : session.primary,
+        expiresAt: session.expiresAt,
+      },
+      context,
   });
 }
