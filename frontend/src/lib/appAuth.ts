@@ -175,6 +175,31 @@ function normalizeIdentity(value: string | null | undefined): string | null {
   return clean || null;
 }
 
+function normalizeIssuerValue(value: string | null | undefined): string | null {
+  const clean = String(value || "").trim();
+  if (!clean) return null;
+  return clean.replace(/\/+$/, "");
+}
+
+function allowedNeonIssuers(cfg: AuthConfig): Set<string> {
+  const issuers = new Set<string>();
+  const configured = normalizeIssuerValue(cfg.neonIssuer);
+  const project = normalizeIssuerValue(cfg.neonProjectUrl);
+  for (const value of [configured, project]) {
+    if (!value) continue;
+    issuers.add(value);
+    try {
+      const url = new URL(value);
+      const origin = url.origin;
+      if (origin) {
+        issuers.add(`${origin}/auth`);
+        issuers.add(`${origin}/neondb/auth`);
+      }
+    } catch {}
+  }
+  return issuers;
+}
+
 function remoteJwks(url: string) {
   const cached = jwksByUrl.get(url);
   if (cached) return cached;
@@ -199,10 +224,15 @@ export async function authenticateNeonLogin(idToken: string): Promise<AppSession
   const token = String(idToken || "").trim();
   if (!token) return null;
 
-  const verifyOptions: { issuer: string; audience?: string } = { issuer: cfg.neonIssuer };
+  const verifyOptions: { audience?: string } = {};
   if (cfg.neonAudience) verifyOptions.audience = cfg.neonAudience;
   const jwks = cfg.neonJwksJson ? localJwks(cfg.neonJwksJson) : remoteJwks(cfg.neonJwksUrl);
   const { payload } = await jwtVerify(token, jwks, verifyOptions);
+
+  const issuer = normalizeIssuerValue(typeof payload.iss === "string" ? payload.iss : null);
+  if (!issuer || !allowedNeonIssuers(cfg).has(issuer)) {
+    return null;
+  }
 
   const subject = String(payload.sub || "").trim();
   const email = String(payload.email || "").trim();
