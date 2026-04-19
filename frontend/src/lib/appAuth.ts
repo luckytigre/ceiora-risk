@@ -194,7 +194,7 @@ function localJwks(raw: string) {
 
 export async function authenticateNeonLogin(idToken: string): Promise<AppSession | null> {
   const cfg = authConfig();
-  if (cfg.provider !== "neon" || !cfg.secret || !cfg.neonIssuer || !cfg.neonJwksUrl) return null;
+  if (cfg.provider !== "neon" || !cfg.secret || !cfg.neonIssuer || (!cfg.neonJwksUrl && !cfg.neonJwksJson)) return null;
 
   const token = String(idToken || "").trim();
   if (!token) return null;
