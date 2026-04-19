@@ -6,7 +6,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY frontend/package.json frontend/package-lock.json ./
 
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 FROM node:20-alpine AS builder
 
