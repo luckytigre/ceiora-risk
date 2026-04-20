@@ -278,6 +278,24 @@ def test_support_rows_map_typed_package_authority_failures_to_unavailable(
         )
 
 
+def test_support_rows_map_prefetched_alias_resolution_failures_to_typed_read_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_portfolio_snapshot_service,
+        "_resolve_support_fit_aliases",
+        lambda **kwargs: (_ for _ in ()).throw(cpar_outputs.CparPackageNotReady("prefetch unavailable")),
+    )
+
+    with pytest.raises(cpar_meta_service.CparReadNotReady, match="prefetch unavailable"):
+        cpar_portfolio_snapshot_service.load_cpar_portfolio_support_rows(
+            rics=["AAPL.OQ"],
+            package_run_id="run_curr",
+            package_date="2026-03-14",
+            positions=[{"ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 1.0}],
+        )
+
+
 def test_support_rows_map_typed_source_failures_to_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

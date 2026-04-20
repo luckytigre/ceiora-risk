@@ -320,9 +320,13 @@ def _factor_delta_rows(
     return rows[:20]
 
 
-def _preview_side(snapshot: dict[str, object]) -> dict[str, object]:
+def _preview_side(
+    snapshot: dict[str, object],
+    *,
+    scope: str | None = None,
+) -> dict[str, object]:
     return {
-        "scope": snapshot.get("scope") or "all_accounts",
+        "scope": scope or snapshot.get("scope") or "all_accounts",
         "positions": list(snapshot.get("positions") or []),
         "total_value": float(snapshot.get("gross_market_value") or 0.0),
         "position_count": int(snapshot.get("positions_count") or 0),
@@ -343,6 +347,21 @@ def _preview_side(snapshot: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _preview_scope_payload(*, normalized_rows: list[dict[str, object]]) -> dict[str, object]:
+    account_ids = list(
+        dict.fromkeys(
+            str(row.get("account_id") or "")
+            for row in normalized_rows
+            if str(row.get("account_id") or "").strip()
+        )
+    )
+    return {
+        "kind": "staged_accounts",
+        "account_ids": account_ids,
+        "accounts_count": len(account_ids),
+    }
+
+
 def load_cpar_explore_whatif_payload(
     *,
     scenario_rows: list[dict[str, Any]],
@@ -358,13 +377,23 @@ def load_cpar_explore_whatif_payload(
         live_positions=live_positions,
         scenario_rows=scenario_rows,
     )
+    preview_account_ids = {
+        _normalize_account_id(str(row.get("account_id") or ""))
+        for row in normalized_rows
+        if _normalize_account_id(str(row.get("account_id") or ""))
+    }
+    scoped_live_positions = [
+        dict(position)
+        for position in live_positions
+        if _normalize_account_id(str(position.get("account_id") or "")) in preview_account_ids
+    ]
     hypothetical_positions = _apply_scenario_rows(
-        live_positions=live_positions,
+        live_positions=scoped_live_positions,
         scenario_rows=normalized_rows,
     )
 
     current_aggregated_positions, current_accounts = cpar_portfolio_snapshot_service.aggregate_cpar_positions_across_accounts(
-        live_positions
+        scoped_live_positions
     )
     hypothetical_aggregated_positions, hypothetical_accounts = cpar_portfolio_snapshot_service.aggregate_cpar_positions_across_accounts(
         hypothetical_positions
@@ -387,7 +416,7 @@ def load_cpar_explore_whatif_payload(
     )
     for row in normalized_rows:
         key = _scenario_key(row.get("account_id"), row.get("ric"))
-        live_exists = any(_scenario_key(pos.get("account_id"), pos.get("ric")) == key for pos in live_positions)
+        live_exists = any(_scenario_key(pos.get("account_id"), pos.get("ric")) == key for pos in scoped_live_positions)
         if not live_exists and str(row.get("ric") or "") not in fit_by_ric:
             raise ValueError(
                 f"RIC {row['ric']} is not present in the active cPAR package. "
@@ -413,8 +442,10 @@ def load_cpar_explore_whatif_payload(
         covariance_rows=covariance_rows,
     )
 
-    current_side = _preview_side(current_snapshot)
-    hypothetical_side = _preview_side(hypothetical_snapshot)
+    preview_scope = _preview_scope_payload(normalized_rows=normalized_rows)
+    preview_side_scope = "restricted_accounts" if preview_scope["account_ids"] else None
+    current_side = _preview_side(current_snapshot, scope=preview_side_scope)
+    hypothetical_side = _preview_side(hypothetical_snapshot, scope=preview_side_scope)
 
     diff_factor_deltas = {
         mode: _factor_delta_rows(
@@ -452,7 +483,7 @@ def load_cpar_explore_whatif_payload(
             for row in normalized_rows
         ],
         "holding_deltas": _build_holding_delta_rows(
-            live_positions=live_positions,
+            live_positions=scoped_live_positions,
             hypothetical_positions=hypothetical_positions,
             scenario_rows=normalized_rows,
         ),
@@ -475,5 +506,6 @@ def load_cpar_explore_whatif_payload(
             "exposures_served_asof": package.get("package_date"),
         },
         "truth_surface": "aggregate_holdings_projected_through_active_cpar_package",
+        "preview_scope": preview_scope,
         "_preview_only": True,
     }

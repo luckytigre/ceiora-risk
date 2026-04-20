@@ -273,8 +273,20 @@ export function useCparExploreScenarioLab({
       setErrorMessage(`Fix quantity for ${existing.ticker} before stepping it.`);
       return;
     }
-    updateScenarioRow(key, String(currentQty + delta));
-  }, [scenarioDrafts, updateScenarioRow]);
+    const nextQty = currentQty + delta;
+    if (Math.abs(nextQty) <= 1e-12) {
+      setPreviewData(null);
+      clearMessages();
+      setScenarioDrafts((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setResultMessage(`Removed staged trade delta for ${existing.ticker}.`);
+      return;
+    }
+    updateScenarioRow(key, String(nextQty));
+  }, [clearMessages, scenarioDrafts, updateScenarioRow]);
 
   const removeScenarioRow = useCallback((key: string) => {
     setPreviewData(null);
@@ -370,6 +382,7 @@ export function useCparExploreScenarioLab({
       await Promise.all([
         mutate(holdingsApiPath.holdingsAccounts()),
         mutate(holdingsApiPath.holdingsPositions(null)),
+        mutate(cparApiPath.cparExploreContext()),
         mutate(cparApiPath.cparRisk()),
       ]);
       setScenarioDrafts({});

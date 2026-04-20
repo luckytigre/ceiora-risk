@@ -49,7 +49,7 @@ export interface WhatIfFactorDeltaRow {
 }
 
 export interface WhatIfPreviewScope {
-  kind: string;
+  kind: "staged_accounts";
   account_ids: string[];
   accounts_count: number;
 }

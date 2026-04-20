@@ -147,7 +147,7 @@ export default function WhatIfBuilderPanel({
                 const whatIfReady = row.whatif_ready !== false;
                 return (
                   <button
-                    key={row.ticker}
+                    key={row.ric || row.ticker}
                     className={`explore-typeahead-item${index === activeIndex ? " active" : ""}${pos ? " held" : ""}`}
                     onMouseEnter={() => {
                       onSetActiveIndex(index);

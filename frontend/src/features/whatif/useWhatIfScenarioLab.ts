@@ -199,7 +199,7 @@ export function useWhatIfScenarioLab({
   const liveQuantityByScenarioKey = useMemo(() => {
     const out = new Map<string, number>();
     for (const row of holdingsRows) {
-      const key = scenarioKey(row.account_id, row.ticker);
+      const key = scenarioKey(row.account_id, row.ticker, row.ric);
       out.set(key, Number(out.get(key) || 0) + Number(row.quantity || 0));
     }
     return out;
@@ -207,14 +207,15 @@ export function useWhatIfScenarioLab({
 
   useEffect(() => {
     if (!accountId) return;
-    const key = scenarioKey(accountId, scenarioTicker);
+    const scenarioRic = scenarioUniverseRow && "ric" in scenarioUniverseRow ? (scenarioUniverseRow.ric ?? null) : null;
+    const key = scenarioKey(accountId, scenarioTicker, scenarioRic);
     const staged = scenarioDrafts[key];
     if (staged) {
       setQuantityText(staged.quantity_text);
       return;
     }
     setQuantityText("");
-  }, [accountId, scenarioDrafts, scenarioTicker]);
+  }, [accountId, scenarioDrafts, scenarioTicker, scenarioUniverseRow]);
 
   const scenarioRows = useMemo(
     () =>
@@ -275,16 +276,18 @@ export function useWhatIfScenarioLab({
       return;
     }
     if (qty === null) {
-      setErrorMessage("Quantity must be numeric.");
+      setErrorMessage("Quantity must be numeric and non-zero.");
       return;
     }
-    const key = scenarioKey(account, ticker);
+    const scenarioRic = "ric" in scenarioUniverseRow ? (scenarioUniverseRow.ric ?? null) : null;
+    const key = scenarioKey(account, ticker, scenarioRic);
     setScenarioDrafts((prev) => ({
       ...prev,
       [key]: {
         key,
         account_id: account,
         ticker,
+        ric: scenarioRic,
         quantity_text: quantityText.trim(),
         source: "what_if",
       },
@@ -315,8 +318,20 @@ export function useWhatIfScenarioLab({
       setErrorMessage(`Fix quantity for ${existing.ticker} before stepping it.`);
       return;
     }
-    updateScenarioRow(key, fmtQty(currentQty + delta));
-  }, [scenarioDrafts, updateScenarioRow]);
+    const nextQty = currentQty + delta;
+    if (Math.abs(nextQty) <= 1e-12) {
+      setPreviewData(null);
+      clearMessages();
+      setScenarioDrafts((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setResultMessage(`Removed staged trade delta for ${existing.ticker}.`);
+      return;
+    }
+    updateScenarioRow(key, fmtQty(nextQty));
+  }, [clearMessages, scenarioDrafts, updateScenarioRow]);
 
   const removeScenarioRow = useCallback((key: string) => {
     setPreviewData(null);
@@ -379,7 +394,7 @@ export function useWhatIfScenarioLab({
     const hasFullRemovalFromDelta = scenarioRows.some((row) => {
       const qty = parseQty(row.quantity_text);
       if (qty === null) return false;
-      const liveQty = Number(liveQuantityByScenarioKey.get(scenarioKey(row.account_id, row.ticker)) || 0);
+      const liveQty = Number(liveQuantityByScenarioKey.get(scenarioKey(row.account_id, row.ticker, row.ric)) || 0);
       return Math.abs(liveQty) > 1e-12 && Math.abs(liveQty + qty) <= 1e-12;
     });
     if (
@@ -417,6 +432,7 @@ export function useWhatIfScenarioLab({
       await Promise.all([
         mutate(apiPath.holdingsAccounts()),
         mutate(apiPath.holdingsPositions(null)),
+        mutate(apiPath.exploreContext()),
         mutate(apiPath.refreshStatus()),
         mutate(apiPath.operatorStatus()),
       ]);

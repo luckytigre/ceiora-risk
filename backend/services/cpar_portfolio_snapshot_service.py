@@ -917,11 +917,16 @@ def load_cpar_portfolio_support_rows(
     fit_alias_by_requested_ric: dict[str, str]
     prefetched_fit_rows: list[dict[str, Any]] | None
     if positions:
-        fit_alias_by_requested_ric, prefetched_fit_by_ric = _resolve_support_fit_aliases(
-            positions=positions,
-            package_run_id=str(package_run_id),
-            data_db=data_db,
-        )
+        try:
+            fit_alias_by_requested_ric, prefetched_fit_by_ric = _resolve_support_fit_aliases(
+                positions=positions,
+                package_run_id=str(package_run_id),
+                data_db=data_db,
+            )
+        except cpar_outputs.CparPackageNotReady as exc:
+            raise cpar_meta_service.CparReadNotReady(str(exc)) from exc
+        except cpar_outputs.CparAuthorityReadError as exc:
+            raise cpar_meta_service.CparReadUnavailable(str(exc)) from exc
         prefetched_fit_rows = sorted(prefetched_fit_by_ric.values(), key=lambda row: str(row.get("ric") or ""))
         support_rics = sorted(
             {

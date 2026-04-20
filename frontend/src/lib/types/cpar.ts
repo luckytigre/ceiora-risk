@@ -490,7 +490,7 @@ export interface CparExploreExposureRow {
 }
 
 export interface CparExplorePreviewSide {
-  scope: CparRiskScope;
+  scope: CparExploreScope;
   positions: CparPortfolioPositionRow[];
   total_value: number;
   position_count: number;
@@ -518,7 +518,7 @@ export interface CparExploreFactorDeltaRow {
 }
 
 export interface CparExplorePreviewScope {
-  kind: string;
+  kind: "staged_accounts";
   account_ids: string[];
   accounts_count: number;
 }

@@ -91,6 +91,14 @@ export default function ExplorePage() {
     setQuery(ticker);
   }, []);
 
+  const handleSearchQueryChange = useCallback((nextQuery: string) => {
+    setQuery(nextQuery);
+    if (selectedTicker && nextQuery.trim().toUpperCase() !== selectedTicker.toUpperCase()) {
+      setQuoteExpanded(false);
+      setSelectedTicker(null);
+    }
+  }, [selectedTicker]);
+
   const chartFactors: FactorExposure[] = useMemo(() => {
     if (!item) return [];
     const exposures = item.exposures ?? {};
@@ -199,7 +207,7 @@ export default function ExplorePage() {
         searchQuery={query}
         searchLoading={searchPending || searchLoading || searchValidating}
         searchSettled={searchRequestSettled}
-        onSearchQueryChange={setQuery}
+        onSearchQueryChange={handleSearchQueryChange}
         searchResults={visibleSearchResults}
         onSelectTicker={selectTicker}
         positionMap={positionMap}
