@@ -29,7 +29,7 @@ from backend.analytics.services.risk_views import (
 from backend.data import serving_outputs as serving_outputs_store
 from backend.data.serving_outputs import load_current_payload
 from backend.data.sqlite import cache_get, cache_get_live_first
-from backend.risk_model.risk_attribution import risk_decomposition
+from backend.risk_model.risk_attribution import risk_decomposition, vol_scaled_decomposition
 from backend.services.cuse4_universe_service import cuse_row_model_readiness
 from backend.services import cuse4_holdings_service as holdings_service
 
@@ -257,6 +257,7 @@ def _build_holdings_snapshot(
     *,
     account_id: str | None = None,
     allowed_account_ids: list[str] | tuple[str, ...] | None = None,
+    preview_account_ids: list[str] | tuple[str, ...] | None = None,
     holdings_loader: Callable[..., list[dict[str, Any]]] = holdings_service.load_holdings_positions,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     loader_signature = inspect.signature(holdings_loader)
@@ -271,6 +272,17 @@ def _build_holdings_snapshot(
         live_rows = holdings_loader(account_id=account_id, allowed_account_ids=allowed_account_ids)
     else:
         live_rows = holdings_loader(account_id=account_id)
+    preview_account_filter = {
+        _normalize_account_id(raw_account_id)
+        for raw_account_id in list(preview_account_ids or [])
+        if _normalize_account_id(raw_account_id)
+    }
+    if preview_account_filter:
+        live_rows = [
+            row
+            for row in live_rows
+            if _normalize_account_id(row.get("account_id")) in preview_account_filter
+        ]
     current_by_key: dict[str, dict[str, Any]] = {}
     for raw in live_rows:
         account_id = _normalize_account_id(raw.get("account_id"))
@@ -411,6 +423,17 @@ def _build_preview_payload(
         "style": float(raw_risk_shares.get("style", 0.0)),
         "idio": float(raw_risk_shares.get("idio", 0.0)),
     }
+    raw_vol_scaled_shares = vol_scaled_decomposition(
+        cov=cov,
+        positions=positions,
+        specific_risk_by_ticker=specific_risk_by_ticker,
+    )
+    vol_scaled_shares: RiskSharesPayload = {
+        "market": float(raw_vol_scaled_shares.get("market", 0.0)),
+        "industry": float(raw_vol_scaled_shares.get("industry", 0.0)),
+        "style": float(raw_vol_scaled_shares.get("style", 0.0)),
+        "idio": float(raw_vol_scaled_shares.get("idio", 0.0)),
+    }
     component_shares: ComponentSharesPayload = {
         "market": float(raw_component_shares.get("market", 0.0)),
         "industry": float(raw_component_shares.get("industry", 0.0)),
@@ -449,6 +472,7 @@ def _build_preview_payload(
         "total_value": round(float(total_value), 2),
         "position_count": len(positions),
         "risk_shares": risk_shares,
+        "vol_scaled_shares": vol_scaled_shares,
         "component_shares": component_shares,
         "factor_details": factor_details,
         "exposure_modes": exposure_modes,
@@ -532,6 +556,13 @@ def preview_portfolio_whatif(
         )
     )
     normalized_scenario_rows = _normalize_scenario_rows(scenario_rows)
+    preview_account_ids = tuple(
+        dict.fromkeys(
+            _normalize_account_id(row.get("account_id"))
+            for row in normalized_scenario_rows
+            if _normalize_account_id(row.get("account_id"))
+        )
+    )
     current_payloads = _load_current_serving_payloads(
         "portfolio",
         "universe_loadings",
@@ -581,6 +612,7 @@ def preview_portfolio_whatif(
         normalized_scenario_rows,
         account_id=account_id,
         allowed_account_ids=allowed_account_ids,
+        preview_account_ids=preview_account_ids,
         holdings_loader=deps.holdings_loader,
     )
     current_preview = _build_preview_payload(
@@ -641,6 +673,11 @@ def preview_portfolio_whatif(
         if cov_from_serving and specific_risk_from_serving
         else "live_holdings_projected_through_current_loadings_and_live_risk_cache"
     )
+    preview_scope = {
+        "kind": "staged_accounts",
+        "account_ids": list(preview_account_ids),
+        "accounts_count": len(preview_account_ids),
+    }
     return {
         "scenario_rows": [
             {
@@ -667,6 +704,7 @@ def preview_portfolio_whatif(
         "source_dates": source_dates,
         "serving_snapshot": serving_snapshot,
         "truth_surface": truth_surface,
+        "preview_scope": preview_scope,
         "_preview_only": True,
     }
 

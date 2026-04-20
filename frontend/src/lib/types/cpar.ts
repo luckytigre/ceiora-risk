@@ -517,6 +517,12 @@ export interface CparExploreFactorDeltaRow {
   delta: number;
 }
 
+export interface CparExplorePreviewScope {
+  kind: string;
+  account_ids: string[];
+  accounts_count: number;
+}
+
 export interface CparExploreWhatIfData extends CparPackageMeta {
   scenario_rows: CparExploreScenarioRow[];
   holding_deltas: CparExploreHoldingDelta[];
@@ -544,5 +550,6 @@ export interface CparExploreWhatIfData extends CparPackageMeta {
     exposures_served_asof?: string | null;
   };
   truth_surface?: string | null;
+  preview_scope?: CparExplorePreviewScope;
   _preview_only: boolean;
 }

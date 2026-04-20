@@ -129,6 +129,7 @@ def test_risk_route_returns_account_scoped_preview_payload(monkeypatch) -> None:
         lambda scenario_rows, **kwargs: {
             "current": {
                 "risk_shares": {"market": 1.0, "industry": 2.0, "style": 3.0, "idio": 94.0},
+                "vol_scaled_shares": {"market": 11.0, "industry": 22.0, "style": 33.0, "idio": 34.0},
                 "component_shares": {"market": 1.0, "industry": 2.0, "style": 3.0},
                 "factor_details": [{"factor_id": "market", "category": "market"}],
                 "cov_matrix": {"factors": ["market"], "correlation": [[1.0]]},
@@ -154,6 +155,7 @@ def test_risk_route_returns_account_scoped_preview_payload(monkeypatch) -> None:
     assert body["_cached"] is False
     assert body["account_id"] == "acct_a"
     assert body["risk_shares"]["market"] == 1.0
+    assert body["vol_scaled_shares"]["market"] == 11.0
     assert body["model_sanity"]["status"] == "scoped-preview"
     assert body["run_id"] == "run_curr"
 

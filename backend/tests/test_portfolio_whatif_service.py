@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pandas as pd
+import pytest
 
 from backend.services import cuse4_portfolio_whatif
 from backend.services import portfolio_whatif
@@ -181,6 +182,76 @@ def test_preview_portfolio_whatif_projects_current_and_hypothetical_without_writ
     assert out["truth_surface"] == "live_holdings_projected_through_current_served_model"
 
 
+def test_preview_portfolio_whatif_scopes_current_book_to_staged_accounts() -> None:
+    universe_loadings = {
+        "by_ticker": {
+            "AAA": {
+                "ticker": "AAA",
+                "name": "AAA",
+                "price": 10.0,
+                "exposures": {"Beta": 1.0},
+                "specific_var": 0.01,
+                "specific_vol": 0.1,
+                "model_status": "core_estimated",
+                "eligibility_reason": "",
+                "trbc_economic_sector_short": "Technology",
+                "trbc_economic_sector_short_abbr": "Tech",
+                "trbc_industry_group": "Software",
+            },
+            "BBB": {
+                "ticker": "BBB",
+                "name": "BBB",
+                "price": 20.0,
+                "exposures": {"Beta": 0.8},
+                "specific_var": 0.02,
+                "specific_vol": 0.1414,
+                "model_status": "core_estimated",
+                "eligibility_reason": "",
+                "trbc_economic_sector_short": "Financials",
+                "trbc_economic_sector_short_abbr": "Fins",
+                "trbc_industry_group": "Banks",
+            },
+        },
+    }
+    cov = pd.DataFrame([[0.04]], index=["Beta"], columns=["Beta"])
+    live_rows = [
+        {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.N", "quantity": 10.0, "source": "ui_edit"},
+        {"account_id": "acct_b", "ticker": "BBB", "ric": "BBB.N", "quantity": 5.0, "source": "ui_edit"},
+    ]
+
+    out = portfolio_whatif.preview_portfolio_whatif(
+        scenario_rows=[{"account_id": "acct_a", "ticker": "AAA", "quantity": 5.0}],
+        dependencies=_deps(
+            current_payload_loader=lambda key: {
+                "portfolio": {
+                    "source_dates": {"exposures_served_asof": "2026-03-03"},
+                    "run_id": "run_meta_scope",
+                    "snapshot_id": "snap_meta_scope",
+                },
+                "risk_engine_cov": {"factors": ["Beta"], "matrix": [[0.04]]},
+                "risk_engine_specific_risk": {
+                    "AAA.OQ": {"ticker": "AAA", "specific_var": 0.01},
+                    "BBB.OQ": {"ticker": "BBB", "specific_var": 0.02},
+                },
+            }.get(key),
+            holdings_loader=lambda account_id=None: live_rows,
+            universe_loader=lambda current_payload, **kwargs: universe_loadings,
+            covariance_loader=lambda current_payload, **kwargs: (cov, True),
+            specific_risk_loader=lambda current_payload, **kwargs: (
+                {"AAA": {"specific_var": 0.01}, "BBB": {"specific_var": 0.02}},
+                True,
+            ),
+        ),
+    )
+
+    assert out["preview_scope"]["kind"] == "staged_accounts"
+    assert out["preview_scope"]["account_ids"] == ["acct_a"]
+    assert out["current"]["position_count"] == 1
+    assert [row["ticker"] for row in out["current"]["positions"]] == ["AAA"]
+    assert out["hypothetical"]["position_count"] == 1
+    assert out["holding_deltas"][0]["account_id"] == "acct_a"
+
+
 def test_preview_portfolio_whatif_can_limit_exposure_modes() -> None:
     universe_loadings = {
         "by_ticker": {
@@ -234,6 +305,160 @@ def test_preview_portfolio_whatif_can_limit_exposure_modes() -> None:
     assert out["diff"]["factor_deltas"]["raw"][0]["delta"] == 0.0
     assert out["diff"]["factor_deltas"]["sensitivity"] == []
     assert out["diff"]["factor_deltas"]["risk_contribution"] == []
+
+
+def test_preview_portfolio_whatif_includes_vol_scaled_shares() -> None:
+    universe_loadings = {
+        "by_ticker": {
+            "AAA": {
+                "ticker": "AAA",
+                "name": "AAA",
+                "price": 10.0,
+                "exposures": {"Beta": 1.0},
+                "specific_var": 0.01,
+                "specific_vol": 0.1,
+                "model_status": "core_estimated",
+                "eligibility_reason": "",
+                "trbc_economic_sector_short": "Technology",
+                "trbc_economic_sector_short_abbr": "Tech",
+                "trbc_industry_group": "Software",
+            },
+        },
+    }
+    cov = pd.DataFrame([[0.04]], index=["Beta"], columns=["Beta"])
+
+    out = portfolio_whatif.preview_portfolio_whatif(
+        scenario_rows=[],
+        dependencies=_deps(
+            current_payload_loader=lambda key: {
+                "portfolio": {
+                    "source_dates": {"exposures_served_asof": "2026-03-03"},
+                    "run_id": "run_meta_vs",
+                    "snapshot_id": "snap_meta_vs",
+                },
+                "risk_engine_cov": {"factors": ["Beta"], "matrix": [[0.04]]},
+                "risk_engine_specific_risk": {
+                    "AAA.OQ": {"ticker": "AAA", "specific_var": 0.01},
+                },
+            }.get(key),
+            holdings_loader=lambda account_id=None: [
+                {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.N", "quantity": 10.0, "source": "ui_edit"},
+            ],
+            universe_loader=lambda current_payload, **kwargs: universe_loadings,
+            covariance_loader=lambda current_payload, **kwargs: (cov, True),
+            specific_risk_loader=lambda current_payload, **kwargs: (
+                {"AAA": {"specific_var": 0.01}},
+                True,
+            ),
+        ),
+    )
+
+    current_shares = out["current"]["vol_scaled_shares"]
+    assert pytest.approx(sum(current_shares.values()), abs=0.05) == 100.0
+    assert current_shares["style"] > 0.0
+    assert current_shares["idio"] > 0.0
+
+
+def test_preview_portfolio_whatif_scoped_snapshot_and_lazy_modes_stay_populated() -> None:
+    universe_loadings = {
+        "by_ticker": {
+            "AAA": {
+                "ticker": "AAA",
+                "name": "AAA",
+                "price": 10.0,
+                "exposures": {"Beta": 1.0, "Value": 0.5},
+                "specific_var": 0.01,
+                "specific_vol": 0.1,
+                "model_status": "core_estimated",
+                "eligibility_reason": "",
+                "trbc_economic_sector_short": "Technology",
+                "trbc_economic_sector_short_abbr": "Tech",
+                "trbc_industry_group": "Software",
+            },
+            "BBB": {
+                "ticker": "BBB",
+                "name": "BBB",
+                "price": 20.0,
+                "exposures": {"Beta": 0.8, "Value": -0.2},
+                "specific_var": 0.02,
+                "specific_vol": 0.1414,
+                "model_status": "core_estimated",
+                "eligibility_reason": "",
+                "trbc_economic_sector_short": "Financials",
+                "trbc_economic_sector_short_abbr": "Fins",
+                "trbc_industry_group": "Banks",
+            },
+        },
+        "factor_catalog": [
+            {"factor_id": "Beta", "factor_name": "Beta"},
+            {"factor_id": "Value", "factor_name": "Value"},
+        ],
+        "source_dates": {"exposures_served_asof": "2026-03-03"},
+        "snapshot_id": "snap_scope",
+        "run_id": "run_scope",
+    }
+    cov = pd.DataFrame(
+        [[0.04, 0.01], [0.01, 0.09]],
+        index=["Beta", "Value"],
+        columns=["Beta", "Value"],
+    )
+    deps = _deps(
+        current_payload_loader=lambda key: {
+            "portfolio": {
+                "source_dates": {"exposures_served_asof": "2026-03-03"},
+                "run_id": "run_scope",
+                "snapshot_id": "snap_scope",
+            },
+            "universe_loadings": universe_loadings,
+            "risk_engine_cov": {"factors": ["Beta", "Value"], "matrix": [[0.04, 0.01], [0.01, 0.09]]},
+            "risk_engine_specific_risk": {
+                "AAA.OQ": {"ticker": "AAA", "specific_var": 0.01},
+                "BBB.OQ": {"ticker": "BBB", "specific_var": 0.02},
+            },
+        }.get(key),
+        runtime_cache_loader=lambda key: {},
+        live_cache_loader=lambda key: {},
+        holdings_loader=lambda account_id=None, allowed_account_ids=None: [
+            {"account_id": "acct_a", "ticker": "AAA", "ric": "AAA.N", "quantity": 10.0, "source": "ui_edit"},
+            {"account_id": "acct_a", "ticker": "BBB", "ric": "BBB.N", "quantity": 5.0, "source": "ui_edit"},
+        ],
+        universe_loader=lambda current_payload, **kwargs: universe_loadings,
+        covariance_loader=lambda current_payload, **kwargs: (cov, True),
+        specific_risk_loader=lambda current_payload, **kwargs: (
+            {"AAA": {"specific_var": 0.01}, "BBB": {"specific_var": 0.02}},
+            True,
+        ),
+    )
+
+    summary = cuse4_portfolio_whatif.preview_portfolio_whatif(
+        scenario_rows=[],
+        account_id="acct_a",
+        allowed_account_ids=("acct_a",),
+        requested_exposure_modes=("raw",),
+        dependencies=deps,
+    )
+    sensitivity = cuse4_portfolio_whatif.preview_portfolio_whatif(
+        scenario_rows=[],
+        account_id="acct_a",
+        allowed_account_ids=("acct_a",),
+        requested_exposure_modes=("sensitivity",),
+        dependencies=deps,
+    )
+    risk_contribution = cuse4_portfolio_whatif.preview_portfolio_whatif(
+        scenario_rows=[],
+        account_id="acct_a",
+        allowed_account_ids=("acct_a",),
+        requested_exposure_modes=("risk_contribution",),
+        dependencies=deps,
+    )
+
+    current_shares = summary["current"]["vol_scaled_shares"]
+    assert pytest.approx(sum(current_shares.values()), abs=0.05) == 100.0
+    assert current_shares["style"] > 0.0
+    assert current_shares["idio"] > 0.0
+    assert len(summary["current"]["exposure_modes"]["raw"]) == 2
+    assert len(sensitivity["current"]["exposure_modes"]["sensitivity"]) == 2
+    assert len(risk_contribution["current"]["exposure_modes"]["risk_contribution"]) == 2
 
 
 def test_preview_portfolio_whatif_prefers_published_risk_payloads() -> None:
@@ -552,5 +777,60 @@ def test_apply_ticker_bucket_scenario_rejects_duplicate_payload_rows_without_mut
     assert out["accepted_rows"] == 1
     assert out["rejected_rows"] == 1
     assert out["rejection_counts"]["duplicate_row_in_file"] == 1
+    assert delete_calls == []
+    assert conn.commits == 0
+
+
+def test_apply_ticker_bucket_scenario_rejects_zero_delta_rows_without_mutation(monkeypatch) -> None:
+    conn = _FakeConn()
+    delete_calls: list[str] = []
+    monkeypatch.setattr(
+        neon_holdings,
+        "_delete_position",
+        lambda _conn, *, account_id, ric: delete_calls.append(f"{account_id}:{ric}"),
+    )
+
+    out = neon_holdings.apply_ticker_bucket_scenario(
+        conn,
+        scenario_rows=[{"account_id": "acct_a", "ticker": "AAA", "quantity": 0.0}],
+        requested_by="tester",
+    )
+
+    assert out["status"] == "rejected"
+    assert out["accepted_rows"] == 0
+    assert out["rejected_rows"] == 1
+    assert out["rejection_counts"]["zero_quantity"] == 1
+    assert delete_calls == []
+    assert conn.commits == 0
+
+
+def test_apply_ticker_bucket_scenario_rejects_alias_rows_that_resolve_to_same_ric(monkeypatch) -> None:
+    conn = _FakeConn()
+    delete_calls: list[str] = []
+
+    def _resolve(*_args, **kwargs):
+        ticker = kwargs.get("ticker") if "ticker" in kwargs else _args[1]
+        return ("AAA.N", []) if ticker in {"AAA", "AAA.US"} else (None, [])
+
+    monkeypatch.setattr(neon_holdings, "_resolve_ticker_to_ric", _resolve)
+    monkeypatch.setattr(
+        neon_holdings,
+        "_delete_position",
+        lambda _conn, *, account_id, ric: delete_calls.append(f"{account_id}:{ric}"),
+    )
+
+    out = neon_holdings.apply_ticker_bucket_scenario(
+        conn,
+        scenario_rows=[
+            {"account_id": "acct_a", "ticker": "AAA", "quantity": 10.0},
+            {"account_id": "acct_a", "ticker": "AAA.US", "quantity": 20.0},
+        ],
+        requested_by="tester",
+    )
+
+    assert out["status"] == "rejected"
+    assert out["accepted_rows"] == 1
+    assert out["rejected_rows"] == 1
+    assert out["rejection_counts"]["duplicate_resolved_instrument"] == 1
     assert delete_calls == []
     assert conn.commits == 0

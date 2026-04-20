@@ -169,6 +169,11 @@ export default function CparWhatIfPreviewPanel({
     );
   }
 
+  const previewScope = previewData.preview_scope;
+  const previewAccountIds = previewScope?.account_ids ?? [];
+  const previewScopeLabel = previewAccountIds.length <= 1 ? "staged account" : "staged accounts";
+  const modeLabel = CPAR_EXPLORE_MODES.find((entry) => entry.key === mode)?.label ?? mode;
+
   return (
     <>
       <div
@@ -196,7 +201,10 @@ export default function CparWhatIfPreviewPanel({
         <div className="whatif-results-body">
           <div className="section-subtitle" style={{ marginBottom: 12 }}>
             Current and hypothetical sides are projected through the active cPAR package dated {formatCparPackageDate(previewData.package_date)}.
-            Holdings stay aggregate across all accounts, while staged rows preserve their account-level edits.
+            {previewAccountIds.length > 0
+              ? ` Preview scope: ${previewAccountIds.join(", ")}.`
+              : ""}
+            {" "}The comparison book is limited to the {previewScopeLabel}, while staged rows preserve their account-level edits.
           </div>
           <div className="explore-mode-toggle">
             {CPAR_EXPLORE_MODES.map((entry) => (
@@ -213,7 +221,7 @@ export default function CparWhatIfPreviewPanel({
 
           <div className="explore-detail-grid">
             <div className="chart-card">
-              <span className="explore-compare-label">Current Aggregate Book</span>
+              <span className="explore-compare-label">Current Staged-Account Book ({modeLabel})</span>
               <CparExposureBarChart
                 factors={currentFactors}
                 mode={mode}
@@ -221,7 +229,7 @@ export default function CparWhatIfPreviewPanel({
               />
             </div>
             <div className="chart-card">
-              <span className="explore-compare-label">Hypothetical Aggregate Book</span>
+              <span className="explore-compare-label">Hypothetical Staged-Account Book ({modeLabel})</span>
               <CparExposureBarChart
                 factors={hypotheticalFactors}
                 mode={mode}
@@ -233,14 +241,14 @@ export default function CparWhatIfPreviewPanel({
 
           <div className="explore-whatif-grid">
             <div className="dash-table">
-              <h4 className="explore-whatif-table-title">Risk Share Delta</h4>
+              <h4 className="explore-whatif-table-title">Risk Share Delta (% of total risk)</h4>
               <table>
                 <thead>
                   <tr>
                     <th onClick={() => handleRiskShareSort("bucket")}>Bucket{riskShareArrow("bucket")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("current")}>Current{riskShareArrow("current")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("hypothetical")}>Hypothetical{riskShareArrow("hypothetical")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("delta")}>Delta{riskShareArrow("delta")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("current")}>Current Share{riskShareArrow("current")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("hypothetical")}>Hypothetical Share{riskShareArrow("hypothetical")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("delta")}>Share Delta{riskShareArrow("delta")}</th>
                   </tr>
                 </thead>
                 <tbody>

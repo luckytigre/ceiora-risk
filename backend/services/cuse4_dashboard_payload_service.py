@@ -371,6 +371,7 @@ def load_account_scoped_risk_response(
     current = dict(scoped_preview.get("current") or {})
     response = dict(current)
     response["risk_shares"] = _normalize_systematic_shares(current.get("risk_shares"))
+    response["vol_scaled_shares"] = _normalize_systematic_shares(current.get("vol_scaled_shares")) or {}
     response["component_shares"] = _normalize_systematic_shares(current.get("component_shares"))
     response["factor_details"] = _normalize_risk_factor_details(current.get("factor_details"))
     response["_cached"] = False

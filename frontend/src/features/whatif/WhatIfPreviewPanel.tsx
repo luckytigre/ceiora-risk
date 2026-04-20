@@ -45,9 +45,13 @@ export default function WhatIfPreviewPanel({
 
   const truthSurface = String(previewData.truth_surface || "").trim();
   const servedModelPreview = truthSurface === "live_holdings_projected_through_current_served_model";
+  const previewScope = previewData.preview_scope;
+  const previewAccountIds = previewScope?.account_ids ?? [];
+  const previewScopeLabel = previewAccountIds.length <= 1 ? "staged account" : "staged accounts";
+  const modeLabel = WHAT_IF_MODES.find((entry) => entry.key === mode)?.label ?? mode;
   const currentSideDescription = servedModelPreview
-    ? "Current side = live holdings projected through the current served model snapshot"
-    : "Current side = live holdings projected through current published loadings plus live risk-cache fallback";
+    ? `Current side = live holdings for the ${previewScopeLabel} projected through the current served model snapshot`
+    : `Current side = live holdings for the ${previewScopeLabel} projected through current published loadings plus live risk-cache fallback`;
   const methodByAccountTicker = new Map<string, { label: string; tone: MethodLabelTone }>();
   const methodByTicker = new Map<string, { label: string; tone: MethodLabelTone }>();
   const collectMethod = (
@@ -167,6 +171,9 @@ export default function WhatIfPreviewPanel({
           <div className="section-subtitle" style={{ marginBottom: 12 }}>
             {currentSideDescription}
             {previewData.serving_snapshot?.snapshot_id ? ` ${previewData.serving_snapshot.snapshot_id}` : ""}.
+            {previewAccountIds.length > 0
+              ? ` Preview scope: ${previewAccountIds.join(", ")}.`
+              : ""}
             {servedModelPreview
               ? " This preview is exploratory and does not replace the dashboard’s published truth surface."
               : " Risk inputs are temporarily falling back to live cache because the current published snapshot predates the new durable risk payloads."}
@@ -190,7 +197,7 @@ export default function WhatIfPreviewPanel({
 
           <div className="explore-detail-grid">
             <div className="chart-card">
-              <span className="explore-compare-label">Live Holdings Preview</span>
+              <span className="explore-compare-label">Current Staged-Account Book ({modeLabel})</span>
               <ExposureBarChart
                 factors={previewData.current.exposure_modes[mode]}
                 mode={mode}
@@ -198,7 +205,7 @@ export default function WhatIfPreviewPanel({
               />
             </div>
             <div className="chart-card">
-              <span className="explore-compare-label">Hypothetical Portfolio</span>
+              <span className="explore-compare-label">Hypothetical Staged-Account Book ({modeLabel})</span>
               <ExposureBarChart
                 factors={previewData.hypothetical.exposure_modes[mode]}
                 mode={mode}
@@ -210,14 +217,14 @@ export default function WhatIfPreviewPanel({
 
           <div className="explore-whatif-grid">
             <div className="dash-table">
-              <h4 className="explore-whatif-table-title">Risk Share Delta</h4>
+              <h4 className="explore-whatif-table-title">Risk Share Delta (% of total risk)</h4>
               <table>
                 <thead>
                   <tr>
                     <th onClick={() => handleRiskShareSort("bucket")}>Bucket{riskShareArrow("bucket")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("current")}>Current{riskShareArrow("current")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("hypothetical")}>Hypothetical{riskShareArrow("hypothetical")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("delta")}>Delta{riskShareArrow("delta")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("current")}>Current Share{riskShareArrow("current")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("hypothetical")}>Hypothetical Share{riskShareArrow("hypothetical")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("delta")}>Share Delta{riskShareArrow("delta")}</th>
                   </tr>
                 </thead>
                 <tbody>

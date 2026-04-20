@@ -156,7 +156,11 @@ export default function ExposuresPage() {
   const riskDetails = riskData?.factor_details ?? [];
   const factorCatalog = riskData?.factor_catalog ?? [];
   const riskShares = riskData?.risk_shares ?? { market: 0, industry: 0, style: 0, idio: 100 };
-  const volScaledShares = riskData?.vol_scaled_shares ?? riskShares;
+  const hasVolScaledShares = Boolean(
+    riskData?.vol_scaled_shares
+    && Object.values(riskData.vol_scaled_shares).some((value) => Math.abs(Number(value || 0)) > 1e-12),
+  );
+  const volScaledShares = hasVolScaledShares ? riskData!.vol_scaled_shares! : riskShares;
   const rawLoadingShares = useMemo(
     () => deriveRawLoadingSharesFromRiskDetails(riskDetails, positions),
     [positions, riskDetails],
@@ -361,7 +365,7 @@ export default function ExposuresPage() {
         )}
         {isAccountScoped && (
           <div className="section-subtitle">
-            Scoped previews stay on Exposure mode so the page keeps one coherent account snapshot.
+            Scoped previews load deeper modes on demand from the current account snapshot.
           </div>
         )}
         {hasProjectedExtensions && (
@@ -574,15 +578,10 @@ export default function ExposuresPage() {
           <button
             key={m.key}
             className={mode === m.key ? "active" : ""}
-            disabled={isAccountScoped && m.key !== "raw"}
             onClick={() => {
-              if (isAccountScoped && m.key !== "raw") return;
               setMode(m.key);
               setSelectedFactor(null);
             }}
-            title={isAccountScoped && m.key !== "raw"
-              ? "Scoped previews stay on Exposure mode until deeper modes can reuse the same account snapshot."
-              : undefined}
           >
             {m.label}
           </button>

@@ -48,6 +48,12 @@ export interface WhatIfFactorDeltaRow {
   delta: number;
 }
 
+export interface WhatIfPreviewScope {
+  kind: string;
+  account_ids: string[];
+  accounts_count: number;
+}
+
 export interface WhatIfPreviewData {
   scenario_rows: WhatIfScenarioRow[];
   holding_deltas: WhatIfHoldingDelta[];
@@ -66,6 +72,7 @@ export interface WhatIfPreviewData {
   source_dates?: SourceDates;
   serving_snapshot?: ServingSnapshotMeta;
   truth_surface?: string;
+  preview_scope?: WhatIfPreviewScope;
   _preview_only: boolean;
 }
 
