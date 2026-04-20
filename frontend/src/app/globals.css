@@ -1348,8 +1348,8 @@ main {
 }
 
 .cpar-clickable-ticker:hover {
-  color: var(--accent);
-  border-bottom-color: color-mix(in srgb, var(--accent) 72%, transparent);
+  color: var(--family-cpar);
+  border-bottom-color: color-mix(in srgb, var(--family-cpar) 72%, transparent);
 }
 
 .cpar-position-hedge-popover {
