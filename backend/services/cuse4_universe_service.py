@@ -278,6 +278,54 @@ def _registry_ticker_row(ticker: str) -> dict[str, Any] | None:
     return ranked[0] if ranked else None
 
 
+def _published_portfolio_overlay_rows(
+    *,
+    payload_loader: PayloadLoader,
+    fallback_loader,
+) -> dict[str, dict[str, Any]]:
+    portfolio_payload = payload_loader("portfolio", fallback_loader=fallback_loader)
+    positions = (portfolio_payload or {}).get("positions") if isinstance(portfolio_payload, dict) else None
+    if not isinstance(positions, list):
+        return {}
+
+    overlay: dict[str, dict[str, Any]] = {}
+    for raw in positions:
+        if not isinstance(raw, dict):
+            continue
+        ticker = str(raw.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+        exposures = dict(raw.get("exposures") or {})
+        row: dict[str, Any] = {
+            "ticker": ticker,
+            "name": str(raw.get("name") or ticker).strip() or ticker,
+            "trbc_economic_sector_short": str(raw.get("trbc_economic_sector_short") or "").strip(),
+            "trbc_industry_group": str(raw.get("trbc_industry_group") or "").strip() or None,
+            "price": raw.get("price"),
+            "exposures": exposures,
+            "specific_var": raw.get("specific_var"),
+            "specific_vol": raw.get("specific_vol"),
+            "model_status": str(raw.get("model_status") or "").strip(),
+            "model_status_reason": str(raw.get("model_status_reason") or raw.get("eligibility_reason") or "").strip(),
+            "eligibility_reason": str(raw.get("eligibility_reason") or raw.get("model_status_reason") or "").strip(),
+            "exposure_origin": str(raw.get("exposure_origin") or "").strip() or None,
+            "projection_method": raw.get("projection_method"),
+            "projection_r_squared": raw.get("projection_r_squared"),
+            "projection_obs_count": raw.get("projection_obs_count"),
+            "projection_asof": raw.get("projection_asof"),
+            "projection_output_status": raw.get("projection_output_status"),
+            "served_exposure_available": bool(raw.get("served_exposure_available", bool(exposures))),
+        }
+        ric = str(raw.get("ric") or "").upper().strip()
+        if ric:
+            row["ric"] = ric
+        prior = overlay.get(ticker) or {}
+        overlay[ticker] = {**prior, **{key: value for key, value in row.items() if value not in (None, "", {})}}
+        if exposures:
+            overlay[ticker]["exposures"] = exposures
+    return overlay
+
+
 def _search_rank(row: dict[str, Any], needle: str) -> tuple[int, int, str]:
     ticker = str(row.get("ticker", "")).upper()
     name = str(row.get("name", "")).upper()
@@ -352,7 +400,16 @@ def _load_universe_ticker_payload(
         fallback_loader=fallback_loader,
     )
     by_ticker = data.get("by_ticker") or {}
-    item = by_ticker.get(str(ticker).upper().strip())
+    overlay_by_ticker = _published_portfolio_overlay_rows(
+        payload_loader=payload_loader,
+        fallback_loader=fallback_loader,
+    )
+    clean_ticker = str(ticker).upper().strip()
+    item = (
+        {**dict(by_ticker.get(clean_ticker) or {}), **dict(overlay_by_ticker.get(clean_ticker) or {})}
+        if clean_ticker in by_ticker or clean_ticker in overlay_by_ticker
+        else None
+    )
     if item is None:
         try:
             fallback = _registry_ticker_row(ticker)
@@ -511,17 +568,37 @@ def _search_universe_payload(
             )
             ranked.append((_search_rank(normalized, needle), 0, normalized))
 
+    overlay_by_ticker = _published_portfolio_overlay_rows(
+        payload_loader=payload_loader,
+        fallback_loader=fallback_loader,
+    )
+    existing_tickers = {
+        str(row.get("ticker") or "").upper().strip()
+        for _, _, row in ranked
+        if str(row.get("ticker") or "").strip()
+    }
+    for ticker, raw_row in overlay_by_ticker.items():
+        if not ticker or ticker in existing_tickers:
+            continue
+        name = str(raw_row.get("name") or "").upper()
+        ric = str(raw_row.get("ric") or "").upper()
+        if needle not in ticker and needle not in name and needle not in ric:
+            continue
+        normalized = row_normalizer(
+            _decorate_cuse_row(
+                dict(raw_row),
+                quote_source="served_payload",
+            )
+        )
+        ranked.append((_search_rank(normalized, needle), 0, normalized))
+        existing_tickers.add(ticker)
+
     registry_rows: list[dict[str, Any]] = []
     if len(ranked) < limit:
         try:
             registry_rows = _registry_search_rows(q=q, limit=limit)
         except registry_quote_reads.RegistryQuoteReadError:
             registry_rows = []
-    existing_tickers = {
-        str(row.get("ticker") or "").upper().strip()
-        for _, _, row in ranked
-        if str(row.get("ticker") or "").strip()
-    }
     for row in registry_rows:
         clean_ticker = str(row.get("ticker") or "").upper().strip()
         if not clean_ticker or clean_ticker in existing_tickers:

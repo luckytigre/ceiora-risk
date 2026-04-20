@@ -289,9 +289,10 @@ Key rule:
   - targeted metadata patches such as `health_diagnostics` or `refresh_meta` remain explicit partial writes and must not masquerade as a full publish.
 - Projection-only serving rows are protected at publish time.
   - If persisted projected loadings exist for a ticker at the active core date, the live serving payloads must publish that ticker as `projected_only` with `exposure_origin=projected_returns` or `projected_fundamental`, or the publish fails.
-  - During refresh persistence, the current run's `cuse_security_membership_daily` truth is overlaid onto `universe_loadings`, `portfolio`, and exposure drilldowns before the canonical serving payload set is written, so the just-computed run does not lag one publish behind.
-  - `universe_loadings` and the app-facing universe search/detail surfaces are runtime-admitted only; raw source names without current registry/runtime identity must not appear there just because prices, fundamentals, or classifications exist.
-  - Explore/what-if quote search and detail may augment the live `universe_loadings` payload with registry/runtime-admitted rows when a ticker has no current published cUSE loadings row, but those fallback rows must be clearly labeled as registry/runtime coverage rather than live factor payload coverage.
+- During refresh persistence, the current run's `cuse_security_membership_daily` truth is overlaid onto `universe_loadings`, `portfolio`, and exposure drilldowns before the canonical serving payload set is written, so the just-computed run does not lag one publish behind.
+- `universe_loadings` and the app-facing universe search/detail surfaces are runtime-admitted only; raw source names without current registry/runtime identity must not appear there just because prices, fundamentals, or classifications exist.
+- Explore/what-if quote search and detail may augment the live `universe_loadings` payload with registry/runtime-admitted rows when a ticker has no current published cUSE loadings row, but those fallback rows must be clearly labeled as registry/runtime coverage rather than live factor payload coverage.
+- Held names that already carry a published modeled surface inside the `portfolio` payload must remain preview-eligible even if they are temporarily absent from `universe_loadings`; universe search/detail and cUSE what-if preview should treat that portfolio overlay as part of the active published surface rather than downgrading the name to registry-only coverage.
 
 ## Canonical Event Types
 

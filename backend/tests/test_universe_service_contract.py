@@ -252,6 +252,84 @@ def test_universe_ticker_payload_falls_back_to_registry_runtime(monkeypatch) -> 
     assert out["item"]["whatif_ready"] is False
 
 
+def test_universe_ticker_payload_uses_published_portfolio_overlay_for_held_name(monkeypatch) -> None:
+    payload = {
+        "index": [],
+        "by_ticker": {},
+    }
+    monkeypatch.setattr(
+        universe_service,
+        "load_runtime_payload",
+        lambda name, *, fallback_loader=None: (
+            payload if name == "universe_loadings" else {
+                "positions": [
+                    {
+                        "ticker": "COST",
+                        "name": "Costco Wholesale Corp",
+                        "price": 980.85,
+                        "exposures": {"market": 1.0, "industry_retailers": 1.0},
+                        "model_status": "core_estimated",
+                        "exposure_origin": "native",
+                        "served_exposure_available": True,
+                    }
+                ]
+            } if name == "portfolio" else None
+        ),
+    )
+    monkeypatch.setattr(universe_service, "cache_get", lambda key: None)
+
+    out = universe_service.load_universe_ticker_payload("COST", row_normalizer=lambda row: row)
+
+    assert out["_cached"] is True
+    assert out["item"]["ticker"] == "COST"
+    assert out["item"]["quote_source_label"] == "Live cUSE Payload"
+    assert out["item"]["whatif_ready"] is True
+    assert out["item"]["exposures"]["market"] == 1.0
+
+
+def test_universe_search_includes_published_portfolio_overlay_when_universe_missing_ticker(monkeypatch) -> None:
+    payload = {
+        "index": [],
+        "by_ticker": {},
+    }
+    monkeypatch.setattr(
+        universe_service,
+        "load_runtime_payload",
+        lambda name, *, fallback_loader=None: (
+            payload if name == "universe_loadings" else {
+                "positions": [
+                    {
+                        "ticker": "COST",
+                        "name": "Costco Wholesale Corp",
+                        "price": 980.85,
+                        "exposures": {"market": 1.0, "industry_retailers": 1.0},
+                        "model_status": "core_estimated",
+                        "exposure_origin": "native",
+                        "served_exposure_available": True,
+                    }
+                ]
+            } if name == "portfolio" else None
+        ),
+    )
+    monkeypatch.setattr(universe_service, "cache_get", lambda key: None)
+    monkeypatch.setattr(
+        cuse4_universe_service.registry_quote_reads,
+        "search_registry_quote_rows",
+        lambda *args, **kwargs: [],
+    )
+
+    out = universe_service.search_universe_payload(
+        q="cost",
+        limit=20,
+        row_normalizer=lambda row: row,
+    )
+
+    assert out["total"] == 1
+    assert out["results"][0]["ticker"] == "COST"
+    assert out["results"][0]["whatif_ready"] is True
+    assert out["results"][0]["quote_source_label"] == "Live cUSE Payload"
+
+
 def test_universe_history_can_resolve_registry_runtime_ticker(monkeypatch, tmp_path: Path) -> None:
     data_db = tmp_path / "legacy-data.db"
     monkeypatch.setattr(universe_service, "DATA_DB", data_db)

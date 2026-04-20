@@ -390,6 +390,65 @@ def _rows_to_snapshot(
     return shares, meta
 
 
+def _overlay_published_positions_into_universe_loadings(
+    *,
+    universe_loadings: dict[str, Any],
+    current_portfolio_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    positions = (current_portfolio_payload or {}).get("positions") if isinstance(current_portfolio_payload, dict) else None
+    if not isinstance(positions, list) or not positions:
+        return universe_loadings
+
+    by_ticker = dict(universe_loadings.get("by_ticker") or {})
+    mutated = False
+    for raw in positions:
+        if not isinstance(raw, dict):
+            continue
+        ticker = _normalize_ticker(raw.get("ticker"))
+        if not ticker:
+            continue
+        overlay_row: dict[str, Any] = {
+            "ticker": ticker,
+            "name": str(raw.get("name") or ticker).strip() or ticker,
+            "price": raw.get("price"),
+            "exposures": dict(raw.get("exposures") or {}),
+            "specific_var": raw.get("specific_var"),
+            "specific_vol": raw.get("specific_vol"),
+            "model_status": str(raw.get("model_status") or "").strip(),
+            "model_status_reason": str(raw.get("model_status_reason") or raw.get("eligibility_reason") or "").strip(),
+            "eligibility_reason": str(raw.get("eligibility_reason") or raw.get("model_status_reason") or "").strip(),
+            "exposure_origin": str(raw.get("exposure_origin") or "").strip() or None,
+            "projection_method": raw.get("projection_method"),
+            "projection_r_squared": raw.get("projection_r_squared"),
+            "projection_obs_count": raw.get("projection_obs_count"),
+            "projection_asof": raw.get("projection_asof"),
+            "projection_output_status": raw.get("projection_output_status"),
+            "trbc_economic_sector_short": raw.get("trbc_economic_sector_short"),
+            "trbc_economic_sector_short_abbr": raw.get("trbc_economic_sector_short_abbr"),
+            "trbc_industry_group": raw.get("trbc_industry_group"),
+            "served_exposure_available": bool(raw.get("served_exposure_available", bool(raw.get("exposures")))),
+        }
+        ric = _normalize_ric(raw.get("ric"))
+        if ric:
+            overlay_row["ric"] = ric
+        merged = {
+            **dict(by_ticker.get(ticker) or {}),
+            **{key: value for key, value in overlay_row.items() if value not in (None, "", {})},
+        }
+        if overlay_row.get("exposures"):
+            merged["exposures"] = overlay_row["exposures"]
+        if merged != by_ticker.get(ticker):
+            by_ticker[ticker] = merged
+            mutated = True
+
+    if not mutated:
+        return universe_loadings
+    return {
+        **universe_loadings,
+        "by_ticker": by_ticker,
+    }
+
+
 def _build_preview_payload(
     *,
     holdings_rows: list[dict[str, Any]],
@@ -575,6 +634,17 @@ def preview_portfolio_whatif(
         current_payload_loader=deps.current_payload_loader,
         fallback_loader=deps.runtime_cache_loader,
     )
+    current_portfolio_payload = current_payloads.get("portfolio")
+    if current_portfolio_payload is None:
+        current_portfolio_payload = _load_serving_or_runtime_cache(
+            "portfolio",
+            current_payload_loader=deps.current_payload_loader,
+            fallback_loader=deps.runtime_cache_loader,
+        ) or {}
+    universe_loadings = _overlay_published_positions_into_universe_loadings(
+        universe_loadings=universe_loadings,
+        current_portfolio_payload=current_portfolio_payload if isinstance(current_portfolio_payload, dict) else {},
+    )
     _assert_scenario_rows_are_preview_ready(
         scenario_rows=normalized_scenario_rows,
         universe_loadings=universe_loadings,
@@ -589,13 +659,6 @@ def preview_portfolio_whatif(
         current_payload_loader=deps.current_payload_loader,
         live_cache_loader=deps.live_cache_loader,
     )
-    current_portfolio_payload = current_payloads.get("portfolio")
-    if current_portfolio_payload is None:
-        current_portfolio_payload = _load_serving_or_runtime_cache(
-            "portfolio",
-            current_payload_loader=deps.current_payload_loader,
-            fallback_loader=deps.runtime_cache_loader,
-        ) or {}
     source_dates = (
         (current_portfolio_payload or {}).get("source_dates")
         or universe_loadings.get("source_dates")

@@ -692,6 +692,75 @@ def test_preview_portfolio_whatif_rejects_tickers_without_published_modeled_surf
     raise AssertionError("preview_portfolio_whatif should reject registry-visible but unmodeled names")
 
 
+def test_preview_portfolio_whatif_accepts_held_name_from_published_portfolio_overlay() -> None:
+    universe_loadings = {
+        "by_ticker": {},
+        "source_dates": {"prices_asof": "2026-03-03"},
+    }
+    portfolio_payload = {
+        "positions": [
+            {
+                "account": "acct_a",
+                "ticker": "COST",
+                "name": "Costco Wholesale Corp",
+                "price": 100.0,
+                "shares": 100.0,
+                "market_value": 10000.0,
+                "weight": 1.0,
+                "exposures": {"market": 1.0, "style_growth_score": -0.5},
+                "specific_var": 0.04,
+                "specific_vol": 0.2,
+                "model_status": "core_estimated",
+                "eligibility_reason": "",
+                "model_status_reason": "",
+                "exposure_origin": "native",
+                "served_exposure_available": True,
+                "trbc_economic_sector_short": "Consumer Cyclicals",
+                "trbc_economic_sector_short_abbr": "ConsCyc",
+                "trbc_industry_group": "Retail",
+            }
+        ],
+        "source_dates": {"exposures_served_asof": "2026-03-03"},
+        "snapshot_id": "snap_held",
+        "run_id": "run_held",
+    }
+    cov = pd.DataFrame(
+        [[0.04, 0.01], [0.01, 0.09]],
+        index=["market", "style_growth_score"],
+        columns=["market", "style_growth_score"],
+    )
+    live_rows = [
+        {"account_id": "acct_a", "ticker": "COST", "quantity": 100.0, "source": "neon_holdings"},
+    ]
+
+    out = portfolio_whatif.preview_portfolio_whatif(
+        scenario_rows=[{"account_id": "acct_a", "ticker": "COST", "quantity": -50.0}],
+        dependencies=_deps(
+            current_payload_loader=lambda key: {
+                "portfolio": portfolio_payload,
+                "universe_loadings": universe_loadings,
+                "risk_engine_cov": {
+                    "factors": ["market", "style_growth_score"],
+                    "matrix": [[0.04, 0.01], [0.01, 0.09]],
+                },
+                "risk_engine_specific_risk": {
+                    "COST": {"ticker": "COST", "specific_var": 0.04},
+                },
+            }.get(key),
+            holdings_loader=lambda account_id=None, allowed_account_ids=None: list(live_rows),
+            universe_loader=lambda current_payload, **kwargs: current_payload,
+            covariance_loader=lambda current_payload, **kwargs: (cov, True),
+            specific_risk_loader=lambda current_payload, **kwargs: ({"COST": {"specific_var": 0.04}}, True),
+        ),
+    )
+
+    assert out["current"]["position_count"] == 1
+    assert out["hypothetical"]["position_count"] == 1
+    assert out["current"]["positions"][0]["ticker"] == "COST"
+    assert out["holding_deltas"][0]["ticker"] == "COST"
+    assert out["current"]["exposure_modes"]["raw"][0]["factor_id"] == "market"
+
+
 class _FakeConn:
     def __init__(self) -> None:
         self.commits = 0
