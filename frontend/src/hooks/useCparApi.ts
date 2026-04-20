@@ -14,8 +14,11 @@ import type {
   CparHedgeMode,
   CparMetaData,
   CparPortfolioHedgeData,
+  CparPortfolioHedgeRecommendationData,
   CparPortfolioWhatIfData,
+  CparPositionHedgeData,
   CparRiskData,
+  CparScopedHedgeScope,
   CparSearchData,
   CparTickerDetailData,
   CparTickerHistoryData,
@@ -89,6 +92,28 @@ export function useCparPortfolioHedge(
   const cleanAccountId = accountId?.trim() || null;
   const key = enabled && cleanAccountId ? cparApiPath.cparPortfolioHedge(cleanAccountId, mode) : null;
   return useSWR<CparPortfolioHedgeData>(key, apiFetch, SWR_OPTS);
+}
+
+export function useCparPositionHedge(
+  ric: string | null,
+  scope: CparScopedHedgeScope,
+  accountId?: string | null,
+  enabled = true,
+) {
+  const cleanRic = ric?.trim().toUpperCase() || null;
+  const cleanAccountId = accountId?.trim() || null;
+  const key = enabled && cleanRic ? cparApiPath.cparPositionHedge(cleanRic, scope, cleanAccountId) : null;
+  return useSWR<CparPositionHedgeData>(key, apiFetch, SWR_OPTS);
+}
+
+export function useCparPortfolioHedgeRecommendation(
+  scope: CparScopedHedgeScope,
+  accountId?: string | null,
+  enabled = true,
+) {
+  const cleanAccountId = accountId?.trim() || null;
+  const key = enabled ? cparApiPath.cparPortfolioHedgeRecommendation(scope, cleanAccountId) : null;
+  return useSWR<CparPortfolioHedgeRecommendationData>(key, apiFetch, SWR_OPTS);
 }
 
 export function useCparPortfolioWhatIf(

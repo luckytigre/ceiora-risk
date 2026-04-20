@@ -171,6 +171,7 @@ The hedge engine lives in `backend/cpar/hedge_engine.py`.
 Supported modes:
 - `market_neutral`
 - `factor_neutral`
+- `factor_neutral_recommendation` for the `/cpar/hedge` portfolio workspace only
 
 Rules:
 - hedge directly in raw ETF trade space
@@ -184,6 +185,16 @@ Rules:
 - drop any final hedge leg with `abs(weight) < 0.05`
 - mark `hedge_degraded` if non-market gross reduction is below `50%`
 - mark `hedge_unavailable` if fit status is `insufficient_history`
+
+Portfolio recommendation addendum:
+- the `/cpar/hedge` workspace uses a distinct recommendation path instead of widening the compact `factor_neutral` preview globally
+- recommendation path:
+  - starts from aggregate hedge trade-space loadings for the selected scope
+  - keeps material factors under the existing materiality rules
+  - if more than 10 candidates remain, selects the 10 largest absolute trade-space loadings
+  - assigns exact negative hedge weights to those selected factors
+  - reports residual reduction after the 10-leg truncation
+- ETF share/dollar sizing is not part of the pure hedge engine; backend services size those abstract weights into signed dollar notionals and fractional quantities from a scope-owned base notional
 
 ## Non-Goals For Slice 1
 

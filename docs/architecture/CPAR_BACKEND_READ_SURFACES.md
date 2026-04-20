@@ -85,6 +85,36 @@ It does not add:
   - per-position `thresholded_contributions` for covered rows only
 - supported `mode` values are `factor_neutral` and `market_neutral`
 
+`GET /api/cpar/position/hedge?ric=&scope=&account_id=`
+- returns a read-only scoped holdings-row hedge payload for the `/cpar/risk` ticker-click popover
+- accepts:
+  - `scope=all_permitted_accounts`
+  - `scope=account` plus `account_id`
+- uses the selected holdings row only, not ticker-detail semantics
+- sizes hedge ETF legs on the backend from `base_notional = abs(clicked_row.market_value)`
+- returns both:
+  - `packages.market_neutral`
+  - `packages.factor_neutral`
+- each package returns signed ETF `trade_rows[]` with:
+  - `proxy_ticker`
+  - signed fractional `quantity`
+  - signed dollar `dollar_notional`
+- fails closed when the row is not covered/priced in the selected scope
+
+`GET /api/cpar/portfolio/hedge/recommendation?scope=&account_id=`
+- returns the portfolio hedge workspace payload used by `/cpar/hedge`
+- accepts:
+  - `scope=all_permitted_accounts`
+  - `scope=account` plus `account_id`
+- keeps the current explanatory risk snapshot for the selected scope on the top-level payload
+- adds one distinct `hedge_recommendation` block:
+  - factor-neutral only
+  - objective: minimize residual hedge trade-space loading magnitude after truncation
+  - uses the cPAR factor-proxy ETF registry only
+  - returns up to `10` ETF hedge trades
+- sizes ETF trades on the backend from `base_notional = covered_gross_market_value`
+- returns signed fractional `quantity` plus signed dollar `dollar_notional`
+
 `POST /api/cpar/portfolio/whatif`
 - returns a preview-only account-scoped cPAR what-if payload
 - accepts `account_id`, `mode`, and `scenario_rows[{ric,ticker,quantity_delta}]`
@@ -136,8 +166,12 @@ Aggregate risk owner:
 
 Account-scoped owners:
 - `GET /api/cpar/portfolio/hedge` remains owned by `backend/services/cpar_portfolio_hedge_service.py`
+- `GET /api/cpar/position/hedge` is owned by `backend/services/cpar_position_hedge_service.py`
+- `GET /api/cpar/portfolio/hedge/recommendation` is owned by `backend/services/cpar_portfolio_hedge_recommendation_service.py`
 - `POST /api/cpar/portfolio/whatif` remains owned by `backend/services/cpar_portfolio_whatif_service.py`
 - `backend/services/cpar_portfolio_hedge_service.py` now owns the route-facing hedge payload assembly
+- `backend/services/cpar_position_hedge_service.py` now owns the route-facing row-popover hedge payload assembly
+- `backend/services/cpar_portfolio_hedge_recommendation_service.py` now owns the route-facing hedge-workspace recommendation payload assembly
 - `backend/services/cpar_portfolio_account_snapshot_service.py` now owns the shared account-scoped hedge snapshot builder reused by both the hedge and what-if services
 - `backend/services/cpar_portfolio_snapshot_service.py` keeps the shared package/account/support-row loaders plus the compatibility seam for `build_cpar_portfolio_hedge_snapshot()`
 - aggregate current/hypothetical package-pinned snapshots reused by `POST /api/cpar/explore/whatif` now also flow through `backend/services/cpar_aggregate_risk_service.py`
@@ -238,6 +272,12 @@ The hedge route:
 - if the optional previous-package fit lookup or covariance read is unreadable, or if that previous covariance coverage is partial, the route still returns the current hedge preview and leaves stability metrics unset
 - unexpected previous-package decode or hedge-construction errors are not swallowed; they still surface as real defects
 - never refits the model on request
+
+The position-hedge and hedge-recommendation routes:
+- remain package-pinned and read-only
+- keep ETF trade sizing on the backend only
+- do not reinterpret abstract hedge weights as dollars on the frontend
+- treat all-accounts scope explicitly as all permitted accounts, never all database accounts
 
 ## Display-Loadings Behavior
 

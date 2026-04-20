@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatCparNumber } from "@/lib/cparTruth";
 import type {
   CparFactorVarianceContribution,
+  CparPortfolioHedgeRecommendationData,
   CparRiskData,
   CparRiskExposureMode,
 } from "@/lib/types/cpar";
@@ -18,27 +19,37 @@ const MODES: Array<{ key: CparRiskExposureMode; label: string }> = [
 
 export default function CparRiskFactorSummaryCard({
   portfolio,
+  space = "display",
 }: {
-  portfolio: CparRiskData;
+  portfolio: CparRiskData | CparPortfolioHedgeRecommendationData;
+  space?: "display" | "trade";
 }) {
+  const factorChartRows = space === "trade" ? portfolio.factor_chart : portfolio.display_factor_chart;
+  const varianceRows = space === "trade"
+    ? portfolio.factor_variance_contributions
+    : portfolio.display_factor_variance_contributions;
+  const varianceProxy = space === "trade"
+    ? portfolio.factor_variance_proxy
+    : portfolio.pre_hedge_factor_variance_proxy;
+
   const factorRows = useMemo(() => (
-    [...portfolio.display_factor_chart].sort((left, right) => (
+    [...factorChartRows].sort((left, right) => (
       left.display_order - right.display_order
       || Math.abs(right.aggregate_beta) - Math.abs(left.aggregate_beta)
       || left.factor_id.localeCompare(right.factor_id)
     ))
-  ), [portfolio.display_factor_chart]);
+  ), [factorChartRows]);
   const [mode, setMode] = useState<CparRiskExposureMode>("raw");
   const modeLabel = MODES.find((option) => option.key === mode)?.label ?? "Exposure";
   const [selectedFactorId, setSelectedFactorId] = useState<string | null>(null);
   const preHedgeVarianceProxy = useMemo(() => (
-    typeof portfolio.pre_hedge_factor_variance_proxy === "number"
-      ? portfolio.pre_hedge_factor_variance_proxy
-      : portfolio.display_factor_variance_contributions.reduce(
+    typeof varianceProxy === "number"
+      ? varianceProxy
+      : varianceRows.reduce(
           (sum: number, row: CparFactorVarianceContribution) => sum + (row.variance_contribution || 0),
           0,
         )
-  ), [portfolio.display_factor_variance_contributions, portfolio.pre_hedge_factor_variance_proxy]);
+  ), [varianceProxy, varianceRows]);
 
   useEffect(() => {
     setSelectedFactorId((current) => (

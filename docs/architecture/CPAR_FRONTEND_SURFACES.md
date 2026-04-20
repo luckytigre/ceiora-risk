@@ -4,7 +4,7 @@ Date: 2026-03-20
 Status: Active cPAR frontend notes
 Owner: Codex
 
-This document describes the current cPAR frontend surfaces after the namespaced-family routing slice and the later reset of the exploratory cPAR pages. `/cpar/risk` remains the active aggregate all-accounts cPAR risk surface.
+This document describes the current cPAR frontend surfaces after the namespaced-family routing slice, the aggregate risk rebuild, and the hedge workspace rebuild.
 
 Related cPAR docs:
 - [CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CPAR_ARCHITECTURE_AND_OPERATING_MODEL.md)
@@ -42,6 +42,12 @@ It does not add:
   - `total_variance_proxy`
   - `positions[].risk_mix`
 - explanatory factor displays must use those display-basis fields, not hedge-trade-space fields
+- the positions table now supports one ticker-click anchored popover at a time
+- only covered/priced rows are clickable
+- the popover reads `GET /api/cpar/position/hedge` and renders two single-name packages:
+  - `Market Neutral`
+  - `Factor Neutral`
+- popover package rendering fails closed if the returned package identity drifts from the parent risk payload
 - is the canonical route for that workflow now
 
 `/cpar/explore`
@@ -65,9 +71,14 @@ It does not add:
 - kept as a route placeholder so the cPAR family hierarchy remains stable while the page is rebuilt from the ground up
 
 `/cpar/hedge`
-- intentionally reset placeholder page
-- no longer renders the single-name hedge workflow in the current repo state
-- kept as a route placeholder so the cPAR family hierarchy remains stable while the page is rebuilt from the ground up
+- current portfolio hedge workspace
+- owns:
+  - scope selector for `All Accounts` plus individual accounts
+  - current cPAR long/short risk decomposition chart for the selected scope
+  - package banner and coverage summary for the selected scope
+  - one factor-neutral recommendation package only
+- reads `GET /api/cpar/portfolio/hedge/recommendation`
+- does not expose market-neutral as a hedge-page package mode
 
 Legacy redirects:
 - `/cpar` redirects to `/cpar/risk`
@@ -126,6 +137,18 @@ Shared shell behavior:
 - no request-time refit or build path
 - uses the active cPAR package, live holdings rows, and latest shared-source prices on or before the package date
 - now also exposes the exclusion buckets, factor-only variance decomposition, and per-position weighted thresholded contributions needed for a richer cPAR-native risk page
+
+`GET /api/cpar/position/hedge`
+- scoped holdings-row hedge payload for `/cpar/risk`
+- package-pinned and read-only
+- returns `packages.market_neutral` and `packages.factor_neutral`
+- each package returns signed ETF quantities and signed dollar notionals sized on the backend
+
+`GET /api/cpar/portfolio/hedge/recommendation`
+- portfolio hedge workspace payload for `/cpar/hedge`
+- package-pinned and read-only
+- current selected-scope risk summary stays on the top-level payload
+- `hedge_recommendation` is factor-neutral only and returns up to 10 ETF trades with signed fractional quantities
 
 `POST /api/cpar/portfolio/whatif`
 - account-scoped preview-only what-if payload
@@ -208,8 +231,8 @@ Read failures:
 - may hand staged deltas into the shared holdings apply surface, but that handoff is outside the cPAR route family
 
 `/cpar/hedge`
-- is intentionally blank aside from a reset placeholder
-- no longer owns single-name hedge workflow behavior in the current repo state
+- owns the portfolio-level factor-neutral recommendation workflow
+- does not own the single-name hedge popup workflow
 
 `/cpar/risk`
 - is now the aggregate cPAR risk analytics surface across all loaded holdings accounts
@@ -235,7 +258,7 @@ Read failures:
 
 Current cPAR frontend smokes cover:
 - `/cpar/explore` single-name detail rendering
-- `/cpar/hedge` placeholder rendering
+- `/cpar/hedge` workspace rendering
 - `/cpar/risk` baseline flow
 - `/cpar/risk` signed factor-loadings chart plus drilldown, 5Y factor history, positions contribution mix, and full-factor correlation heatmap
 - `/cpar/risk` fail-closed branches on the aggregate risk payload
@@ -250,6 +273,7 @@ Current cPAR frontend smokes cover:
 - any shared cUSE4/cPAR comparison UI
 - cPAR-native apply/mutation flows beyond the explicit shared holdings apply reuse on `/cpar/explore`
 - broader portfolio-analytics cPAR views beyond the current aggregate risk surface
+  - except for the current hedge workspace recommendation package
 - broader cPAR what-if expansion beyond the current narrow account-scoped preview route
 
 ## Shared App Chrome

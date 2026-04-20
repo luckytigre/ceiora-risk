@@ -1,7 +1,12 @@
 "use client";
 
 import { formatCparNumber, formatCparPercent } from "@/lib/cparTruth";
-import type { CparPortfolioHedgeData, CparPortfolioStatus } from "@/lib/types/cpar";
+import type {
+  CparCoverageBreakdown,
+  CparPortfolioHedgeData,
+  CparPortfolioHedgeRecommendationData,
+  CparPortfolioStatus,
+} from "@/lib/types/cpar";
 
 const STATUS_LABELS: Record<CparPortfolioStatus, { label: string; tone: "success" | "warning" | "error" }> = {
   ok: { label: "Coverage OK", tone: "success" },
@@ -20,9 +25,12 @@ const BREAKDOWN_LABELS = {
 export default function CparRiskCoverageSummaryCard({
   portfolio,
 }: {
-  portfolio: CparPortfolioHedgeData;
+  portfolio: CparPortfolioHedgeData | CparPortfolioHedgeRecommendationData;
 }) {
   const status = STATUS_LABELS[portfolio.portfolio_status];
+  const breakdownEntries = Object.entries(portfolio.coverage_breakdown as CparCoverageBreakdown) as Array<
+    [keyof CparCoverageBreakdown, CparCoverageBreakdown[keyof CparCoverageBreakdown]]
+  >;
 
   return (
     <section className="chart-card" data-testid="cpar-portfolio-overview">
@@ -57,11 +65,9 @@ export default function CparRiskCoverageSummaryCard({
       </div>
 
       <div className="cpar-risk-breakdown-grid" data-testid="cpar-risk-coverage-breakdown">
-        {Object.entries(portfolio.coverage_breakdown).map(([key, value]) => (
+        {breakdownEntries.map(([key, value]) => (
           <div key={key} className="cpar-risk-breakdown-card">
-            <div className="cpar-risk-breakdown-label">
-              {BREAKDOWN_LABELS[key as keyof typeof BREAKDOWN_LABELS]}
-            </div>
+            <div className="cpar-risk-breakdown-label">{BREAKDOWN_LABELS[key]}</div>
             <div className="cpar-risk-breakdown-value">{value.positions_count}</div>
             <div className="cpar-risk-breakdown-detail">
               Gross MV {formatCparNumber(value.gross_market_value, 2)}

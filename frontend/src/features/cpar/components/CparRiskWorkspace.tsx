@@ -87,7 +87,13 @@ function CparRiskWorkspaceInner() {
             />
           </div>
           <CparRiskFactorSummaryCard portfolio={normalizedRisk} />
-          <CparRiskPositionsContributionTable rows={normalizedRisk.positions} />
+          <CparRiskPositionsContributionTable
+            rows={normalizedRisk.positions}
+            packageIdentity={{
+              package_run_id: normalizedRisk.package_run_id,
+              package_date: normalizedRisk.package_date,
+            }}
+          />
           <CparRiskCovarianceSection covMatrix={normalizedRisk.cov_matrix} factors={normalizedRisk.factors ?? []} />
         </>
       ) : null}

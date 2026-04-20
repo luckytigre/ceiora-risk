@@ -89,6 +89,8 @@ Read-only backend routes:
   - reports `scope=restricted_accounts` when account enforcement trims the aggregate book for the active session
 - `GET /api/cpar/factors/history?factor_id=&years=`
 - `GET /api/cpar/portfolio/hedge?account_id=&mode=`
+- `GET /api/cpar/position/hedge?ric=&scope=&account_id=`
+- `GET /api/cpar/portfolio/hedge/recommendation?scope=&account_id=`
 - `POST /api/cpar/portfolio/whatif`
 
 Frontend pages:
@@ -237,6 +239,8 @@ Current display-vs-hedge rule:
 - single-name detail therefore distinguishes:
   - compatibility field `beta_market_step1` for the one-shot market coefficient, plus `display_loadings`, `raw_loadings`, and `thresholded_loadings` for explanatory residualized display
   - `beta_spy_trade` for hedge-space interpretation
+- `/cpar/risk` may now expose hedge-trade-space output only inside the ticker-click row popover backed by `GET /api/cpar/position/hedge`
+- `/cpar/hedge` now owns the portfolio-level factor-neutral recommendation package backed by `GET /api/cpar/portfolio/hedge/recommendation`
 
 ## Current Deferred Limits
 

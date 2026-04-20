@@ -29,6 +29,23 @@ export const cparApiPath = {
     params.set("mode", mode);
     return `/api/cpar/portfolio/hedge?${params.toString()}`;
   },
+  cparPositionHedge: (ric: string, scope: string, accountId?: string | null) => {
+    const params = new URLSearchParams();
+    params.set("ric", ric.trim().toUpperCase());
+    params.set("scope", scope);
+    if (scope === "account" && accountId && accountId.trim().length > 0) {
+      params.set("account_id", accountId.trim());
+    }
+    return `/api/cpar/position/hedge?${params.toString()}`;
+  },
+  cparPortfolioHedgeRecommendation: (scope: string, accountId?: string | null) => {
+    const params = new URLSearchParams();
+    params.set("scope", scope);
+    if (scope === "account" && accountId && accountId.trim().length > 0) {
+      params.set("account_id", accountId.trim());
+    }
+    return `/api/cpar/portfolio/hedge/recommendation?${params.toString()}`;
+  },
   cparPortfolioWhatIf: () => "/api/cpar/portfolio/whatif",
   cparExploreWhatIf: () => "/api/cpar/explore/whatif",
 } as const;

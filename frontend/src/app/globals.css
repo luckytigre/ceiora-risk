@@ -1335,6 +1335,187 @@ main {
   cursor: pointer;
 }
 
+.cpar-clickable-ticker {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px dotted color-mix(in srgb, var(--text-secondary) 78%, transparent);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.cpar-clickable-ticker:hover {
+  color: var(--family-cpar);
+  border-bottom-color: color-mix(in srgb, var(--family-cpar) 72%, transparent);
+}
+
+.cpar-position-hedge-popover {
+  position: fixed;
+  z-index: 70;
+  width: min(396px, calc(100vw - 24px));
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: var(--surface-popover);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.cpar-position-hedge-popover-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cpar-position-hedge-popover .cpar-section-kicker {
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+.cpar-position-hedge-popover-head strong {
+  font-size: 14px;
+  line-height: 1.2;
+  color: color-mix(in srgb, var(--text-primary) 78%, var(--text-secondary));
+}
+
+.cpar-position-hedge-popover .cpar-table-sub {
+  font-size: 11px;
+}
+
+.cpar-position-hedge-close {
+  border: 1px solid var(--rule-soft);
+  background: transparent;
+  color: var(--text-secondary);
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cpar-position-hedge-package-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.cpar-position-hedge-package {
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 10px;
+}
+
+.cpar-position-hedge-package:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.cpar-position-hedge-package-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cpar-position-hedge-package-head strong {
+  font-size: 13px;
+  line-height: 1.2;
+  color: color-mix(in srgb, var(--text-primary) 74%, var(--text-secondary));
+}
+
+.cpar-position-hedge-status {
+  font-size: 9px;
+  line-height: 1.1;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cpar-position-hedge-status.success {
+  color: var(--positive);
+}
+
+.cpar-position-hedge-status.warning {
+  color: var(--accent-yellow);
+}
+
+.cpar-position-hedge-status.error {
+  color: var(--negative);
+}
+
+.cpar-position-hedge-status.neutral {
+  color: var(--text-muted);
+}
+
+.cpar-position-hedge-table {
+  margin-top: 8px;
+}
+
+.cpar-position-hedge-popover .cpar-badge-row.compact {
+  gap: 6px;
+  margin-top: 0;
+}
+
+.cpar-position-hedge-popover .cpar-detail-chip,
+.cpar-position-hedge-popover .cpar-badge {
+  font-size: 10px;
+  padding: 3px 6px;
+}
+
+.cpar-position-hedge-popover .dash-table table {
+  font-size: 12px;
+}
+
+.cpar-position-hedge-popover .dash-table thead th {
+  font-size: 9px;
+  padding: 5px 8px;
+}
+
+.cpar-position-hedge-popover .dash-table tbody td {
+  padding: 6px 8px;
+}
+
+.cpar-hedge-workspace-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.cpar-hedge-scope-control {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.cpar-hedge-scope-control select {
+  border: 1px solid var(--rule-strong);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+@media (max-width: 900px) {
+  .cpar-hedge-workspace-head {
+    flex-direction: column;
+  }
+
+  .cpar-hedge-scope-control {
+    min-width: 100%;
+  }
+}
+
 .dash-table td strong {
   color: inherit;
   font-weight: 500;

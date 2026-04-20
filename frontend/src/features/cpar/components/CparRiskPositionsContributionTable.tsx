@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import TableRowToggle from "@/components/TableRowToggle";
 import MethodLabel from "@/components/MethodLabel";
+import CparPositionHedgePopover from "@/features/cpar/components/CparPositionHedgePopover";
 import { describeCparPositionMethod, formatCparMarketValueThousands } from "@/lib/cparTruth";
-import type { CparPortfolioPositionRow } from "@/lib/types/cpar";
+import type { CparPackageMeta, CparPortfolioPositionRow } from "@/lib/types/cpar";
 
 const COLLAPSED_ROWS = 8;
 type SortKey = "ticker" | "method" | "trbc_industry_group" | "quantity" | "market_value" | "risk_mix";
@@ -44,15 +45,23 @@ function riskMixSortValue(row: CparPortfolioPositionRow): number {
   return normalizeRiskMix(row)?.idio ?? -1;
 }
 
+function rowKey(row: CparPortfolioPositionRow): string {
+  return `${row.account_id || "scope"}:${row.ric}`;
+}
+
 export default function CparRiskPositionsContributionTable({
   rows,
+  packageIdentity,
 }: {
   rows: CparPortfolioPositionRow[];
+  packageIdentity: Pick<CparPackageMeta, "package_run_id" | "package_date">;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("market_value");
   const [sortAsc, setSortAsc] = useState(false);
   const [marketValueSortMode, setMarketValueSortMode] = useState<MarketValueSortMode>("abs");
+  const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
+  const [activeAnchorEl, setActiveAnchorEl] = useState<HTMLElement | null>(null);
   const coveredCount = useMemo(
     () => rows.filter((row) => row.coverage === "covered").length,
     [rows],
@@ -90,6 +99,13 @@ export default function CparRiskPositionsContributionTable({
     return nextRows;
   }, [marketValueSortMode, rows, sortAsc, sortKey]);
   const visibleRows = expanded ? sortedRows : sortedRows.slice(0, COLLAPSED_ROWS);
+
+  useEffect(() => {
+    if (!activeRowKey) return;
+    if (rows.some((row) => rowKey(row) === activeRowKey)) return;
+    setActiveRowKey(null);
+    setActiveAnchorEl(null);
+  }, [activeRowKey, rows]);
 
   const handleSort = (nextKey: SortKey) => {
     if (nextKey === "market_value") {
@@ -163,8 +179,39 @@ export default function CparRiskPositionsContributionTable({
               </tr>
             ) : (
               visibleRows.map((row) => (
-                <tr key={row.ric}>
-                  <td>{row.ticker || "—"}</td>
+                <tr key={rowKey(row)}>
+                  <td>
+                    {row.coverage === "covered" && typeof row.market_value === "number" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="cpar-clickable-ticker"
+                          onClick={(event) => {
+                            const nextRowKey = activeRowKey === rowKey(row) ? null : rowKey(row);
+                            setActiveRowKey(nextRowKey);
+                            setActiveAnchorEl(nextRowKey ? event.currentTarget : null);
+                          }}
+                        >
+                          {row.ticker || row.ric}
+                        </button>
+                        {activeRowKey === rowKey(row) && activeAnchorEl ? (
+                          <CparPositionHedgePopover
+                            row={row}
+                            anchorEl={activeAnchorEl}
+                            onClose={() => {
+                              setActiveRowKey(null);
+                              setActiveAnchorEl(null);
+                            }}
+                            packageIdentity={packageIdentity}
+                            scope={row.account_id === "all_accounts" ? "all_permitted_accounts" : "account"}
+                            accountId={row.account_id === "all_accounts" ? null : row.account_id}
+                          />
+                        ) : null}
+                      </>
+                    ) : (
+                      row.ticker || "—"
+                    )}
+                  </td>
                   <td>
                     <MethodLabel
                       label={methodLabel(row)}

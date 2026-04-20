@@ -14,6 +14,7 @@ import type {
   CparHedgeStatus,
   CparLoading,
   CparPortfolioHedgeData,
+  CparPortfolioHedgeRecommendationData,
   CparPortfolioPositionRow,
   CparPortfolioWhatIfData,
   CparSearchItem,
@@ -556,6 +557,13 @@ export function normalizeCparPortfolioHedgeData(
 ): CparPortfolioHedgeData | null {
   if (!portfolio) return null;
   return normalizeCparRiskLikeData(portfolio);
+}
+
+export function normalizeCparPortfolioHedgeRecommendationData(
+  portfolio: CparPortfolioHedgeRecommendationData | null | undefined,
+): CparPortfolioHedgeRecommendationData | null {
+  if (!portfolio) return null;
+  return normalizeCparRiskLikeData(portfolio) as CparPortfolioHedgeRecommendationData;
 }
 
 export function normalizeCparRiskData(

@@ -9,6 +9,7 @@ export type CparPortfolioStatus = "ok" | "partial" | "empty" | "unavailable";
 export type CparPortfolioCoverage = "covered" | "missing_price" | "missing_cpar_fit" | "insufficient_history";
 export type CparRiskScope = "all_accounts";
 export type CparExploreScope = "all_accounts" | "restricted_accounts";
+export type CparScopedHedgeScope = "all_permitted_accounts" | "account";
 export type CparSourceContextStatus = "ok" | "partial" | "missing" | "unavailable";
 export type CparSourceContextReason = "missing_rows" | "shared_source_unavailable" | "mixed";
 
@@ -191,6 +192,22 @@ export interface CparHedgeLeg {
   weight: number;
 }
 
+export interface CparHedgeTradeRow {
+  factor_id: string;
+  label?: string | null;
+  group?: CparFactorGroup | null;
+  display_order?: number | null;
+  proxy_ric: string;
+  proxy_ticker: string;
+  price: number;
+  price_field_used?: string | null;
+  price_date?: string | null;
+  currency?: string | null;
+  trade_weight: number;
+  dollar_notional: number;
+  quantity: number | null;
+}
+
 export interface CparPostHedgeExposure {
   factor_id: string;
   label?: string | null;
@@ -251,6 +268,31 @@ export interface CparPortfolioPositionRow {
   display_contributions: CparLoading[];
   thresholded_contributions: CparLoading[];
   risk_mix?: CparRiskShares | null;
+}
+
+export interface CparPositionHedgePackage {
+  mode: CparHedgeMode;
+  hedge_status: CparHedgeStatus;
+  hedge_reason?: string | null;
+  trade_rows: CparHedgeTradeRow[];
+  post_hedge_exposures: CparPostHedgeExposure[];
+  pre_hedge_factor_variance_proxy: number;
+  post_hedge_factor_variance_proxy: number;
+  non_market_reduction_ratio?: number | null;
+}
+
+export interface CparPositionHedgeData extends CparPackageMeta {
+  scope: CparScopedHedgeScope;
+  account_id: string | null;
+  account_name: string | null;
+  position: CparPortfolioPositionRow & {
+    base_notional: number;
+    classification?: Record<string, unknown> | null;
+  };
+  packages: {
+    market_neutral: CparPositionHedgePackage;
+    factor_neutral: CparPositionHedgePackage;
+  };
 }
 
 export interface CparFactorDrilldownRow {
@@ -417,6 +459,53 @@ export interface CparPortfolioHedgeData extends CparPackageMeta {
   net_hedge_notional: number | null;
   non_market_reduction_ratio: number | null;
   positions: CparPortfolioPositionRow[];
+}
+
+export interface CparPortfolioHedgeRecommendationPackage {
+  mode: "factor_neutral";
+  objective: string;
+  max_hedge_legs: number;
+  base_notional: number;
+  hedge_status: CparHedgeStatus;
+  hedge_reason?: string | null;
+  trade_rows: CparHedgeTradeRow[];
+  post_hedge_exposures: CparPostHedgeExposure[];
+  pre_hedge_factor_variance_proxy: number;
+  post_hedge_factor_variance_proxy: number;
+  non_market_reduction_ratio?: number | null;
+}
+
+export interface CparPortfolioHedgeRecommendationData extends CparPackageMeta {
+  factors?: CparFactorSpec[];
+  scope: CparScopedHedgeScope;
+  account_id: string | null;
+  account_name: string | null;
+  portfolio_status: CparPortfolioStatus;
+  portfolio_reason: string | null;
+  positions_count: number;
+  covered_positions_count: number;
+  excluded_positions_count: number;
+  gross_market_value: number;
+  net_market_value: number;
+  covered_gross_market_value: number;
+  coverage_ratio: number | null;
+  coverage_breakdown: CparCoverageBreakdown;
+  aggregate_display_loadings: CparLoading[];
+  aggregate_thresholded_loadings: CparLoading[];
+  risk_shares: CparRiskShares;
+  vol_scaled_shares?: CparRiskShares;
+  display_factor_variance_contributions: CparFactorVarianceContribution[];
+  factor_variance_contributions: CparFactorVarianceContribution[];
+  display_factor_chart: CparFactorChartRow[];
+  factor_chart: CparFactorChartRow[];
+  display_cov_matrix?: CparCovMatrix;
+  cov_matrix: CparCovMatrix;
+  factor_variance_proxy: number;
+  pre_hedge_factor_variance_proxy?: number | null;
+  idio_variance_proxy: number;
+  total_variance_proxy: number;
+  positions: CparPortfolioPositionRow[];
+  hedge_recommendation: CparPortfolioHedgeRecommendationPackage;
 }
 
 export interface CparPortfolioWhatIfScenarioRow {
