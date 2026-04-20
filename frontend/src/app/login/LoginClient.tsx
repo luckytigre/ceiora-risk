@@ -375,8 +375,9 @@ function LoginShell({
                     autoComplete="name"
                     value={displayName}
                     onChange={(event) => onDisplayNameChange?.(event.target.value)}
-                    placeholder="Display name"
+                    placeholder=" "
                   />
+                  <span className="public-login-field-label">Display name</span>
                 </label>
               )}
 
@@ -388,8 +389,11 @@ function LoginShell({
                       autoComplete={provider === "neon" ? "email" : "username"}
                       value={username}
                       onChange={(event) => onUsernameChange?.(event.target.value)}
-                      placeholder={provider === "neon" ? "Email" : "Username"}
+                      placeholder=" "
                     />
+                    <span className="public-login-field-label">
+                      {provider === "neon" ? "Email" : "Username"}
+                    </span>
                   </label>
 
                   <label className="public-login-field">
@@ -398,8 +402,9 @@ function LoginShell({
                       autoComplete={provider === "neon" && mode === "signup" ? "new-password" : "current-password"}
                       value={password}
                       onChange={(event) => onPasswordChange?.(event.target.value)}
-                      placeholder="Password"
+                      placeholder=" "
                     />
+                    <span className="public-login-field-label">Password</span>
                   </label>
                 </>
               ) : null}

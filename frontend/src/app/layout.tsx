@@ -36,7 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const initialAuthState = decodeAuthSessionBootstrapHeader(requestHeaders.get(APP_AUTH_BOOTSTRAP_HEADER));
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
-      <body data-theme="dark">
+      <body data-theme="dark" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
         <AuthSessionProvider neonProjectUrl={projectUrl} initialState={initialAuthState}>
           <AppSettingsProvider>

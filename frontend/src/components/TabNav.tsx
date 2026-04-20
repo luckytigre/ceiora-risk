@@ -70,11 +70,46 @@ export default function TabNav() {
   const [transitionFamily, setTransitionFamily] = useState<"cuse" | "cpar" | null>(null);
   const prevFamilyRef = useRef<string | null>(null);
   const badgeSlotRef = useRef<HTMLSpanElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuState, setMenuState] = useState<"closed" | "open" | "closing">("closed");
+  const menuOpen = menuState === "open";
+  const menuMounted = menuState !== "closed";
+  const closeTimerRef = useRef<number | null>(null);
+  const closeMenu = useCallback(() => {
+    setMenuState((prev) => {
+      if (prev !== "open") return prev;
+      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = window.setTimeout(() => {
+        setMenuState("closed");
+        closeTimerRef.current = null;
+      }, 300);
+      return "closing";
+    });
+  }, []);
+  const toggleMenu = useCallback(() => {
+    setMenuState((prev) => {
+      if (prev === "open") {
+        if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = window.setTimeout(() => {
+          setMenuState("closed");
+          closeTimerRef.current = null;
+        }, 300);
+        return "closing";
+      }
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      return "open";
+    });
+  }, []);
+  useEffect(() => () => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+  }, []);
   const [refreshActionState, setRefreshActionState] = useState<"idle" | "running" | "failed">("idle");
   const [clockMs, setClockMs] = useState<number>(0);
   const navRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const { themeMode } = useAppSettings();
   const operatorTokenAvailable = useOperatorTokenAvailable();
   const showOperatorChrome = operatorTokenAvailable && (activePath.startsWith("/cuse") || activePath === "/positions" || activePath === "/data");
@@ -171,13 +206,16 @@ export default function TabNav() {
   useEffect(() => {
     if (!menuOpen) return;
     const onClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
+      const target = e.target as Node;
+      const insideButton = menuRef.current?.contains(target);
+      const insideDropdown = dropdownRef.current?.contains(target);
+      if (!insideButton && !insideDropdown) {
+        closeMenu();
       }
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
-  }, [menuOpen]);
+  }, [menuOpen, closeMenu]);
 
   useEffect(() => {
     if (!pending) {
@@ -348,6 +386,8 @@ export default function TabNav() {
   }
 
   return (
+    <>
+      {menuMounted && <div className="dash-page-scrim" data-state={menuState} aria-hidden="true" />}
     <nav
       ref={navRef}
       className={`dash-tabs${isLanding ? " dash-tabs-landing" : ""}${isPositionsPage ? " dash-tabs-positions" : ""}`}
@@ -426,7 +466,7 @@ export default function TabNav() {
         <div ref={menuRef} style={{ position: "relative" }}>
           <button
             className="dash-menu-btn"
-            onClick={() => setMenuOpen(!menuOpen)}
+            onClick={() => toggleMenu()}
             aria-label="Menu"
             aria-expanded={menuOpen}
           >
@@ -446,67 +486,76 @@ export default function TabNav() {
             </svg>
           </button>
 
-          {menuOpen && (
-            <div className="dash-dropdown">
-              <div className="dash-dropdown-group">
-                <div className="dash-dropdown-section">Navigation</div>
-                <div className="dash-dropdown-group-items">
-                  <Link
-                    href="/positions"
-                    className={`dash-dropdown-item${pathname === "/positions" ? " active" : ""}`}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Positions
-                  </Link>
-                </div>
-              </div>
-              <div className="dash-dropdown-group">
-                <div className="dash-dropdown-section">Settings</div>
-                <div className="dash-dropdown-group-items">
-                  <Link
-                    href="/settings"
-                    className={`dash-dropdown-item${pathname === "/settings" ? " active" : ""}`}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Global settings
-                  </Link>
-                  {session?.isAdmin && context?.admin_settings_enabled !== false ? (
-                    <Link
-                      href="/settings/admin"
-                      className={`dash-dropdown-item${pathname === "/settings/admin" ? " active" : ""}`}
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      Admin settings
-                    </Link>
-                  ) : null}
-                  <Link
-                    href="/data"
-                    className={`dash-dropdown-item${pathname === "/data" ? " active" : ""}`}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    cUSE data
-                  </Link>
-                  <span className="dash-dropdown-item disabled" aria-disabled="true">cPAR data</span>
-                </div>
-              </div>
-              <div className="dash-dropdown-group">
-                <div className="dash-dropdown-section">Account</div>
-                <div className="dash-dropdown-group-items">
-                  <button
-                    className="dash-dropdown-item"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      void handleLogout();
-                    }}
-                  >
-                    Sign out
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </nav>
+    {menuMounted && (
+      <div ref={dropdownRef} className="dash-dropdown" data-state={menuState}>
+        <div className="dash-dropdown-group">
+          <div className="dash-dropdown-section">Navigation</div>
+          <div className="dash-dropdown-group-items">
+            <Link
+              href="/tutorial"
+              className={`dash-dropdown-item${pathname === "/tutorial" ? " active" : ""}`}
+              onClick={() => closeMenu()}
+            >
+              Tutorial
+            </Link>
+            <Link
+              href="/positions"
+              className={`dash-dropdown-item${pathname === "/positions" ? " active" : ""}`}
+              onClick={() => closeMenu()}
+            >
+              Positions
+            </Link>
+          </div>
+        </div>
+        <div className="dash-dropdown-group">
+          <div className="dash-dropdown-section">Settings</div>
+          <div className="dash-dropdown-group-items">
+            <Link
+              href="/settings"
+              className={`dash-dropdown-item${pathname === "/settings" ? " active" : ""}`}
+              onClick={() => closeMenu()}
+            >
+              Global settings
+            </Link>
+            {session?.isAdmin && context?.admin_settings_enabled !== false ? (
+              <Link
+                href="/settings/admin"
+                className={`dash-dropdown-item${pathname === "/settings/admin" ? " active" : ""}`}
+                onClick={() => closeMenu()}
+              >
+                Admin settings
+              </Link>
+            ) : null}
+            <Link
+              href="/data"
+              className={`dash-dropdown-item${pathname === "/data" ? " active" : ""}`}
+              onClick={() => closeMenu()}
+            >
+              cUSE data
+            </Link>
+            <span className="dash-dropdown-item disabled" aria-disabled="true">cPAR data</span>
+          </div>
+        </div>
+        <div className="dash-dropdown-group">
+          <div className="dash-dropdown-section">Account</div>
+          <div className="dash-dropdown-group-items">
+            <button
+              className="dash-dropdown-item"
+              onClick={() => {
+                closeMenu();
+                void handleLogout();
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+        <div className="dash-dropdown-footer">Copyright © 2026 Ceiora</div>
+      </div>
+    )}
+    </>
   );
 }
