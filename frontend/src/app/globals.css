@@ -314,7 +314,7 @@ body {
 :root[data-theme="light"] .confirm-modal-card,
 :root[data-theme="light"] .settings-auth-card,
 :root[data-theme="light"] .settings-choice-card {
-  background: var(--surface-popover-light);
+  background: rgba(246, 244, 239, 0.96);
   border-color: var(--rule-base-light);
   box-shadow: none;
 }
@@ -644,11 +644,15 @@ main {
 }
 
 .dash-tabs-landing {
-  background-color: rgba(var(--nav-bg-rgb), 0.89);
+  background-color: color-mix(in srgb, rgba(var(--nav-bg-rgb), 0.84) 90%, rgba(255, 255, 255, 0.08));
   border-bottom-color: var(--rule-soft);
   box-shadow: none;
-  backdrop-filter: blur(10px) saturate(1.04);
-  -webkit-backdrop-filter: blur(10px) saturate(1.04);
+  backdrop-filter: blur(7px) saturate(1.04);
+  -webkit-backdrop-filter: blur(7px) saturate(1.04);
+}
+
+:root[data-theme="light"] .dash-tabs-landing {
+  background-color: color-mix(in srgb, rgba(var(--nav-bg-rgb), 0.78) 88%, rgba(255, 255, 255, 0.24));
 }
 
 .dash-tabs-positions {
@@ -6584,13 +6588,19 @@ main {
   padding: 40px 42px 36px;
   display: grid;
   justify-items: stretch;
-  background: color-mix(in srgb, var(--surface-soft) 55%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 58%, rgba(255, 255, 255, 0.04));
+  backdrop-filter: blur(1px) saturate(1.01);
+  -webkit-backdrop-filter: blur(1px) saturate(1.01);
   border-top: 1px solid var(--rule-strong);
   border-bottom: 1px solid color-mix(in srgb, var(--rule-soft) 100%, transparent);
   border-left: 0;
   border-right: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+:root[data-theme="light"] .public-login-shell {
+  background: color-mix(in srgb, var(--surface-soft-light) 62%, rgba(255, 255, 255, 0.26));
 }
 
 .public-intro-header {
