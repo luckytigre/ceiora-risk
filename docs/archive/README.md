@@ -11,7 +11,7 @@ Use active docs first:
 
 Archive buckets:
 - `implementation-trackers/`
-  - completed rollout trackers, implementation trackers, and archived planning specs
+  - completed rollout trackers, implementation trackers, and archived active-folder workstream plans after they stop being live guidance
 - `one-time-protocols/`
   - one-off cleanup or migration procedures that are no longer live runbooks
 - `execution-logs/`

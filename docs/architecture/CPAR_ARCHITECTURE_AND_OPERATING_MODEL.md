@@ -117,6 +117,13 @@ Frontend consistency rule:
 
 The next cPAR frontend overhaul should remain cPAR-native even when it adopts cUSE-like presentation patterns.
 
+Current active workstream:
+- cPAR hedge packages are the one intentionally active temporary UX expansion:
+  - row-level hedge popovers on `/cpar/risk`
+  - a real portfolio hedge workspace on `/cpar/hedge`
+- while that work is in flight, the temporary implementation plan lives in `CPAR_HEDGE_WORKSTREAM_PLAN_2026-04-20.md`
+- that temporary plan should be archived once the hedge surfaces land and this canonical document has been updated
+
 Current owner decisions:
 - rebuilt `/cpar/explore`, `/cpar/hedge`, and `/cpar/health` surfaces should remain cPAR-owned when they return
 - `/cpar/risk` is now the explicit aggregate all-accounts cPAR risk owner:

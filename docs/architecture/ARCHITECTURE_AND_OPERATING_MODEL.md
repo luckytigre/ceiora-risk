@@ -92,6 +92,27 @@ Integration-layer ownership remains in the repo's normal layers and is documente
 - Canonical timing and contract names are defined in `architecture-invariants.md`.
   Compatibility aliases may remain only for fallback decoding and must not drive new UI or documentation semantics.
 
+## Current Product And UX Tradeoffs
+
+The repo now makes a few explicit product/serving tradeoffs rather than trying to hide them behind generic caches or page-local fetch logic.
+
+- Risk pages are summary-first:
+  - `cUSE` first render comes from `/api/cuse/risk-page`
+  - `cPAR` first render comes from `/api/cpar/risk`
+  - covariance heatmaps, drilldown history, and deeper diagnostics are loaded later or only when visible
+- Explore pages are compact-first:
+  - `/api/cuse/explore/context` and `/api/cpar/explore/context` are intentionally small first-render bootstrap surfaces
+  - they must not grow into second generic portfolio or aggregate-risk payloads
+- What-if preview is scoped and ephemeral:
+  - staged scenarios compare against the staged account set, not the whole book by default
+  - preview remains browser-staged and preview-only until explicit apply
+- Shared auth/session now prioritizes first paint over eager verification:
+  - protected pages bootstrap from middleware-validated session/context
+  - `/api/auth/session` is background refresh, not the first-render gate
+- Package and snapshot truth is favored over request-time rebuilding:
+  - `cPAR` pages stay package-pinned
+  - `cUSE`/`cPAR` UI surfaces should read owned serving snapshots before inventing page-local recompute paths
+
 ## Four-Layer Operating Model
 
 ### 1) Universe Layer
