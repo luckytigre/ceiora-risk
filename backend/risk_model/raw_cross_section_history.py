@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
@@ -21,8 +22,8 @@ from backend.data.trbc_schema import (
     pick_trbc_industry_column,
 )
 from backend.trading_calendar import filter_xnys_sessions
-from backend.universe.runtime_rows import load_security_runtime_rows
-from backend.universe.security_master_sync import load_default_source_universe_rows
+from backend.universe.runtime_rows import load_security_runtime_rows_by_dates
+from backend.universe.selectors import _source_quality_exclusion_reason
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,18 @@ _RAW_DESCRIPTOR_COLS = [
     "asset_growth_raw",
     "dividend_yield_raw",
 ]
+
+
+def _memory_high_water_mb() -> float | None:
+    try:
+        import resource
+    except ImportError:
+        return None
+    usage = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss or 0.0)
+    if usage <= 0.0:
+        return None
+    divisor = 1024.0 * 1024.0 if sys.platform == "darwin" else 1024.0
+    return round(usage / divisor, 2)
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -352,28 +365,74 @@ def _normalize_text(series: pd.Series) -> pd.Series:
     )
 
 
-def _load_runtime_identity(conn: sqlite3.Connection) -> pd.DataFrame:
-    runtime_rows = load_security_runtime_rows(
+def _has_historical_source_observations(conn: sqlite3.Connection) -> bool:
+    if not _table_exists(conn, "security_source_observation_daily"):
+        return False
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM security_source_observation_daily
+        LIMIT 1
+        """
+    ).fetchone()
+    return row is not None
+
+
+def _load_runtime_identity_by_dates(
+    conn: sqlite3.Connection,
+    *,
+    dates: list[str],
+) -> pd.DataFrame:
+    runtime_rows_by_date = load_security_runtime_rows_by_dates(
         conn,
+        as_of_dates=dates,
         include_disabled=False,
         allow_empty_registry_fallback=False,
     )
-    if not runtime_rows:
-        return pd.DataFrame(columns=["ric", "ticker"])
-    runtime_identity = pd.DataFrame(
-        [
-            {
-                "ric": row.get("ric"),
-                "ticker": row.get("ticker"),
-            }
-            for row in runtime_rows
-        ]
-    )
-    if runtime_identity.empty:
-        return pd.DataFrame(columns=["ric", "ticker"])
+    if not runtime_rows_by_date:
+        return pd.DataFrame(columns=["as_of_date", "ric", "ticker"])
+    require_observation_history = _has_historical_source_observations(conn)
+    rows: list[dict[str, str]] = []
+    for as_of_date, runtime_rows in runtime_rows_by_date.items():
+        for row in runtime_rows:
+            ric = str(row.get("ric") or "").strip().upper()
+            ticker = str(row.get("ticker") or "").strip().upper()
+            if not ric or not ticker:
+                continue
+            if require_observation_history and not str(row.get("observation_as_of_date") or "").strip():
+                continue
+            source = str(row.get("source") or "").strip()
+            if (
+                int(row.get("classification_ready") or 0) == 0
+                and source.endswith("_seed")
+                and int(row.get("allow_cuse_returns_projection") or 0) != 1
+            ):
+                continue
+            if str(row.get("legacy_coverage_role") or "").strip() == "projection_only":
+                continue
+            if _source_quality_exclusion_reason(
+                ric=ric,
+                ticker=ticker,
+                exchange_name=row.get("exchange_name"),
+            ):
+                continue
+            rows.append(
+                {
+                    "as_of_date": str(as_of_date),
+                    "ric": ric,
+                    "ticker": ticker,
+                }
+            )
+    if not rows:
+        return pd.DataFrame(columns=["as_of_date", "ric", "ticker"])
+    runtime_identity = pd.DataFrame(rows)
+    runtime_identity["as_of_date"] = runtime_identity["as_of_date"].astype(str)
     runtime_identity["ric"] = runtime_identity["ric"].astype(str).str.upper()
     runtime_identity["ticker"] = runtime_identity["ticker"].astype(str).str.upper()
-    return runtime_identity[["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
+    return runtime_identity[["as_of_date", "ric", "ticker"]].drop_duplicates(
+        subset=["as_of_date", "ric"],
+        keep="last",
+    )
 
 
 def rebuild_raw_cross_section_history(
@@ -386,6 +445,12 @@ def rebuild_raw_cross_section_history(
 ) -> dict[str, Any]:
     """Rebuild in-project raw/scores table from source-of-truth datasets."""
     stage_t0 = time.perf_counter()
+    read_seconds = 0.0
+    compute_seconds = 0.0
+    write_seconds = 0.0
+    query_count = 0
+    rows_read = 0
+    largest_batch_rows = 0
     conn = sqlite3.connect(str(data_db))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
@@ -425,25 +490,22 @@ def rebuild_raw_cross_section_history(
         ).date().isoformat()
         max_date = dates[-1]
 
-        runtime_identity = _load_runtime_identity(conn)
-        if runtime_identity.empty:
+        read_t0 = time.perf_counter()
+        runtime_identity_by_date = _load_runtime_identity_by_dates(conn, dates=dates)
+        read_seconds += time.perf_counter() - read_t0
+        query_count += 1
+        rows_read += int(len(runtime_identity_by_date))
+        largest_batch_rows = max(largest_batch_rows, int(len(runtime_identity_by_date)))
+        if runtime_identity_by_date.empty:
             return {"status": "no-runtime-identity", "rows_upserted": 0, "table": TABLE}
-        default_source_rows = load_default_source_universe_rows(conn, include_pending_seed=False)
-        if default_source_rows:
-            default_source_rics = {
-                str(row.get("ric") or "").strip().upper()
-                for row in default_source_rows
-                if str(row.get("ric") or "").strip()
-            }
-            runtime_identity = runtime_identity[
-                runtime_identity["ric"].astype(str).str.upper().isin(default_source_rics)
-            ]
-        if runtime_identity.empty:
-            return {"status": "no-runtime-identity", "rows_upserted": 0, "table": TABLE}
-        runtime_union_identity = runtime_identity[["ric", "ticker"]].drop_duplicates(subset=["ric"], keep="last")
+        runtime_union_identity = runtime_identity_by_date[["ric", "ticker"]].drop_duplicates(
+            subset=["ric"],
+            keep="last",
+        )
         runtime_rics = runtime_union_identity["ric"].astype(str).tolist()
         runtime_placeholders = ",".join("?" for _ in runtime_rics)
 
+        read_t0 = time.perf_counter()
         prices_raw = pd.read_sql_query(
             f"""
             SELECT UPPER(p.ric) AS ric, p.date, p.close, p.volume, p.source, p.updated_at
@@ -455,11 +517,17 @@ def rebuild_raw_cross_section_history(
             conn,
             params=(min_for_roll, max_date, *runtime_rics),
         )
+        read_seconds += time.perf_counter() - read_t0
+        query_count += 1
+        rows_read += int(len(prices_raw))
+        largest_batch_rows = max(largest_batch_rows, int(len(prices_raw)))
+        compute_t0 = time.perf_counter()
         if not prices_raw.empty:
             prices_raw["ric"] = prices_raw["ric"].astype(str).str.upper()
             prices_raw = prices_raw.merge(runtime_union_identity, on="ric", how="inner")
         prices = _dedupe_prices(prices_raw)
         prices = _compute_price_features(prices)
+        compute_seconds += time.perf_counter() - compute_t0
         logger.info(
             "Loaded price history for raw cross-section: rows=%s rics=%s",
             len(prices),
@@ -484,7 +552,10 @@ def rebuild_raw_cross_section_history(
         base = base.rename(columns={"date": "as_of_date", "close": "price_close", "volume": "price_volume"})
         base["as_of_date_dt"] = pd.to_datetime(base["as_of_date"], errors="coerce")
         base = base.dropna(subset=["as_of_date_dt"])
-        base = base.merge(runtime_union_identity, on=["ric", "ticker"], how="inner")
+        base["ric"] = base["ric"].astype(str).str.upper()
+        if "ticker" in base.columns:
+            base = base.drop(columns=["ticker"])
+        base = base.merge(runtime_identity_by_date, on=["as_of_date", "ric"], how="inner")
         if base.empty:
             return {"status": "no-base", "rows_upserted": 0, "table": TABLE}
 
@@ -510,6 +581,7 @@ def rebuild_raw_cross_section_history(
             fundamentals = pd.DataFrame()
         else:
             fselect_cols = ", ".join(f"f.{c}" for c in fkeep)
+            read_t0 = time.perf_counter()
             fundamentals = pd.read_sql_query(
                 f"""
                 SELECT UPPER(f.ric) AS ric, f.as_of_date AS fetch_date, {fselect_cols}
@@ -521,6 +593,11 @@ def rebuild_raw_cross_section_history(
                 conn,
                 params=(max_date, *runtime_rics),
             )
+            read_seconds += time.perf_counter() - read_t0
+            query_count += 1
+            rows_read += int(len(fundamentals))
+            largest_batch_rows = max(largest_batch_rows, int(len(fundamentals)))
+        compute_t0 = time.perf_counter()
         if not fundamentals.empty:
             fundamentals["ric"] = fundamentals["ric"].astype(str).str.upper()
             fundamentals = fundamentals.merge(runtime_union_identity, on="ric", how="left")
@@ -542,6 +619,7 @@ def rebuild_raw_cross_section_history(
             fundamentals["sales_growth_raw"] = fundamentals.groupby("ric", sort=False)["revenue"].pct_change(4, fill_method=None)
             fundamentals["eps_growth_raw"] = fundamentals.groupby("ric", sort=False)["trailing_eps"].pct_change(4, fill_method=None)
             fundamentals["asset_growth_raw"] = fundamentals.groupby("ric", sort=False)["total_assets"].pct_change(4, fill_method=None)
+        compute_seconds += time.perf_counter() - compute_t0
         logger.info(
             "Loaded fundamentals for raw cross-section: rows=%s rics=%s",
             len(fundamentals),
@@ -565,6 +643,7 @@ def rebuild_raw_cross_section_history(
         trbc_sec_col = "trbc_economic_sector"
         trbc = pd.DataFrame()
         if trbc_biz_col and trbc_sec_col in trbc_cols:
+            read_t0 = time.perf_counter()
             trbc = pd.read_sql_query(
                 f"""
                 SELECT
@@ -582,6 +661,11 @@ def rebuild_raw_cross_section_history(
                 conn,
                 params=(max_date, *runtime_rics),
             )
+            read_seconds += time.perf_counter() - read_t0
+            query_count += 1
+            rows_read += int(len(trbc))
+            largest_batch_rows = max(largest_batch_rows, int(len(trbc)))
+            compute_t0 = time.perf_counter()
             if not trbc.empty:
                 trbc["ric"] = trbc["ric"].astype(str).str.upper()
                 trbc = trbc.merge(runtime_union_identity, on="ric", how="left")
@@ -596,6 +680,7 @@ def rebuild_raw_cross_section_history(
                 trbc = trbc.sort_values(["ric", "as_of_date"]).drop_duplicates(
                     subset=["ric", "as_of_date"], keep="last"
                 )
+            compute_seconds += time.perf_counter() - compute_t0
         logger.info(
             "Loaded TRBC PIT classification for raw cross-section: rows=%s rics=%s biz_col=%s ind_col=%s",
             len(trbc),
@@ -615,6 +700,7 @@ def rebuild_raw_cross_section_history(
                 }
             )
 
+        compute_t0 = time.perf_counter()
         out = base.copy()
         if not fundamentals.empty:
             fmerge_cols = [
@@ -901,6 +987,7 @@ def rebuild_raw_cross_section_history(
         out["source"] = "in_project_builder"
         out["job_run_id"] = job_run_id
         out["updated_at"] = now_iso
+        compute_seconds += time.perf_counter() - compute_t0
 
         target_cols = [
             "ric",
@@ -925,46 +1012,66 @@ def rebuild_raw_cross_section_history(
             "job_run_id",
             "updated_at",
         ]
-        payload = out[target_cols].where(pd.notna(out[target_cols]), None).copy()
-        delete_dates = sorted(set(payload["as_of_date"].astype(str).tolist()))
+        delete_dates = sorted({str(as_of) for as_of, _ in eligibility_groups})
         logger.info(
             "Persisting raw cross-section payload: rows=%s dates=%s",
-            len(payload),
+            len(out),
             len(delete_dates),
         )
         if progress_callback is not None:
             progress_callback(
                 {
-                    "message": f"Persisting {len(payload)} raw cross-section rows",
+                    "message": f"Persisting {len(out)} raw cross-section rows",
                     "items_processed": 4,
                     "items_total": 4,
                     "unit": "setup_steps",
                     "progress_pct": 100.0,
-                    "rows_upserted": int(len(payload)),
+                    "rows_upserted": int(len(out)),
                     "dates_processed": int(len(delete_dates)),
                     "progress_kind": "persist",
                 }
             )
+        write_t0 = time.perf_counter()
         for d in delete_dates:
             conn.execute(f"DELETE FROM {TABLE} WHERE as_of_date = ?", (d,))
-        conn.executemany(
-            f"""
+        insert_sql = f"""
             INSERT OR REPLACE INTO {TABLE}
             ({", ".join(target_cols)})
             VALUES ({", ".join(["?"] * len(target_cols))})
-            """,
-            payload.itertuples(index=False, name=None),
-        )
+            """
+        rows_upserted = 0
+        for group_i, (_, idx) in enumerate(eligibility_groups, start=1):
+            chunk_source = out.loc[idx, target_cols]
+            chunk = chunk_source.where(pd.notna(chunk_source), None)
+            conn.executemany(
+                insert_sql,
+                chunk.itertuples(index=False, name=None),
+            )
+            rows_upserted += int(len(chunk))
+            if group_i % 250 == 0 or group_i == total_eligibility_groups:
+                conn.commit()
         conn.commit()
+        write_seconds += time.perf_counter() - write_t0
         elapsed = time.perf_counter() - stage_t0
         logger.info("Raw cross-section rebuild completed in %.1fs", elapsed)
         return {
             "status": "ok",
             "table": TABLE,
-            "rows_upserted": int(len(payload)),
+            "rows_upserted": int(rows_upserted),
             "dates_processed": int(len(delete_dates)),
             "assumption_set_version": assumption_set_version,
             "job_run_id": job_run_id,
+            "metrics": {
+                "read_seconds": round(float(read_seconds), 3),
+                "query_seconds": round(float(read_seconds), 3),
+                "compute_seconds": round(float(compute_seconds), 3),
+                "write_seconds": round(float(write_seconds), 3),
+                "query_count": int(query_count),
+                "rows_read": int(rows_read),
+                "rows_written": int(rows_upserted),
+                "largest_batch_rows": int(largest_batch_rows),
+                "memory_high_water_mb": _memory_high_water_mb(),
+            },
         }
     finally:
         conn.close()

@@ -11,19 +11,23 @@ export default function CparExploreWhatIfSection({
   selectedInstrument,
   searchQuery,
   searchLoading,
+  searchSettled,
   onSearchQueryChange,
   searchResults,
   onSelectInstrument,
   positionMap,
+  onPreviewInstrument,
 }: {
   priceMap: Map<string, number>;
   selectedInstrument: CparSearchItem | null;
   searchQuery: string;
   searchLoading: boolean;
+  searchSettled: boolean;
   onSearchQueryChange: (query: string) => void;
   searchResults: CparSearchItem[];
   onSelectInstrument: (item: CparSearchItem) => void;
   positionMap: Map<string, CparExplorePositionSummary>;
+  onPreviewInstrument: (item: CparSearchItem) => void;
 }) {
   const scenario = useCparExploreScenarioLab({
     priceMap,
@@ -31,6 +35,8 @@ export default function CparExploreWhatIfSection({
     searchQuery,
     searchResults,
     onSelectInstrument,
+    searchSettled,
+    onPreviewInstrument,
   });
 
   return (
@@ -59,6 +65,7 @@ export default function CparExploreWhatIfSection({
         onTickerBlur={scenario.handleTickerBlur}
         onTickerFocus={scenario.handleTickerFocus}
         onTickerKeyDown={scenario.handleTickerKeyDown}
+        onTickerHover={onPreviewInstrument}
         onTickerSelect={scenario.selectFromTypeahead}
         positionMap={positionMap}
         previewNeedsAttention={scenario.previewNeedsAttention}
@@ -69,6 +76,7 @@ export default function CparExploreWhatIfSection({
         scenarioRows={scenario.scenarioRows}
         searchQuery={searchQuery}
         searchLoading={searchLoading}
+        searchSettled={searchSettled}
         searchResults={searchResults}
         stageReady={scenario.stageReady}
         updateScenarioRow={scenario.updateScenarioRow}

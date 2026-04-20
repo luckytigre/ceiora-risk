@@ -52,27 +52,61 @@ def _shape_position_rows(rows: list[tuple[object, object, object, object, object
     return out
 
 
-def load_holdings_accounts() -> list[dict[str, Any]]:
+def _normalize_scope_ids(allowed_account_ids: list[str] | tuple[str, ...] | None) -> list[str] | None:
+    if allowed_account_ids is None:
+        return None
+    normalized: list[str] = []
+    for account_id in allowed_account_ids:
+        clean = _normalize_account_id(account_id)
+        if clean:
+            normalized.append(clean)
+    return normalized
+
+
+def load_holdings_accounts(*, allowed_account_ids: list[str] | tuple[str, ...] | None = None) -> list[dict[str, Any]]:
+    scoped_ids = _normalize_scope_ids(allowed_account_ids)
+    if scoped_ids == []:
+        return []
     conn = None
     try:
         conn = connect(dsn=resolve_dsn(None), autocommit=True)
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    a.account_id,
-                    a.account_name,
-                    a.is_active,
-                    COUNT(p.ric) AS positions_count,
-                    COALESCE(SUM(ABS(CAST(p.quantity AS DOUBLE PRECISION))), 0) AS gross_quantity,
-                    MAX(p.updated_at) AS last_position_updated_at
-                FROM holdings_accounts a
-                LEFT JOIN holdings_positions_current p
-                  ON p.account_id = a.account_id
-                GROUP BY a.account_id, a.account_name, a.is_active
-                ORDER BY a.account_id ASC
-                """
-            )
+            if scoped_ids is not None:
+                cur.execute(
+                    """
+                    SELECT
+                        a.account_id,
+                        a.account_name,
+                        a.is_active,
+                        COUNT(p.ric) AS positions_count,
+                        COALESCE(SUM(ABS(CAST(p.quantity AS DOUBLE PRECISION))), 0) AS gross_quantity,
+                        MAX(p.updated_at) AS last_position_updated_at
+                    FROM holdings_accounts a
+                    LEFT JOIN holdings_positions_current p
+                      ON p.account_id = a.account_id
+                    WHERE a.account_id = ANY(%s)
+                    GROUP BY a.account_id, a.account_name, a.is_active
+                    ORDER BY a.account_id ASC
+                    """,
+                    (scoped_ids,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        a.account_id,
+                        a.account_name,
+                        a.is_active,
+                        COUNT(p.ric) AS positions_count,
+                        COALESCE(SUM(ABS(CAST(p.quantity AS DOUBLE PRECISION))), 0) AS gross_quantity,
+                        MAX(p.updated_at) AS last_position_updated_at
+                    FROM holdings_accounts a
+                    LEFT JOIN holdings_positions_current p
+                      ON p.account_id = a.account_id
+                    GROUP BY a.account_id, a.account_name, a.is_active
+                    ORDER BY a.account_id ASC
+                    """
+                )
             rows = cur.fetchall()
     except Exception as exc:
         raise HoldingsReadError(
@@ -97,28 +131,54 @@ def load_holdings_accounts() -> list[dict[str, Any]]:
     return out
 
 
-def load_holdings_positions(*, account_id: str) -> list[dict[str, Any]]:
+def load_holdings_positions(
+    *,
+    account_id: str,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     account = _normalize_account_id(account_id)
+    scoped_ids = _normalize_scope_ids(allowed_account_ids)
+    if scoped_ids == []:
+        return []
     conn = None
     try:
         conn = connect(dsn=resolve_dsn(None), autocommit=True)
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    p.account_id,
-                    p.ric,
-                    """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
-                    p.quantity,
-                    p.source,
-                    p.updated_at
-                FROM holdings_positions_current p
-                """ + _REGISTRY_JOIN_SQL + """
-                WHERE p.account_id = %s
-                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
-                """,
-                (account,),
-            )
+            if scoped_ids is not None:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        p.ric,
+                        """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
+                        p.quantity,
+                        p.source,
+                        p.updated_at
+                    FROM holdings_positions_current p
+                    """ + _REGISTRY_JOIN_SQL + """
+                    WHERE p.account_id = %s
+                      AND p.account_id = ANY(%s)
+                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                    """,
+                    (account, scoped_ids),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        p.ric,
+                        """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
+                        p.quantity,
+                        p.source,
+                        p.updated_at
+                    FROM holdings_positions_current p
+                    """ + _REGISTRY_JOIN_SQL + """
+                    WHERE p.account_id = %s
+                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                    """,
+                    (account,),
+                )
             rows = cur.fetchall()
     except Exception as exc:
         raise HoldingsReadError(
@@ -131,25 +191,46 @@ def load_holdings_positions(*, account_id: str) -> list[dict[str, Any]]:
     return _shape_position_rows(rows)
 
 
-def load_all_holdings_positions() -> list[dict[str, Any]]:
+def load_all_holdings_positions(*, allowed_account_ids: list[str] | tuple[str, ...] | None = None) -> list[dict[str, Any]]:
+    scoped_ids = _normalize_scope_ids(allowed_account_ids)
+    if scoped_ids == []:
+        return []
     conn = None
     try:
         conn = connect(dsn=resolve_dsn(None), autocommit=True)
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    p.account_id,
-                    p.ric,
-                    """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
-                    p.quantity,
-                    p.source,
-                    p.updated_at
-                FROM holdings_positions_current p
-                """ + _REGISTRY_JOIN_SQL + """
-                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
-                """
-            )
+            if scoped_ids is not None:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        p.ric,
+                        """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
+                        p.quantity,
+                        p.source,
+                        p.updated_at
+                    FROM holdings_positions_current p
+                    """ + _REGISTRY_JOIN_SQL + """
+                    WHERE p.account_id = ANY(%s)
+                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                    """,
+                    (scoped_ids,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        p.ric,
+                        """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
+                        p.quantity,
+                        p.source,
+                        p.updated_at
+                    FROM holdings_positions_current p
+                    """ + _REGISTRY_JOIN_SQL + """
+                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                    """
+                )
             rows = cur.fetchall()
     except Exception as exc:
         raise HoldingsReadError(
@@ -162,23 +243,42 @@ def load_all_holdings_positions() -> list[dict[str, Any]]:
     return _shape_position_rows(rows)
 
 
-def load_contributing_holdings_accounts() -> list[dict[str, Any]]:
+def load_contributing_holdings_accounts(*, allowed_account_ids: list[str] | tuple[str, ...] | None = None) -> list[dict[str, Any]]:
+    scoped_ids = _normalize_scope_ids(allowed_account_ids)
+    if scoped_ids == []:
+        return []
     conn = None
     try:
         conn = connect(dsn=resolve_dsn(None), autocommit=True)
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    p.account_id,
-                    COALESCE(a.account_name, p.account_id) AS account_name
-                FROM holdings_positions_current p
-                LEFT JOIN holdings_accounts a
-                  ON a.account_id = p.account_id
-                GROUP BY p.account_id, a.account_name
-                ORDER BY p.account_id ASC
-                """
-            )
+            if scoped_ids is not None:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        COALESCE(a.account_name, p.account_id) AS account_name
+                    FROM holdings_positions_current p
+                    LEFT JOIN holdings_accounts a
+                      ON a.account_id = p.account_id
+                    WHERE p.account_id = ANY(%s)
+                    GROUP BY p.account_id, a.account_name
+                    ORDER BY p.account_id ASC
+                    """,
+                    (scoped_ids,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        COALESCE(a.account_name, p.account_id) AS account_name
+                    FROM holdings_positions_current p
+                    LEFT JOIN holdings_accounts a
+                      ON a.account_id = p.account_id
+                    GROUP BY p.account_id, a.account_name
+                    ORDER BY p.account_id ASC
+                    """
+                )
             rows = cur.fetchall()
     except Exception as exc:
         raise HoldingsReadError(
@@ -199,42 +299,79 @@ def load_contributing_holdings_accounts() -> list[dict[str, Any]]:
     return out
 
 
-def load_aggregate_holdings_positions() -> list[dict[str, Any]]:
+def load_aggregate_holdings_positions(*, allowed_account_ids: list[str] | tuple[str, ...] | None = None) -> list[dict[str, Any]]:
+    scoped_ids = _normalize_scope_ids(allowed_account_ids)
+    if scoped_ids == []:
+        return []
     conn = None
     try:
         conn = connect(dsn=resolve_dsn(None), autocommit=True)
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    agg.account_id,
-                    agg.ric,
-                    agg.ticker,
-                    agg.quantity,
-                    agg.source,
-                    agg.updated_at
-                FROM (
+            if scoped_ids is not None:
+                cur.execute(
+                    """
                     SELECT
-                        'all_accounts' AS account_id,
-                        p.ric,
-                        (
-                            ARRAY_AGG(
-                                """ + _REGISTRY_TICKER_EXPR + """
-                                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
-                            )
-                        )[1] AS ticker,
-                        SUM(CAST(p.quantity AS DOUBLE PRECISION)) AS quantity,
-                        'aggregate' AS source,
-                        MAX(p.updated_at) AS updated_at
-                    FROM holdings_positions_current p
-                    """ + _REGISTRY_JOIN_SQL + """
-                    GROUP BY p.ric
-                    HAVING ABS(SUM(CAST(p.quantity AS DOUBLE PRECISION))) > %s
-                ) agg
-                ORDER BY COALESCE(agg.ticker, agg.ric), agg.ric
-                """,
-                (1e-12,),
-            )
+                        agg.account_id,
+                        agg.ric,
+                        agg.ticker,
+                        agg.quantity,
+                        agg.source,
+                        agg.updated_at
+                    FROM (
+                        SELECT
+                            'all_accounts' AS account_id,
+                            p.ric,
+                            (
+                                ARRAY_AGG(
+                                    """ + _REGISTRY_TICKER_EXPR + """
+                                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                                )
+                            )[1] AS ticker,
+                            SUM(CAST(p.quantity AS DOUBLE PRECISION)) AS quantity,
+                            'aggregate' AS source,
+                            MAX(p.updated_at) AS updated_at
+                        FROM holdings_positions_current p
+                        """ + _REGISTRY_JOIN_SQL + """
+                        WHERE p.account_id = ANY(%s)
+                        GROUP BY p.ric
+                        HAVING ABS(SUM(CAST(p.quantity AS DOUBLE PRECISION))) > %s
+                    ) agg
+                    ORDER BY COALESCE(agg.ticker, agg.ric), agg.ric
+                    """,
+                    (scoped_ids, 1e-12),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        agg.account_id,
+                        agg.ric,
+                        agg.ticker,
+                        agg.quantity,
+                        agg.source,
+                        agg.updated_at
+                    FROM (
+                        SELECT
+                            'all_accounts' AS account_id,
+                            p.ric,
+                            (
+                                ARRAY_AGG(
+                                    """ + _REGISTRY_TICKER_EXPR + """
+                                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                                )
+                            )[1] AS ticker,
+                            SUM(CAST(p.quantity AS DOUBLE PRECISION)) AS quantity,
+                            'aggregate' AS source,
+                            MAX(p.updated_at) AS updated_at
+                        FROM holdings_positions_current p
+                        """ + _REGISTRY_JOIN_SQL + """
+                        GROUP BY p.ric
+                        HAVING ABS(SUM(CAST(p.quantity AS DOUBLE PRECISION))) > %s
+                    ) agg
+                    ORDER BY COALESCE(agg.ticker, agg.ric), agg.ric
+                    """,
+                    (1e-12,),
+                )
             rows = cur.fetchall()
     except Exception as exc:
         raise HoldingsReadError(

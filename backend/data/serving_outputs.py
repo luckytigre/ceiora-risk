@@ -90,6 +90,66 @@ def load_runtime_payload(
     return load_runtime_payloads((clean,), fallback_loader=fallback_loader).get(clean)
 
 
+def load_runtime_payload_field(
+    payload_name: str,
+    field_name: str,
+    *,
+    fallback_loader: Callable[[str], Any | None] | None = None,
+) -> Any | None:
+    """Load a single top-level field from a runtime payload when available."""
+    clean = str(payload_name or "").strip()
+    field = str(field_name or "").strip()
+    if not clean or not field:
+        return None
+    value = (
+        _load_current_payload_field_neon(clean, field)
+        if _use_neon_reads()
+        else _load_current_payload_field_sqlite(clean, field)
+    )
+    if value is not None:
+        return value
+    if fallback_loader is None or not config.serving_outputs_cache_fallback_enabled():
+        return None
+    fallback = fallback_loader(clean)
+    if isinstance(fallback, dict):
+        return fallback.get(field)
+    return None
+
+
+def load_runtime_payload_state(
+    payload_name: str,
+    *,
+    fallback_loader: Callable[[str], Any | None] | None = None,
+) -> dict[str, Any]:
+    clean = str(payload_name or "").strip()
+    if not clean:
+        return {"status": "missing", "source": "none", "value": None}
+    state = load_current_payload_states((clean,)).get(clean) or {
+        "status": "missing",
+        "source": "none",
+        "value": None,
+    }
+    if str(state.get("status") or "") == "ok":
+        return state
+    if fallback_loader is None or not config.serving_outputs_cache_fallback_enabled():
+        return state
+    try:
+        payload = fallback_loader(clean)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "source": "cache",
+            "value": None,
+            "error": {
+                "type": type(exc).__name__,
+                "message": str(exc),
+            },
+        }
+    if payload is None:
+        return {"status": "missing", "source": "cache", "value": None}
+    return {"status": "ok", "source": "cache", "value": payload}
+
+
 def load_runtime_payloads(
     payload_names: Iterable[str],
     *,
@@ -99,7 +159,10 @@ def load_runtime_payloads(
     clean_names = _normalize_payload_names(payload_names)
     if not clean_names:
         return {}
-    payloads = load_current_payloads(clean_names)
+    payloads = {
+        name: (state.get("value") if str(state.get("status") or "") == "ok" else None)
+        for name, state in load_current_payload_states(clean_names).items()
+    }
     if fallback_loader is None or not config.serving_outputs_cache_fallback_enabled():
         return payloads
     for payload_name in clean_names:
@@ -175,22 +238,22 @@ def load_current_payload(payload_name: str) -> dict[str, Any] | list[Any] | None
     return load_current_payloads((clean,)).get(clean)
 
 
-def load_current_payloads(payload_names: Iterable[str]) -> dict[str, Any | None]:
-    """Load multiple durable serving payloads in one read path where possible."""
+def load_current_payload_states(payload_names: Iterable[str]) -> dict[str, dict[str, Any]]:
     clean_names = _normalize_payload_names(payload_names)
     if not clean_names:
         return {}
     if _use_neon_reads():
-        payloads = _load_current_payloads_neon(clean_names)
-        if config.serving_outputs_cache_fallback_enabled():
-            missing = [name for name in clean_names if payloads.get(name) is None]
-            if missing:
-                sqlite_payloads = _load_current_payloads_sqlite(missing)
-                for name in missing:
-                    if payloads.get(name) is None:
-                        payloads[name] = sqlite_payloads.get(name)
-        return payloads
-    return _load_current_payloads_sqlite(clean_names)
+        return _load_current_payload_states_neon(clean_names)
+    return _load_current_payload_states_sqlite(clean_names)
+
+
+def load_current_payloads(payload_names: Iterable[str]) -> dict[str, Any | None]:
+    """Load multiple durable serving payloads in one read path where possible."""
+    states = load_current_payload_states(payload_names)
+    return {
+        name: (state.get("value") if str(state.get("status") or "") == "ok" else None)
+        for name, state in states.items()
+    }
 
 
 def _normalize_payload_names(payload_names: Iterable[str]) -> list[str]:
@@ -386,6 +449,68 @@ def _load_current_payload_rows_neon(
     return list(rows)
 
 
+def _load_current_payload_field_sqlite(
+    payload_name: str,
+    field_name: str,
+    *,
+    data_db: Path | None = None,
+) -> Any | None:
+    db = Path(data_db or DATA_DB)
+    if not db.exists():
+        return None
+    conn = sqlite3.connect(str(db))
+    try:
+        _ensure_sqlite_schema(conn)
+        row = conn.execute(
+            """
+            SELECT json_extract(payload_json, ?)
+            FROM serving_payload_current
+            WHERE payload_name = ?
+            """,
+            (f"$.{field_name}", payload_name),
+        ).fetchone()
+    except Exception:
+        return None
+    finally:
+        conn.close()
+    if not row:
+        return None
+    return _decode_payload_json(row[0])
+
+
+def _load_current_payload_field_neon(
+    payload_name: str,
+    field_name: str,
+) -> Any | None:
+    try:
+        conn = connect(
+            dsn=resolve_dsn(None),
+            autocommit=True,
+            connect_timeout=5,
+            options={"options": "-c statement_timeout=8000"},
+        )
+    except Exception:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT (payload_json -> %s)::text
+                FROM serving_payload_current
+                WHERE payload_name = %s
+                """,
+                (field_name, payload_name),
+            )
+            row = cur.fetchone()
+    except Exception:
+        return None
+    finally:
+        conn.close()
+    if not row:
+        return None
+    return _decode_payload_json(row[0])
+
+
 def _load_current_payloads_sqlite(payload_names: Iterable[str]) -> dict[str, Any | None]:
     return serving_output_read_authority.load_current_payloads_sqlite(
         payload_names,
@@ -402,6 +527,26 @@ def _load_current_payload_neon(payload_name: str) -> dict[str, Any] | list[Any] 
 
 def _load_current_payloads_neon(payload_names: Iterable[str]) -> dict[str, Any | None]:
     return serving_output_read_authority.load_current_payloads_neon(
+        payload_names,
+        normalize_payload_names=_normalize_payload_names,
+        connect_fn=connect,
+        resolve_dsn_fn=resolve_dsn,
+        decode_payload_json=_decode_payload_json,
+    )
+
+
+def _load_current_payload_states_sqlite(payload_names: Iterable[str]) -> dict[str, dict[str, Any]]:
+    return serving_output_read_authority.load_current_payload_states_sqlite(
+        payload_names,
+        data_db=DATA_DB,
+        normalize_payload_names=_normalize_payload_names,
+        ensure_sqlite_schema=_ensure_sqlite_schema,
+        decode_payload_json=_decode_payload_json,
+    )
+
+
+def _load_current_payload_states_neon(payload_names: Iterable[str]) -> dict[str, dict[str, Any]]:
+    return serving_output_read_authority.load_current_payload_states_neon(
         payload_names,
         normalize_payload_names=_normalize_payload_names,
         connect_fn=connect,

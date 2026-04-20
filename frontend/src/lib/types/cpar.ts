@@ -8,6 +8,7 @@ export type CparRiskExposureMode = "raw" | "sensitivity" | "risk_contribution";
 export type CparPortfolioStatus = "ok" | "partial" | "empty" | "unavailable";
 export type CparPortfolioCoverage = "covered" | "missing_price" | "missing_cpar_fit" | "insufficient_history";
 export type CparRiskScope = "all_accounts";
+export type CparExploreScope = "all_accounts" | "restricted_accounts";
 export type CparSourceContextStatus = "ok" | "partial" | "missing" | "unavailable";
 export type CparSourceContextReason = "missing_rows" | "shared_source_unavailable" | "mixed";
 
@@ -321,7 +322,35 @@ export interface CparTickerHistoryData {
   _cached: boolean;
 }
 
+export interface CparExploreHeldPosition {
+  ric: string;
+  ticker: string | null;
+  quantity: number;
+  price: number | null;
+  market_value: number | null;
+  portfolio_weight: number | null;
+  long_short: "LONG" | "SHORT";
+  fit_status: CparFitStatus | null;
+  coverage: CparPortfolioCoverage;
+}
+
+export interface CparExploreContextData extends CparPackageMeta {
+  scope: CparExploreScope;
+  accounts_count: number;
+  positions_count: number;
+  covered_positions_count: number;
+  excluded_positions_count: number;
+  gross_market_value: number;
+  net_market_value: number;
+  covered_gross_market_value: number;
+  coverage_ratio: number | null;
+  portfolio_status: CparPortfolioStatus;
+  portfolio_reason: string | null;
+  held_positions: CparExploreHeldPosition[];
+}
+
 export interface CparRiskData extends CparPackageMeta {
+  factors: CparFactorSpec[];
   scope: CparRiskScope;
   accounts_count: number;
   portfolio_status: CparPortfolioStatus;
@@ -461,7 +490,7 @@ export interface CparExploreExposureRow {
 }
 
 export interface CparExplorePreviewSide {
-  scope: CparRiskScope;
+  scope: CparExploreScope;
   positions: CparPortfolioPositionRow[];
   total_value: number;
   position_count: number;
@@ -486,6 +515,12 @@ export interface CparExploreFactorDeltaRow {
   current: number;
   hypothetical: number;
   delta: number;
+}
+
+export interface CparExplorePreviewScope {
+  kind: "staged_accounts";
+  account_ids: string[];
+  accounts_count: number;
 }
 
 export interface CparExploreWhatIfData extends CparPackageMeta {
@@ -515,5 +550,6 @@ export interface CparExploreWhatIfData extends CparPackageMeta {
     exposures_served_asof?: string | null;
   };
   truth_surface?: string | null;
+  preview_scope?: CparExplorePreviewScope;
   _preview_only: boolean;
 }

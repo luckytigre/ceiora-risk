@@ -23,6 +23,14 @@ def _normalize_account_id(value: str | None) -> str:
     return str(value or "").strip().lower()
 
 
+def _normalize_ric(value: str | None) -> str:
+    return str(value or "").strip().upper()
+
+
+def _normalize_ticker(value: str | None) -> str:
+    return str(value or "").strip().upper()
+
+
 def _factor_rows(loadings: dict[str, float]) -> list[dict[str, object]]:
     return cpar_display_loadings.ordered_factor_rows(loadings)
 
@@ -108,10 +116,10 @@ def _compat_coverage_label(
             return "covered"
         if persisted in {"missing_price", "insufficient_history"}:
             return persisted
-    if price_value is None:
-        return "missing_price"
     if fit is None:
         return "missing_cpar_fit"
+    if price_value is None:
+        return "missing_price"
     if str(fit.get("fit_status") or "") == "insufficient_history":
         return "insufficient_history"
     return "covered"
@@ -325,6 +333,63 @@ def _aggregate_positions_across_accounts(
         ),
     )
     return aggregated_positions, accounts
+
+
+def _resolve_support_fit_aliases(
+    *,
+    positions: list[dict[str, Any]],
+    package_run_id: str,
+    data_db=None,
+) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    requested_rows: list[tuple[str, str]] = []
+    seen_requested_rics: set[str] = set()
+    for position in positions:
+        raw_ric = _normalize_ric(position.get("ric"))
+        if not raw_ric or raw_ric in seen_requested_rics:
+            continue
+        seen_requested_rics.add(raw_ric)
+        requested_rows.append((raw_ric, _normalize_ticker(position.get("ticker"))))
+
+    requested_rics = [raw_ric for raw_ric, _ticker in requested_rows]
+    resolved_fit_rows = cpar_outputs.load_package_instrument_fits_for_rics(
+        requested_rics,
+        package_run_id=str(package_run_id),
+        data_db=data_db,
+    )
+    fit_rows_by_ric = {str(row.get("ric") or "").strip().upper(): row for row in resolved_fit_rows}
+
+    unresolved_tickers = sorted(
+        {
+            ticker
+            for raw_ric, ticker in requested_rows
+            if raw_ric not in fit_rows_by_ric and ticker
+        }
+    )
+    fit_rows_by_ticker: dict[str, list[dict[str, Any]]] = {}
+    if unresolved_tickers:
+        ticker_fit_rows = cpar_outputs.load_package_instrument_fits_for_tickers(
+            unresolved_tickers,
+            package_run_id=str(package_run_id),
+            data_db=data_db,
+        )
+        for row in ticker_fit_rows:
+            fit_rows_by_ric.setdefault(str(row.get("ric") or "").strip().upper(), row)
+            ticker = _normalize_ticker(row.get("ticker"))
+            if ticker:
+                fit_rows_by_ticker.setdefault(ticker, []).append(row)
+
+    alias_by_requested_ric: dict[str, str] = {}
+    for raw_ric, ticker in requested_rows:
+        if raw_ric in fit_rows_by_ric:
+            alias_by_requested_ric[raw_ric] = raw_ric
+            continue
+        ticker_matches = fit_rows_by_ticker.get(ticker, [])
+        if len(ticker_matches) == 1:
+            alias_by_requested_ric[raw_ric] = _normalize_ric(ticker_matches[0].get("ric"))
+            continue
+        alias_by_requested_ric[raw_ric] = raw_ric
+
+    return alias_by_requested_ric, fit_rows_by_ric
 
 
 def _aggregate_loadings(
@@ -765,17 +830,28 @@ def _attach_risk_mix(
 def load_cpar_portfolio_account_context(
     *,
     account_id: str,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
     data_db=None,
-) -> tuple[dict[str, object], dict[str, object], list[dict[str, Any]]]:
+    ) -> tuple[dict[str, object], dict[str, object], list[dict[str, Any]]]:
     package = cpar_meta_service.require_specific_risk_package(data_db=data_db)
+    normalized_allowed_account_ids = {
+        _normalize_account_id(account_id)
+        for account_id in (allowed_account_ids or [])
+        if _normalize_account_id(account_id)
+    }
+    normalized_account_id = _normalize_account_id(account_id)
+    if normalized_allowed_account_ids and normalized_account_id not in normalized_allowed_account_ids:
+        raise CparPortfolioAccountNotFound(f"Holdings account {account_id!r} was not found.")
 
     try:
-        accounts = holdings_reads.load_holdings_accounts()
-        positions = holdings_reads.load_holdings_positions(account_id=account_id)
+        accounts = holdings_reads.load_holdings_accounts(allowed_account_ids=allowed_account_ids)
+        positions = holdings_reads.load_holdings_positions(
+            account_id=account_id,
+            allowed_account_ids=allowed_account_ids,
+        )
     except holdings_reads.HoldingsReadError as exc:
         raise cpar_meta_service.CparReadUnavailable(f"Holdings read failed: {exc}") from exc
 
-    normalized_account_id = _normalize_account_id(account_id)
     account = next(
         (row for row in accounts if _normalize_account_id(str(row.get("account_id") or "")) == normalized_account_id),
         None,
@@ -788,13 +864,14 @@ def load_cpar_portfolio_account_context(
 
 def load_cpar_portfolio_holdings_context(
     *,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
     data_db=None,
 ) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, Any]]]:
     package = cpar_meta_service.require_specific_risk_package(data_db=data_db)
 
     try:
-        accounts = holdings_reads.load_holdings_accounts()
-        live_positions = holdings_reads.load_all_holdings_positions()
+        accounts = holdings_reads.load_holdings_accounts(allowed_account_ids=allowed_account_ids)
+        live_positions = holdings_reads.load_all_holdings_positions(allowed_account_ids=allowed_account_ids)
     except holdings_reads.HoldingsReadError as exc:
         raise cpar_meta_service.CparReadUnavailable(f"Holdings read failed: {exc}") from exc
 
@@ -809,13 +886,14 @@ def aggregate_cpar_positions_across_accounts(
 
 def load_cpar_portfolio_aggregate_context(
     *,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
     data_db=None,
 ) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, Any]]]:
     package = cpar_meta_service.require_specific_risk_package(data_db=data_db)
 
     try:
-        accounts = holdings_reads.load_contributing_holdings_accounts()
-        live_positions = holdings_reads.load_aggregate_holdings_positions()
+        accounts = holdings_reads.load_contributing_holdings_accounts(allowed_account_ids=allowed_account_ids)
+        live_positions = holdings_reads.load_aggregate_holdings_positions(allowed_account_ids=allowed_account_ids)
     except holdings_reads.HoldingsReadError as exc:
         raise cpar_meta_service.CparReadUnavailable(f"Holdings read failed: {exc}") from exc
 
@@ -827,6 +905,7 @@ def load_cpar_portfolio_support_rows(
     rics: list[str],
     package_run_id: str,
     package_date: str,
+    positions: list[dict[str, Any]] | None = None,
     data_db=None,
 ) -> tuple[
     dict[str, dict[str, Any]],
@@ -834,13 +913,45 @@ def load_cpar_portfolio_support_rows(
     dict[str, dict[str, Any]],
     list[dict[str, Any]],
 ]:
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        fit_future = executor.submit(
-            cpar_outputs.load_package_instrument_fits_for_rics,
-            rics,
-            package_run_id=str(package_run_id),
-            data_db=data_db,
+    clean_rics = sorted({_normalize_ric(ric) for ric in rics if _normalize_ric(ric)})
+    fit_alias_by_requested_ric: dict[str, str]
+    prefetched_fit_rows: list[dict[str, Any]] | None
+    if positions:
+        try:
+            fit_alias_by_requested_ric, prefetched_fit_by_ric = _resolve_support_fit_aliases(
+                positions=positions,
+                package_run_id=str(package_run_id),
+                data_db=data_db,
+            )
+        except cpar_outputs.CparPackageNotReady as exc:
+            raise cpar_meta_service.CparReadNotReady(str(exc)) from exc
+        except cpar_outputs.CparAuthorityReadError as exc:
+            raise cpar_meta_service.CparReadUnavailable(str(exc)) from exc
+        prefetched_fit_rows = sorted(prefetched_fit_by_ric.values(), key=lambda row: str(row.get("ric") or ""))
+        support_rics = sorted(
+            {
+                *clean_rics,
+                *(
+                    resolved_ric
+                    for resolved_ric in fit_alias_by_requested_ric.values()
+                    if resolved_ric
+                ),
+            }
         )
+    else:
+        fit_alias_by_requested_ric = {ric: ric for ric in clean_rics}
+        prefetched_fit_rows = None
+        support_rics = clean_rics
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        fit_future = None
+        if prefetched_fit_rows is None:
+            fit_future = executor.submit(
+                cpar_outputs.load_package_instrument_fits_for_rics,
+                support_rics,
+                package_run_id=str(package_run_id),
+                data_db=data_db,
+            )
         covariance_future = executor.submit(
             cpar_outputs.load_package_covariance_rows,
             str(package_run_id),
@@ -850,19 +961,19 @@ def load_cpar_portfolio_support_rows(
         )
         price_future = executor.submit(
             cpar_source_reads.load_latest_price_rows,
-            rics,
+            support_rics,
             as_of_date=str(package_date),
             data_db=data_db,
         )
         classification_future = executor.submit(
             cpar_source_reads.load_latest_classification_rows,
-            rics,
+            support_rics,
             as_of_date=str(package_date),
             data_db=data_db,
         )
 
         try:
-            fit_rows = fit_future.result()
+            fit_rows = prefetched_fit_rows if prefetched_fit_rows is not None else fit_future.result()
             covariance_rows = covariance_future.result()
             price_rows = price_future.result()
         except cpar_outputs.CparPackageNotReady as exc:
@@ -881,7 +992,106 @@ def load_cpar_portfolio_support_rows(
     fit_by_ric = {str(row["ric"]): row for row in fit_rows}
     price_by_ric = {str(row["ric"]): row for row in price_rows}
     classification_by_ric = {str(row["ric"]): row for row in classification_rows}
+    for requested_ric, resolved_ric in fit_alias_by_requested_ric.items():
+        if not requested_ric or requested_ric == resolved_ric:
+            continue
+        if resolved_ric in fit_by_ric:
+            fit_by_ric[requested_ric] = fit_by_ric[resolved_ric]
+        if resolved_ric in price_by_ric:
+            price_by_ric[requested_ric] = price_by_ric[resolved_ric]
+        if resolved_ric in classification_by_ric:
+            classification_by_ric[requested_ric] = classification_by_ric[resolved_ric]
     return fit_by_ric, price_by_ric, classification_by_ric, covariance_rows
+
+
+def load_cpar_portfolio_support_rows_without_covariance(
+    *,
+    rics: list[str],
+    package_run_id: str,
+    package_date: str,
+    positions: list[dict[str, Any]] | None = None,
+    data_db=None,
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+]:
+    clean_rics = sorted({_normalize_ric(ric) for ric in rics if _normalize_ric(ric)})
+    fit_alias_by_requested_ric: dict[str, str]
+    prefetched_fit_rows: list[dict[str, Any]] | None
+    if positions:
+        fit_alias_by_requested_ric, prefetched_fit_by_ric = _resolve_support_fit_aliases(
+            positions=positions,
+            package_run_id=str(package_run_id),
+            data_db=data_db,
+        )
+        prefetched_fit_rows = sorted(prefetched_fit_by_ric.values(), key=lambda row: str(row.get("ric") or ""))
+        support_rics = sorted(
+            {
+                *clean_rics,
+                *(
+                    resolved_ric
+                    for resolved_ric in fit_alias_by_requested_ric.values()
+                    if resolved_ric
+                ),
+            }
+        )
+    else:
+        fit_alias_by_requested_ric = {ric: ric for ric in clean_rics}
+        prefetched_fit_rows = None
+        support_rics = clean_rics
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        fit_future = None
+        if prefetched_fit_rows is None:
+            fit_future = executor.submit(
+                cpar_outputs.load_package_instrument_fits_for_rics,
+                support_rics,
+                package_run_id=str(package_run_id),
+                data_db=data_db,
+            )
+        price_future = executor.submit(
+            cpar_source_reads.load_latest_price_rows,
+            support_rics,
+            as_of_date=str(package_date),
+            data_db=data_db,
+        )
+        classification_future = executor.submit(
+            cpar_source_reads.load_latest_classification_rows,
+            support_rics,
+            as_of_date=str(package_date),
+            data_db=data_db,
+        )
+
+        try:
+            fit_rows = prefetched_fit_rows if prefetched_fit_rows is not None else fit_future.result()
+            price_rows = price_future.result()
+        except cpar_outputs.CparPackageNotReady as exc:
+            raise cpar_meta_service.CparReadNotReady(str(exc)) from exc
+        except cpar_outputs.CparAuthorityReadError as exc:
+            raise cpar_meta_service.CparReadUnavailable(str(exc)) from exc
+        except cpar_source_reads.CparSourceReadError as exc:
+            raise cpar_meta_service.CparReadUnavailable(f"Shared-source read failed: {exc}") from exc
+
+        try:
+            classification_rows = classification_future.result()
+        except cpar_source_reads.CparSourceReadError:
+            classification_rows = []
+
+    _require_specific_risk_fit_rows(fit_rows, package_run_id=str(package_run_id))
+    fit_by_ric = {str(row["ric"]): row for row in fit_rows}
+    price_by_ric = {str(row["ric"]): row for row in price_rows}
+    classification_by_ric = {str(row["ric"]): row for row in classification_rows}
+    for requested_ric, resolved_ric in fit_alias_by_requested_ric.items():
+        if not requested_ric or requested_ric == resolved_ric:
+            continue
+        if resolved_ric in fit_by_ric:
+            fit_by_ric[requested_ric] = fit_by_ric[resolved_ric]
+        if resolved_ric in price_by_ric:
+            price_by_ric[requested_ric] = price_by_ric[resolved_ric]
+        if resolved_ric in classification_by_ric:
+            classification_by_ric[requested_ric] = classification_by_ric[resolved_ric]
+    return fit_by_ric, price_by_ric, classification_by_ric
 
 
 _ACCOUNT_SNAPSHOT_HELPERS = SimpleNamespace(

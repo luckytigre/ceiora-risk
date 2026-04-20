@@ -88,12 +88,13 @@ def record_holdings_dirty(
 
 def load_holdings_accounts(
     *,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
     dependencies: HoldingsDependencies | None = None,
 ) -> list[dict[str, Any]]:
     deps = dependencies or get_holdings_dependencies()
     conn = deps.connection_factory(dsn=deps.dsn_resolver(None), autocommit=True)
     try:
-        return deps.accounts_loader(conn)
+        return deps.accounts_loader(conn, allowed_account_ids=allowed_account_ids)
     finally:
         conn.close()
 
@@ -101,12 +102,13 @@ def load_holdings_accounts(
 def load_holdings_positions(
     account_id: str | None = None,
     *,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
     dependencies: HoldingsDependencies | None = None,
 ) -> list[dict[str, Any]]:
     deps = dependencies or get_holdings_dependencies()
     conn = deps.connection_factory(dsn=deps.dsn_resolver(None), autocommit=True)
     try:
-        return deps.positions_loader(conn, account_id=account_id)
+        return deps.positions_loader(conn, account_id=account_id, allowed_account_ids=allowed_account_ids)
     finally:
         conn.close()
 

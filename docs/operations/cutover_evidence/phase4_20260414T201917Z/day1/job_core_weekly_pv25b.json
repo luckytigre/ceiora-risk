@@ -1,0 +1,124 @@
+{
+  "apiVersion": "run.googleapis.com/v1",
+  "kind": "Execution",
+  "metadata": {
+    "annotations": {
+      "run.googleapis.com/creator": "shaun.skc@gmail.com",
+      "run.googleapis.com/execution-environment": "gen2",
+      "run.googleapis.com/lastModifier": "shaun.skc@gmail.com",
+      "run.googleapis.com/operation-id": "931d6941-b0c6-443c-97eb-a9614a2fd947"
+    },
+    "creationTimestamp": "2026-04-14T20:20:18.887940Z",
+    "generation": 1,
+    "labels": {
+      "cloud.googleapis.com/location": "us-east4",
+      "run.googleapis.com/job": "ceiora-prod-core-weekly",
+      "run.googleapis.com/jobGeneration": "13",
+      "run.googleapis.com/jobResourceVersion": "1776192379247659",
+      "run.googleapis.com/jobUid": "1df5d189-4c34-457c-86f1-2e15ba1640f9",
+      "run.googleapis.com/satisfiesPzs": "true"
+    },
+    "name": "ceiora-prod-core-weekly-pv25b",
+    "namespace": "799021330046",
+    "ownerReferences": [
+      {
+        "apiVersion": "serving.knative.dev/v1",
+        "blockOwnerDeletion": true,
+        "controller": true,
+        "kind": "Job",
+        "name": "ceiora-prod-core-weekly",
+        "uid": "1df5d189-4c34-457c-86f1-2e15ba1640f9"
+      }
+    ],
+    "resourceVersion": "AAZPcb1b6dY",
+    "selfLink": "/apis/run.googleapis.com/v1/namespaces/799021330046/executions/ceiora-prod-core-weekly-pv25b",
+    "uid": "e111c270-1949-4d12-9ce3-60585225c5da"
+  },
+  "spec": {
+    "parallelism": 1,
+    "taskCount": 1,
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "command": [
+              "python",
+              "-m",
+              "backend.scripts.run_refresh_job"
+            ],
+            "env": [
+              {
+                "name": "REFRESH_PROFILE",
+                "value": "core-weekly"
+              },
+              {
+                "name": "APP_RUNTIME_ROLE",
+                "value": "cloud-job"
+              },
+              {
+                "name": "NEON_AUTHORITATIVE_REBUILDS",
+                "value": "true"
+              },
+              {
+                "name": "DATA_BACKEND",
+                "value": "neon"
+              },
+              {
+                "name": "NEON_DATABASE_URL",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "latest",
+                    "name": "ceiora-prod-neon-database-url"
+                  }
+                }
+              }
+            ],
+            "image": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control@sha256:0ff06e62a38e061763b7660c87576c31a57e50ec164b5686c18ef7e10aab8dd9",
+            "resources": {
+              "limits": {
+                "cpu": "8",
+                "memory": "32Gi"
+              }
+            }
+          }
+        ],
+        "maxRetries": 3,
+        "serviceAccountName": "ceioraprodjobs@project-4e18de12-63a3-4206-aaa.iam.gserviceaccount.com",
+        "timeoutSeconds": "7200"
+      }
+    }
+  },
+  "status": {
+    "completionTime": "2026-04-14T20:49:46.973657Z",
+    "conditions": [
+      {
+        "lastTransitionTime": "2026-04-14T20:49:46.973657Z",
+        "message": "Execution completed successfully in 29m24.04s.",
+        "status": "True",
+        "type": "Completed"
+      },
+      {
+        "lastTransitionTime": "2026-04-14T20:20:19.721592Z",
+        "message": "Provisioned imported containers.",
+        "status": "True",
+        "type": "ResourcesAvailable"
+      },
+      {
+        "lastTransitionTime": "2026-04-14T20:20:34.625383Z",
+        "message": "Started deployed execution in 14.9s.",
+        "status": "True",
+        "type": "Started"
+      },
+      {
+        "lastTransitionTime": "2026-04-14T20:20:19.531864Z",
+        "message": "Imported container image.",
+        "status": "True",
+        "type": "ContainerReady"
+      }
+    ],
+    "logUri": "https://console.cloud.google.com/logs/viewer?project=project-4e18de12-63a3-4206-aaa&advancedFilter=resource.type%3D%22cloud_run_job%22%0Aresource.labels.job_name%3D%22ceiora-prod-core-weekly%22%0Aresource.labels.location%3D%22us-east4%22%0Alabels.%22run.googleapis.com/execution_name%22%3D%22ceiora-prod-core-weekly-pv25b%22",
+    "observedGeneration": 1,
+    "startTime": "2026-04-14T20:20:22.929245Z",
+    "succeededCount": 1
+  }
+}

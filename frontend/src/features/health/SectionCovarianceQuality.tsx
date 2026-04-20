@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import HelpLabel from "@/components/HelpLabel";
 import { compareNumber, compareText, useSortableRows } from "@/hooks/useSortableRows";
+import { chartTextColor } from "@/lib/charts/chartTheme";
 import type { HealthDiagnosticsData } from "@/lib/types/cuse4";
 import { Bar, Line } from "./charts";
 import { commonLineOptions, fmtPct, seriesData } from "./utils";
@@ -17,7 +18,7 @@ export default function SectionCovarianceQuality({ data }: { data: HealthDiagnos
       {
         label: "Eigenvalue",
         data: eigenvalues,
-        backgroundColor: "rgba(169, 182, 210, 0.55)",
+        backgroundColor: chartTextColor("secondary", 0.55),
         borderWidth: 0,
       },
     ],
@@ -63,7 +64,7 @@ export default function SectionCovarianceQuality({ data }: { data: HealthDiagnos
           <h4>Rolling Average Factor Vol</h4>
           <div className="health-chart-sm">
             <Line
-              data={seriesData(data.section4.rolling_avg_factor_vol, "Avg Factor Vol", "rgba(169, 182, 210, 0.85)", 100)}
+              data={seriesData(data.section4.rolling_avg_factor_vol, "Avg Factor Vol", chartTextColor("secondary", 0.85), 100)}
               options={{
                 ...commonLineOptions,
                 scales: {
@@ -71,7 +72,7 @@ export default function SectionCovarianceQuality({ data }: { data: HealthDiagnos
                   y: {
                     ...(commonLineOptions.scales?.y || {}),
                     ticks: {
-                      color: "rgba(169, 182, 210, 0.5)",
+                      color: chartTextColor("secondary", 0.5),
                       callback: (v) => `${Number(v).toFixed(1)}%`,
                       font: { size: 9 },
                     },

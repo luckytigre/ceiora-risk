@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -73,15 +74,40 @@ def _table_exists(table: str, *, data_db: Path | None = None) -> bool:
     )
 
 
-def _ensure_required_tables(*, data_db: Path | None = None) -> set[str]:
-    available = {table for table in _OPTIONAL_TABLES if _table_exists(table, data_db=data_db)}
-    missing = [table for table in _REQUIRED_TABLES if not _table_exists(table, data_db=data_db)]
+@lru_cache(maxsize=16)
+def _cached_available_tables(
+    data_db_key: str,
+    data_db_revision: tuple[int | None, int | None],
+    neon_enabled: bool,
+) -> tuple[str, ...]:
+    resolved_data_db = Path(data_db_key)
+
+    def _table_exists_cached(table: str) -> bool:
+        return core_backend.table_exists(
+            table,
+            fetch_rows_fn=lambda sql, params=None: _fetch_rows(sql, params, data_db=resolved_data_db),
+            neon_enabled=neon_enabled,
+        )
+
+    available = tuple(table for table in _OPTIONAL_TABLES if _table_exists_cached(table))
+    missing = tuple(table for table in _REQUIRED_TABLES if not _table_exists_cached(table))
     if missing:
         raise RegistryQuoteReadError(
             "Registry quote read requires tables: " + ", ".join(_REQUIRED_TABLES)
             + f"; missing {', '.join(missing)}"
         )
     return available
+
+
+def _ensure_required_tables(*, data_db: Path | None = None) -> set[str]:
+    resolved_data_db = _resolve_data_db(data_db)
+    try:
+        stat = resolved_data_db.stat()
+        data_db_revision = (int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ino))
+    except OSError:
+        data_db_revision = (None, None, None)
+    neon_enabled = bool(core_backend.use_neon_core_reads())
+    return set(_cached_available_tables(str(resolved_data_db), data_db_revision, neon_enabled))
 
 
 def _query_registry_rows(

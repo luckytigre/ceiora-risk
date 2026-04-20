@@ -38,6 +38,17 @@
   - `cold-core` (full historical rebuild path)
   - `universe-add` (post-onboarding finalization lane)
 
+## 2026-04-15 Authority Recovery
+- The April 15, 2026 production recovery repaired two separate cUSE authority defects:
+  - serving publish must use the candidate run's cUSE membership artifact, not `MAX(as_of_date)` membership history
+  - serving-only projected ETF reloads must use authoritative persisted projection scope and factor identity mapping, not SQLite selector state or brittle factor-label text matching
+- The same recovery also repaired the cPAR package/runtime-coverage defect by deriving package-date price presence from the shared-source authority path instead of a stale local-only path.
+- Healthy post-recovery production state:
+  - cUSE live universe: `4159` tickers, `2983` `core_estimated`, `258` `projected_only`
+  - returns-projected ETF cohort restored: `SPY`, `QQQ`, `URA`, `XLE`, `SMH`
+  - cPAR aggregate risk restored with `covered_positions_count = 24`, `missing_price = 0`, `missing_cpar_fit = 0`
+- The full implementation record and validation trail live in [CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN_2026-04-15.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/archive/implementation-trackers/CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN_2026-04-15.md).
+
 ## Hobby Launch Profile (Low Cost, 1-2 Users)
 - Run a single backend process/worker only.
 - Keep SQLite local and persistent on disk (no shared multi-node writes).
@@ -46,6 +57,11 @@
 - In `cloud-serve` mode, set non-empty auth tokens before exposing the app online:
   - `OPERATOR_API_TOKEN`
   - `EDITOR_API_TOKEN`
+- The frontend shared-session auth boundary also requires:
+  - `CEIORA_SHARED_LOGIN_USERNAME`
+  - `CEIORA_SHARED_LOGIN_PASSWORD`
+  - `CEIORA_SESSION_SECRET`
+  - `CEIORA_PRIMARY_ACCOUNT_USERNAME` (may match the shared username)
 - `REFRESH_API_TOKEN` remains a local-only compatibility token for the single-backend refresh route; do not rely on it for public cloud control-plane access
 - Prefer manual or low-frequency refreshes (`serve-refresh` most days).
 - Keep daily file backups of `data.db` and `cache.db`.
@@ -73,7 +89,9 @@
   - the public/editor-facing serve app should not expose refresh execution routes
   - operator/control routes should be served from the separate control app surface
   - the frontend may target a separate control origin through `BACKEND_CONTROL_ORIGIN`; when unset it falls back to `BACKEND_API_ORIGIN`
+  - the frontend now owns the shared app-session boundary; `/home`, `/cuse/*`, `/cpar/*`, `/positions`, `/data`, and privileged `/settings` are frontend-authenticated surfaces
   - the frontend must not hold operator/editor secrets in runtime env; privileged frontend `/api/*` routes should forward caller-supplied auth headers instead
+  - `/settings` is now a privileged maintenance page rather than the public auth bootstrap surface
 - Small local scratch/cache/workspace files may still appear, but they are not the historical source warehouse and are not the serving authority.
 - Local SQLite remains required only for:
   - direct LSEG ingest
@@ -107,13 +125,15 @@
   - serving-time prices remain read-only inputs to the projection layer; they must never write into canonical historical model-estimation tables such as `security_prices_eod`
   - projection-only outputs are read from persisted `projected_instrument_*` rows for the active `core_state_through_date`; if those rows are missing, the instrument is surfaced as projection-unavailable rather than being recomputed on the quick path
 - `source-daily`: local LSEG ingest into SQLite for the latest completed XNYS session, repair any missing daily price sessions up to that session, purge open-month PIT rows, backfill any missing closed-month fundamentals/classification anchors, publish the retained working window into Neon, then refresh serving only.
+- `source-daily` is a source-only lane plus serving refresh. It must not run the broad Neon mirror/parity tail that expects analytics/core rebuild outputs.
 - For identifier-based historical source/serving surfaces such as `security_prices_eod`, `security_fundamentals_pit`, and `security_classification_pit`, stage-2 Neon sync is identifier-aware:
   - existing identifiers that are already fully initialized in Neon continue to use the normal overlap-window sync
   - newly introduced or partially initialized identifiers receive retained-history backfill from local SQLite up to Neon's retained-history floor
 - This prevents the Neon-primary app from seeing truncated history after a local ticker add/backfill.
-- `source-daily-plus-core-if-due`: default daily maintenance lane; local ingest + Neon source-sync first, then recompute core only when cadence/version says due.
-- `core-weekly`: force core recompute without rebuilding full raw history.
+- `source-daily-plus-core-if-due`: default daily maintenance lane; local ingest + Neon source-sync first, then refresh a recent daily slice of `barra_raw_cross_section_history` so fresh prices can propagate into served loadings, and recompute factor returns/risk only when cadence/version says due.
+- `core-weekly`: force core recompute with a recent-window raw-history rebuild, without rebuilding full raw history.
   - factor-return recompute now determines uncached dates before loading prices and only reads the bounded price window needed for those dates plus the immediately prior session.
+  - it also refreshes a recent daily slice of `barra_raw_cross_section_history` before factor returns/risk so refreshed prices can propagate into served loadings without requiring `cold-core`
   - when projection-only instruments are registered, this lane also refreshes their persisted projected outputs from durable `model_factor_returns_daily` for the active core package date.
   - this lane now owns deep `health_diagnostics` recompute for the current weekly core model state.
   - during the `serving_refresh` stage inside this lane, app-facing payloads still publish before deep diagnostics; the rest of the stage is diagnostics tail work plus diagnostics persistence
@@ -123,6 +143,7 @@
   - During that run, `serving_refresh` must read the local/workspace source tables that just produced the rebuilt raw history; otherwise it can publish stale Neon factor-loadings metadata before the broad Neon mirror catches up.
   - During ordinary `serve-refresh`, the published weekly core-state should come from the latest durable `model_run_metadata` rather than a stale runtime cache key; otherwise a quick refresh can republish fresh loadings with regressed core metadata.
   - this lane also owns deep `health_diagnostics` recompute for structural rebuilds.
+  - partial stage-window execution is not an accepted operator path for `cold-core`; request the full lane or use a different profile
 - `universe-add`: finalization lane after explicit registry/policy merge and targeted source backfills for new names.
   - if the add includes new projection-only / returns-projection instruments that do not yet have persisted projected outputs for the active core package date, do not stop at `serve-refresh`; run at least `core-weekly` so durable `projected_instrument_*` rows are produced before app refresh
 
@@ -152,6 +173,9 @@ Runtime-role rule:
 - `local-ingest`: all lanes may be used.
 - `cloud-serve`: only `serve-refresh`, `core-weekly`, and `cold-core` are allowed (dispatched as Cloud Run Jobs).
 - `cloud-job`: the mode for running Cloud Run Jobs. `source_sync` is auto-skipped (no local SQLite); `neon_readiness` still runs.
+- `cloud-job` must fail closed for source publication work:
+  - `ingest` is never valid there
+  - `source_sync` is never a normal cloud-job escape hatch
 - In `cloud-serve`, a bare `POST /api/refresh` now defaults safely to `serve-refresh`.
 - `core-weekly` and `cold-core` are dispatched as Cloud Run Jobs when the control app has the job name env vars configured and those jobs are provisioned.
 - cPAR builds are dispatched via `POST /api/cpar/build` on the control app (not the serve app) once the `cpar-build` Cloud Run Job is provisioned.
@@ -203,6 +227,7 @@ Parallel cPAR note:
   - `curl -X POST "<control-origin>/api/refresh?profile=core-weekly" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
 - Cloud-dispatched cold-core (via control API):
   - `curl -X POST "<control-origin>/api/refresh?profile=cold-core" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
+- `cold-core` must not be dispatched with partial `from_stage` / `to_stage` windows; the control/job runner now rejects that request shape explicitly
 - Cloud-dispatched cPAR build (via control API):
   - `curl -X POST "<control-origin>/api/cpar/build?profile=cpar-weekly" -H "X-Operator-Token: $OPERATOR_API_TOKEN"`
   - resolve `<control-origin>` from `terraform output service_urls` for the active topology
@@ -215,6 +240,7 @@ Parallel cPAR note:
 - API refresh partial stage run:
   - `curl -X POST "http://localhost:8000/api/refresh?profile=source-daily-plus-core-if-due&from_stage=ingest&to_stage=risk_model"`
   - if Neon-authoritative rebuilds are active and you target core stages explicitly, include `neon_readiness` in the window or the run will fail closed before core work starts
+  - do not use this pattern with `cold-core`
 - Orchestrated refresh via CLI module:
   - `python3 -m backend.scripts.run_model_pipeline --profile serve-refresh`
 - Orchestrated refresh via script wrapper:

@@ -43,6 +43,8 @@ def test_run_serving_stage_requests_projection_refresh_on_core_lane() -> None:
 
     assert out["status"] == "ok"
     assert captured["refresh_projected_loadings"] is True
+    assert out["metrics"]["compute_seconds"] >= 0.0
+    assert out["metrics"]["rows_written"] == 0
 
 
 def test_run_serving_stage_does_not_request_projection_refresh_on_serving_only_lane() -> None:
@@ -65,6 +67,48 @@ def test_run_serving_stage_does_not_request_projection_refresh_on_serving_only_l
 
     assert out["status"] == "ok"
     assert captured["refresh_projected_loadings"] is False
+
+
+def test_run_serving_stage_exposes_published_payload_metrics() -> None:
+    out = run_serving_stage(
+        stage="serving_refresh",
+        should_run_core=False,
+        serving_mode="light",
+        data_db=Path("/tmp/data.db"),
+        cache_db=Path("/tmp/cache.db"),
+        progress_callback=None,
+        core_reads_module=_CoreReadsModule,
+        serving_refresh_skip_risk_engine_fn=lambda **kwargs: (True, "stable_core_package_reused"),
+        run_refresh_fn=lambda **kwargs: {"status": "ok", "published_payload_count": 42},
+        previous_or_same_xnys_session_fn=lambda s: s,
+        canonical_data_db=Path("/tmp/data.db"),
+        canonical_cache_db=Path("/tmp/cache.db"),
+    )
+
+    assert out["status"] == "ok"
+    assert out["metrics"]["rows_written"] == 42
+    assert out["metrics"]["compute_seconds"] >= 0.0
+
+
+def test_projection_active_asof_prefers_refresh_meta_projection_package_asof() -> None:
+    payloads = {
+        "refresh_meta": {
+            "projection_package_asof": "2026-04-13",
+            "risk_engine": {
+                "core_state_through_date": "2026-03-31",
+            },
+        },
+        "universe_loadings": {
+            "by_ticker": {
+                "SPY": {
+                    "ticker": "SPY",
+                    "projection_asof": "2026-03-31",
+                }
+            }
+        },
+    }
+
+    assert pipeline._projection_active_asof_from_payloads(payloads) == "2026-04-13"
 
 
 def test_run_refresh_uses_persisted_projection_outputs_on_serving_rebuild(
@@ -185,7 +229,7 @@ def test_run_refresh_uses_persisted_projection_outputs_on_serving_rebuild(
     assert "SPY" in captured["projected_loadings"]
 
 
-def test_run_refresh_recomputes_projection_outputs_when_persisted_asof_is_stale(
+def test_run_refresh_reuses_latest_persisted_projection_package_when_newer_than_core_state(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -193,18 +237,18 @@ def test_run_refresh_recomputes_projection_outputs_when_persisted_asof_is_stale(
     data_db = tmp_path / "data.db"
     cache_db = tmp_path / "cache.db"
     source_dates = {
-        "fundamentals_asof": "2026-03-20",
-        "classification_asof": "2026-03-20",
-        "prices_asof": "2026-03-20",
-        "exposures_asof": "2026-03-20",
-        "exposures_latest_available_asof": "2026-03-20",
+        "fundamentals_asof": "2026-03-13",
+        "classification_asof": "2026-03-13",
+        "prices_asof": "2026-03-13",
+        "exposures_asof": "2026-03-13",
+        "exposures_latest_available_asof": "2026-03-13",
     }
     risk_meta = {
         "status": "ok",
         "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
-        "last_recompute_date": "2026-03-20",
-        "factor_returns_latest_date": "2026-03-20",
-        "core_state_through_date": "2026-03-20",
+        "last_recompute_date": "2026-03-13",
+        "factor_returns_latest_date": "2026-03-13",
+        "core_state_through_date": "2026-03-13",
         "cross_section_min_age_days": 7,
         "lookback_days": 504,
         "specific_risk_ticker_count": 1,
@@ -212,7 +256,6 @@ def test_run_refresh_recomputes_projection_outputs_when_persisted_asof_is_stale(
         "latest_r2": 0.4,
     }
     projection_rows = [{"ric": "SPY.P", "ticker": "SPY"}]
-    recompute_called = {"value": False}
 
     monkeypatch.setattr(pipeline.core_reads, "load_source_dates", lambda **kwargs: dict(source_dates))
     monkeypatch.setattr(pipeline.config, "CUSE4_ENABLE_ESTU_AUDIT", False)
@@ -254,11 +297,16 @@ def test_run_refresh_recomputes_projection_outputs_when_persisted_asof_is_stale(
     monkeypatch.setattr(
         pipeline,
         "latest_persisted_projection_asof",
-        lambda **kwargs: "2026-03-13",
+        lambda **kwargs: "2026-03-20",
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "compute_projected_loadings",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("serving-only rebuild should reuse persisted projection package")),
     )
 
-    def _compute_projected_loadings(**kwargs):
-        recompute_called["value"] = True
+    def _load_persisted_projection_package(**kwargs):
+        assert kwargs["as_of_date"] == "2026-03-20"
         return {
             "SPY": ProjectedLoadingResult(
                 ric="SPY.P",
@@ -274,7 +322,111 @@ def test_run_refresh_recomputes_projection_outputs_when_persisted_asof_is_stale(
             )
         }
 
-    monkeypatch.setattr(pipeline, "compute_projected_loadings", _compute_projected_loadings)
+    monkeypatch.setattr(
+        pipeline,
+        "load_persisted_projected_loadings",
+        _load_persisted_projection_package,
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_build_universe_ticker_loadings",
+        lambda *args, **kwargs: captured.update(kwargs) or (_ for _ in ()).throw(_StopRefresh()),
+    )
+
+    with pytest.raises(_StopRefresh):
+        pipeline.run_refresh(
+            data_db=data_db,
+            cache_db=cache_db,
+            mode="light",
+            skip_snapshot_rebuild=True,
+            skip_cuse4_foundation=True,
+            skip_risk_engine=True,
+            prefer_local_source_archive=True,
+        )
+
+    assert captured["projection_core_state_through_date"] == "2026-03-20"
+    assert "SPY" in captured["projected_loadings"]
+
+
+def test_run_refresh_uses_authoritative_projection_scope_when_sqlite_selector_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+    data_db = tmp_path / "data.db"
+    cache_db = tmp_path / "cache.db"
+    source_dates = {
+        "fundamentals_asof": "2026-03-13",
+        "classification_asof": "2026-03-13",
+        "prices_asof": "2026-03-13",
+        "exposures_asof": "2026-03-13",
+        "exposures_latest_available_asof": "2026-03-13",
+    }
+    risk_meta = {
+        "status": "ok",
+        "method_version": pipeline.RISK_ENGINE_METHOD_VERSION,
+        "last_recompute_date": "2026-04-13",
+        "factor_returns_latest_date": "2026-04-13",
+        "core_state_through_date": "2026-04-13",
+        "cross_section_min_age_days": 7,
+        "lookback_days": 504,
+        "specific_risk_ticker_count": 1,
+        "recompute_interval_days": 7,
+        "latest_r2": 0.4,
+    }
+
+    monkeypatch.setattr(pipeline.core_reads, "load_source_dates", lambda **kwargs: dict(source_dates))
+    monkeypatch.setattr(pipeline.config, "CUSE4_ENABLE_ESTU_AUDIT", False)
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_effective_risk_engine_meta",
+        lambda **kwargs: (dict(risk_meta), "model_run_metadata"),
+    )
+    monkeypatch.setattr(
+        pipeline.sqlite,
+        "cache_get_live_first",
+        lambda key, **kwargs: {
+            "risk_engine_cov": {"factors": ["market"], "matrix": [[1.0]]},
+            "risk_engine_specific_risk": {"AAPL.OQ": {"ticker": "AAPL", "specific_var": 0.01, "specific_vol": 0.1}},
+        }.get(key),
+    )
+    monkeypatch.setattr(pipeline.sqlite, "cache_get", lambda key, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_latest_prices",
+        lambda **kwargs: pd.DataFrame(
+            [
+                {"ticker": "AAPL", "ric": "AAPL.OQ", "close": 100.0},
+                {"ticker": "SPY", "ric": "SPY.P", "close": 500.0},
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_latest_fundamentals",
+        lambda **kwargs: pd.DataFrame([{"ticker": "AAPL", "ric": "AAPL.OQ", "market_cap": 1_000_000.0}]),
+    )
+    monkeypatch.setattr(
+        pipeline.core_reads,
+        "load_raw_cross_section_latest",
+        lambda **kwargs: pd.DataFrame([{"ticker": "AAPL", "ric": "AAPL.OQ", "as_of_date": "2026-03-13", "beta_score": 1.0}]),
+    )
+    monkeypatch.setattr(pipeline, "load_projection_only_universe_rows", lambda _conn: [])
+    monkeypatch.setattr(
+        pipeline,
+        "load_latest_returns_projection_scope_rows",
+        lambda **kwargs: [{"ric": "SPY.P", "ticker": "SPY"}],
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "latest_persisted_projection_asof",
+        lambda **kwargs: "2026-04-13",
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "compute_projected_loadings",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("serving-only rebuild should reuse persisted projection package")),
+    )
     monkeypatch.setattr(
         pipeline,
         "load_persisted_projected_loadings",
@@ -288,7 +440,7 @@ def test_run_refresh_recomputes_projection_outputs_when_persisted_asof_is_stale(
                 r_squared=0.95,
                 obs_count=252,
                 lookback_days=252,
-                projection_asof="2026-03-20",
+                projection_asof="2026-04-13",
                 status="ok",
             )
         },
@@ -310,8 +462,8 @@ def test_run_refresh_recomputes_projection_outputs_when_persisted_asof_is_stale(
             prefer_local_source_archive=True,
         )
 
-    assert recompute_called["value"] is True
-    assert captured["projection_core_state_through_date"] == "2026-03-20"
+    assert captured["projection_universe_rows"] == [{"ric": "SPY.P", "ticker": "SPY"}]
+    assert captured["projection_core_state_through_date"] == "2026-04-13"
     assert "SPY" in captured["projected_loadings"]
 
 

@@ -108,11 +108,16 @@ def _load_structural_eligibility_rows_by_date(
     *,
     data_db: Path,
     as_of_dates: list[str],
+    force_local: bool = False,
 ) -> dict[str, dict[str, dict[str, Any]]]:
     clean_dates = sorted({value for value in as_of_dates if _text(value)})
     if not clean_dates:
         return {}
-    context = build_eligibility_context(data_db, dates=clean_dates, force_local=True)
+    context = build_eligibility_context(
+        data_db,
+        dates=clean_dates,
+        force_local=bool(force_local),
+    )
     rows_by_date: dict[str, dict[str, dict[str, Any]]] = {}
     for as_of_date in clean_dates:
         _, frame = structural_eligibility_for_date(context, as_of_date)

@@ -16,6 +16,15 @@ import {
   type Plugin,
 } from "chart.js";
 import { Chart } from "react-chartjs-2";
+import { useAppSettings } from "./AppSettingsContext";
+import {
+  alphaColor,
+  chartGridColor,
+  chartLongColor,
+  chartShortColor,
+  chartTextColor,
+  tooltipOptions,
+} from "@/lib/charts/chartTheme";
 import type { FactorCatalogEntry, FactorExposure } from "@/lib/types/cuse4";
 import { exposureTier as exposureMethodTier } from "@/lib/exposureOrigin";
 import { factorDisplayName, shortFactorLabel, factorTier } from "@/lib/factorLabels";
@@ -56,8 +65,8 @@ const zeroLinePlugin: Plugin<"bar" | "line"> = {
     const ctx = chart.ctx;
     ctx.save();
     ctx.beginPath();
-    ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = "rgba(169, 182, 210, 0.32)";
+    ctx.setLineDash([1, 6]);
+    ctx.strokeStyle = chartTextColor("secondary", 0.09);
     ctx.lineWidth = 1;
     ctx.moveTo(xPixel, chart.chartArea.top);
     ctx.lineTo(xPixel, chart.chartArea.bottom);
@@ -77,10 +86,9 @@ const netMarkerPlugin: Plugin<"bar" | "line"> = {
     const tickHalfLen = 7;
     ctx.save();
     ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(232, 237, 249, 0.88)";
-    ctx.lineWidth = 2;
-    ctx.shadowColor = "rgba(232, 237, 249, 0.25)";
-    ctx.shadowBlur = 4;
+    ctx.strokeStyle = chartTextColor("primary", 0.76);
+    ctx.lineWidth = 1.75;
+    ctx.shadowBlur = 0;
 
     for (const point of meta.data) {
       const x = point.x;
@@ -104,6 +112,7 @@ export default function ExposureBarChart({
   presentationThreshold: presentationThresholdOverride,
   visibleFactorIds,
 }: ExposureBarChartProps) {
+  const { themeMode } = useAppSettings();
   const axisLabel = mode === "risk_contribution"
     ? "% of total risk"
     : mode === "sensitivity"
@@ -240,7 +249,7 @@ export default function ExposureBarChart({
         // Separator line
         ctx.beginPath();
         ctx.setLineDash([]);
-        ctx.strokeStyle = "rgba(154, 171, 214, 0.16)";
+        ctx.strokeStyle = chartGridColor(0.07);
         ctx.lineWidth = 1;
         ctx.moveTo(chart.chartArea.left, yMid);
         ctx.lineTo(chart.chartArea.right, yMid);
@@ -251,7 +260,7 @@ export default function ExposureBarChart({
         const tierLabel = TIER_LABELS[nextTier];
         if (tierLabel) {
           ctx.font = "600 9px -apple-system, BlinkMacSystemFont, sans-serif";
-          ctx.fillStyle = "rgba(169, 182, 210, 0.7)";
+          ctx.fillStyle = chartTextColor("secondary", 0.3);
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
           ctx.fillText(tierLabel, chart.chartArea.right - 1, yMid + 4);
@@ -268,7 +277,7 @@ export default function ExposureBarChart({
             : 18;
           const firstLabelY = Math.max(chart.chartArea.top + 2, rowCenters[0] - rowGap / 2 + 2);
           ctx.font = "600 9px -apple-system, BlinkMacSystemFont, sans-serif";
-          ctx.fillStyle = "rgba(169, 182, 210, 0.7)";
+          ctx.fillStyle = chartTextColor("secondary", 0.3);
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
           ctx.fillText(firstLabel, chart.chartArea.right - 1, firstLabelY);
@@ -294,79 +303,79 @@ export default function ExposureBarChart({
         type: "bar",
         label: "Core Long",
         data: coreLongValues,
-        backgroundColor: "rgba(105, 207, 154, 0.96)",
-        hoverBackgroundColor: "rgba(105, 207, 154, 1.0)",
+        backgroundColor: chartLongColor(0.96),
+        hoverBackgroundColor: chartLongColor(),
         borderWidth: 0,
         borderRadius: 0,
         borderSkipped: false,
         inflateAmount: 0,
         stack: "exposure",
-        barThickness: 10,
+        barThickness: 8,
       },
       {
         type: "bar",
         label: "Fundamental Projection Long",
         data: fundamentalLongValues,
-        backgroundColor: "rgba(120, 188, 176, 0.9)",
-        hoverBackgroundColor: "rgba(128, 196, 184, 0.96)",
+        backgroundColor: chartTextColor("secondary", 0.32),
+        hoverBackgroundColor: chartTextColor("secondary", 0.44),
         borderWidth: 0,
         borderRadius: 0,
         borderSkipped: false,
         inflateAmount: 0,
         stack: "exposure",
-        barThickness: 10,
+        barThickness: 8,
       },
       {
         type: "bar",
         label: "Returns Projection Long",
         data: returnsLongValues,
-        backgroundColor: "rgba(124, 180, 180, 0.84)",
-        hoverBackgroundColor: "rgba(132, 188, 188, 0.92)",
+        backgroundColor: chartTextColor("muted", 0.24),
+        hoverBackgroundColor: chartTextColor("muted", 0.34),
         borderWidth: 0,
         borderRadius: 0,
         borderSkipped: false,
         inflateAmount: 0,
         stack: "exposure",
-        barThickness: 10,
+        barThickness: 8,
       },
       {
         type: "bar",
         label: "Core Short",
         data: coreShortValues,
-        backgroundColor: "rgba(224, 87, 127, 0.96)",
-        hoverBackgroundColor: "rgba(224, 87, 127, 1.0)",
+        backgroundColor: chartShortColor(0.96),
+        hoverBackgroundColor: chartShortColor(),
         borderWidth: 0,
         borderRadius: 0,
         borderSkipped: false,
         inflateAmount: 0,
         stack: "exposure",
-        barThickness: 10,
+        barThickness: 8,
       },
       {
         type: "bar",
         label: "Fundamental Projection Short",
         data: fundamentalShortValues,
-        backgroundColor: "rgba(216, 118, 110, 0.9)",
-        hoverBackgroundColor: "rgba(224, 126, 118, 0.96)",
+        backgroundColor: chartTextColor("secondary", 0.32),
+        hoverBackgroundColor: chartTextColor("secondary", 0.44),
         borderWidth: 0,
         borderRadius: 0,
         borderSkipped: false,
         inflateAmount: 0,
         stack: "exposure",
-        barThickness: 10,
+        barThickness: 8,
       },
       {
         type: "bar",
         label: "Returns Projection Short",
         data: returnsShortValues,
-        backgroundColor: "rgba(204, 136, 118, 0.84)",
-        hoverBackgroundColor: "rgba(212, 144, 126, 0.92)",
+        backgroundColor: chartTextColor("muted", 0.24),
+        hoverBackgroundColor: chartTextColor("muted", 0.34),
         borderWidth: 0,
         borderRadius: 0,
         borderSkipped: false,
         inflateAmount: 0,
         stack: "exposure",
-        barThickness: 10,
+        barThickness: 8,
       },
       {
         type: "line",
@@ -376,8 +385,8 @@ export default function ExposureBarChart({
         pointRadius: 0,
         pointHoverRadius: 0,
         borderWidth: 0,
-        pointBackgroundColor: "rgba(0, 0, 0, 0)",
-        pointBorderColor: "rgba(0, 0, 0, 0)",
+        pointBackgroundColor: "transparent",
+        pointBorderColor: "transparent",
       },
     ],
   };
@@ -390,13 +399,8 @@ export default function ExposureBarChart({
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "rgba(20, 22, 30, 0.92)",
-        borderColor: "rgba(154, 171, 214, 0.18)",
-        borderWidth: 1,
-        cornerRadius: 4,
+        ...tooltipOptions(),
         padding: { top: 6, bottom: 6, left: 10, right: 10 },
-        titleColor: "rgba(232, 237, 249, 0.6)",
-        bodyColor: "#e8edf9",
         titleFont: { size: 10, weight: "normal" as const },
         bodyFont: { size: 11, weight: 500 },
         displayColors: true,
@@ -421,9 +425,9 @@ export default function ExposureBarChart({
       x: {
         stacked: true,
         border: { display: false },
-        grid: { color: "rgba(154, 171, 214, 0.16)" },
+        grid: { color: chartGridColor(0.12) },
         ticks: {
-          color: "rgba(169, 182, 210, 0.5)",
+          color: chartTextColor("secondary", 0.32),
           callback: (value) => xTick(Number(value)),
           font: { size: 9 },
         },
@@ -433,7 +437,7 @@ export default function ExposureBarChart({
         border: { display: false },
         grid: { display: false },
         ticks: {
-          color: "rgba(232, 237, 249, 0.6)",
+          color: chartTextColor("primary", 0.6),
           font: { size: 10 },
         },
       },
@@ -451,10 +455,11 @@ export default function ExposureBarChart({
   return (
     <div>
       <div style={{ height }}>
-        <Chart
-          type="bar"
-          data={data}
-          options={options}
+      <Chart
+        key={`exposure-chart-${themeMode}`}
+        type="bar"
+        data={data}
+        options={options}
           plugins={[zeroLinePlugin, tierSeparatorPlugin, netMarkerPlugin]}
         />
       </div>

@@ -12,7 +12,8 @@ import {
   type TooltipItem,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
-import { tooltipOptions } from "@/lib/charts/chartTheme";
+import { useAppSettings } from "./AppSettingsContext";
+import { chartColor, chartTextColor, chartVar, tooltipOptions } from "@/lib/charts/chartTheme";
 import type { RiskShares } from "@/lib/types/cuse4";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
@@ -28,6 +29,7 @@ interface RiskDecompChartProps {
 }
 
 export default function RiskDecompChart({ rows }: RiskDecompChartProps) {
+  const { themeMode } = useAppSettings();
   const labels = rows.map((row) => row.label);
   const normalizedRows = rows.map((row) => ({
     label: row.label,
@@ -38,34 +40,34 @@ export default function RiskDecompChart({ rows }: RiskDecompChartProps) {
     {
       label: "Market",
       data: normalizedRows.map((row) => row.shares.market || 0),
-      backgroundColor: "#58b6c7",
-      barThickness: 12,
-      categoryPercentage: 0.52,
-      barPercentage: 0.82,
+      backgroundColor: chartVar("--analytics-market", "#63add8"),
+      barThickness: 8,
+      categoryPercentage: 0.42,
+      barPercentage: 0.76,
     },
     {
       label: "Industry",
       data: normalizedRows.map((row) => row.shares.industry || 0),
-      backgroundColor: "#cc3558",
-      barThickness: 12,
-      categoryPercentage: 0.52,
-      barPercentage: 0.82,
+      backgroundColor: chartVar("--analytics-industry", chartColor("sector")),
+      barThickness: 8,
+      categoryPercentage: 0.42,
+      barPercentage: 0.76,
     },
     {
       label: "Style",
       data: normalizedRows.map((row) => row.shares.style || 0),
-      backgroundColor: "#f5bae4",
-      barThickness: 12,
-      categoryPercentage: 0.52,
-      barPercentage: 0.82,
+      backgroundColor: chartVar("--analytics-style", chartColor("factor")),
+      barThickness: 8,
+      categoryPercentage: 0.42,
+      barPercentage: 0.76,
     },
     {
       label: "Idiosyncratic",
       data: normalizedRows.map((row) => (row.showIdio ? (row.shares.idio || 0) : 0)),
-      backgroundColor: "#ff8f2a",
-      barThickness: 12,
-      categoryPercentage: 0.52,
-      barPercentage: 0.82,
+      backgroundColor: chartVar("--analytics-idio", chartColor("idio")),
+      barThickness: 8,
+      categoryPercentage: 0.42,
+      barPercentage: 0.76,
     },
   ];
   const data: ChartData<"bar", number[], string> = {
@@ -85,7 +87,7 @@ export default function RiskDecompChart({ rows }: RiskDecompChartProps) {
         display: true,
         position: "bottom" as const,
         labels: {
-          color: "#a9b6d2",
+          color: chartTextColor("secondary"),
           boxWidth: 10,
           padding: 16,
           font: { size: 11 },
@@ -112,7 +114,7 @@ export default function RiskDecompChart({ rows }: RiskDecompChartProps) {
         border: { display: false },
         grid: { display: false },
         ticks: {
-          color: "#a9b6d2",
+          color: chartTextColor("secondary"),
           callback: (v) => `${Number(v)}%`,
           font: { size: 11 },
         },
@@ -123,7 +125,7 @@ export default function RiskDecompChart({ rows }: RiskDecompChartProps) {
         border: { display: false },
         grid: { display: false },
         ticks: {
-          color: "rgba(232, 237, 249, 0.6)",
+          color: chartTextColor("primary", 0.6),
           font: { size: 10, weight: 500 },
           padding: 10,
         },
@@ -135,7 +137,7 @@ export default function RiskDecompChart({ rows }: RiskDecompChartProps) {
 
   return (
     <div style={{ height }}>
-      <Bar data={data} options={options} />
+      <Bar key={`risk-decomp-${themeMode}`} data={data} options={options} />
     </div>
   );
 }

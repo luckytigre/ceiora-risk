@@ -9,6 +9,17 @@ from backend.cpar.factor_registry import ordered_factor_ids
 from backend.data import cpar_outputs
 
 
+@pytest.fixture(autouse=True)
+def _stub_shared_price_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_outputs.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda *_args, **_kwargs: [],
+    )
+
+
 def _package_run(package_run_id: str, package_date: str) -> dict[str, object]:
     return {
         "package_run_id": package_run_id,
@@ -209,6 +220,41 @@ def test_package_membership_keeps_us_non_equity_in_extended_scope() -> None:
     assert by_ticker["AAPL"]["target_scope"] == "core_us_equity"
     assert by_ticker["SPY"]["target_scope"] == "factor_basis_only"
     assert by_ticker["ARKK"]["target_scope"] == "extended_priced_instrument"
+
+
+def test_persist_uses_shared_source_price_rows_for_runtime_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_db = tmp_path / "cpar.db"
+    monkeypatch.setattr(cpar_outputs.config, "APP_RUNTIME_ROLE", "local-ingest")
+    monkeypatch.setattr(cpar_outputs.config, "DATA_BACKEND", "sqlite")
+    monkeypatch.setattr(cpar_outputs.config, "neon_dsn", lambda: "")
+    monkeypatch.setattr(
+        cpar_outputs.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda rics, **_kwargs: [
+            {"ric": "AAPL.OQ", "date": "2026-03-14", "adj_close": 210.0, "close": 210.0}
+            for ric in rics
+            if str(ric).upper() == "AAPL.OQ"
+        ],
+    )
+
+    cpar_outputs.persist_cpar_package(
+        data_db=data_db,
+        package_run=_package_run("run_1", "2026-03-14"),
+        proxy_returns=_proxy_returns("run_1", "2026-03-14"),
+        proxy_transforms=_proxy_transforms("run_1", "2026-03-14"),
+        covariance_rows=_covariance_rows("run_1", "2026-03-14", covariance=1.0),
+        instrument_fits=_instrument_fits("run_1", "2026-03-14", spy_beta=1.1),
+    )
+
+    fit = cpar_outputs.load_active_package_instrument_fit("AAPL", data_db=data_db)
+    assert fit is not None
+    assert fit["price_on_package_date_status"] == "present"
+    assert fit["portfolio_use_status"] == "covered"
+    assert fit["hedge_use_status"] == "usable"
+    assert fit["quality_label"] == "ok"
 
 
 def test_persist_replaces_child_rows_for_same_package_date(

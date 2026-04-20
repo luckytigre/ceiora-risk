@@ -5,6 +5,7 @@ import LazyMountOnVisible from "@/components/LazyMountOnVisible";
 import CovarianceHeatmap from "@/features/cuse4/components/CovarianceHeatmap";
 import HelpLabel from "@/components/HelpLabel";
 import TableRowToggle from "@/components/TableRowToggle";
+import { chartLongColor, chartTextColor } from "@/lib/charts/chartTheme";
 import { factorFamily, shortFactorLabel } from "@/lib/factorLabels";
 import type { HealthDiagnosticsData, HealthExposureStats } from "@/lib/types/cuse4";
 import { Bar, Line } from "./charts";
@@ -46,7 +47,7 @@ export default function SectionExposure({ data }: { data: HealthDiagnosticsData 
       {
         label: "Daily Exposure Turnover",
         data: turnoverSeries.map((r) => Number(r.turnover) || 0),
-        borderColor: "rgba(169, 182, 210, 0.56)",
+        borderColor: chartTextColor("secondary", 0.56),
         pointRadius: 0,
         borderWidth: 1.2,
         tension: 0.2,
@@ -54,7 +55,7 @@ export default function SectionExposure({ data }: { data: HealthDiagnosticsData 
       {
         label: "Rolling 60",
         data: turnoverSeries.map((r) => Number(r.roll60) || 0),
-        borderColor: "rgba(107, 207, 154, 0.9)",
+        borderColor: chartLongColor(0.9),
         pointRadius: 0,
         borderWidth: 1.5,
         tension: 0.2,

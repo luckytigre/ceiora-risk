@@ -42,14 +42,13 @@ def _live_positions() -> list[dict[str, object]]:
 
 def _current_snapshot() -> dict[str, object]:
     return {
-        "scope": "all_accounts",
-        "positions_count": 2,
-        "gross_market_value": 2500.0,
+        "scope": "restricted_accounts",
+        "positions_count": 1,
+        "gross_market_value": 2000.0,
         "portfolio_status": "ok",
         "portfolio_reason": None,
         "positions": [
-            {"account_id": "all_accounts", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "fit_status": "ok", "coverage": "covered", "warnings": [], "market_value": 2000.0, "portfolio_weight": 0.8, "thresholded_contributions": []},
-            {"account_id": "all_accounts", "ric": "MSFT.OQ", "ticker": "MSFT", "quantity": 5.0, "fit_status": "ok", "coverage": "covered", "warnings": [], "market_value": 500.0, "portfolio_weight": 0.2, "thresholded_contributions": []},
+            {"account_id": "acct_a", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "fit_status": "ok", "coverage": "covered", "warnings": [], "market_value": 2000.0, "portfolio_weight": 1.0, "thresholded_contributions": []},
         ],
         "factor_variance_contributions": [
             {"factor_id": "SPY", "group": "market", "variance_share": 0.7},
@@ -66,7 +65,7 @@ def _current_snapshot() -> dict[str, object]:
                 "sensitivity_beta": 0.4,
                 "risk_contribution_pct": 70.0,
                 "factor_volatility": 0.3,
-                "drilldown": [{"ric": "AAPL.OQ", "ticker": "AAPL", "portfolio_weight": 0.8, "factor_beta": 1.0, "vol_scaled_loading": 0.3, "contribution_beta": 0.8, "vol_scaled_contribution": 0.24, "risk_contribution_pct": 56.0, "fit_status": "ok", "coverage": "covered"}],
+                "drilldown": [{"ric": "AAPL.OQ", "ticker": "AAPL", "portfolio_weight": 1.0, "factor_beta": 1.0, "vol_scaled_loading": 0.3, "contribution_beta": 1.0, "vol_scaled_contribution": 0.3, "risk_contribution_pct": 70.0, "fit_status": "ok", "coverage": "covered"}],
             },
         ],
         "display_factor_chart": [
@@ -79,7 +78,7 @@ def _current_snapshot() -> dict[str, object]:
                 "sensitivity_beta": 0.33,
                 "risk_contribution_pct": 70.0,
                 "factor_volatility": 0.3,
-                "drilldown": [{"ric": "AAPL.OQ", "ticker": "AAPL", "portfolio_weight": 0.8, "factor_beta": 0.8, "vol_scaled_loading": 0.24, "contribution_beta": 0.64, "vol_scaled_contribution": 0.192, "risk_contribution_pct": 56.0, "fit_status": "ok", "coverage": "covered"}],
+                "drilldown": [{"ric": "AAPL.OQ", "ticker": "AAPL", "portfolio_weight": 1.0, "factor_beta": 0.8, "vol_scaled_loading": 0.24, "contribution_beta": 0.8, "vol_scaled_contribution": 0.24, "risk_contribution_pct": 70.0, "fit_status": "ok", "coverage": "covered"}],
             },
         ],
     }
@@ -87,15 +86,14 @@ def _current_snapshot() -> dict[str, object]:
 
 def _hypothetical_snapshot() -> dict[str, object]:
     return {
-        "scope": "all_accounts",
-        "positions_count": 3,
-        "gross_market_value": 3400.0,
+        "scope": "restricted_accounts",
+        "positions_count": 2,
+        "gross_market_value": 2900.0,
         "portfolio_status": "ok",
         "portfolio_reason": None,
         "positions": [
-            {"account_id": "all_accounts", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "fit_status": "ok", "coverage": "covered", "warnings": [], "market_value": 2000.0, "portfolio_weight": 0.58, "thresholded_contributions": []},
-            {"account_id": "all_accounts", "ric": "MSFT.OQ", "ticker": "MSFT", "quantity": 5.0, "fit_status": "ok", "coverage": "covered", "warnings": [], "market_value": 500.0, "portfolio_weight": 0.15, "thresholded_contributions": []},
-            {"account_id": "all_accounts", "ric": "NVDA.OQ", "ticker": "NVDA", "quantity": 6.0, "fit_status": "ok", "coverage": "covered", "warnings": [], "market_value": 900.0, "portfolio_weight": 0.27, "thresholded_contributions": []},
+            {"account_id": "acct_a", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "fit_status": "ok", "coverage": "covered", "warnings": [], "market_value": 2000.0, "portfolio_weight": 0.69, "thresholded_contributions": []},
+            {"account_id": "acct_a", "ric": "NVDA.OQ", "ticker": "NVDA", "quantity": 6.0, "fit_status": "ok", "coverage": "covered", "warnings": [], "market_value": 900.0, "portfolio_weight": 0.31, "thresholded_contributions": []},
         ],
         "factor_variance_contributions": [
             {"factor_id": "SPY", "group": "market", "variance_share": 0.6},
@@ -112,7 +110,7 @@ def _hypothetical_snapshot() -> dict[str, object]:
                 "sensitivity_beta": 0.45,
                 "risk_contribution_pct": 60.0,
                 "factor_volatility": 0.3,
-                "drilldown": [{"ric": "NVDA.OQ", "ticker": "NVDA", "portfolio_weight": 0.27, "factor_beta": 1.3, "vol_scaled_loading": 0.39, "contribution_beta": 0.351, "vol_scaled_contribution": 0.1053, "risk_contribution_pct": 18.0, "fit_status": "ok", "coverage": "covered"}],
+                "drilldown": [{"ric": "NVDA.OQ", "ticker": "NVDA", "portfolio_weight": 0.31, "factor_beta": 1.3, "vol_scaled_loading": 0.39, "contribution_beta": 0.403, "vol_scaled_contribution": 0.1209, "risk_contribution_pct": 18.0, "fit_status": "ok", "coverage": "covered"}],
             },
         ],
         "display_factor_chart": [
@@ -125,7 +123,7 @@ def _hypothetical_snapshot() -> dict[str, object]:
                 "sensitivity_beta": 0.36,
                 "risk_contribution_pct": 60.0,
                 "factor_volatility": 0.3,
-                "drilldown": [{"ric": "NVDA.OQ", "ticker": "NVDA", "portfolio_weight": 0.27, "factor_beta": 1.0, "vol_scaled_loading": 0.3, "contribution_beta": 0.27, "vol_scaled_contribution": 0.081, "risk_contribution_pct": 18.0, "fit_status": "ok", "coverage": "covered"}],
+                "drilldown": [{"ric": "NVDA.OQ", "ticker": "NVDA", "portfolio_weight": 0.31, "factor_beta": 1.0, "vol_scaled_loading": 0.3, "contribution_beta": 0.31, "vol_scaled_contribution": 0.093, "risk_contribution_pct": 18.0, "fit_status": "ok", "coverage": "covered"}],
             },
         ],
     }
@@ -141,8 +139,8 @@ def test_cpar_explore_whatif_service_builds_aggregate_preview(monkeypatch: pytes
         cpar_explore_whatif_service.cpar_portfolio_snapshot_service,
         "aggregate_cpar_positions_across_accounts",
         lambda positions: (
-            ([{"account_id": "all_accounts", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0}, {"account_id": "all_accounts", "ric": "MSFT.OQ", "ticker": "MSFT", "quantity": 5.0}] if len(positions) == 2 else [{"account_id": "all_accounts", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0}, {"account_id": "all_accounts", "ric": "MSFT.OQ", "ticker": "MSFT", "quantity": 5.0}, {"account_id": "all_accounts", "ric": "NVDA.OQ", "ticker": "NVDA", "quantity": 6.0}]),
-            [{"account_id": "acct_a"}, {"account_id": "acct_b"}],
+            ([{"account_id": "acct_a", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0}] if len(positions) == 1 else [{"account_id": "acct_a", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0}, {"account_id": "acct_a", "ric": "NVDA.OQ", "ticker": "NVDA", "quantity": 6.0}]),
+            [{"account_id": "acct_a"}],
         ),
     )
     monkeypatch.setattr(
@@ -157,7 +155,7 @@ def test_cpar_explore_whatif_service_builds_aggregate_preview(monkeypatch: pytes
     )
 
     def _build_snapshot(*, positions, **kwargs):
-        return _current_snapshot() if len(positions) == 2 else _hypothetical_snapshot()
+        return _current_snapshot() if len(positions) == 1 else _hypothetical_snapshot()
 
     monkeypatch.setattr(
         cpar_explore_whatif_service.cpar_aggregate_risk_service,
@@ -170,8 +168,13 @@ def test_cpar_explore_whatif_service_builds_aggregate_preview(monkeypatch: pytes
     )
 
     assert payload["_preview_only"] is True
+    assert payload["preview_scope"]["account_ids"] == ["acct_a"]
     assert payload["scenario_rows"][0]["account_id"] == "acct_a"
     assert payload["holding_deltas"][0]["delta_quantity"] == 6.0
+    assert payload["current"]["scope"] == "restricted_accounts"
+    assert payload["hypothetical"]["scope"] == "restricted_accounts"
+    assert [row["ticker"] for row in payload["current"]["positions"]] == ["AAPL"]
+    assert [row["ticker"] for row in payload["hypothetical"]["positions"]] == ["AAPL", "NVDA"]
     assert payload["current"]["risk_shares"]["market"] == 70.0
     assert payload["hypothetical"]["risk_shares"]["style"] == 15.0
     assert payload["diff"]["risk_shares"]["market"] == -10.0

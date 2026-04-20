@@ -149,6 +149,8 @@ def persist_model_outputs(
     cov: pd.DataFrame,
     specific_risk_by_ticker: dict[str, dict[str, float | int | str]],
     persisted_payloads: dict[str, Any] | None = None,
+    cuse_membership_payload: list[tuple[Any, ...]] | None = None,
+    cuse_stage_results_payload: list[tuple[Any, ...]] | None = None,
     error: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -224,13 +226,18 @@ def persist_model_outputs(
         run_id=run_id,
         updated_at=now_iso,
     )
-    cuse_membership_payload, cuse_stage_results_payload = build_cuse_membership_payloads(
-        data_db=data_db,
-        universe_payload=dict((persisted_payloads or {}).get("universe_loadings") or {}),
-        risk_engine_state=risk_engine_state,
-        run_id=run_id,
-        updated_at=now_iso,
-    )
+    if cuse_membership_payload is None or cuse_stage_results_payload is None:
+        derived_membership_payload, derived_stage_results_payload = build_cuse_membership_payloads(
+            data_db=data_db,
+            universe_payload=dict((persisted_payloads or {}).get("universe_loadings") or {}),
+            risk_engine_state=risk_engine_state,
+            run_id=run_id,
+            updated_at=now_iso,
+        )
+        if cuse_membership_payload is None:
+            cuse_membership_payload = derived_membership_payload
+        if cuse_stage_results_payload is None:
+            cuse_stage_results_payload = derived_stage_results_payload
     row_counts = {
         "model_factor_returns_daily": int(len(factor_returns_payload)),
         "model_factor_covariance_daily": int(len(covariance_payload)),

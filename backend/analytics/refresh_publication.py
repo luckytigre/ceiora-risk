@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from backend import config
-from backend.analytics import health_payloads, publish_payloads, refresh_metadata, refresh_persistence
+from backend.analytics import health_payloads, publish_payloads, refresh_metadata, refresh_persistence, reuse_policy
 from backend.data import serving_outputs, sqlite
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,24 @@ def run_publish_only_refresh(
         ),
         payloads=payloads,
     )
+    universe_ok, universe_reason = reuse_policy.universe_loadings_payload_integrity(
+        payloads.get("universe_loadings")
+    )
+    if not universe_ok:
+        raise RuntimeError(
+            "Publish-only universe payload integrity failed: "
+            f"{universe_reason}"
+        )
+    live_universe_payload = serving_outputs.load_current_payload("universe_loadings")
+    regression_ok, regression_reason = reuse_policy.universe_loadings_live_regression_guard(
+        payloads.get("universe_loadings"),
+        current_live_payload=live_universe_payload,
+    )
+    if not regression_ok:
+        raise RuntimeError(
+            "Publish-only universe payload regressed versus the current live modeled snapshot: "
+            f"{regression_reason}"
+        )
 
     refresh_meta = dict(payloads.get("refresh_meta") or {})
     risk_payload = dict(payloads.get("risk") or {})

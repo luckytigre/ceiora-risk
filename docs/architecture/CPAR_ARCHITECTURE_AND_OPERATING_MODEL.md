@@ -82,6 +82,11 @@ Read-only backend routes:
 - `GET /api/cpar/meta`
 - `GET /api/cpar/search?q=&limit=`
 - `GET /api/cpar/risk`
+  - includes the package-pinned aggregate risk snapshot plus the factor registry needed for the risk-page first render
+- `GET /api/cpar/explore/context`
+  - includes only the package-pinned held-position lookup needed for `/cpar/explore` first render
+  - stops at package-aware position rows and must not expand into a second aggregate-risk payload
+  - reports `scope=restricted_accounts` when account enforcement trims the aggregate book for the active session
 - `GET /api/cpar/factors/history?factor_id=&years=`
 - `GET /api/cpar/portfolio/hedge?account_id=&mode=`
 - `POST /api/cpar/portfolio/whatif`
@@ -111,6 +116,13 @@ Frontend consistency rule:
 ## Risk And Explore Expansion Guardrails
 
 The next cPAR frontend overhaul should remain cPAR-native even when it adopts cUSE-like presentation patterns.
+
+Current active workstream:
+- cPAR hedge packages are the one intentionally active temporary UX expansion:
+  - row-level hedge popovers on `/cpar/risk`
+  - a real portfolio hedge workspace on `/cpar/hedge`
+- while that work is in flight, the temporary implementation plan lives in `CPAR_HEDGE_WORKSTREAM_PLAN_2026-04-20.md`
+- that temporary plan should be archived once the hedge surfaces land and this canonical document has been updated
 
 Current owner decisions:
 - rebuilt `/cpar/explore`, `/cpar/hedge`, and `/cpar/health` surfaces should remain cPAR-owned when they return
@@ -143,7 +155,7 @@ Current frontend boundary decision:
   - intentionally shared holdings/account plumbing now lives in `frontend/src/hooks/useHoldingsApi.ts` and `frontend/src/lib/holdingsApi.ts`
   - low-level fetch/error transport now lives in `frontend/src/lib/apiTransport.ts`
   - cPAR contracts now come from `frontend/src/lib/types/cpar.ts` plus shared `frontend/src/lib/types/holdings.ts` where account plumbing is intentionally reused
-  - mixed-family compatibility barrels remain in the repo, but they are no longer the preferred import path for cPAR-owned frontend files or the owner of shared holdings/account reuse
+  - mixed-family compatibility barrels have been retired; cPAR-owned files should stay on these explicit cPAR and shared-holdings owners
 
 Current package-truth decision:
 - a richer cPAR page may continue to compose multiple requests only while it preserves one `package_run_id` / `package_date` across the full page
@@ -171,7 +183,8 @@ Current read behavior:
   - per-position weighted thresholded contributions plus additive display contributions
   - backend-owned `risk_shares`, `factor_variance_proxy`, `idio_variance_proxy`, `total_variance_proxy`, and row `risk_mix`
 - `/api/cpar/risk` additionally exposes the full package-pinned covariance matrix for the frontend heatmap
-- the current implementation keeps the frontend meta-first gate intact, but shortens the backend risk path by:
+- `/api/cpar/explore/context` is the cPAR-owned compact Explore bootstrap surface; it may reuse aggregate holdings context plus package/source support rows, but it must stop before covariance, factor charts, or aggregate risk-share analytics
+- the current implementation removes the old frontend meta-first gate and shortens the backend risk path by:
   - reading pre-aggregated all-account holdings rows from the shared holdings adapter
   - fanning out independent package/source/display-covariance reads concurrently after the aggregate book is known
 - factor drilldown history now has a cPAR-owned supplemental route:
@@ -180,11 +193,12 @@ Current read behavior:
   - degradeable without suppressing the primary aggregate risk payload
 - account-level what-if additionally requires one account hedge baseline, one active package, and staged signed share deltas that reference either existing holdings rows or active-package search hits
 - `/cpar/explore` search/detail may surface registry-admitted names that are outside the active package, but those quote rows must stay clearly labeled as registry/runtime-only and must not silently broaden the stage/apply contract beyond active-package names
-- aggregate explore what-if additionally reuses the same package-pinned aggregate snapshot core for both current and hypothetical comparison states
+- aggregate explore what-if additionally reuses the same package-pinned aggregate snapshot core for both current and hypothetical comparison states, but scopes that comparison to the staged holdings accounts instead of unrelated accounts elsewhere in the book
 - missing required relational coverage fails closed with cPAR-specific `503 not_ready`
 - the account-level what-if envelope and its nested `current` / `hypothetical` snapshots are part of the same package-scoped flow as the shared banner and baseline portfolio hedge payload
 - the frontend may keep rendering the incumbent baseline hedge while staged what-if rows are invalid, recomputing, or fail closed, but it must not promote a hypothetical comparison panel unless the what-if envelope and both nested snapshots share the same package identity
-- the frontend uses package metadata as the first gate for dependent reads and does not intentionally keep querying detail/hedge/account payloads after a package-level `not_ready` or `unavailable` response
+- `/cpar/risk` now uses the package-pinned `/api/cpar/risk` payload as its first-render contract instead of waiting on a separate meta read
+- the frontend does not intentionally keep querying detail/hedge/account payloads after a package-level `not_ready` or `unavailable` response
 - current package freshness is interpreted from the active package date/source-as-of date, not from any cUSE4 refresh/runtime-state surface
 
 Current runtime authority:

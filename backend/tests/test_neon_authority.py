@@ -104,11 +104,42 @@ def test_assess_neon_rebuild_readiness_allows_cold_core_without_existing_raw_his
     assert out["status"] == "ok"
 
 
-def test_assess_neon_rebuild_readiness_requires_model_output_tables() -> None:
+def test_assess_neon_rebuild_readiness_cold_core_tolerates_missing_model_output_tables() -> None:
+    # cold-core rebuilds covariance/specific-risk/metadata from scratch, so
+    # it must be allowed to run even on a bootstrap Neon with those tables missing.
     table_stats = _registry_first_table_stats(model_covariance_exists=False, model_run_metadata_exists=False)
 
     out = neon_authority._assess_neon_rebuild_readiness(
         profile="cold-core",
+        table_stats=table_stats,
+        analytics_years=5,
+    )
+
+    assert out["status"] == "ok"
+
+
+def test_assess_neon_rebuild_readiness_cold_core_tolerates_empty_model_output_tables() -> None:
+    # Same bootstrap scenario: tables exist but are empty (no prior run).
+    table_stats = _registry_first_table_stats()
+    table_stats["model_factor_covariance_daily"] = {"exists": True, "row_count": 0, "min_date": None, "max_date": None}
+    table_stats["model_specific_risk_daily"] = {"exists": True, "row_count": 0, "min_date": None, "max_date": None}
+    table_stats["model_run_metadata"] = {"exists": True, "row_count": 0, "min_date": None, "max_date": None}
+
+    out = neon_authority._assess_neon_rebuild_readiness(
+        profile="cold-core",
+        table_stats=table_stats,
+        analytics_years=5,
+    )
+
+    assert out["status"] == "ok"
+
+
+def test_assess_neon_rebuild_readiness_requires_model_output_tables_for_non_cold_core() -> None:
+    # Other profiles (e.g. core-weekly) still require existing model outputs.
+    table_stats = _registry_first_table_stats(model_covariance_exists=False, model_run_metadata_exists=False)
+
+    out = neon_authority._assess_neon_rebuild_readiness(
+        profile="core-weekly",
         table_stats=table_stats,
         analytics_years=5,
     )
@@ -366,6 +397,29 @@ def test_sync_workspace_derivatives_to_local_mirror_copies_core_outputs(tmp_path
         "SELECT COUNT(*) FROM cache WHERE key='risk_engine_meta'"
     ).fetchone()[0] == 1
     target_cache_conn.close()
+
+
+def test_workspace_barra_table_keeps_expected_primary_key(tmp_path: Path) -> None:
+    db_path = tmp_path / "workspace.db"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        neon_authority._drop_and_recreate_sqlite_table(
+            conn,
+            table="barra_raw_cross_section_history",
+            columns=[
+                {"name": "ric", "data_type": "text"},
+                {"name": "as_of_date", "data_type": "date"},
+                {"name": "ticker", "data_type": "text"},
+            ],
+        )
+        pk_cols = [
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(barra_raw_cross_section_history)").fetchall()
+            if int(row[5] or 0) > 0
+        ]
+    finally:
+        conn.close()
+    assert pk_cols == ["ric", "as_of_date"]
 
 
 def test_workspace_source_tables_are_registry_first() -> None:

@@ -45,15 +45,21 @@ function authHeadersForPath(path: string): Headers | null {
   return operatorToken || editorToken ? headers : null;
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+type ApiFetchOptions = RequestInit & {
+  privileged?: boolean;
+};
+
+async function doApiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const url = `${BASE}${path}`;
   const headers = new Headers(init?.headers);
-  const authHeaders = authHeadersForPath(path);
-  authHeaders?.forEach((value, key) => {
-    headers.set(key, value);
-  });
+  if (init?.privileged) {
+    const authHeaders = authHeadersForPath(path);
+    authHeaders?.forEach((value, key) => {
+      headers.set(key, value);
+    });
+  }
   try {
     const res = await fetch(url, { ...init, headers, signal: controller.signal });
     if (!res.ok) {
@@ -64,4 +70,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return doApiFetch<T>(path, init);
+}
+
+export async function apiPrivilegedFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return doApiFetch<T>(path, { ...init, privileged: true });
 }

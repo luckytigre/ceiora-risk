@@ -76,7 +76,10 @@ def test_compute_daily_factor_returns_keeps_projected_non_us_residuals(
         index=pd.Index(["AAPL.OQ", "MSFT.OQ", "BABA.N"], name="ric"),
     )
 
-    def _build_eligibility_context(_data_db, *, dates=None):
+    captured: dict[str, object] = {}
+
+    def _build_eligibility_context(_data_db, *, dates=None, force_local=False):
+        captured["force_local"] = bool(force_local)
         return SimpleNamespace(
             exposure_dates=list(dates or []),
             exposure_snapshots={str(date): exposure_snapshot for date in (dates or [])},
@@ -139,3 +142,4 @@ def test_compute_daily_factor_returns_keeps_projected_non_us_residuals(
         ("2026-03-05", "BABA"),
         ("2026-03-05", "MSFT"),
     ]
+    assert captured["force_local"] is True

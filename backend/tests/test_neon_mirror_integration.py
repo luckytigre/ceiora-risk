@@ -39,7 +39,7 @@ def _patch_lightweight_pipeline(monkeypatch) -> None:
     )
 
 
-def test_run_model_pipeline_runs_optional_neon_mirror_on_source_profiles(monkeypatch) -> None:
+def test_run_model_pipeline_runs_optional_neon_mirror_on_core_profiles(monkeypatch) -> None:
     _patch_lightweight_pipeline(monkeypatch)
     health_cache: dict[str, object] = {}
     monkeypatch.setattr(run_model_pipeline.sqlite, "cache_set", lambda k, v: health_cache.__setitem__(k, v))
@@ -60,7 +60,7 @@ def test_run_model_pipeline_runs_optional_neon_mirror_on_source_profiles(monkeyp
         lambda **_kwargs: {"status": "ok", "sync": {"status": "ok"}},
     )
 
-    out = run_model_pipeline.run_model_pipeline(profile="source-daily")
+    out = run_model_pipeline.run_model_pipeline(profile="source-daily-plus-core-if-due")
 
     assert out["status"] == "ok"
     assert out["neon_mirror"]["status"] == "ok"
@@ -92,7 +92,7 @@ def test_run_model_pipeline_fails_if_required_neon_mirror_mismatch(monkeypatch) 
         lambda **_kwargs: {"status": "mismatch"},
     )
 
-    out = run_model_pipeline.run_model_pipeline(profile="source-daily")
+    out = run_model_pipeline.run_model_pipeline(profile="source-daily-plus-core-if-due")
 
     assert out["neon_mirror"]["status"] == "mismatch"
     assert out["status"] == "failed"
@@ -143,7 +143,7 @@ def test_run_model_pipeline_still_runs_required_source_sync_when_neon_primary_ev
         lambda **_kwargs: {"status": "ok", "sync": {"status": "ok"}},
     )
 
-    out = run_model_pipeline.run_model_pipeline(profile="source-daily")
+    out = run_model_pipeline.run_model_pipeline(profile="source-daily-plus-core-if-due")
 
     assert out["status"] == "ok"
     assert out["neon_mirror"]["status"] == "ok"
@@ -151,6 +151,31 @@ def test_run_model_pipeline_still_runs_required_source_sync_when_neon_primary_ev
     payload = health_cache["neon_sync_health"]
     assert isinstance(payload, dict)
     assert payload.get("status") == "ok"
+
+
+def test_run_model_pipeline_skips_broad_neon_mirror_for_source_daily(monkeypatch) -> None:
+    _patch_lightweight_pipeline(monkeypatch)
+    health_cache: dict[str, object] = {}
+    monkeypatch.setattr(run_model_pipeline.sqlite, "cache_set", lambda k, v: health_cache.__setitem__(k, v))
+    monkeypatch.setattr(run_model_pipeline.config, "APP_RUNTIME_ROLE", "local-ingest")
+    monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_ENABLED", True)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_SYNC_REQUIRED", True)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_PARITY_ENABLED", True)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTO_PRUNE_ENABLED", True)
+    monkeypatch.setattr(run_model_pipeline.config, "NEON_DATABASE_URL", "postgresql://example")
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "run_neon_mirror_cycle",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("source-daily should not run broad neon mirror")),
+    )
+
+    out = run_model_pipeline.run_model_pipeline(profile="source-daily")
+
+    assert out["status"] == "ok"
+    assert out["neon_mirror"]["status"] == "skipped"
+    assert out["neon_mirror"]["reason"] == "profile_skips_broad_neon_mirror"
+    assert "neon_sync_health" not in health_cache
 
 
 def test_run_model_pipeline_publishes_health_when_required_serving_write_fails(monkeypatch) -> None:

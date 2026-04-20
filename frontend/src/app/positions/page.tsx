@@ -6,10 +6,7 @@ import ApiErrorState from "@/features/cuse4/components/ApiErrorState";
 import ConfirmActionModal from "@/components/ConfirmActionModal";
 import MethodLabel, { type MethodLabelTone } from "@/components/MethodLabel";
 import { compareNumber, compareText, useSortableRows } from "@/hooks/useSortableRows";
-import {
-  usePortfolio,
-  useRisk,
-} from "@/hooks/useCuse4Api";
+import { useCuseRiskPageSnapshot } from "@/hooks/useCuse4Api";
 import { useCparRisk } from "@/hooks/useCparApi";
 import { useHoldingsAccounts, useHoldingsModes, useHoldingsPositions } from "@/hooks/useHoldingsApi";
 import type { HoldingsImportMode } from "@/lib/types/holdings";
@@ -22,6 +19,15 @@ import { buildAnalyticsTruthCompactSummary, summarizeAnalyticsTruth } from "@/li
 import { exposureMethodDisplayLabel, exposureMethodTone } from "@/lib/exposureOrigin";
 
 type ModelDiffSortKey = "account" | "ticker" | "method" | "status" | "live" | "modeled" | "delta";
+const SNAPSHOT_WARNING_STYLE = {
+  marginTop: 12,
+  padding: "12px 14px",
+  border: "1px solid color-mix(in srgb, var(--negative) 32%, transparent)",
+  background: "color-mix(in srgb, var(--negative) 10%, transparent)",
+  color: "var(--text-primary)",
+  fontSize: 13,
+  lineHeight: 1.5,
+} as const;
 
 function modeLabel(m: HoldingsImportMode): string {
   if (m === "replace_account") return "Full Replace Account";
@@ -51,13 +57,14 @@ function fmtQty(n: number): string {
 }
 
 export default function PositionsPage() {
-  const { data: portfolio, isLoading: pLoading, error: pError } = usePortfolio();
+  const { data: cuseSnapshot, isLoading: cuseLoading, error: cuseError } = useCuseRiskPageSnapshot();
   const { data: cparRiskData } = useCparRisk();
-  const { data: riskData, isLoading: riskLoading, error: riskError } = useRisk();
   const { data: modesData } = useHoldingsModes();
   const { data: accountsData, error: accountError } = useHoldingsAccounts();
   const [selectedAccount, setSelectedAccount] = useState("");
   const { data: holdingsData, error: holdingsError } = useHoldingsPositions(null);
+  const portfolio = cuseSnapshot?.portfolio;
+  const riskData = cuseSnapshot?.risk;
 
   const [mode, setMode] = useState<HoldingsImportMode>("upsert_absolute");
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -239,11 +246,11 @@ export default function PositionsPage() {
       ticker: row.ticker,
     });
 
-  if (pLoading || (riskLoading && !riskData)) {
+  if (cuseLoading) {
     return <AnalyticsLoadingViz message="Loading positions..." />;
   }
-  if (pError || accountError || riskError) {
-    return <ApiErrorState title="Positions Not Ready" error={pError || accountError || riskError} />;
+  if (cuseError || accountError) {
+    return <ApiErrorState title="Positions Not Ready" error={cuseError || accountError} />;
   }
 
   return (
@@ -347,17 +354,7 @@ export default function PositionsPage() {
           This is the last modeled view across all accounts. It updates only after `RECALC`, so it is shown here as a compact check instead of a second full positions table.
         </div>
         {snapshotMismatch ? (
-          <div
-            style={{
-              marginTop: 12,
-              padding: "12px 14px",
-              border: "1px solid rgba(204, 53, 88, 0.25)",
-              background: "rgba(204, 53, 88, 0.08)",
-              color: "rgba(248, 221, 228, 0.92)",
-              fontSize: 13,
-              lineHeight: 1.5,
-            }}
-          >
+          <div style={SNAPSHOT_WARNING_STYLE}>
             The modeled snapshot and risk metadata are spanning multiple published snapshots ({truth.snapshotIds.join(" / ")}).
             Live holdings above remain authoritative, but this modeled analytics section is withheld until RECALC finishes or the page reloads into one coherent publish.
           </div>

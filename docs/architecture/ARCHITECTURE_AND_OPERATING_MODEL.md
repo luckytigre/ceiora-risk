@@ -92,6 +92,27 @@ Integration-layer ownership remains in the repo's normal layers and is documente
 - Canonical timing and contract names are defined in `architecture-invariants.md`.
   Compatibility aliases may remain only for fallback decoding and must not drive new UI or documentation semantics.
 
+## Current Product And UX Tradeoffs
+
+The repo now makes a few explicit product/serving tradeoffs rather than trying to hide them behind generic caches or page-local fetch logic.
+
+- Risk pages are summary-first:
+  - `cUSE` first render comes from `/api/cuse/risk-page`
+  - `cPAR` first render comes from `/api/cpar/risk`
+  - covariance heatmaps, drilldown history, and deeper diagnostics are loaded later or only when visible
+- Explore pages are compact-first:
+  - `/api/cuse/explore/context` and `/api/cpar/explore/context` are intentionally small first-render bootstrap surfaces
+  - they must not grow into second generic portfolio or aggregate-risk payloads
+- What-if preview is scoped and ephemeral:
+  - staged scenarios compare against the staged account set, not the whole book by default
+  - preview remains browser-staged and preview-only until explicit apply
+- Shared auth/session now prioritizes first paint over eager verification:
+  - protected pages bootstrap from middleware-validated session/context
+  - `/api/auth/session` is background refresh, not the first-render gate
+- Package and snapshot truth is favored over request-time rebuilding:
+  - `cPAR` pages stay package-pinned
+  - `cUSE`/`cPAR` UI surfaces should read owned serving snapshots before inventing page-local recompute paths
+
 ## Four-Layer Operating Model
 
 ### 1) Universe Layer
@@ -220,13 +241,13 @@ The dashboard should stay thin. Each page should read one of a small number of s
 
 Canonical page-to-backend wiring:
 - `Risk` (`/cuse/exposures`)
-  - reads: `/api/exposures`, `/api/risk`, `/api/portfolio`
+  - reads: `/api/cuse/risk-page` for summary-first render, `/api/cuse/risk-page/exposure-mode?mode=...` for non-raw tabs on demand, `/api/cuse/risk-page/covariance` only when the heatmap scrolls into view, then `/api/exposures/history` for factor drilldown history on demand
   - purpose: factor-level portfolio views plus portfolio risk split and per-position drilldown
 - `Explore` (`/cuse/explore`)
-  - reads: `/api/universe/search`, `/api/universe/ticker/{ticker}`, `/api/universe/ticker/{ticker}/history`, `/api/universe/factors`, `/api/portfolio`, `/api/portfolio/whatif`
-  - purpose: single-name inspection plus account-aware what-if preview against the current live holdings ledger, with optional apply + `serve-refresh` once a scenario is accepted
+  - reads: `/api/universe/search`, `/api/universe/ticker/{ticker}`, `/api/universe/ticker/{ticker}/history`, `/api/universe/factors`, `/api/cuse/explore/context`, `/api/portfolio/whatif`
+  - purpose: single-name inspection plus account-aware what-if preview against the current live holdings ledger, scoped to the staged holdings accounts rather than unrelated accounts in the rest of the book, with optional apply + `serve-refresh` once a scenario is accepted
 - `Positions` (`/positions`)
-  - reads: `/api/holdings/*`, `/api/portfolio`, `/api/risk`, `/api/cpar/risk`, `/api/universe/search`
+  - reads: `/api/holdings/*`, `/api/cuse/risk-page`, `/api/cpar/risk`, `/api/universe/search`
   - purpose: shared live-holdings editing/import plus a dual-family modeled coverage check, with cUSE as the operator/control owner and cPAR as a read-only method overlay
 - `Data` (`/data`)
   - reads: `/api/data/diagnostics`
@@ -234,14 +255,26 @@ Canonical page-to-backend wiring:
 - `Health` (`/cuse/health`)
   - reads: `/api/operator/status`, `/api/risk`, `/api/health/diagnostics`
   - purpose: live operator control-room status plus top-level model quality and deeper model-diagnostics study, loaded on demand because it is the heaviest dashboard page
+- Public entry and auth:
+  - `/` is now the lightweight public landing placeholder
+  - `/login` establishes the shared frontend session
+  - `/home` is the authenticated app home that replaced the old public dashboard landing role
+- Privileged settings:
+  - `/settings` is an authenticated privileged page for the primary account
+  - it remains the temporary maintenance surface for browser-held backend tokens during the transition to frontend-server trust
 
 Efficiency rules now in force:
+- the frontend now owns the app auth boundary through a shared signed-cookie session and middleware-gated `/api/*` routes; page-level token-presence checks are UI suppression only, not auth
+- protected pages should hydrate the shared shell from middleware-validated session/context bootstrap and treat `/api/auth/session` as a background refresh path rather than a first-paint gate
 - operator state is fetched on demand plus fast-polled only while a refresh is actively running; pages should not each invent their own background loop
+- anonymous visits must not trigger shared-shell control-plane reads; operator chrome belongs behind an authenticated operator surface rather than ambient app-shell fetches
+- browser `/api/*` traffic should flow only through owned App Router route handlers; ambient catch-all backend rewrites are no longer part of the contract
 - header sync/recalc actions now use canonical profile semantics (`serve-refresh`) instead of legacy mode-based refresh calls
 - ticker/RIC typeahead is debounced before hitting `/api/universe/search`
 - Health diagnostics are no longer fetched automatically on page load, and heavy sections mount only as the user scrolls
 - user-facing dashboard pages should consume durable serving outputs first rather than piecing together raw source tables in the browser
 - the Explore what-if preview is intentionally ephemeral until explicit apply; staged trade deltas live in browser state and are posted once to `/api/portfolio/whatif` for in-memory comparison only, then can be written only through explicit `Apply + RECALC`
+- `/api/cuse/explore/context` is the cUSE-owned held-position lookup for Explore first render; it may derive scoped positions from live holdings plus the current served cUSE loadings surface, but it must not grow into a second generic portfolio contract or duplicate builder-owned holdings account/ledger reads
 - in `local-ingest`, old local cache blobs remain bootstrap fallback only when a serving payload snapshot does not yet exist
 - in `cloud-serve`, serving routes fail closed instead of falling back to local cache/SQLite state
 - universe explore/search outputs
@@ -280,6 +313,7 @@ Key rule:
   - During refresh persistence, the current run's `cuse_security_membership_daily` truth is overlaid onto `universe_loadings`, `portfolio`, and exposure drilldowns before the canonical serving payload set is written, so the just-computed run does not lag one publish behind.
   - `universe_loadings` and the app-facing universe search/detail surfaces are runtime-admitted only; raw source names without current registry/runtime identity must not appear there just because prices, fundamentals, or classifications exist.
   - Explore/what-if quote search and detail may augment the live `universe_loadings` payload with registry/runtime-admitted rows when a ticker has no current published cUSE loadings row, but those fallback rows must be clearly labeled as registry/runtime coverage rather than live factor payload coverage.
+  - Held names that already carry a published modeled surface inside the `portfolio` payload must remain preview-eligible even if they are temporarily absent from `universe_loadings`; universe search/detail and cUSE what-if preview should treat that portfolio overlay as part of the active published surface rather than downgrading the name to registry-only coverage.
 
 ## Canonical Event Types
 

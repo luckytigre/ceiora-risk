@@ -4,6 +4,7 @@ import { useState } from "react";
 import LazyMountOnVisible from "@/components/LazyMountOnVisible";
 import CovarianceHeatmap from "@/features/cuse4/components/CovarianceHeatmap";
 import HelpLabel from "@/components/HelpLabel";
+import { chartLongColor, chartShortColor, chartTextColor } from "@/lib/charts/chartTheme";
 import { shortFactorLabel } from "@/lib/factorLabels";
 import type { HealthDiagnosticsData } from "@/lib/types/cuse4";
 import { Bar, Line } from "./charts";
@@ -48,7 +49,7 @@ export default function SectionFactorReturns({ data }: { data: HealthDiagnostics
           <h4>Cumulative Return</h4>
           <div className="health-chart-sm">
             <Line
-              data={seriesData(cumulativeRows, "Cumulative Return", "rgba(107, 207, 154, 0.88)", 100)}
+              data={seriesData(cumulativeRows, "Cumulative Return", chartLongColor(0.88), 100)}
               options={{
                 ...commonLineOptions,
                 scales: {
@@ -56,7 +57,7 @@ export default function SectionFactorReturns({ data }: { data: HealthDiagnostics
                   y: {
                     ...(commonLineOptions.scales?.y || {}),
                     ticks: {
-                      color: "rgba(169, 182, 210, 0.5)",
+                      color: chartTextColor("secondary", 0.5),
                       callback: (v) => `${Number(v).toFixed(0)}%`,
                       font: { size: 9 },
                     },
@@ -70,7 +71,7 @@ export default function SectionFactorReturns({ data }: { data: HealthDiagnostics
           <h4>Rolling 60d Volatility</h4>
           <div className="health-chart-sm">
             <Line
-              data={seriesData(rollingVolRows, "Rolling Volatility", "rgba(224, 87, 127, 0.88)", 100)}
+              data={seriesData(rollingVolRows, "Rolling Volatility", chartShortColor(0.88), 100)}
               options={{
                 ...commonLineOptions,
                 scales: {
@@ -78,7 +79,7 @@ export default function SectionFactorReturns({ data }: { data: HealthDiagnostics
                   y: {
                     ...(commonLineOptions.scales?.y || {}),
                     ticks: {
-                      color: "rgba(169, 182, 210, 0.5)",
+                      color: chartTextColor("secondary", 0.5),
                       callback: (v) => `${Number(v).toFixed(1)}%`,
                       font: { size: 9 },
                     },

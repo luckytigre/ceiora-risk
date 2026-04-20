@@ -10,25 +10,33 @@ export default function ExploreWhatIfSection({
   item,
   priceMap,
   searchQuery,
+  searchLoading,
+  searchSettled,
   onSearchQueryChange,
   searchResults,
   onSelectTicker,
   positionMap,
+  onPreviewTicker,
 }: {
   item: UniverseTickerItem | null | undefined;
   priceMap: Map<string, number>;
   searchQuery: string;
+  searchLoading: boolean;
+  searchSettled: boolean;
   onSearchQueryChange: (q: string) => void;
   searchResults: UniverseSearchItem[];
   onSelectTicker: (ticker: string) => void;
   positionMap: Map<string, ExplorePositionSummary>;
+  onPreviewTicker: (ticker: string) => void;
 }) {
   const scenario = useWhatIfScenarioLab({
     item,
     priceMap,
     searchQuery,
     searchResults,
+    searchSettled,
     onSelectTicker,
+    onPreviewTicker,
   });
 
   return (
@@ -58,6 +66,7 @@ export default function ExploreWhatIfSection({
         onTickerBlur={scenario.handleTickerBlur}
         onTickerFocus={scenario.handleTickerFocus}
         onTickerKeyDown={scenario.handleTickerKeyDown}
+        onTickerHover={onPreviewTicker}
         onTickerSelect={scenario.selectFromTypeahead}
         positionMap={positionMap}
         previewNeedsAttention={scenario.previewNeedsAttention}
@@ -67,6 +76,8 @@ export default function ExploreWhatIfSection({
         resultMessage={scenario.resultMessage}
         scenarioRows={scenario.scenarioRows}
         searchQuery={searchQuery}
+        searchLoading={searchLoading}
+        searchSettled={searchSettled}
         searchResults={searchResults}
         stageReady={scenario.stageReady}
         updateScenarioRow={scenario.updateScenarioRow}

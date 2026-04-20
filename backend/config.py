@@ -58,6 +58,7 @@ LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "504"))  # ~2 years trading days
 RISK_RECOMPUTE_INTERVAL_DAYS = int(os.getenv("RISK_RECOMPUTE_INTERVAL_DAYS", "7"))
 # Minimum calendar age of exposure snapshot used for cross-sectional regressions.
 CROSS_SECTION_MIN_AGE_DAYS = int(os.getenv("CROSS_SECTION_MIN_AGE_DAYS", "7"))
+RAW_HISTORY_RECENT_WINDOW_DAYS = max(7, int(os.getenv("RAW_HISTORY_RECENT_WINDOW_DAYS", "45")))
 RETURNS_WINSOR_PCT = float(os.getenv("RETURNS_WINSOR_PCT", "0.01"))
 # Snapshot materialization policy for universe_cross_section_snapshot.
 # "current": latest row per ticker (default); "full": historical rows by as_of_date.
@@ -111,6 +112,21 @@ NEON_READ_SURFACES = {
 # cUSE4 foundation toggles (non-breaking additive path).
 CUSE4_ENABLE_ESTU_AUDIT = _env_bool("CUSE4_ENABLE_ESTU_AUDIT", True)
 CUSE4_AUTO_BOOTSTRAP = _env_bool("CUSE4_AUTO_BOOTSTRAP", False)
+APP_ACCOUNT_ENFORCEMENT_ENABLED = _env_bool("APP_ACCOUNT_ENFORCEMENT_ENABLED", False)
+APP_AUTH_BOOTSTRAP_ENABLED = _env_bool("APP_AUTH_BOOTSTRAP_ENABLED", False)
+APP_AUTH_BOOTSTRAP_REUSE_EXISTING_MEMBERSHIP = _env_bool("APP_AUTH_BOOTSTRAP_REUSE_EXISTING_MEMBERSHIP", False)
+APP_ADMIN_SETTINGS_ENABLED = _env_bool("APP_ADMIN_SETTINGS_ENABLED", False)
+APP_SHARED_AUTH_ACCEPT_LEGACY = _env_bool("APP_SHARED_AUTH_ACCEPT_LEGACY", False)
+NEON_AUTH_ALLOWED_EMAILS = tuple(
+    str(value).strip().lower()
+    for value in _env_csv("NEON_AUTH_ALLOWED_EMAILS", [])
+    if str(value).strip()
+)
+NEON_AUTH_BOOTSTRAP_ADMINS = tuple(
+    str(value).strip().lower()
+    for value in _env_csv("NEON_AUTH_BOOTSTRAP_ADMINS", [])
+    if str(value).strip()
+)
 
 # Orchestrator ingest stage controls.
 ORCHESTRATOR_ENABLE_INGEST = _env_bool("ORCHESTRATOR_ENABLE_INGEST", False)

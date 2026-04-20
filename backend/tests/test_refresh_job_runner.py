@@ -43,3 +43,14 @@ def test_run_refresh_job_requires_explicit_profile_in_cloud_job_mode(
 
     with pytest.raises(RuntimeError, match="REFRESH_PROFILE"):
         run_refresh_job.main()
+
+
+def test_run_refresh_job_rejects_cold_core_partial_stage_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REFRESH_PROFILE", "cold-core")
+    monkeypatch.setenv("REFRESH_FROM_STAGE", "factor_returns")
+    monkeypatch.setenv("REFRESH_TO_STAGE", "risk_model")
+
+    with pytest.raises(ValueError, match="cold-core does not support partial stage windows"):
+        run_refresh_job.main()

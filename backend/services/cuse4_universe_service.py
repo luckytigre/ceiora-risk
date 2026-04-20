@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from backend import config
 from backend.data.history_queries import load_price_history_rows
 from backend.data import registry_quote_reads
-from backend.data.serving_outputs import load_runtime_payload
+from backend.data.serving_outputs import load_runtime_payload, load_runtime_payload_field
 from backend.data.sqlite import cache_get
 
 
@@ -84,6 +84,59 @@ def _normalize_registry_ticker_row(row: dict[str, Any]) -> dict[str, Any]:
         "projection_obs_count": None,
         "projection_asof": None,
     }
+
+
+def cuse_row_model_readiness(
+    row: dict[str, Any],
+    *,
+    quote_source: str,
+) -> tuple[bool, str, str]:
+    model_status = str(row.get("model_status") or "").strip()
+    exposure_origin = str(row.get("exposure_origin") or "").strip()
+    has_factor_exposures = bool(dict(row.get("exposures") or {}))
+    served_exposure_available = bool(row.get("served_exposure_available", has_factor_exposures))
+    projection_output_status = str(row.get("projection_output_status") or "").strip()
+
+    if (
+        quote_source == "served_payload"
+        and (
+            has_factor_exposures
+            or served_exposure_available
+            or (
+                exposure_origin in {"projected_returns", "projected_fundamental"}
+                and projection_output_status == "available"
+            )
+        )
+        and model_status != "ineligible"
+    ):
+        return (
+            True,
+            "Preview Ready",
+            "This security has a currently published cUSE modeled surface and can be staged into what-if preview.",
+        )
+    if quote_source == "served_payload" and exposure_origin == "projected_returns" and not served_exposure_available:
+        return (
+            False,
+            "Not Preview Ready",
+            "This security is admitted to the returns-projection path, but the current published cUSE snapshot does not contain served projected loadings for it.",
+        )
+    if quote_source == "served_payload" and exposure_origin == "projected_fundamental" and not served_exposure_available:
+        return (
+            False,
+            "Not Preview Ready",
+            "This security is admitted to the fundamental-projection path, but the current published cUSE snapshot does not contain served projected loadings for it.",
+        )
+    if quote_source != "served_payload":
+        return (
+            False,
+            "Not Preview Ready",
+            "This security is searchable through registry/runtime authority, but the current published cUSE snapshot does not contain a modeled surface for what-if preview.",
+        )
+    return (
+        False,
+        "Not Preview Ready",
+        "This security does not currently have a published cUSE modeled surface that what-if preview can use.",
+    )
 
 
 def _cuse_risk_tier(row: dict[str, Any]) -> tuple[str, str, str]:
@@ -158,11 +211,15 @@ def _decorate_cuse_row(
 ) -> dict[str, Any]:
     enriched = {**row, "quote_source": quote_source}
     tier, label, detail = _cuse_risk_tier(enriched)
+    whatif_ready, whatif_ready_label, whatif_ready_detail = cuse_row_model_readiness(
+        enriched,
+        quote_source=quote_source,
+    )
     source_label = "Live cUSE Payload" if quote_source == "served_payload" else "Registry Runtime"
     source_detail = (
         "This quote is coming from the current published cUSE payload."
         if quote_source == "served_payload"
-        else "This quote is coming from registry/runtime authority because there is no current cUSE payload row for it."
+        else "This quote is coming from registry/runtime authority because the current published cUSE snapshot does not contain this ticker."
     )
     return {
         **enriched,
@@ -172,6 +229,9 @@ def _decorate_cuse_row(
         "quote_source": quote_source,
         "quote_source_label": source_label,
         "quote_source_detail": source_detail,
+        "whatif_ready": whatif_ready,
+        "whatif_ready_label": whatif_ready_label,
+        "whatif_ready_detail": whatif_ready_detail,
     }
 
 
@@ -216,6 +276,54 @@ def _registry_ticker_row(ticker: str) -> dict[str, Any] | None:
         ),
     )
     return ranked[0] if ranked else None
+
+
+def _published_portfolio_overlay_rows(
+    *,
+    payload_loader: PayloadLoader,
+    fallback_loader,
+) -> dict[str, dict[str, Any]]:
+    portfolio_payload = payload_loader("portfolio", fallback_loader=fallback_loader)
+    positions = (portfolio_payload or {}).get("positions") if isinstance(portfolio_payload, dict) else None
+    if not isinstance(positions, list):
+        return {}
+
+    overlay: dict[str, dict[str, Any]] = {}
+    for raw in positions:
+        if not isinstance(raw, dict):
+            continue
+        ticker = str(raw.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+        exposures = dict(raw.get("exposures") or {})
+        row: dict[str, Any] = {
+            "ticker": ticker,
+            "name": str(raw.get("name") or ticker).strip() or ticker,
+            "trbc_economic_sector_short": str(raw.get("trbc_economic_sector_short") or "").strip(),
+            "trbc_industry_group": str(raw.get("trbc_industry_group") or "").strip() or None,
+            "price": raw.get("price"),
+            "exposures": exposures,
+            "specific_var": raw.get("specific_var"),
+            "specific_vol": raw.get("specific_vol"),
+            "model_status": str(raw.get("model_status") or "").strip(),
+            "model_status_reason": str(raw.get("model_status_reason") or raw.get("eligibility_reason") or "").strip(),
+            "eligibility_reason": str(raw.get("eligibility_reason") or raw.get("model_status_reason") or "").strip(),
+            "exposure_origin": str(raw.get("exposure_origin") or "").strip() or None,
+            "projection_method": raw.get("projection_method"),
+            "projection_r_squared": raw.get("projection_r_squared"),
+            "projection_obs_count": raw.get("projection_obs_count"),
+            "projection_asof": raw.get("projection_asof"),
+            "projection_output_status": raw.get("projection_output_status"),
+            "served_exposure_available": bool(raw.get("served_exposure_available", bool(exposures))),
+        }
+        ric = str(raw.get("ric") or "").upper().strip()
+        if ric:
+            row["ric"] = ric
+        prior = overlay.get(ticker) or {}
+        overlay[ticker] = {**prior, **{key: value for key, value in row.items() if value not in (None, "", {})}}
+        if exposures:
+            overlay[ticker]["exposures"] = exposures
+    return overlay
 
 
 def _search_rank(row: dict[str, Any], needle: str) -> tuple[int, int, str]:
@@ -292,7 +400,16 @@ def _load_universe_ticker_payload(
         fallback_loader=fallback_loader,
     )
     by_ticker = data.get("by_ticker") or {}
-    item = by_ticker.get(str(ticker).upper().strip())
+    overlay_by_ticker = _published_portfolio_overlay_rows(
+        payload_loader=payload_loader,
+        fallback_loader=fallback_loader,
+    )
+    clean_ticker = str(ticker).upper().strip()
+    item = (
+        {**dict(by_ticker.get(clean_ticker) or {}), **dict(overlay_by_ticker.get(clean_ticker) or {})}
+        if clean_ticker in by_ticker or clean_ticker in overlay_by_ticker
+        else None
+    )
     if item is None:
         try:
             fallback = _registry_ticker_row(ticker)
@@ -400,39 +517,88 @@ def _search_universe_payload(
     fallback_loader,
     row_normalizer: RowNormalizer,
 ) -> dict[str, Any]:
-    data = _load_universe_payload(
+    index = load_runtime_payload_field(
         "universe_loadings",
-        payload_loader=payload_loader,
+        "index",
         fallback_loader=fallback_loader,
     )
+    if index is None:
+        data = _load_universe_payload(
+            "universe_loadings",
+            payload_loader=payload_loader,
+            fallback_loader=fallback_loader,
+        )
+        index = data.get("index") or []
+    if not isinstance(index, list):
+        index = []
     needle = str(q).strip().upper()
     if not needle:
         return {"query": q, "results": [], "total": 0, "_cached": True}
 
-    index = data.get("index") or []
-    by_ticker = data.get("by_ticker") or {}
+    full_payload: dict[str, Any] | None = None
+    by_ticker: dict[str, Any] = {}
     ranked: list[tuple[tuple[int, int, str], int, dict[str, Any]]] = []
     for row in index:
         ticker = str(row.get("ticker", "")).upper()
         name = str(row.get("name", "")).upper()
         ric = str(row.get("ric", "")).upper()
         if needle in ticker or needle in name or needle in ric:
-            normalized = row_normalizer(_decorate_cuse_row(dict(row), quote_source="served_payload"))
-            if not normalized.get("ric"):
-                resolved_ric = str((by_ticker.get(ticker) or {}).get("ric") or "").upper().strip()
-                if resolved_ric:
-                    normalized["ric"] = resolved_ric
+            served_row = dict(row)
+            if (
+                not served_row.get("exposures")
+                and "served_exposure_available" not in served_row
+                and "projection_output_status" not in served_row
+            ):
+                if full_payload is None:
+                    full_payload = _load_universe_payload(
+                        "universe_loadings",
+                        payload_loader=payload_loader,
+                        fallback_loader=fallback_loader,
+                    )
+                    by_ticker = full_payload.get("by_ticker") or {}
+                served_row = {
+                    **served_row,
+                    **dict(by_ticker.get(ticker) or {}),
+                }
+            normalized = row_normalizer(
+                _decorate_cuse_row(
+                    served_row,
+                    quote_source="served_payload",
+                )
+            )
             ranked.append((_search_rank(normalized, needle), 0, normalized))
 
-    try:
-        registry_rows = _registry_search_rows(q=q, limit=limit)
-    except registry_quote_reads.RegistryQuoteReadError:
-        registry_rows = []
+    overlay_by_ticker = _published_portfolio_overlay_rows(
+        payload_loader=payload_loader,
+        fallback_loader=fallback_loader,
+    )
     existing_tickers = {
         str(row.get("ticker") or "").upper().strip()
         for _, _, row in ranked
         if str(row.get("ticker") or "").strip()
     }
+    for ticker, raw_row in overlay_by_ticker.items():
+        if not ticker or ticker in existing_tickers:
+            continue
+        name = str(raw_row.get("name") or "").upper()
+        ric = str(raw_row.get("ric") or "").upper()
+        if needle not in ticker and needle not in name and needle not in ric:
+            continue
+        normalized = row_normalizer(
+            _decorate_cuse_row(
+                dict(raw_row),
+                quote_source="served_payload",
+            )
+        )
+        ranked.append((_search_rank(normalized, needle), 0, normalized))
+        existing_tickers.add(ticker)
+
+    registry_rows: list[dict[str, Any]] = []
+    if len(ranked) < limit:
+        try:
+            registry_rows = _registry_search_rows(q=q, limit=limit)
+        except registry_quote_reads.RegistryQuoteReadError:
+            registry_rows = []
     for row in registry_rows:
         clean_ticker = str(row.get("ticker") or "").upper().strip()
         if not clean_ticker or clean_ticker in existing_tickers:

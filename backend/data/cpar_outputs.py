@@ -11,7 +11,7 @@ from psycopg.rows import dict_row
 
 from backend import config
 from backend.cpar.factor_registry import build_cpar1_factor_registry, ordered_factor_ids
-from backend.data import cpar_queries, cpar_schema, cpar_writers, core_read_backend as core_backend
+from backend.data import cpar_queries, cpar_schema, cpar_source_reads, cpar_writers, core_read_backend as core_backend
 from backend.data.neon import connect, resolve_dsn
 from backend.data.neon_primary_write import execute_neon_primary_write
 
@@ -206,34 +206,11 @@ def _load_package_price_presence_by_ric(
     clean_rics = sorted({str(ric or "").strip().upper() for ric in rics if str(ric or "").strip()})
     if not clean_rics:
         return {}
-    placeholders = ",".join("?" for _ in clean_rics)
-    try:
-        rows = _sqlite_fetch_rows(
-            f"""
-            WITH ranked AS (
-                SELECT
-                    ric,
-                    date,
-                    adj_close,
-                    close,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY UPPER(COALESCE(ric, ''))
-                        ORDER BY date DESC, updated_at DESC
-                    ) AS rn
-                FROM security_prices_eod
-                WHERE date <= ?
-                  AND UPPER(COALESCE(ric, '')) IN ({placeholders})
-            )
-            SELECT ric, adj_close, close
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY ric
-            """,
-            [str(package_date), *clean_rics],
-            data_db=data_db,
-        )
-    except Exception:
-        return {}
+    rows = cpar_source_reads.load_latest_price_rows(
+        clean_rics,
+        as_of_date=str(package_date),
+        data_db=data_db,
+    )
     return {
         str(row.get("ric") or "").strip().upper(): (
             row.get("adj_close") is not None or row.get("close") is not None
@@ -614,6 +591,27 @@ def load_package_instrument_fits_for_rics(
         lambda sql, params=None: _sqlite_fetch_rows(sql, params, data_db=data_db),
         package_run_id=package_run_id,
         rics=rics,
+    )
+
+
+def load_package_instrument_fits_for_tickers(
+    tickers: list[str] | tuple[str, ...],
+    *,
+    package_run_id: str,
+    data_db: Path | None = None,
+) -> list[dict[str, Any]]:
+    if _use_neon_reads():
+        rows = cpar_queries.package_instrument_fits_for_tickers(
+            lambda sql, params=None: _neon_fetch(sql, params),
+            package_run_id=package_run_id,
+            tickers=tickers,
+        )
+        if rows or config.cloud_mode():
+            return rows
+    return cpar_queries.package_instrument_fits_for_tickers(
+        lambda sql, params=None: _sqlite_fetch_rows(sql, params, data_db=data_db),
+        package_run_id=package_run_id,
+        tickers=tickers,
     )
 
 

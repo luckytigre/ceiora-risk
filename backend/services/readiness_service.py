@@ -28,3 +28,22 @@ def cache_not_ready_payload(
     if isinstance(refresh, dict):
         payload["refresh"] = refresh
     return payload
+
+
+def authority_unavailable_payload(
+    *,
+    error: str,
+    message: str,
+    source: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "unavailable",
+        "error": str(error or "authority_unavailable").strip() or "authority_unavailable",
+        "message": str(message or "").strip(),
+    }
+    if str(source or "").strip():
+        payload["source"] = str(source).strip()
+    refresh = load_persisted_refresh_status(fallback_loader=cache_get)
+    if isinstance(refresh, dict):
+        payload["refresh"] = refresh
+    return payload

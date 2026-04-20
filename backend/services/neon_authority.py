@@ -156,6 +156,12 @@ def _workspace_index_sql(table: str) -> list[str]:
     return []
 
 
+def _workspace_primary_key_columns(table: str) -> tuple[str, ...]:
+    if table == "barra_raw_cross_section_history":
+        return ("ric", "as_of_date")
+    return ()
+
+
 def _drop_and_recreate_sqlite_table(
     conn: sqlite3.Connection,
     *,
@@ -163,10 +169,15 @@ def _drop_and_recreate_sqlite_table(
     columns: list[dict[str, str]],
 ) -> None:
     conn.execute(f'DROP TABLE IF EXISTS "{table}"')
-    cols_sql = ", ".join(
+    pk_columns = _workspace_primary_key_columns(table)
+    cols_sql_parts = [
         f'"{col["name"]}" {_sqlite_type_for_pg(col["data_type"])}'
         for col in columns
-    )
+    ]
+    if pk_columns:
+        pk_sql = ", ".join(f'"{col}"' for col in pk_columns)
+        cols_sql_parts.append(f"PRIMARY KEY ({pk_sql})")
+    cols_sql = ", ".join(cols_sql_parts)
     conn.execute(f'CREATE TABLE "{table}" ({cols_sql})')
     for stmt in _workspace_index_sql(table):
         conn.execute(stmt)
@@ -365,12 +376,20 @@ def _assess_neon_rebuild_readiness(
         "security_fundamentals_pit",
         "security_classification_pit",
     ]
-    required_model_tables = [
-        "model_factor_returns_daily",
-        "model_factor_covariance_daily",
-        "model_specific_risk_daily",
-        "model_run_metadata",
-    ]
+    # cold-core rebuilds covariance/specific-risk/metadata from scratch; only
+    # factor-returns (incremental base) is required.  Other profiles need all
+    # four tables to be non-empty so the workspace is self-consistent.
+    if profile_key == "cold-core":
+        required_model_tables = [
+            "model_factor_returns_daily",
+        ]
+    else:
+        required_model_tables = [
+            "model_factor_returns_daily",
+            "model_factor_covariance_daily",
+            "model_specific_risk_daily",
+            "model_run_metadata",
+        ]
     if profile_key != "cold-core":
         required_tables.append("barra_raw_cross_section_history")
 

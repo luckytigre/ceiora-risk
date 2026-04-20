@@ -16,6 +16,14 @@ import {
   Tooltip,
 } from "chart.js";
 import { Chart } from "react-chartjs-2";
+import {
+  chartGridColor,
+  chartLongColor,
+  chartShortColor,
+  chartTextColor,
+  tooltipOptions,
+} from "@/lib/charts/chartTheme";
+import { useAppSettings } from "@/components/AppSettingsContext";
 import { formatCparNumber, formatCparPercent } from "@/lib/cparTruth";
 import { shortFactorLabel } from "@/lib/factorLabels";
 import type { CparFactorChartRow, CparRiskExposureMode } from "@/lib/types/cpar";
@@ -48,8 +56,8 @@ const zeroLinePlugin: Plugin<"bar" | "line"> = {
     const ctx = chart.ctx;
     ctx.save();
     ctx.beginPath();
-    ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = "rgba(169, 182, 210, 0.32)";
+    ctx.setLineDash([1, 6]);
+    ctx.strokeStyle = chartTextColor("secondary", 0.09);
     ctx.lineWidth = 1;
     ctx.moveTo(xPixel, chart.chartArea.top);
     ctx.lineTo(xPixel, chart.chartArea.bottom);
@@ -68,10 +76,9 @@ const netMarkerPlugin: Plugin<"bar" | "line"> = {
     const ctx = chart.ctx;
     ctx.save();
     ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(232, 237, 249, 0.88)";
-    ctx.lineWidth = 2;
-    ctx.shadowColor = "rgba(232, 237, 249, 0.25)";
-    ctx.shadowBlur = 4;
+    ctx.strokeStyle = chartTextColor("primary", 0.76);
+    ctx.lineWidth = 1.75;
+    ctx.shadowBlur = 0;
 
     for (const point of meta.data) {
       const x = point.x;
@@ -153,6 +160,7 @@ export default function CparRiskFactorLoadingsChart({
   selectedFactorId: string | null;
   onSelectFactor: (factorId: string) => void;
 }) {
+  const { themeMode } = useAppSettings();
   const axisLabel = mode === "risk_contribution"
     ? "% of total risk"
     : mode === "sensitivity"
@@ -214,7 +222,7 @@ export default function CparRiskFactorLoadingsChart({
         const yMid = (y1 + y2) / 2;
         ctx.beginPath();
         ctx.setLineDash([]);
-        ctx.strokeStyle = "rgba(154, 171, 214, 0.16)";
+        ctx.strokeStyle = chartGridColor(0.07);
         ctx.lineWidth = 1;
         ctx.moveTo(chart.chartArea.left, yMid);
         ctx.lineTo(chart.chartArea.right, yMid);
@@ -223,7 +231,7 @@ export default function CparRiskFactorLoadingsChart({
         const nextLabel = GROUP_LABELS[rows[boundaryIndex + 1]?.group || ""];
         if (nextLabel) {
           ctx.font = "600 9px -apple-system, BlinkMacSystemFont, sans-serif";
-          ctx.fillStyle = "rgba(169, 182, 210, 0.7)";
+          ctx.fillStyle = chartTextColor("secondary", 0.3);
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
           ctx.fillText(nextLabel, chart.chartArea.right - 1, yMid + 4);
@@ -234,7 +242,7 @@ export default function CparRiskFactorLoadingsChart({
         const firstLabel = GROUP_LABELS[rows[0].group];
         if (firstLabel) {
           ctx.font = "600 9px -apple-system, BlinkMacSystemFont, sans-serif";
-          ctx.fillStyle = "rgba(169, 182, 210, 0.7)";
+          ctx.fillStyle = chartTextColor("secondary", 0.3);
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
           ctx.fillText(firstLabel, chart.chartArea.right - 1, chart.chartArea.top + 2);
@@ -254,10 +262,10 @@ export default function CparRiskFactorLoadingsChart({
         data: negativeValues,
         backgroundColor: rows.map((row) => (
           row.factor_id === selectedFactorId
-            ? "rgba(224, 87, 127, 1.0)"
-            : "rgba(224, 87, 127, 0.96)"
+            ? chartShortColor()
+            : chartShortColor(0.96)
         )),
-        hoverBackgroundColor: "rgba(224, 87, 127, 1.0)",
+        hoverBackgroundColor: chartShortColor(),
         borderWidth: 0,
         borderRadius: 0,
         borderSkipped: false,
@@ -271,10 +279,10 @@ export default function CparRiskFactorLoadingsChart({
         data: positiveValues,
         backgroundColor: rows.map((row) => (
           row.factor_id === selectedFactorId
-            ? "rgba(105, 207, 154, 1.0)"
-            : "rgba(105, 207, 154, 0.96)"
+            ? chartLongColor()
+            : chartLongColor(0.96)
         )),
-        hoverBackgroundColor: "rgba(105, 207, 154, 1.0)",
+        hoverBackgroundColor: chartLongColor(),
         borderWidth: 0,
         borderRadius: 0,
         borderSkipped: false,
@@ -290,8 +298,8 @@ export default function CparRiskFactorLoadingsChart({
         pointRadius: 0,
         pointHoverRadius: 0,
         borderWidth: 0,
-        pointBackgroundColor: "rgba(0, 0, 0, 0)",
-        pointBorderColor: "rgba(0, 0, 0, 0)",
+        pointBackgroundColor: "transparent",
+        pointBorderColor: "transparent",
       },
     ],
   };
@@ -304,13 +312,8 @@ export default function CparRiskFactorLoadingsChart({
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "rgba(20, 22, 30, 0.92)",
-        borderColor: "rgba(154, 171, 214, 0.18)",
-        borderWidth: 1,
-        cornerRadius: 4,
+        ...tooltipOptions(),
         padding: { top: 6, bottom: 6, left: 10, right: 10 },
-        titleColor: "rgba(232, 237, 249, 0.6)",
-        bodyColor: "#e8edf9",
         titleFont: { size: 10, weight: "normal" as const },
         bodyFont: { size: 11, weight: 500 as const },
         displayColors: true,
@@ -342,9 +345,9 @@ export default function CparRiskFactorLoadingsChart({
       x: {
         stacked: true,
         border: { display: false },
-        grid: { color: "rgba(154, 171, 214, 0.16)" },
+        grid: { color: chartGridColor(0.12) },
         ticks: {
-          color: "rgba(169, 182, 210, 0.5)",
+          color: chartTextColor("secondary", 0.32),
           font: { size: 9 },
           callback: (value) => mode === "risk_contribution"
             ? `${Number(value).toFixed(1)}%`
@@ -356,7 +359,7 @@ export default function CparRiskFactorLoadingsChart({
         border: { display: false },
         grid: { display: false },
         ticks: {
-          color: "rgba(232, 237, 249, 0.6)",
+          color: chartTextColor("primary", 0.6),
           font: {
             size: 10,
             weight: 500,
@@ -375,10 +378,11 @@ export default function CparRiskFactorLoadingsChart({
   return (
     <div className="cpar-factor-chart-shell" data-testid="cpar-risk-factor-chart">
       <div className="cpar-risk-factor-chart-canvas" style={{ height }}>
-        <Chart
-          type="bar"
-          data={data}
-          options={options}
+      <Chart
+        key={`cpar-loadings-${themeMode}`}
+        type="bar"
+        data={data}
+        options={options}
           plugins={[zeroLinePlugin, tierSeparatorPlugin, netMarkerPlugin]}
           aria-label="cPAR factor loadings chart"
         />

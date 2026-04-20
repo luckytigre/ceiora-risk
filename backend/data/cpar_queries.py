@@ -462,6 +462,49 @@ def package_instrument_fits_for_rics(
     return [_normalize_fit_row(row) for row in rows]
 
 
+def package_instrument_fits_for_tickers(
+    fetch_rows: FetchRowsFn,
+    *,
+    package_run_id: str,
+    tickers: list[str] | tuple[str, ...],
+) -> list[dict[str, Any]]:
+    clean_tickers = _normalize_filter_tokens(tickers)
+    if not clean_tickers:
+        return []
+    placeholders = ",".join("?" for _ in clean_tickers)
+    rows = fetch_rows(
+        f"""
+        SELECT
+            f.*,
+            m.universe_scope,
+            m.target_scope,
+            m.basis_role,
+            m.build_reason_code,
+            rc.price_on_package_date_status,
+            rc.fit_row_status,
+            rc.fit_quality_status,
+            rc.portfolio_use_status,
+            rc.ticker_detail_use_status,
+            rc.hedge_use_status,
+            rc.fit_family,
+            rc.reason_code,
+            rc.quality_label
+        FROM cpar_instrument_fits_weekly f
+        LEFT JOIN cpar_package_universe_membership m
+          ON m.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(m.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        LEFT JOIN cpar_instrument_runtime_coverage_weekly rc
+          ON rc.package_run_id = f.package_run_id
+         AND UPPER(COALESCE(rc.ric, '')) = UPPER(COALESCE(f.ric, ''))
+        WHERE f.package_run_id = ?
+          AND UPPER(COALESCE(f.ticker, '')) IN ({placeholders})
+        ORDER BY UPPER(COALESCE(f.ticker, '')), f.ric
+        """,
+        [str(package_run_id), *clean_tickers],
+    )
+    return [_normalize_fit_row(row) for row in rows]
+
+
 def previous_successful_instrument_fit(
     fetch_rows: FetchRowsFn,
     *,

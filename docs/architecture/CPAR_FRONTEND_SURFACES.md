@@ -135,13 +135,12 @@ Shared shell behavior:
 - does not apply trades, mutate holdings, or build/refit cPAR on request
 
 Page consistency rule:
-- the frontend must treat `meta` and the aggregate `/api/cpar/risk` payload as one package-scoped flow
+- the frontend must treat the aggregate `/api/cpar/risk` payload as the package-scoped first-render contract for `/cpar/risk`
 - the frontend must treat the account-level hedge payload as a separate account-scoped flow
 - the frontend must also treat any account-level what-if envelope plus its nested `current` and `hypothetical` payloads as one package-scoped account flow
 - if those responses do not share the same `package_run_id` / `package_date`, the page must fail closed instead of mixing surfaces from different active packages
-- the frontend now uses package metadata as the first gate for dependent reads, so package-level `not_ready` / `unavailable` states do not keep probing detail or account-risk endpoints on the same page load
-- `/cpar/risk` enforces this for banner plus the aggregate risk payload
-- the current risk-page latency work does not change that runtime rule; it optimizes the backend path behind `/api/cpar/risk` while keeping the same meta-first frontend contract and full-page loading behavior
+- `/cpar/risk` enforces this through the package fields embedded in the risk payload itself instead of a separate `meta` read
+- the current risk-page latency work keeps the package-coherence rule but moves first render onto `/api/cpar/risk` rather than a separate meta-first gate
 - drilldown factor history is supplemental to that page and may degrade without suppressing the aggregate risk payload
 
 ## Current Frontend Owner Freeze
@@ -174,11 +173,10 @@ Disallowed direct reuse direction for this overhaul stage:
 - cUSE explore owners under `frontend/src/features/explore/*`
 - cUSE what-if owners under `frontend/src/features/whatif/*`
 - cUSE hooks or payload semantics through `@/hooks/useCuse4Api`, `@/lib/cuse4Api`, or `@/lib/types/cuse4`
-- transitional mixed-family barrels through `@/hooks/useApi`, `@/lib/api`, or `@/lib/types` from cPAR feature owners or page components
 
 Current boundary note:
 - cPAR wrappers now own only cPAR route helpers and hooks over the neutral low-level transport in `frontend/src/lib/apiTransport.ts`
-- when cPAR intentionally reuses shared holdings/account behavior, that reuse should stay explicit through `frontend/src/hooks/useHoldingsApi.ts` and `frontend/src/lib/holdingsApi.ts`, not through the mixed-family compatibility barrels
+- when cPAR intentionally reuses shared holdings/account behavior, that reuse should stay explicit through `frontend/src/hooks/useHoldingsApi.ts` and `frontend/src/lib/holdingsApi.ts`, not through generic alias barrels
 
 If a richer cPAR page still needs multiple backend requests, it must preserve the same package-identity checks described above.
 If that becomes too brittle for one page, the next slice should move that page to a composite cPAR payload rather than mixing partially coherent reads in the browser.

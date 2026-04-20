@@ -158,8 +158,9 @@ def test_compute_daily_factor_returns_bounds_price_window_and_eligibility_dates(
         index=pd.Index(["AAPL.OQ", "MSFT.OQ"], name="ric"),
     )
 
-    def _build_eligibility_context(_data_db, *, dates=None):
+    def _build_eligibility_context(_data_db, *, dates=None, force_local=False):
         captured["eligibility_dates"] = list(dates or [])
+        captured["eligibility_force_local"] = bool(force_local)
         return SimpleNamespace(
             exposure_dates=list(dates or []),
             exposure_snapshots={str(date): exposure_snapshot for date in (dates or [])},
@@ -207,6 +208,7 @@ def test_compute_daily_factor_returns_bounds_price_window_and_eligibility_dates(
     assert captured["cache_signature_days"] == 0
     assert captured["price_window"] == ("2026-03-03", "2026-03-05")
     assert captured["eligibility_dates"] == ["2026-03-04", "2026-03-05"]
+    assert captured["eligibility_force_local"] is True
     assert sorted(out["date"].unique().tolist()) == ["2026-03-04", "2026-03-05"]
 
 

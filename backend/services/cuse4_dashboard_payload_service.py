@@ -223,6 +223,68 @@ def load_exposures_response(
     return response
 
 
+def load_account_scoped_exposures_response(
+    *,
+    mode: str,
+    scoped_preview: dict[str, Any],
+    account_id: str,
+) -> dict[str, Any]:
+    current = dict(scoped_preview.get("current") or {})
+    response = {
+        "mode": str(mode),
+        "factors": _normalize_exposure_factor_rows((current.get("exposure_modes") or {}).get(mode, [])),
+        "_cached": False,
+        "_account_scoped": True,
+        "account_id": str(account_id or "").strip().lower() or None,
+    }
+    source_dates = scoped_preview.get("source_dates")
+    if source_dates is not None:
+        response["source_dates"] = source_dates
+    serving_snapshot = scoped_preview.get("serving_snapshot")
+    if isinstance(serving_snapshot, dict):
+        for key in ("run_id", "snapshot_id", "refresh_started_at"):
+            value = serving_snapshot.get(key)
+            if value is not None:
+                response[key] = value
+    return response
+
+
+def load_risk_summary_response(
+    *,
+    payload_loader: Callable[..., Any] | None = None,
+    fallback_loader=None,
+) -> dict[str, Any]:
+    readers = get_dashboard_payload_readers()
+    payloads = _load_payloads(
+        ("risk", "model_sanity"),
+        payload_loader=payload_loader or readers.payload_loader,
+        fallback_loader=fallback_loader or readers.fallback_loader,
+    )
+    data = payloads.get("risk")
+    if data is None:
+        raise DashboardPayloadNotReady(
+            cache_key="risk",
+            message="Risk cache is not ready yet. Run refresh and try again.",
+        )
+    sanity = payloads.get("model_sanity")
+    if sanity is None:
+        sanity = {"status": "no-data", "warnings": [], "checks": {}}
+
+    return {
+        "risk_shares": _normalize_systematic_shares(data.get("risk_shares")),
+        "vol_scaled_shares": _normalize_systematic_shares(data.get("vol_scaled_shares")),
+        "factor_details": _normalize_risk_factor_details(data.get("factor_details")),
+        "factor_catalog": list(data.get("factor_catalog") or []),
+        "source_dates": data.get("source_dates") or {},
+        "risk_engine": _normalize_risk_engine_state(data.get("risk_engine")),
+        "model_sanity": _normalize_model_sanity(sanity),
+        "run_id": data.get("run_id"),
+        "snapshot_id": data.get("snapshot_id"),
+        "refresh_started_at": data.get("refresh_started_at"),
+        "_cached": True,
+    }
+
+
 def load_risk_response(
     *,
     payload_loader: Callable[..., Any] | None = None,
@@ -261,6 +323,73 @@ def load_risk_response(
     return response
 
 
+def load_risk_covariance_response(
+    *,
+    payload_loader: Callable[..., Any] | None = None,
+    fallback_loader=None,
+) -> dict[str, Any]:
+    readers = get_dashboard_payload_readers()
+    data = _load_payload(
+        "risk",
+        payload_loader=payload_loader or readers.payload_loader,
+        fallback_loader=fallback_loader or readers.fallback_loader,
+    )
+    if data is None:
+        raise DashboardPayloadNotReady(
+            cache_key="risk",
+            message="Risk cache is not ready yet. Run refresh and try again.",
+        )
+    cov = dict(data.get("cov_matrix") or {})
+    factors = cov.get("factors") if isinstance(cov, dict) else []
+    correlation = cov.get("correlation") if isinstance(cov, dict) else []
+    matrix = cov.get("matrix") if isinstance(cov, dict) else []
+    cov_rows = correlation if isinstance(correlation, list) and correlation else matrix
+    if not isinstance(factors, list) or not factors or not isinstance(cov_rows, list) or not cov_rows:
+        raise DashboardPayloadNotReady(
+            cache_key="risk",
+            message="Risk covariance is not ready yet. Run a core refresh and try again.",
+            refresh_profile="cold-core",
+        )
+    return {
+        "cov_matrix": {
+            "factors": list(factors),
+            "correlation": correlation if isinstance(correlation, list) else [],
+            "matrix": matrix if isinstance(matrix, list) else [],
+        },
+        "run_id": data.get("run_id"),
+        "snapshot_id": data.get("snapshot_id"),
+        "refresh_started_at": data.get("refresh_started_at"),
+        "_cached": True,
+    }
+
+
+def load_account_scoped_risk_response(
+    *,
+    scoped_preview: dict[str, Any],
+    account_id: str,
+) -> dict[str, Any]:
+    current = dict(scoped_preview.get("current") or {})
+    response = dict(current)
+    response["risk_shares"] = _normalize_systematic_shares(current.get("risk_shares"))
+    response["vol_scaled_shares"] = _normalize_systematic_shares(current.get("vol_scaled_shares")) or {}
+    response["component_shares"] = _normalize_systematic_shares(current.get("component_shares"))
+    response["factor_details"] = _normalize_risk_factor_details(current.get("factor_details"))
+    response["_cached"] = False
+    response["_account_scoped"] = True
+    response["account_id"] = str(account_id or "").strip().lower() or None
+    response["model_sanity"] = {"status": "scoped-preview", "warnings": [], "checks": {}}
+    source_dates = scoped_preview.get("source_dates")
+    if source_dates is not None:
+        response["source_dates"] = source_dates
+    serving_snapshot = scoped_preview.get("serving_snapshot")
+    if isinstance(serving_snapshot, dict):
+        for key in ("run_id", "snapshot_id", "refresh_started_at"):
+            value = serving_snapshot.get(key)
+            if value is not None:
+                response[key] = value
+    return response
+
+
 def load_portfolio_response(
     *,
     position_normalizer=None,
@@ -293,6 +422,8 @@ __all__ = [
     "get_dashboard_payload_readers",
     "load_exposures_response",
     "load_portfolio_response",
+    "load_risk_covariance_response",
     "load_risk_response",
+    "load_risk_summary_response",
     "load_runtime_payload",
 ]

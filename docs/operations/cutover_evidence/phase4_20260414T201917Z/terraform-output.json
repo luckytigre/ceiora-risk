@@ -1,0 +1,298 @@
+{
+  "artifact_registry_repository": {
+    "sensitive": false,
+    "type": "string",
+    "value": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images"
+  },
+  "control_job_names": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "cold_core": "string",
+        "core_weekly": "string",
+        "cpar_build": "string",
+        "serve_refresh": "string"
+      }
+    ],
+    "value": {
+      "cold_core": "ceiora-prod-cold-core",
+      "core_weekly": "ceiora-prod-core-weekly",
+      "cpar_build": "ceiora-prod-cpar-build",
+      "serve_refresh": "ceiora-prod-serve-refresh"
+    }
+  },
+  "control_service_job_env": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "CLOUD_RUN_JOBS_ENABLED": "string",
+        "CLOUD_RUN_PROJECT_ID": "string",
+        "CLOUD_RUN_REGION": "string",
+        "COLD_CORE_CLOUD_RUN_JOB_NAME": "string",
+        "CORE_WEEKLY_CLOUD_RUN_JOB_NAME": "string",
+        "CPAR_BUILD_CLOUD_RUN_JOB_NAME": "string",
+        "SERVE_REFRESH_CLOUD_RUN_JOB_NAME": "string"
+      }
+    ],
+    "value": {
+      "CLOUD_RUN_JOBS_ENABLED": "true",
+      "CLOUD_RUN_PROJECT_ID": "project-4e18de12-63a3-4206-aaa",
+      "CLOUD_RUN_REGION": "us-east4",
+      "COLD_CORE_CLOUD_RUN_JOB_NAME": "ceiora-prod-cold-core",
+      "CORE_WEEKLY_CLOUD_RUN_JOB_NAME": "ceiora-prod-core-weekly",
+      "CPAR_BUILD_CLOUD_RUN_JOB_NAME": "ceiora-prod-cpar-build",
+      "SERVE_REFRESH_CLOUD_RUN_JOB_NAME": "ceiora-prod-serve-refresh"
+    }
+  },
+  "control_surface_image_refs_applied": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "cold_core_job": "string",
+        "core_weekly_job": "string",
+        "cpar_build_job": "string",
+        "serve_refresh_job": "string",
+        "service": "string"
+      }
+    ],
+    "value": {
+      "cold_core_job": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:2d8b11f",
+      "core_weekly_job": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:2d8b11f",
+      "cpar_build_job": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:2d8b11f",
+      "serve_refresh_job": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:2d8b11f",
+      "service": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:2d8b11f"
+    }
+  },
+  "edge_enabled": {
+    "sensitive": false,
+    "type": "bool",
+    "value": true
+  },
+  "endpoint_mode": {
+    "sensitive": false,
+    "type": "string",
+    "value": "custom_domains"
+  },
+  "frontend_build_contract": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "build_api_origin": "string",
+        "edge_enabled": "bool",
+        "endpoint_mode": "string",
+        "public_frontend_origin": "string",
+        "runtime_control_origin": "string"
+      }
+    ],
+    "value": {
+      "build_api_origin": "https://api.ceiora.com",
+      "edge_enabled": true,
+      "endpoint_mode": "custom_domains",
+      "public_frontend_origin": "https://app.ceiora.com",
+      "runtime_control_origin": "https://control.ceiora.com"
+    }
+  },
+  "hostnames": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": "string",
+        "frontend": "string",
+        "serve": "string"
+      }
+    ],
+    "value": {
+      "control": "control.ceiora.com",
+      "frontend": "app.ceiora.com",
+      "serve": "api.ceiora.com"
+    }
+  },
+  "load_balancer_dns_records": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": [
+          "object",
+          {
+            "hostname": "string",
+            "record_id": "string"
+          }
+        ],
+        "frontend": [
+          "object",
+          {
+            "hostname": "string",
+            "record_id": "string"
+          }
+        ],
+        "serve": [
+          "object",
+          {
+            "hostname": "string",
+            "record_id": "string"
+          }
+        ]
+      }
+    ],
+    "value": {
+      "control": {
+        "hostname": "control.ceiora.com",
+        "record_id": "3af4c22b446e8aedadb66dd5dff9fc34"
+      },
+      "frontend": {
+        "hostname": "app.ceiora.com",
+        "record_id": "a2b82be67fc24510e79c2be72a23a2ee"
+      },
+      "serve": {
+        "hostname": "api.ceiora.com",
+        "record_id": "32aae7f7efbf0a2279c4fe580a1fa75b"
+      }
+    }
+  },
+  "load_balancer_host_routing": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": "string",
+        "frontend": "string",
+        "serve": "string"
+      }
+    ],
+    "value": {
+      "control": "control.ceiora.com",
+      "frontend": "app.ceiora.com",
+      "serve": "api.ceiora.com"
+    }
+  },
+  "load_balancer_ip": {
+    "sensitive": false,
+    "type": "string",
+    "value": "34.149.111.52"
+  },
+  "public_origins": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": "string",
+        "frontend": "string",
+        "serve": "string"
+      }
+    ],
+    "value": {
+      "control": "https://control.ceiora.com",
+      "frontend": "https://app.ceiora.com",
+      "serve": "https://api.ceiora.com"
+    }
+  },
+  "secret_ids": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "editor_api_token": "string",
+        "neon_database_url": "string",
+        "operator_api_token": "string"
+      }
+    ],
+    "value": {
+      "editor_api_token": "ceiora-prod-editor-api-token",
+      "neon_database_url": "ceiora-prod-neon-database-url",
+      "operator_api_token": "ceiora-prod-operator-api-token"
+    }
+  },
+  "serve_refresh_job_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "ceiora-prod-serve-refresh"
+  },
+  "service_account_emails": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": "string",
+        "frontend": "string",
+        "jobs": "string",
+        "serve": "string"
+      }
+    ],
+    "value": {
+      "control": "ceioraprodcontrol@project-4e18de12-63a3-4206-aaa.iam.gserviceaccount.com",
+      "frontend": "ceioraprodfrontend@project-4e18de12-63a3-4206-aaa.iam.gserviceaccount.com",
+      "jobs": "ceioraprodjobs@project-4e18de12-63a3-4206-aaa.iam.gserviceaccount.com",
+      "serve": "ceioraprodserve@project-4e18de12-63a3-4206-aaa.iam.gserviceaccount.com"
+    }
+  },
+  "service_image_refs": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": "string",
+        "frontend": "string",
+        "serve": "string"
+      }
+    ],
+    "value": {
+      "control": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:00aff02",
+      "frontend": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/frontend:latest",
+      "serve": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/serve:2012c3a"
+    }
+  },
+  "service_image_refs_applied": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": "string",
+        "frontend": "string",
+        "serve": "string"
+      }
+    ],
+    "value": {
+      "control": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:00aff02",
+      "frontend": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/frontend:latest",
+      "serve": "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/serve:2012c3a"
+    }
+  },
+  "service_names": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": "string",
+        "frontend": "string",
+        "serve": "string"
+      }
+    ],
+    "value": {
+      "control": "ceiora-prod-control",
+      "frontend": "ceiora-prod-frontend",
+      "serve": "ceiora-prod-serve"
+    }
+  },
+  "service_urls": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "control": "string",
+        "frontend": "string",
+        "serve": "string"
+      }
+    ],
+    "value": {
+      "control": "https://ceiora-prod-control-i5znti5joq-uk.a.run.app",
+      "frontend": "https://ceiora-prod-frontend-i5znti5joq-uk.a.run.app",
+      "serve": "https://ceiora-prod-serve-i5znti5joq-uk.a.run.app"
+    }
+  }
+}

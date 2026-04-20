@@ -27,6 +27,19 @@ edge_enabled                  = true
 # serve_image_ref                 = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/serve:<tag>"
 # control_image_ref               = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:<tag>"
 
+# Auth/runtime contract for the current Neon-authenticated app shape:
+# app_auth_provider               = "neon"
+# app_account_enforcement_enabled = true
+# app_auth_bootstrap_enabled      = true
+# app_admin_settings_enabled      = true
+# app_shared_auth_accept_legacy   = false
+# neon_auth_base_url              = "https://<tenant>/auth"
+# neon_auth_issuer                = "https://<tenant>/auth"
+# neon_auth_audience              = "https://<tenant>"
+# neon_auth_jwks_json             = "{\"keys\":[...]}"
+# neon_auth_allowed_emails        = ["user@example.com"]
+# neon_auth_bootstrap_admins      = ["user@example.com"]
+
 # Final no-edge run_app steady state flips only edge_enabled after soak:
 # endpoint_mode                   = "run_app"
 # edge_enabled                    = false

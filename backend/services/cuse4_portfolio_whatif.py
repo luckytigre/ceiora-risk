@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+import inspect
 from typing import Any
 
 import math
@@ -28,8 +29,11 @@ from backend.analytics.services.risk_views import (
 from backend.data import serving_outputs as serving_outputs_store
 from backend.data.serving_outputs import load_current_payload
 from backend.data.sqlite import cache_get, cache_get_live_first
-from backend.risk_model.risk_attribution import risk_decomposition
+from backend.risk_model.risk_attribution import risk_decomposition, vol_scaled_decomposition
+from backend.services.cuse4_universe_service import cuse_row_model_readiness
 from backend.services import cuse4_holdings_service as holdings_service
+
+ALL_EXPOSURE_MODES = ("raw", "sensitivity", "risk_contribution")
 
 
 @dataclass(frozen=True)
@@ -37,7 +41,7 @@ class PortfolioWhatIfDependencies:
     current_payload_loader: Callable[[str], Any]
     runtime_cache_loader: Callable[[str], Any]
     live_cache_loader: Callable[[str], Any]
-    holdings_loader: Callable[[str | None], list[dict[str, Any]]]
+    holdings_loader: Callable[..., list[dict[str, Any]]]
     universe_loader: Callable[..., dict[str, Any]]
     covariance_loader: Callable[..., tuple[pd.DataFrame, bool]]
     specific_risk_loader: Callable[..., tuple[dict[str, dict[str, Any]], bool]]
@@ -251,9 +255,34 @@ def _normalize_scenario_rows(scenario_rows: list[dict[str, Any]]) -> list[dict[s
 def _build_holdings_snapshot(
     scenario_rows: list[dict[str, Any]],
     *,
-    holdings_loader: Callable[[str | None], list[dict[str, Any]]] = holdings_service.load_holdings_positions,
+    account_id: str | None = None,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
+    preview_account_ids: list[str] | tuple[str, ...] | None = None,
+    holdings_loader: Callable[..., list[dict[str, Any]]] = holdings_service.load_holdings_positions,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    live_rows = holdings_loader(account_id=None)
+    loader_signature = inspect.signature(holdings_loader)
+    accepts_allowed_account_ids = (
+        "allowed_account_ids" in loader_signature.parameters
+        or any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in loader_signature.parameters.values()
+        )
+    )
+    if accepts_allowed_account_ids:
+        live_rows = holdings_loader(account_id=account_id, allowed_account_ids=allowed_account_ids)
+    else:
+        live_rows = holdings_loader(account_id=account_id)
+    preview_account_filter = {
+        _normalize_account_id(raw_account_id)
+        for raw_account_id in list(preview_account_ids or [])
+        if _normalize_account_id(raw_account_id)
+    }
+    if preview_account_filter:
+        live_rows = [
+            row
+            for row in live_rows
+            if _normalize_account_id(row.get("account_id")) in preview_account_filter
+        ]
     current_by_key: dict[str, dict[str, Any]] = {}
     for raw in live_rows:
         account_id = _normalize_account_id(raw.get("account_id"))
@@ -361,6 +390,65 @@ def _rows_to_snapshot(
     return shares, meta
 
 
+def _overlay_published_positions_into_universe_loadings(
+    *,
+    universe_loadings: dict[str, Any],
+    current_portfolio_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    positions = (current_portfolio_payload or {}).get("positions") if isinstance(current_portfolio_payload, dict) else None
+    if not isinstance(positions, list) or not positions:
+        return universe_loadings
+
+    by_ticker = dict(universe_loadings.get("by_ticker") or {})
+    mutated = False
+    for raw in positions:
+        if not isinstance(raw, dict):
+            continue
+        ticker = _normalize_ticker(raw.get("ticker"))
+        if not ticker:
+            continue
+        overlay_row: dict[str, Any] = {
+            "ticker": ticker,
+            "name": str(raw.get("name") or ticker).strip() or ticker,
+            "price": raw.get("price"),
+            "exposures": dict(raw.get("exposures") or {}),
+            "specific_var": raw.get("specific_var"),
+            "specific_vol": raw.get("specific_vol"),
+            "model_status": str(raw.get("model_status") or "").strip(),
+            "model_status_reason": str(raw.get("model_status_reason") or raw.get("eligibility_reason") or "").strip(),
+            "eligibility_reason": str(raw.get("eligibility_reason") or raw.get("model_status_reason") or "").strip(),
+            "exposure_origin": str(raw.get("exposure_origin") or "").strip() or None,
+            "projection_method": raw.get("projection_method"),
+            "projection_r_squared": raw.get("projection_r_squared"),
+            "projection_obs_count": raw.get("projection_obs_count"),
+            "projection_asof": raw.get("projection_asof"),
+            "projection_output_status": raw.get("projection_output_status"),
+            "trbc_economic_sector_short": raw.get("trbc_economic_sector_short"),
+            "trbc_economic_sector_short_abbr": raw.get("trbc_economic_sector_short_abbr"),
+            "trbc_industry_group": raw.get("trbc_industry_group"),
+            "served_exposure_available": bool(raw.get("served_exposure_available", bool(raw.get("exposures")))),
+        }
+        ric = _normalize_ric(raw.get("ric"))
+        if ric:
+            overlay_row["ric"] = ric
+        merged = {
+            **dict(by_ticker.get(ticker) or {}),
+            **{key: value for key, value in overlay_row.items() if value not in (None, "", {})},
+        }
+        if overlay_row.get("exposures"):
+            merged["exposures"] = overlay_row["exposures"]
+        if merged != by_ticker.get(ticker):
+            by_ticker[ticker] = merged
+            mutated = True
+
+    if not mutated:
+        return universe_loadings
+    return {
+        **universe_loadings,
+        "by_ticker": by_ticker,
+    }
+
+
 def _build_preview_payload(
     *,
     holdings_rows: list[dict[str, Any]],
@@ -371,6 +459,7 @@ def _build_preview_payload(
     specific_risk_by_ticker: dict[str, dict[str, Any]],
     served_loadings_asof: str | None,
     factor_coverage: dict[str, Any],
+    requested_exposure_modes: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
     shares_map, dynamic_meta = _rows_to_snapshot(
         holdings_rows,
@@ -392,6 +481,17 @@ def _build_preview_payload(
         "industry": float(raw_risk_shares.get("industry", 0.0)),
         "style": float(raw_risk_shares.get("style", 0.0)),
         "idio": float(raw_risk_shares.get("idio", 0.0)),
+    }
+    raw_vol_scaled_shares = vol_scaled_decomposition(
+        cov=cov,
+        positions=positions,
+        specific_risk_by_ticker=specific_risk_by_ticker,
+    )
+    vol_scaled_shares: RiskSharesPayload = {
+        "market": float(raw_vol_scaled_shares.get("market", 0.0)),
+        "industry": float(raw_vol_scaled_shares.get("industry", 0.0)),
+        "style": float(raw_vol_scaled_shares.get("style", 0.0)),
+        "idio": float(raw_vol_scaled_shares.get("idio", 0.0)),
     }
     component_shares: ComponentSharesPayload = {
         "market": float(raw_component_shares.get("market", 0.0)),
@@ -424,17 +524,49 @@ def _build_preview_payload(
         factor_details,
         factor_coverage=factor_coverage,
         factor_coverage_asof=served_loadings_asof,
+        modes=requested_exposure_modes,
     )
     return {
         "positions": [dict(pos) for pos in positions],
         "total_value": round(float(total_value), 2),
         "position_count": len(positions),
         "risk_shares": risk_shares,
+        "vol_scaled_shares": vol_scaled_shares,
         "component_shares": component_shares,
         "factor_details": factor_details,
         "exposure_modes": exposure_modes,
         "factor_catalog": list(universe_loadings.get("factor_catalog") or []),
     }
+
+
+def _assert_scenario_rows_are_preview_ready(
+    *,
+    scenario_rows: list[dict[str, Any]],
+    universe_loadings: dict[str, Any],
+) -> None:
+    by_ticker = dict(universe_loadings.get("by_ticker") or {})
+    rejected: list[str] = []
+    for row in scenario_rows:
+        ticker = _normalize_ticker(row.get("ticker"))
+        if not ticker:
+            continue
+        universe_row = dict(by_ticker.get(ticker) or {})
+        if not universe_row:
+            rejected.append(f"{ticker} (not in current served cUSE universe)")
+            continue
+        ready, _, detail = cuse_row_model_readiness(universe_row, quote_source="served_payload")
+        if ready:
+            continue
+        rejected.append(f"{ticker} ({detail})")
+    if rejected:
+        sample = "; ".join(rejected[:5])
+        remainder = len(rejected) - min(len(rejected), 5)
+        if remainder > 0:
+            sample = f"{sample}; +{remainder} more"
+        raise ValueError(
+            "What-if preview only supports tickers with a currently published cUSE modeled surface. "
+            f"Rejected: {sample}"
+        )
 
 
 def _factor_delta_rows(
@@ -469,10 +601,27 @@ def _factor_delta_rows(
 def preview_portfolio_whatif(
     *,
     scenario_rows: list[dict[str, Any]],
+    account_id: str | None = None,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
+    requested_exposure_modes: tuple[str, ...] | list[str] | None = None,
     dependencies: PortfolioWhatIfDependencies | None = None,
 ) -> dict[str, Any]:
     deps = dependencies or get_portfolio_whatif_dependencies()
+    normalized_requested_exposure_modes = tuple(
+        dict.fromkeys(
+            mode
+            for mode in (requested_exposure_modes or ALL_EXPOSURE_MODES)
+            if str(mode or "").strip() in ALL_EXPOSURE_MODES
+        )
+    )
     normalized_scenario_rows = _normalize_scenario_rows(scenario_rows)
+    preview_account_ids = tuple(
+        dict.fromkeys(
+            _normalize_account_id(row.get("account_id"))
+            for row in normalized_scenario_rows
+            if _normalize_account_id(row.get("account_id"))
+        )
+    )
     current_payloads = _load_current_serving_payloads(
         "portfolio",
         "universe_loadings",
@@ -485,6 +634,21 @@ def preview_portfolio_whatif(
         current_payload_loader=deps.current_payload_loader,
         fallback_loader=deps.runtime_cache_loader,
     )
+    current_portfolio_payload = current_payloads.get("portfolio")
+    if current_portfolio_payload is None:
+        current_portfolio_payload = _load_serving_or_runtime_cache(
+            "portfolio",
+            current_payload_loader=deps.current_payload_loader,
+            fallback_loader=deps.runtime_cache_loader,
+        ) or {}
+    universe_loadings = _overlay_published_positions_into_universe_loadings(
+        universe_loadings=universe_loadings,
+        current_portfolio_payload=current_portfolio_payload if isinstance(current_portfolio_payload, dict) else {},
+    )
+    _assert_scenario_rows_are_preview_ready(
+        scenario_rows=normalized_scenario_rows,
+        universe_loadings=universe_loadings,
+    )
     cov, cov_from_serving = deps.covariance_loader(
         current_payloads.get("risk_engine_cov"),
         current_payload_loader=deps.current_payload_loader,
@@ -495,13 +659,6 @@ def preview_portfolio_whatif(
         current_payload_loader=deps.current_payload_loader,
         live_cache_loader=deps.live_cache_loader,
     )
-    current_portfolio_payload = current_payloads.get("portfolio")
-    if current_portfolio_payload is None:
-        current_portfolio_payload = _load_serving_or_runtime_cache(
-            "portfolio",
-            current_payload_loader=deps.current_payload_loader,
-            fallback_loader=deps.runtime_cache_loader,
-        ) or {}
     source_dates = (
         (current_portfolio_payload or {}).get("source_dates")
         or universe_loadings.get("source_dates")
@@ -516,6 +673,9 @@ def preview_portfolio_whatif(
     factor_coverage: dict[str, Any] = {}
     current_rows, hypothetical_rows, deltas = _build_holdings_snapshot(
         normalized_scenario_rows,
+        account_id=account_id,
+        allowed_account_ids=allowed_account_ids,
+        preview_account_ids=preview_account_ids,
         holdings_loader=deps.holdings_loader,
     )
     current_preview = _build_preview_payload(
@@ -527,6 +687,7 @@ def preview_portfolio_whatif(
         specific_risk_by_ticker=specific_risk,
         served_loadings_asof=served_loadings_asof,
         factor_coverage=factor_coverage,
+        requested_exposure_modes=normalized_requested_exposure_modes,
     )
     hypothetical_preview = _build_preview_payload(
         holdings_rows=hypothetical_rows,
@@ -537,6 +698,7 @@ def preview_portfolio_whatif(
         specific_risk_by_ticker=specific_risk,
         served_loadings_asof=served_loadings_asof,
         factor_coverage=factor_coverage,
+        requested_exposure_modes=normalized_requested_exposure_modes,
     )
 
     risk_share_deltas = {
@@ -574,6 +736,11 @@ def preview_portfolio_whatif(
         if cov_from_serving and specific_risk_from_serving
         else "live_holdings_projected_through_current_loadings_and_live_risk_cache"
     )
+    preview_scope = {
+        "kind": "staged_accounts",
+        "account_ids": list(preview_account_ids),
+        "accounts_count": len(preview_account_ids),
+    }
     return {
         "scenario_rows": [
             {
@@ -600,6 +767,7 @@ def preview_portfolio_whatif(
         "source_dates": source_dates,
         "serving_snapshot": serving_snapshot,
         "truth_surface": truth_surface,
+        "preview_scope": preview_scope,
         "_preview_only": True,
     }
 

@@ -77,26 +77,42 @@ export default function ManualPositionEditor({
     () => (ricSearch?.results ?? []).filter((r) => typeof r.ric === "string" && r.ric.trim().length > 0),
     [ricSearch?.results],
   );
+  const tickerSuggestions = useMemo(
+    () => (tickerResults.length > 0 ? tickerResults : ricResults),
+    [tickerResults, ricResults],
+  );
+  const ricSuggestions = useMemo(
+    () => (ricResults.length > 0 ? ricResults : tickerResults),
+    [ricResults, tickerResults],
+  );
 
   // --- Ticker dropdown open/close ---
   useEffect(() => {
-    if (tickerFocused && editTicker.trim().length > 0 && tickerResults.length > 0) {
+    if (
+      tickerFocused
+      && (editTicker.trim().length > 0 || (editTicker.trim().length === 0 && editRic.trim().length > 0))
+      && tickerSuggestions.length > 0
+    ) {
       setTickerDropdownOpen(true);
       setTickerActiveIndex(-1);
     } else {
       setTickerDropdownOpen(false);
     }
-  }, [tickerFocused, editTicker, tickerResults.length]);
+  }, [tickerFocused, editTicker, editRic, tickerSuggestions.length]);
 
   // --- RIC dropdown open/close ---
   useEffect(() => {
-    if (ricFocused && editRic.trim().length > 0 && ricResults.length > 0) {
+    if (
+      ricFocused
+      && (editRic.trim().length > 0 || (editRic.trim().length === 0 && editTicker.trim().length > 0))
+      && ricSuggestions.length > 0
+    ) {
       setRicDropdownOpen(true);
       setRicActiveIndex(-1);
     } else {
       setRicDropdownOpen(false);
     }
-  }, [ricFocused, editRic, ricResults.length]);
+  }, [ricFocused, editRic, editTicker, ricSuggestions.length]);
 
   // --- Click-outside handlers ---
   useEffect(() => {
@@ -152,50 +168,50 @@ export default function ManualPositionEditor({
 
   const handleTickerKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (!tickerDropdownOpen || tickerResults.length === 0) {
+      if (!tickerDropdownOpen || tickerSuggestions.length === 0) {
         if (e.key === "Enter") e.preventDefault();
         return;
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setTickerActiveIndex((prev) => (prev < tickerResults.length - 1 ? prev + 1 : 0));
+        setTickerActiveIndex((prev) => (prev < tickerSuggestions.length - 1 ? prev + 1 : 0));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setTickerActiveIndex((prev) => (prev > 0 ? prev - 1 : tickerResults.length - 1));
+        setTickerActiveIndex((prev) => (prev > 0 ? prev - 1 : tickerSuggestions.length - 1));
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (tickerActiveIndex >= 0 && tickerActiveIndex < tickerResults.length) {
-          selectTicker(tickerResults[tickerActiveIndex]);
+        if (tickerActiveIndex >= 0 && tickerActiveIndex < tickerSuggestions.length) {
+          selectTicker(tickerSuggestions[tickerActiveIndex]);
         }
       } else if (e.key === "Escape") {
         setTickerDropdownOpen(false);
       }
     },
-    [tickerActiveIndex, tickerDropdownOpen, tickerResults, selectTicker],
+    [tickerActiveIndex, tickerDropdownOpen, tickerSuggestions, selectTicker],
   );
 
   const handleRicKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (!ricDropdownOpen || ricResults.length === 0) {
+      if (!ricDropdownOpen || ricSuggestions.length === 0) {
         if (e.key === "Enter") e.preventDefault();
         return;
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setRicActiveIndex((prev) => (prev < ricResults.length - 1 ? prev + 1 : 0));
+        setRicActiveIndex((prev) => (prev < ricSuggestions.length - 1 ? prev + 1 : 0));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setRicActiveIndex((prev) => (prev > 0 ? prev - 1 : ricResults.length - 1));
+        setRicActiveIndex((prev) => (prev > 0 ? prev - 1 : ricSuggestions.length - 1));
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (ricActiveIndex >= 0 && ricActiveIndex < ricResults.length) {
-          selectRic(ricResults[ricActiveIndex]);
+        if (ricActiveIndex >= 0 && ricActiveIndex < ricSuggestions.length) {
+          selectRic(ricSuggestions[ricActiveIndex]);
         }
       } else if (e.key === "Escape") {
         setRicDropdownOpen(false);
       }
     },
-    [ricActiveIndex, ricDropdownOpen, ricResults, selectRic],
+    [ricActiveIndex, ricDropdownOpen, ricSuggestions, selectRic],
   );
 
   return (
@@ -235,9 +251,9 @@ export default function ManualPositionEditor({
             placeholder="AAPL"
             autoComplete="off"
           />
-          {tickerDropdownOpen && tickerResults.length > 0 && (
+          {tickerDropdownOpen && tickerSuggestions.length > 0 && (
             <div className="explore-typeahead holdings-typeahead">
-              {tickerResults.map((row, idx) => (
+              {tickerSuggestions.map((row, idx) => (
                 <button
                   key={`${row.ticker}:${row.ric}`}
                   className={`explore-typeahead-item${idx === tickerActiveIndex ? " active" : ""}`}
@@ -245,8 +261,8 @@ export default function ManualPositionEditor({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => selectTicker(row)}
                 >
-                  <span className="ticker">{highlightMatch(row.ticker, editTicker)}</span>
-                  <span className="name">{highlightMatch(row.name, editTicker)}</span>
+                  <span className="ticker">{highlightMatch(row.ticker, editTicker || editRic)}</span>
+                  <span className="name">{highlightMatch(row.name, editTicker || editRic)}</span>
                   <span className="explore-typeahead-classifications">
                     <span>{row.trbc_economic_sector_short_abbr || row.trbc_economic_sector_short || ""}</span>
                   </span>
@@ -277,9 +293,9 @@ export default function ManualPositionEditor({
             placeholder="AAPL.OQ"
             autoComplete="off"
           />
-          {ricDropdownOpen && ricResults.length > 0 && (
+          {ricDropdownOpen && ricSuggestions.length > 0 && (
             <div className="explore-typeahead holdings-typeahead">
-              {ricResults.map((row, idx) => (
+              {ricSuggestions.map((row, idx) => (
                 <button
                   key={`${row.ticker}:${row.ric}`}
                   className={`explore-typeahead-item${idx === ricActiveIndex ? " active" : ""}`}
@@ -287,7 +303,7 @@ export default function ManualPositionEditor({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => selectRic(row)}
                 >
-                  <span className="ticker">{highlightMatch(String(row.ric || ""), editRic)}</span>
+                  <span className="ticker">{highlightMatch(String(row.ric || ""), editRic || editTicker)}</span>
                   <span className="name">{row.ticker}{row.name ? ` — ${row.name}` : ""}</span>
                   <span className="explore-typeahead-classifications">
                     <span>{row.trbc_economic_sector_short_abbr || row.trbc_economic_sector_short || ""}</span>

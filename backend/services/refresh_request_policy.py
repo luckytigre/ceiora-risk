@@ -44,6 +44,16 @@ def _validate_stage_window(from_stage: str | None, to_stage: str | None) -> None
         raise ValueError("--from-stage must be before or equal to --to-stage")
 
 
+def _validate_profile_stage_policy(
+    *,
+    profile: str,
+    from_stage: str | None,
+    to_stage: str | None,
+) -> None:
+    if str(profile or "").strip().lower() == "cold-core" and (from_stage is not None or to_stage is not None):
+        raise ValueError("cold-core does not support partial stage windows; use core-weekly or a narrower profile.")
+
+
 def resolve_refresh_request(
     *,
     profile: str | None = None,
@@ -58,6 +68,11 @@ def resolve_refresh_request(
     stage_from = _normalize_stage(from_stage)
     stage_to = _normalize_stage(to_stage)
     _validate_stage_window(stage_from, stage_to)
+    _validate_profile_stage_policy(
+        profile=resolved_profile,
+        from_stage=stage_from,
+        to_stage=stage_to,
+    )
     force_core_effective = bool(force_core or force_risk_recompute)
     planned_stages_for_profile(
         profile=resolved_profile,

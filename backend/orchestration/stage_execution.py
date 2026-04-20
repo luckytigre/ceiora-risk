@@ -219,6 +219,10 @@ def run_selected_stages(
             stage_details["stage_index"] = int(idx)
             stage_details["stage_count"] = int(total_stages)
             stage_details["started_at"] = stage_started_at
+            stage_details["metrics"] = job_runs_module.normalize_stage_metrics(
+                stage_details,
+                duration_seconds=stage_details["duration_seconds"],
+            )
             job_runs_module.finish_stage(
                 db_path=db_path,
                 run_id=effective_run_id,
@@ -252,6 +256,10 @@ def run_selected_stages(
                 "stage_count": int(total_stages),
                 "started_at": stage_started_at,
             }
+            failed_details["metrics"] = job_runs_module.normalize_stage_metrics(
+                failed_details,
+                duration_seconds=failed_details["duration_seconds"],
+            )
             logger.exception(
                 "Stage failed %s/%s: %s after %.1fs",
                 idx,

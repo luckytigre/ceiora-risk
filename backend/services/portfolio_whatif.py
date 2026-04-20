@@ -21,6 +21,7 @@ def get_portfolio_whatif_dependencies() -> PortfolioWhatIfDependencies:
 def preview_portfolio_whatif(
     *,
     scenario_rows: list[dict[str, object]],
+    requested_exposure_modes: tuple[str, ...] | list[str] | None = None,
     dependencies: PortfolioWhatIfDependencies | None = None,
 ) -> dict[str, object]:
     resolved_dependencies = (
@@ -30,6 +31,7 @@ def preview_portfolio_whatif(
     )
     return _owner.preview_portfolio_whatif(
         scenario_rows=scenario_rows,
+        requested_exposure_modes=requested_exposure_modes,
         dependencies=resolved_dependencies,
     )
 

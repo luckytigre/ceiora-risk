@@ -175,10 +175,7 @@ export default function FactorDrilldown({
             const s = latest >= 0 ? "+" : "";
             return (
               <div className="detail-history-stats">
-                <span
-                  className="detail-history-stat"
-                  style={{ color: pos ? "rgba(107, 207, 154, 0.85)" : "rgba(224, 87, 127, 0.85)" }}
-                >
+                <span className={`detail-history-stat ${pos ? "positive" : "negative"}`}>
                   {s}{latest.toFixed(1)}%
                 </span>
                 {factorVol != null && (

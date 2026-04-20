@@ -57,6 +57,7 @@ def test_load_cpar_risk_payload_uses_aggregate_snapshot_owner(monkeypatch) -> No
         "rics": ["AAPL.OQ"],
         "package_run_id": "run_curr",
         "package_date": "2026-03-14",
+        "positions": [{"ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 6.0}],
         "data_db": None,
     }
     assert calls["build_snapshot"]["accounts"] == [{"account_id": "acct_a", "account_name": "Account A"}]
@@ -153,3 +154,62 @@ def test_cpar_risk_service_delegates_to_aggregate_owner(monkeypatch) -> None:
     payload = cpar_risk_service.load_cpar_risk_payload()
 
     assert payload == {"scope": "all_accounts", "positions_count": 1}
+
+
+def test_build_cpar_risk_snapshot_includes_factor_registry(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_aggregate_risk_service.cpar_meta_service,
+        "factor_registry_payload",
+        lambda: [
+            {
+                "factor_id": "SPY",
+                "ticker": "SPY",
+                "label": "Market",
+                "group": "market",
+                "display_order": 0,
+                "method_version": "cPAR1_residual_v1",
+                "factor_registry_version": "registry_v1",
+            }
+        ],
+    )
+
+    payload = cpar_aggregate_risk_service.build_cpar_risk_snapshot(
+        package={
+            "package_run_id": "run_curr",
+            "package_date": "2026-03-14",
+            "profile": "cpar-weekly",
+            "started_at": "2026-03-14T01:00:00+00:00",
+            "completed_at": "2026-03-14T01:05:00+00:00",
+            "method_version": "cPAR1_residual_v1",
+            "factor_registry_version": "registry_v1",
+            "data_authority": "neon",
+            "lookback_weeks": 52,
+            "half_life_weeks": 13,
+            "min_observations": 26,
+            "source_prices_asof": "2026-03-14",
+            "classification_asof": "2026-03-01",
+            "universe_count": 100,
+            "fit_ok_count": 90,
+            "fit_limited_count": 8,
+            "fit_insufficient_count": 2,
+        },
+        accounts=[],
+        positions=[],
+        fit_by_ric={},
+        price_by_ric={},
+        classification_by_ric={},
+        covariance_rows=[],
+    )
+
+    assert payload["factors"] == [
+        {
+            "factor_id": "SPY",
+            "ticker": "SPY",
+            "label": "Market",
+            "group": "market",
+            "display_order": 0,
+            "method_version": "cPAR1_residual_v1",
+            "factor_registry_version": "registry_v1",
+        }
+    ]
+    assert payload["portfolio_status"] == "empty"

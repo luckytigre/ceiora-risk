@@ -750,7 +750,10 @@ def test_build_cuse_membership_payloads_uses_eligibility_reason_for_structural_f
     assert stage_map["structural_eligible"][4] == "missing_trbc_industry"
 
 
-def test_build_cuse_membership_payloads_force_local_eligibility_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_cuse_membership_payloads_respects_default_eligibility_read_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from backend.risk_model.cuse_membership import build_cuse_membership_payloads
 
     data_db = tmp_path / "data.db"
@@ -798,7 +801,32 @@ def test_build_cuse_membership_payloads_force_local_eligibility_reads(tmp_path: 
     conn.commit()
     conn.close()
 
-    monkeypatch.setattr("backend.risk_model.eligibility.core_backend.use_neon_core_reads", lambda: True)
+    captured: dict[str, object] = {}
+
+    def _fake_build_eligibility_context(_data_db, *, dates=None, force_local=False):
+        captured["dates"] = list(dates or [])
+        captured["force_local"] = bool(force_local)
+        return object()
+
+    def _fake_structural_eligibility_for_date(_context, as_of_date):
+        frame = pd.DataFrame(
+            {
+                "is_structural_eligible": [True],
+                "exclusion_reason": [""],
+                "hq_country_code": ["US"],
+            },
+            index=["AAPL.OQ"],
+        )
+        return str(as_of_date), frame
+
+    monkeypatch.setattr(
+        "backend.risk_model.cuse_membership.build_eligibility_context",
+        _fake_build_eligibility_context,
+    )
+    monkeypatch.setattr(
+        "backend.risk_model.cuse_membership.structural_eligibility_for_date",
+        _fake_structural_eligibility_for_date,
+    )
 
     membership_payload, _stage_payload = build_cuse_membership_payloads(
         data_db=data_db,
@@ -820,6 +848,8 @@ def test_build_cuse_membership_payloads_force_local_eligibility_reads(tmp_path: 
         updated_at="2026-03-16T00:01:00Z",
     )
 
+    assert captured["dates"] == ["2026-03-13"]
+    assert captured["force_local"] is False
     assert membership_payload[0][3] == "native_core_candidate"
 
 

@@ -30,11 +30,11 @@ resource "terraform_data" "topology_contract" {
 
     precondition {
       condition = local.endpoint_mode != "run_app" || alltrue([
-        length(regexall("^https://[^/]+\\.run\\.app$", local.normalized_frontend_public_origin)) > 0,
-        length(regexall("^https://[^/]+\\.run\\.app$", local.normalized_frontend_backend_api_origin)) > 0,
-        length(regexall("^https://[^/]+\\.run\\.app$", local.normalized_frontend_backend_control_origin)) > 0,
+        length(regexall("^https://[^/]+$", local.normalized_frontend_public_origin)) > 0,
+        length(regexall("^https://[^/]+$", local.normalized_frontend_backend_api_origin)) > 0,
+        length(regexall("^https://[^/]+$", local.normalized_frontend_backend_control_origin)) > 0,
       ])
-      error_message = "endpoint_mode=run_app requires frontend_public_origin, frontend_backend_api_origin, and frontend_backend_control_origin to be absolute https://<service>.run.app origins with no path."
+      error_message = "endpoint_mode=run_app requires frontend_public_origin, frontend_backend_api_origin, and frontend_backend_control_origin to be absolute https origins with no path."
     }
 
     precondition {

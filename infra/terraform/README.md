@@ -55,7 +55,8 @@ The `prod` root currently owns:
   - control
 - Cloud Run Job definition for `serve-refresh`
 - Cloud Run IAM bindings for:
-  - public `run.app` smoke access
+  - the public frontend `run.app` entrypoint
+  - private frontend-to-backend invocation for `serve` and `control`
   - control-service invocation of the `serve-refresh` job
 - ingress prep for final-domain cutover:
   - global HTTPS load balancer
@@ -65,14 +66,20 @@ The `prod` root currently owns:
 
 Topology contract:
 - `endpoint_mode=custom_domains`
-  - current default
+  - rollback-only topology
   - requires `edge_enabled=true`
   - canonical public origins resolve to `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com`
 - `endpoint_mode=run_app`
-  - explicit alternate public contract
+  - current production topology
   - requires explicit `frontend_public_origin`, `frontend_backend_api_origin`, `frontend_backend_control_origin`, and pinned `*_image_ref` inputs
   - `edge_enabled=true` is the soak/rollback state
   - `edge_enabled=false` is the no-edge steady state
+- `private_backend_invocation_enabled=true`
+  - keeps the frontend public but repoints frontend runtime proxying to backend Cloud Run `run.app` service URLs
+  - enables frontend-to-backend Cloud Run IAM auth
+  - removes unauthenticated invoker access from `serve` and `control`
+  - grants the frontend service account invoker on `serve` and `control`
+  - current production also expects the Neon-auth env contract to be declared in Terraform for `frontend` and `serve`; image pins alone are not sufficient
 
 Important ingress rule:
 - the root now owns the edge through `module.edge`, with `moved` blocks preserving state addresses from the earlier root-level ingress resources
@@ -115,18 +122,20 @@ Build/deploy operator rule:
 Observability prep owned here:
 - `_Default` Cloud Logging retention
 - no public uptime checks by default, to preserve scale-to-zero behavior
-- `control.ceiora.com` remains an operator-token smoke target and is documented in the runbook instead of being a public uptime probe
+- backend smoke targets should use the `run.app` service URLs from Terraform outputs; `control.ceiora.com` and `api.ceiora.com` are no longer live DNS aliases
 
 Important Cloud Run billing rule:
 - when a service defines `template.containers.resources`, set `cpu_idle = true` explicitly to preserve request-based billing
 - direct `gcloud run deploy` workflows must also pass `--cpu-throttling`, or the live service can drift back to instance-based billing
+- Cloud Run v2 also persists a separate service-level `scaling` block in Terraform state; keep `scaling { min_instance_count = 0, manual_instance_count = 0 }` explicit on the services while leaving `template.scaling.max_instance_count` as the max-scale owner
 - rollout verification should include `terraform plan`, `make cloud-request-billing-check`, `make smoke-check`, and either `RUN_REFRESH_DISPATCH=1 make operator-check` or `TOPOLOGY_CHECK_RUN_REFRESH_DISPATCH=1 make cloud-topology-check`
 - for config-only Terraform changes in production, pin `frontend_image_ref`, `serve_image_ref`, and `control_image_ref` to the currently deployed image refs so the plan does not drift to `:latest`
 
 Important frontend rule:
-- the frontend image bakes `BACKEND_API_ORIGIN` at build time
-- the Terraform `prod` root therefore treats `frontend_backend_api_origin` and `frontend_image_ref` as explicit rollout inputs
-- the frontend Cloud Run service mirrors the same `BACKEND_API_ORIGIN` at runtime for Next server-side proxy helpers, but changing the service env alone does not retarget the compiled rewrite
+- the frontend no longer relies on a catch-all `next.config.js` `/api/*` rewrite
+- `BACKEND_API_ORIGIN` and `BACKEND_CONTROL_ORIGIN` are now runtime proxy inputs for owned App Router handlers
+- the Terraform `prod` root therefore still owns the frontend runtime proxy origins, but they are no longer compile-time rewrite inputs
+- because Firebase Hosting only forwards the `__session` cookie on Cloud Run rewrites, the shared app session must use the `__session` cookie name
 - the canonical topology-facing outputs are:
   - `endpoint_mode`
   - `edge_enabled`
@@ -142,7 +151,11 @@ Important frontend rule:
 - post-cutover operator capture/contract helpers now prefer the applied refs so a targeted control/job image hotfix does not silently get overwritten by a stale bundle
 - the frontend service must not hold `OPERATOR_API_TOKEN` or `EDITOR_API_TOKEN`; privileged frontend `/api/*` routes must forward caller-supplied auth headers instead of injecting server-side secrets
 - secret access bindings in the prod root should therefore exist only for secret-consuming backend services and jobs, not for the frontend service account
-- for final-domain rollout, the default stays `https://api.ceiora.com`
+- exception: the frontend still consumes the shared session and shared-login compatibility secrets during the current Neon-auth transition, so those frontend secret bindings remain intentional until the shared-auth rollback path is formally removed
+- for the current no-edge production shape, set:
+  - `frontend_public_origin=https://app.ceiora.com`
+  - `frontend_backend_api_origin=https://<serve-service>.run.app`
+  - `frontend_backend_control_origin=https://<control-service>.run.app`
 - the repo-owned Cloud Run image scripts mirror that contract:
   - `scripts/cloud/build_images.sh` / `scripts/cloud/build_and_push_images.sh` default `ENDPOINT_MODE=custom_domains`
   - `ENDPOINT_MODE=custom_domains` requires `BACKEND_API_ORIGIN=https://api.ceiora.com`; use `ENDPOINT_MODE=run_app` for explicit `run.app` frontend builds
@@ -168,10 +181,14 @@ Secret values are intentionally out of band. After the secret containers exist, 
 printf '%s' "$NEON_DATABASE_URL" | gcloud secrets versions add ceiora-prod-neon-database-url --data-file=-
 printf '%s' "$OPERATOR_API_TOKEN" | gcloud secrets versions add ceiora-prod-operator-api-token --data-file=-
 printf '%s' "$EDITOR_API_TOKEN" | gcloud secrets versions add ceiora-prod-editor-api-token --data-file=-
+printf '%s' "$CEIORA_SHARED_LOGIN_USERNAME" | gcloud secrets versions add ceiora-prod-shared-login-username --data-file=-
+printf '%s' "$CEIORA_SHARED_LOGIN_PASSWORD" | gcloud secrets versions add ceiora-prod-shared-login-password --data-file=-
+printf '%s' "$CEIORA_SESSION_SECRET" | gcloud secrets versions add ceiora-prod-session-secret --data-file=-
+printf '%s' "$CEIORA_PRIMARY_ACCOUNT_USERNAME" | gcloud secrets versions add ceiora-prod-primary-account-username --data-file=-
 ```
 
 Cloudflare DNS access is expected through the provider environment contract:
 
 ```bash
-export CLOUDFLARE_API_TOKEN="$(op item get 'Cloudflare - Ceiora Risk' --fields label=credential)"
+export CLOUDFLARE_API_TOKEN="$(op item get 'Cloudflare - Ceiora Risk' --fields label=credential --reveal)"
 ```

@@ -34,6 +34,7 @@ BACKEND_CONTEXT_PATHS=(
   "backend/services"
   "backend/universe"
   "backend/vendor"
+  "docs/reference/migrations/neon"
 )
 
 declare -a TEMP_CONTEXT_DIRS=()

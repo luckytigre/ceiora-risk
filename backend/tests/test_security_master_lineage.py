@@ -696,6 +696,122 @@ def test_raw_cross_section_history_uses_date_specific_runtime_eligibility(tmp_pa
     assert rows == [("2026-03-06", "TEST.OQ"), ("2026-03-13", "TEST.OQ")]
 
 
+def test_raw_cross_section_history_requires_date_appropriate_source_observation_when_available(
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    conn = sqlite3.connect(str(data_db))
+    ensure_cuse4_schema(conn)
+    conn.execute(
+        """
+        INSERT INTO security_registry (
+            ric, ticker, tracking_status, source, updated_at
+        ) VALUES ('LATE.OQ', 'LATE', 'active', 'security_registry_seed', '2026-03-01T00:00:00+00:00')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_policy_current (
+            ric, price_ingest_enabled, pit_fundamentals_enabled, pit_classification_enabled,
+            allow_cuse_native_core, allow_cuse_fundamental_projection, allow_cuse_returns_projection,
+            allow_cpar_core_target, allow_cpar_extended_target, policy_source, updated_at
+        ) VALUES (
+            'LATE.OQ', 1, 1, 1,
+            1, 0, 0,
+            1, 0, 'registry_seed_defaults', '2026-03-01T00:00:00+00:00'
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_taxonomy_current (
+            ric, instrument_kind, vehicle_structure, issuer_country_code, model_home_market_scope,
+            is_single_name_equity, classification_ready, source, updated_at
+        ) VALUES (
+            'LATE.OQ', 'single_name_equity', 'equity_security', 'US', 'us',
+            1, 1, 'security_registry_seed', '2026-03-01T00:00:00+00:00'
+        )
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO security_prices_eod (
+            ric, date, close, volume, currency, source, updated_at
+        ) VALUES (?, ?, ?, ?, 'USD', 'lseg_toolkit', ?)
+        """,
+        [
+            ("LATE.OQ", "2025-06-01", 80.0, 1000.0, "2025-06-01T00:00:00+00:00"),
+            ("LATE.OQ", "2026-03-06", 100.0, 1000.0, "2026-03-06T00:00:00+00:00"),
+            ("LATE.OQ", "2026-03-13", 101.0, 1000.0, "2026-03-13T00:00:00+00:00"),
+        ],
+    )
+    conn.execute(
+        """
+        INSERT INTO security_fundamentals_pit (
+            ric, as_of_date, stat_date, period_end_date, market_cap, shares_outstanding,
+            book_value_per_share, forward_eps, trailing_eps, total_debt, operating_cashflow,
+            revenue, total_assets, roe_pct, operating_margin_pct, common_name, source, job_run_id, updated_at
+        ) VALUES (
+            'LATE.OQ', '2026-02-27', '2026-02-27', '2025-12-31', 1000000.0, 100000.0,
+            5.0, 1.2, 1.1, 10000.0, 5000.0,
+            25000.0, 80000.0, 12.0, 10.0, 'Late Co', 'lseg_toolkit', 'job_1', '2026-03-01T00:00:00+00:00'
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_classification_pit (
+            ric, as_of_date, trbc_economic_sector, trbc_business_sector, trbc_industry_group, trbc_industry,
+            trbc_activity, hq_country_code, source, job_run_id, updated_at
+        ) VALUES (
+            'LATE.OQ', '2026-02-27', 'Technology', 'Software & IT Services', 'Software & IT Services', 'Software',
+            'Application Software', 'US', 'lseg_toolkit', 'job_1', '2026-03-01T00:00:00+00:00'
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO security_source_observation_daily (
+            as_of_date, ric, classification_ready, is_equity_eligible, price_ingest_enabled,
+            pit_fundamentals_enabled, pit_classification_enabled, has_price_history_as_of_date,
+            has_fundamentals_history_as_of_date, has_classification_history_as_of_date,
+            latest_price_date, latest_fundamentals_as_of_date, latest_classification_as_of_date,
+            source, job_run_id, updated_at
+        ) VALUES (
+            '2026-03-13', 'LATE.OQ', 1, 1, 1, 1, 1, 1, 1, 1,
+            '2026-03-13', '2026-02-27', '2026-02-27',
+            'source_observation', 'job_obs', '2026-03-13T00:00:00+00:00'
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    out = rebuild_raw_cross_section_history(
+        data_db,
+        start_date="2026-03-06",
+        end_date="2026-03-13",
+        frequency="weekly",
+    )
+
+    assert out["status"] == "ok"
+
+    conn = sqlite3.connect(str(data_db))
+    try:
+        rows = conn.execute(
+            """
+            SELECT as_of_date, ric
+            FROM barra_raw_cross_section_history
+            WHERE ric = 'LATE.OQ'
+            ORDER BY as_of_date
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert rows == [("2026-03-13", "LATE.OQ")]
+
+
 def test_raw_cross_section_history_retains_non_us_rows_for_fundamental_projection(tmp_path: Path) -> None:
     data_db = tmp_path / "data.db"
     conn = sqlite3.connect(str(data_db))

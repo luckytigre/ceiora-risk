@@ -58,7 +58,7 @@ export default function CparRiskFactorSummaryCard({
           style={{
             fontSize: 10,
             letterSpacing: "0.04em",
-            color: "rgba(169, 182, 210, 0.5)",
+            color: "var(--text-muted)",
             fontVariantNumeric: "tabular-nums",
           }}
         >

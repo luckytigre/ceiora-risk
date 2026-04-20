@@ -66,14 +66,15 @@ def run_source_stage(
         if progress_callback is not None:
             progress_callback({"message": "Pulling latest source data from LSEG", "progress_kind": "io"})
         latest_price_date_before_ingest = _latest_price_date(data_db)
+        # Daily ingest is price-led; closed-month PIT repair owns fundamentals/classification backfills.
         ingest = download_from_lseg_fn(
             db_path=data_db,
             as_of_date=as_of_date,
             shard_count=1,
             shard_index=0,
-            write_fundamentals=bool(config_module.SOURCE_DAILY_WRITE_FUNDAMENTALS),
+            write_fundamentals=False,
             write_prices=True,
-            write_classification=bool(config_module.SOURCE_DAILY_WRITE_CLASSIFICATION),
+            write_classification=False,
         )
         price_gap_repair = {"status": "skipped", "reason": "ingest_not_ok"}
         pit_gap_repair = {"status": "skipped", "reason": "ingest_not_ok"}

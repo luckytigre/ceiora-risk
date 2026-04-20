@@ -13,6 +13,15 @@ import {
   type ScriptableContext,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import { useAppSettings } from "./AppSettingsContext";
+import {
+  alphaColor,
+  chartGridColor,
+  chartLongColor,
+  chartShortColor,
+  chartTextColor,
+  tooltipOptions,
+} from "@/lib/charts/chartTheme";
 import type { WeeklyPricePoint } from "@/lib/types/cuse4";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip);
@@ -40,6 +49,7 @@ export default function TickerWeeklyPriceChart({
   variant = "full",
   className = "",
 }: TickerWeeklyPriceChartProps) {
+  const { themeMode } = useAppSettings();
   const isSparkline = variant === "sparkline";
 
   if (!points || points.length === 0) {
@@ -55,7 +65,7 @@ export default function TickerWeeklyPriceChart({
   const first = values[0] ?? 0;
   const latest = values[values.length - 1] ?? 0;
   const isPositive = latest >= first;
-  const lineColor = isPositive ? "#6bcf9a" : "#e0577f";
+  const lineColor = isPositive ? chartLongColor() : chartShortColor();
 
   const data: ChartData<"line", number[], string> = {
     labels,
@@ -68,7 +78,7 @@ export default function TickerWeeklyPriceChart({
         pointRadius: 0,
         pointHoverRadius: isSparkline ? 2 : 3,
         pointHoverBackgroundColor: lineColor,
-        pointHoverBorderColor: "#fff",
+        pointHoverBorderColor: chartTextColor("primary"),
         pointHoverBorderWidth: 1.5,
         tension: isSparkline ? 0.28 : 0.22,
         fill: true,
@@ -77,15 +87,9 @@ export default function TickerWeeklyPriceChart({
           const { ctx: canvasCtx, chartArea } = chart;
           if (!chartArea) return "transparent";
           const gradient = canvasCtx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          if (isPositive) {
-            gradient.addColorStop(0, "rgba(79, 160, 116, 0.45)");
-            gradient.addColorStop(0.4, "rgba(79, 160, 116, 0.12)");
-            gradient.addColorStop(1, "rgba(79, 160, 116, 0.02)");
-          } else {
-            gradient.addColorStop(0, "rgba(196, 63, 116, 0.02)");
-            gradient.addColorStop(0.6, "rgba(196, 63, 116, 0.12)");
-            gradient.addColorStop(1, "rgba(196, 63, 116, 0.45)");
-          }
+          gradient.addColorStop(0, alphaColor(lineColor, isPositive ? 0.45 : 0.02));
+          gradient.addColorStop(isPositive ? 0.4 : 0.6, alphaColor(lineColor, 0.12));
+          gradient.addColorStop(1, alphaColor(lineColor, isPositive ? 0.02 : 0.45));
           return gradient;
         },
       },
@@ -102,13 +106,8 @@ export default function TickerWeeklyPriceChart({
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "rgba(20, 22, 30, 0.92)",
-        borderColor: "rgba(154, 171, 214, 0.18)",
-        borderWidth: 1,
-        cornerRadius: 4,
+        ...tooltipOptions(),
         padding: { top: 6, bottom: 6, left: isSparkline ? 8 : 10, right: isSparkline ? 8 : 10 },
-        titleColor: "rgba(232, 237, 249, 0.6)",
-        bodyColor: "#e8edf9",
         titleFont: { size: isSparkline ? 9 : 10, weight: "normal" as const },
         bodyFont: { size: isSparkline ? 10 : 11, weight: 500 },
         displayColors: false,
@@ -124,7 +123,7 @@ export default function TickerWeeklyPriceChart({
         border: { display: false },
         grid: { display: false },
         ticks: {
-          color: "rgba(169, 182, 210, 0.5)",
+          color: chartTextColor("secondary", 0.5),
           autoSkip: true,
           maxTicksLimit: 6,
           callback: (_value, idx) => {
@@ -137,9 +136,9 @@ export default function TickerWeeklyPriceChart({
       y: {
         display: !isSparkline,
         border: { display: false },
-        grid: { color: "rgba(154, 171, 214, 0.10)" },
+        grid: { color: chartGridColor(0.45) },
         ticks: {
-          color: "rgba(169, 182, 210, 0.5)",
+          color: chartTextColor("secondary", 0.5),
           callback: (v) => formatCurrency(Number(v)),
           font: { size: 9 },
         },
@@ -151,7 +150,7 @@ export default function TickerWeeklyPriceChart({
     <div
       className={`detail-history-chart ticker-weekly-history-chart${isSparkline ? " sparkline" : ""}${className ? ` ${className}` : ""}`}
     >
-      <Line data={data} options={options} />
+      <Line key={`ticker-weekly-${themeMode}`} data={data} options={options} />
     </div>
   );
 }

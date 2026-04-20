@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useEffect, useState, useMemo, useCallback } from "react";
+import { alphaColor, chartLongColor, chartShortColor, chartTextColor } from "@/lib/charts/chartTheme";
+import { useAppSettings } from "@/components/AppSettingsContext";
 import type { CovMatrix, FactorCatalogEntry } from "@/lib/types/analytics";
 import { factorDisplayName, factorFamily, shortFactorLabel } from "@/lib/factorLabels";
 
@@ -21,19 +23,8 @@ const STYLE_ORDER: string[] = [
 
 function corrColorStr(v: number): string {
   const clamped = Math.max(-1, Math.min(1, v));
-  const t = Math.abs(clamped);
-  const s = t * t;
-  if (clamped >= 0) {
-    const r = Math.round(14 + (59 - 14) * s);
-    const g = Math.round(19 + (169 - 19) * s);
-    const b = Math.round(33 + (225 - 33) * s);
-    return `rgb(${r}, ${g}, ${b})`;
-  } else {
-    const r = Math.round(14 + (204 - 14) * s);
-    const g = Math.round(19 + (53 - 19) * s);
-    const b = Math.round(33 + (88 - 33) * s);
-    return `rgb(${r}, ${g}, ${b})`;
-  }
+  const alpha = 0.12 + (Math.abs(clamped) ** 2) * 0.76;
+  return clamped >= 0 ? alphaColor(chartLongColor(), alpha) : alphaColor(chartShortColor(), alpha);
 }
 
 const FAMILY_ORDER: Record<string, number> = {
@@ -147,7 +138,7 @@ function drawHeatmap(
 
       // Hover highlight outline
       if (hover && hover.i === i && hover.j === j) {
-        ctx.strokeStyle = "rgba(232, 237, 249, 0.8)";
+        ctx.strokeStyle = chartTextColor("primary", 0.8);
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(rx, ry - d);
@@ -161,7 +152,7 @@ function drawHeatmap(
       // Correlation text
       if (cellSize >= 22) {
         const absVal = Math.abs(val);
-        ctx.fillStyle = absVal > 0.4 ? "rgba(232, 237, 249, 0.88)" : "rgba(169, 182, 210, 0.5)";
+        ctx.fillStyle = absVal > 0.4 ? chartTextColor("primary", 0.88) : chartTextColor("secondary", 0.5);
         ctx.font = `500 ${Math.max(7, cellSize * 0.26)}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -181,7 +172,7 @@ function drawHeatmap(
     const rx = cx0 + (0 + j - (n - 1)) * step;
     const ry = cy0 + j * step;
     const active = j === leftHighlight;
-    ctx.fillStyle = active ? "rgba(232, 237, 249, 1)" : "rgba(232, 237, 249, 0.45)";
+    ctx.fillStyle = active ? chartTextColor("primary") : chartTextColor("primary", 0.45);
     ctx.font = active
       ? `600 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
       : `${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
@@ -195,7 +186,7 @@ function drawHeatmap(
     const rx = cx0 + i * step;
     const ry = cy0 + ((n - 1) - i) * step;
     const active = i === rightHighlight;
-    ctx.fillStyle = active ? "rgba(232, 237, 249, 1)" : "rgba(232, 237, 249, 0.45)";
+    ctx.fillStyle = active ? chartTextColor("primary") : chartTextColor("primary", 0.45);
     ctx.font = active
       ? `600 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
       : `${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
@@ -204,6 +195,7 @@ function drawHeatmap(
 }
 
 export default function CovarianceHeatmap({ data, factorCatalog, factorScope = "style" }: CovarianceHeatmapProps) {
+  const { themeMode } = useAppSettings();
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const geoRef = useRef<Geometry | null>(null);
@@ -268,7 +260,7 @@ export default function CovarianceHeatmap({ data, factorCatalog, factorScope = "
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     drawHeatmap(ctx, geo, filtered.correlation, null);
-  }, [filtered, containerW, factorCatalog]);
+  }, [filtered, containerW, factorCatalog, themeMode]);
 
   // Redraw on hover change
   useEffect(() => {
@@ -278,7 +270,7 @@ export default function CovarianceHeatmap({ data, factorCatalog, factorScope = "
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     drawHeatmap(ctx, geo, filtered.correlation, hover);
-  }, [hover, filtered]);
+  }, [hover, filtered, themeMode]);
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -299,7 +291,7 @@ export default function CovarianceHeatmap({ data, factorCatalog, factorScope = "
   const onMouseLeave = useCallback(() => setHover(null), []);
 
   if (!data.factors?.length) {
-    return <div style={{ color: "rgba(169, 182, 210, 0.6)", fontSize: 12 }}>No correlation data available</div>;
+    return <div style={{ color: "var(--text-muted)", fontSize: 12 }}>No correlation data available</div>;
   }
 
   return (

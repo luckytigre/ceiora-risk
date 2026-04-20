@@ -11,6 +11,7 @@ import {
   useOperatorStatus,
   useRisk,
 } from "@/hooks/useCuse4Api";
+import { useOperatorTokenAvailable } from "@/hooks/useOperatorTokenAvailable";
 import OperatorStatusSection from "@/features/health/OperatorStatusSection";
 import { formatAsOfDate } from "@/lib/cuse4Truth";
 import { runServeRefreshAndRevalidate } from "@/lib/cuse4Refresh";
@@ -36,15 +37,16 @@ export default function HealthPage() {
   const [loadDiagnostics, setLoadDiagnostics] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [dismissUpdatePrompt, setDismissUpdatePrompt] = useState(false);
+  const operatorTokenAvailable = useOperatorTokenAvailable();
   const { data, isLoading, error } = useHealthDiagnostics(loadDiagnostics);
   const {
     data: operatorData,
     isLoading: operatorLoading,
     error: operatorError,
-  } = useOperatorStatus();
+  } = useOperatorStatus(operatorTokenAvailable);
   const { data: riskData, isLoading: riskLoading, error: riskError } = useRisk();
 
-  if (operatorLoading && !operatorData && riskLoading && !riskData && !loadDiagnostics) {
+  if (operatorTokenAvailable && operatorLoading && !operatorData && riskLoading && !riskData && !loadDiagnostics) {
     return <AnalyticsLoadingViz message="Loading operator health..." />;
   }
   if (isLoading && !operatorData && !riskData) {
@@ -77,7 +79,9 @@ export default function HealthPage() {
   const coreRefreshActionAvailable = coreDue && !onlyServeRefreshAllowed;
   const canRunRefreshAction = servedLoadingsBehind || coreRefreshActionAvailable;
   const updateAvailable = Boolean(
-    !dismissUpdatePrompt
+    operatorTokenAvailable
+    && canRunRefreshAction
+    && !dismissUpdatePrompt
     && (servedLoadingsBehind || coreDue),
   );
 
@@ -99,9 +103,9 @@ export default function HealthPage() {
     }
   }
 
-  const operatorSection = (
-    <OperatorStatusSection data={operatorData} error={operatorError} isLoading={operatorLoading} />
-  );
+  const operatorSection = operatorTokenAvailable
+    ? <OperatorStatusSection data={operatorData} error={operatorError} isLoading={operatorLoading} />
+    : null;
   const modelSummary = (
     <div className="chart-card">
       <h3 style={{ marginBottom: 6 }}>Current Core Risk State</h3>

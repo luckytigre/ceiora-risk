@@ -530,7 +530,7 @@ def test_pipeline_rebuilds_universe_loadings_when_local_source_archive_requested
 def test_cached_universe_loadings_reuse_requires_matching_risk_engine_and_source_dates() -> None:
     ok, reason = pipeline._can_reuse_cached_universe_loadings(
         {
-            "by_ticker": {"AAPL": {"ticker": "AAPL"}},
+            "by_ticker": {"AAPL": {"ticker": "AAPL", "model_status": "core_estimated"}},
             "source_dates": {"prices_asof": "2026-03-07"},
             "risk_engine": {
                 "status": "ok",
@@ -561,7 +561,7 @@ def test_cached_universe_loadings_reuse_requires_matching_risk_engine_and_source
 def test_cached_universe_loadings_reuse_accepts_legacy_source_dates_without_explicit_aliases() -> None:
     ok, reason = pipeline._can_reuse_cached_universe_loadings(
         {
-            "by_ticker": {"AAPL": {"ticker": "AAPL"}},
+            "by_ticker": {"AAPL": {"ticker": "AAPL", "model_status": "core_estimated"}},
             "source_dates": {
                 "fundamentals_asof": "2026-03-07",
                 "classification_asof": "2026-03-07",
@@ -598,6 +598,43 @@ def test_cached_universe_loadings_reuse_accepts_legacy_source_dates_without_expl
 
     assert ok is True
     assert reason == "source_and_risk_engine_match"
+
+
+def test_cached_universe_loadings_reuse_rejects_payload_with_no_modeled_tickers() -> None:
+    ok, reason = pipeline._can_reuse_cached_universe_loadings(
+        {
+            "by_ticker": {
+                "SPY": {
+                    "ticker": "SPY",
+                    "model_status": "ineligible",
+                    "exposure_origin": "projected_returns",
+                }
+            },
+            "source_dates": {"prices_asof": "2026-03-07"},
+            "risk_engine": {
+                "status": "ok",
+                "method_version": "v1",
+                "last_recompute_date": "2026-03-07",
+                "factor_returns_latest_date": "2026-03-07",
+                "cross_section_min_age_days": 7,
+                "lookback_days": 504,
+                "specific_risk_ticker_count": 1,
+            },
+        },
+        source_dates={"prices_asof": "2026-03-07"},
+        risk_engine_meta={
+            "status": "ok",
+            "method_version": "v1",
+            "last_recompute_date": "2026-03-07",
+            "factor_returns_latest_date": "2026-03-07",
+            "cross_section_min_age_days": 7,
+            "lookback_days": 504,
+            "specific_risk_ticker_count": 1,
+        },
+    )
+
+    assert ok is False
+    assert reason == "no_modeled_tickers"
 
 
 def test_pipeline_fallback_light_refresh_skips_model_outputs_when_risk_engine_is_reused(
@@ -1855,7 +1892,17 @@ def test_run_refresh_publish_only_republishes_cached_payloads_without_recompute(
         "exposures": {"run_id": "old_run", "snapshot_id": "old_snapshot"},
         "health_diagnostics": {"status": "ok", "run_id": "old_run", "snapshot_id": "old_snapshot"},
         "universe_factors": {"run_id": "old_run", "snapshot_id": "old_snapshot"},
-        "universe_loadings": {"run_id": "old_run", "snapshot_id": "old_snapshot"},
+        "universe_loadings": {
+            "run_id": "old_run",
+            "snapshot_id": "old_snapshot",
+            "by_ticker": {
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "model_status": "core_estimated",
+                    "exposure_origin": "native",
+                }
+            },
+        },
     }
 
     monkeypatch.setattr(pipeline.publish_payloads, "load_publishable_payloads", lambda **kwargs: (dict(payloads), []))
@@ -1887,6 +1934,107 @@ def test_run_refresh_publish_only_republishes_cached_payloads_without_recompute(
     assert stamped_payloads["risk"]["run_id"] == out["run_id"]
     assert stamped_payloads["exposures"]["snapshot_id"] == out["snapshot_id"]
     assert stamped_payloads["refresh_meta"]["run_id"] == out["run_id"]
+
+
+def test_run_refresh_publish_only_rejects_broken_universe_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads = {
+        "eligibility": {},
+        "exposures": {},
+        "health_diagnostics": {},
+        "model_sanity": {},
+        "portfolio": {"positions": [], "position_count": 0, "total_value": 0.0},
+        "refresh_meta": {"risk_engine": {"core_state_through_date": "2026-03-20"}},
+        "risk": {"risk_engine": {"core_state_through_date": "2026-03-20"}},
+        "risk_engine_cov": {},
+        "risk_engine_specific_risk": {},
+        "universe_factors": {},
+        "universe_loadings": {
+            "by_ticker": {
+                "SPY": {
+                    "ticker": "SPY",
+                    "model_status": "ineligible",
+                    "exposure_origin": "projected_returns",
+                }
+            }
+        },
+    }
+
+    monkeypatch.setattr(
+        pipeline.publish_payloads,
+        "load_publishable_payloads",
+        lambda **kwargs: (dict(payloads), []),
+    )
+    monkeypatch.setattr(
+        pipeline.publish_payloads,
+        "restamp_publishable_payloads",
+        lambda payloads, **kwargs: dict(payloads),
+    )
+    monkeypatch.setattr(
+        pipeline.serving_outputs,
+        "persist_current_payloads",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("publish should fail before persistence")),
+    )
+
+    with pytest.raises(RuntimeError, match="Publish-only universe payload integrity failed: no_modeled_tickers"):
+        pipeline.run_refresh(mode="publish")
+
+
+def test_run_refresh_publish_only_rejects_modeled_universe_regression_vs_live(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads = {
+        "eligibility": {},
+        "exposures": {},
+        "health_diagnostics": {},
+        "model_sanity": {},
+        "portfolio": {"positions": [], "position_count": 0, "total_value": 0.0},
+        "refresh_meta": {"risk_engine": {"core_state_through_date": "2026-03-20"}},
+        "risk": {"risk_engine": {"core_state_through_date": "2026-03-20"}},
+        "risk_engine_cov": {},
+        "risk_engine_specific_risk": {},
+        "universe_factors": {},
+        "universe_loadings": {
+            "by_ticker": {
+                "SPY": {
+                    "ticker": "SPY",
+                    "model_status": "core_estimated",
+                    "exposure_origin": "native",
+                }
+            }
+        },
+    }
+    live_universe = {
+        "by_ticker": {
+            "AAPL": {"ticker": "AAPL", "model_status": "core_estimated", "exposure_origin": "native"},
+            "ASML": {"ticker": "ASML", "model_status": "projected_only", "exposure_origin": "projected_fundamental"},
+        }
+    }
+
+    monkeypatch.setattr(
+        pipeline.publish_payloads,
+        "load_publishable_payloads",
+        lambda **kwargs: (dict(payloads), []),
+    )
+    monkeypatch.setattr(
+        pipeline.publish_payloads,
+        "restamp_publishable_payloads",
+        lambda payloads, **kwargs: dict(payloads),
+    )
+    monkeypatch.setattr(
+        pipeline.serving_outputs,
+        "load_current_payload",
+        lambda payload_name: dict(live_universe) if payload_name == "universe_loadings" else None,
+    )
+    monkeypatch.setattr(
+        pipeline.serving_outputs,
+        "persist_current_payloads",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("publish should fail before persistence")),
+    )
+
+    with pytest.raises(RuntimeError, match="Publish-only universe payload regressed versus the current live modeled snapshot"):
+        pipeline.run_refresh(mode="publish")
 
 
 def test_run_refresh_publishes_before_deep_health_diagnostics(

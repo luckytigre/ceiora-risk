@@ -67,34 +67,48 @@ export default function CparWhatIfPreviewPanel({
   showResults: boolean;
   toggleRef: Ref<HTMLDivElement>;
 }) {
-  if (!previewData) {
-    return (
-      <div className="whatif-results-placeholder">
-        Stage one or more trade deltas and run <strong>Preview</strong> to turn this page into the full current-versus-hypothetical cPAR analysis.
-      </div>
-    );
-  }
-
-  const currentCatalog = factorCatalog(previewData.current);
-  const hypotheticalCatalog = factorCatalog(previewData.hypothetical);
-  const currentExposureModes = previewData.current.display_exposure_modes ?? previewData.current.exposure_modes;
-  const hypotheticalExposureModes = previewData.hypothetical.display_exposure_modes ?? previewData.hypothetical.exposure_modes;
-  const factorDeltaModes = previewData.diff.display_factor_deltas ?? previewData.diff.factor_deltas;
-  const currentFactors = chartFactors(currentExposureModes[mode]);
-  const hypotheticalFactors = chartFactors(hypotheticalExposureModes[mode]);
-  const methodByRic = new Map<string, { label: string; tone: MethodLabelTone }>();
-  for (const row of [...previewData.current.positions, ...previewData.hypothetical.positions]) {
-    const descriptor = describeCparPositionMethod(row.coverage, row.fit_status);
-    methodByRic.set(row.ric, { label: descriptor.label, tone: descriptor.tone });
-  }
+  const currentCatalog = useMemo(
+    () => (previewData ? factorCatalog(previewData.current) : []),
+    [previewData],
+  );
+  const hypotheticalCatalog = useMemo(
+    () => (previewData ? factorCatalog(previewData.hypothetical) : []),
+    [previewData],
+  );
+  const currentExposureRows = previewData
+    ? (previewData.current.display_exposure_modes ?? previewData.current.exposure_modes)[mode]
+    : [];
+  const hypotheticalExposureRows = previewData
+    ? (previewData.hypothetical.display_exposure_modes ?? previewData.hypothetical.exposure_modes)[mode]
+    : [];
+  const factorDeltaRows = previewData
+    ? (previewData.diff.display_factor_deltas ?? previewData.diff.factor_deltas)[mode]
+    : [];
+  const currentFactors = useMemo(
+    () => chartFactors(currentExposureRows),
+    [currentExposureRows],
+  );
+  const hypotheticalFactors = useMemo(
+    () => chartFactors(hypotheticalExposureRows),
+    [hypotheticalExposureRows],
+  );
+  const methodByRic = useMemo(() => {
+    const methods = new Map<string, { label: string; tone: MethodLabelTone }>();
+    if (!previewData) return methods;
+    for (const row of [...previewData.current.positions, ...previewData.hypothetical.positions]) {
+      const descriptor = describeCparPositionMethod(row.coverage, row.fit_status);
+      methods.set(row.ric, { label: descriptor.label, tone: descriptor.tone });
+    }
+    return methods;
+  }, [previewData]);
   const riskShareRows = useMemo(
     () => (["market", "industry", "style", "idio"] as const).map((bucket) => ({
       bucket,
-      current: previewData.current.risk_shares[bucket],
-      hypothetical: previewData.hypothetical.risk_shares[bucket],
-      delta: previewData.diff.risk_shares[bucket],
+      current: previewData?.current.risk_shares[bucket] ?? 0,
+      hypothetical: previewData?.hypothetical.risk_shares[bucket] ?? 0,
+      delta: previewData?.diff.risk_shares[bucket] ?? 0,
     })),
-    [previewData.current.risk_shares, previewData.diff.risk_shares, previewData.hypothetical.risk_shares],
+    [previewData],
   );
   const riskShareComparators = useMemo<Record<RiskShareSortKey, (left: (typeof riskShareRows)[number], right: (typeof riskShareRows)[number]) => number>>(
     () => ({
@@ -114,7 +128,7 @@ export default function CparWhatIfPreviewPanel({
       hypothetical: (left, right) => compareNumber(left.hypothetical_quantity, right.hypothetical_quantity),
       delta: (left, right) => compareNumber(left.delta_quantity, right.delta_quantity),
     }),
-    [methodByRic, previewData.holding_deltas],
+    [methodByRic],
   );
   const factorDeltaComparators = useMemo<Record<FactorDeltaSortKey, (left: CparFactorDeltaRow, right: CparFactorDeltaRow) => number>>(
     () => ({
@@ -123,7 +137,7 @@ export default function CparWhatIfPreviewPanel({
       hypothetical: (left, right) => compareNumber(left.hypothetical, right.hypothetical),
       delta: (left, right) => compareNumber(left.delta, right.delta),
     }),
-    [currentCatalog, factorDeltaModes, mode],
+    [currentCatalog],
   );
   const { sortedRows: sortedRiskShareRows, handleSort: handleRiskShareSort, arrow: riskShareArrow } = useSortableRows<
     (typeof riskShareRows)[number],
@@ -136,16 +150,29 @@ export default function CparWhatIfPreviewPanel({
     CparHoldingDeltaRow,
     HoldingDeltaSortKey
   >({
-    rows: previewData.holding_deltas,
+    rows: previewData?.holding_deltas ?? [],
     comparators: holdingDeltaComparators,
   });
   const { sortedRows: sortedFactorDeltas, handleSort: handleFactorDeltaSort, arrow: factorDeltaArrow } = useSortableRows<
     CparFactorDeltaRow,
     FactorDeltaSortKey
   >({
-    rows: factorDeltaModes[mode],
+    rows: factorDeltaRows,
     comparators: factorDeltaComparators,
   });
+
+  if (!previewData) {
+    return (
+      <div className="whatif-results-placeholder">
+        Stage one or more trade deltas and run <strong>Preview</strong> to turn this page into the full current-versus-hypothetical cPAR analysis.
+      </div>
+    );
+  }
+
+  const previewScope = previewData.preview_scope;
+  const previewAccountIds = previewScope?.account_ids ?? [];
+  const previewScopeLabel = previewAccountIds.length <= 1 ? "staged account" : "staged accounts";
+  const modeLabel = CPAR_EXPLORE_MODES.find((entry) => entry.key === mode)?.label ?? mode;
 
   return (
     <>
@@ -174,7 +201,10 @@ export default function CparWhatIfPreviewPanel({
         <div className="whatif-results-body">
           <div className="section-subtitle" style={{ marginBottom: 12 }}>
             Current and hypothetical sides are projected through the active cPAR package dated {formatCparPackageDate(previewData.package_date)}.
-            Holdings stay aggregate across all accounts, while staged rows preserve their account-level edits.
+            {previewAccountIds.length > 0
+              ? ` Preview scope: ${previewAccountIds.join(", ")}.`
+              : ""}
+            {" "}The comparison book is limited to the {previewScopeLabel}, while staged rows preserve their account-level edits.
           </div>
           <div className="explore-mode-toggle">
             {CPAR_EXPLORE_MODES.map((entry) => (
@@ -191,7 +221,7 @@ export default function CparWhatIfPreviewPanel({
 
           <div className="explore-detail-grid">
             <div className="chart-card">
-              <span className="explore-compare-label">Current Aggregate Book</span>
+              <span className="explore-compare-label">Current Staged-Account Book ({modeLabel})</span>
               <CparExposureBarChart
                 factors={currentFactors}
                 mode={mode}
@@ -199,7 +229,7 @@ export default function CparWhatIfPreviewPanel({
               />
             </div>
             <div className="chart-card">
-              <span className="explore-compare-label">Hypothetical Aggregate Book</span>
+              <span className="explore-compare-label">Hypothetical Staged-Account Book ({modeLabel})</span>
               <CparExposureBarChart
                 factors={hypotheticalFactors}
                 mode={mode}
@@ -211,14 +241,14 @@ export default function CparWhatIfPreviewPanel({
 
           <div className="explore-whatif-grid">
             <div className="dash-table">
-              <h4 className="explore-whatif-table-title">Risk Share Delta</h4>
+              <h4 className="explore-whatif-table-title">Risk Share Delta (% of total risk)</h4>
               <table>
                 <thead>
                   <tr>
                     <th onClick={() => handleRiskShareSort("bucket")}>Bucket{riskShareArrow("bucket")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("current")}>Current{riskShareArrow("current")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("hypothetical")}>Hypothetical{riskShareArrow("hypothetical")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("delta")}>Delta{riskShareArrow("delta")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("current")}>Current Share{riskShareArrow("current")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("hypothetical")}>Hypothetical Share{riskShareArrow("hypothetical")}</th>
+                    <th className="text-right" onClick={() => handleRiskShareSort("delta")}>Share Delta{riskShareArrow("delta")}</th>
                   </tr>
                 </thead>
                 <tbody>

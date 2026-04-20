@@ -32,7 +32,9 @@ interface UseWhatIfScenarioLabArgs {
   priceMap: Map<string, number>;
   searchQuery: string;
   searchResults: UniverseSearchItem[];
+  searchSettled: boolean;
   onSelectTicker: (ticker: string) => void;
+  onPreviewTicker: (ticker: string) => void;
 }
 
 export function useWhatIfScenarioLab({
@@ -40,7 +42,9 @@ export function useWhatIfScenarioLab({
   priceMap,
   searchQuery,
   searchResults,
+  searchSettled,
   onSelectTicker,
+  onPreviewTicker,
 }: UseWhatIfScenarioLabArgs) {
   const { data: accountsData } = useHoldingsAccounts();
   const { data: holdingsData } = useHoldingsPositions(null);
@@ -70,6 +74,14 @@ export function useWhatIfScenarioLab({
   const holdingsRows = holdingsData?.positions ?? [];
   const selectedTicker = normalizeTicker(item?.ticker);
   const scenarioTicker = normalizeTicker(searchQuery) || selectedTicker;
+  const scenarioUniverseRow = useMemo(() => {
+    const cleanTicker = normalizeTicker(searchQuery) || selectedTicker;
+    if (!cleanTicker) return null;
+    const detailRow = normalizeTicker(item?.ticker) === cleanTicker ? item : null;
+    const searchRow = searchResults.find((row) => normalizeTicker(row.ticker) === cleanTicker) ?? null;
+    if (detailRow && detailRow.whatif_ready !== false) return detailRow;
+    return searchRow ?? detailRow;
+  }, [item, searchQuery, searchResults, selectedTicker]);
   const entryPrice = priceMap.get(scenarioTicker) ?? null;
   const entryQty = parseQty(quantityText);
   const entryMv = entryPrice != null && entryQty != null ? entryQty * entryPrice : null;
@@ -95,18 +107,33 @@ export function useWhatIfScenarioLab({
 
   const selectFromTypeahead = useCallback(
     (ticker: string) => {
+      if (!searchSettled) return;
+      onPreviewTicker(ticker);
       onSelectTicker(ticker);
       setTickerFocused(false);
       setDropdownOpen(false);
       setActiveIndex(-1);
     },
-    [onSelectTicker],
+    [onPreviewTicker, onSelectTicker, searchSettled],
   );
+
+  useEffect(() => {
+    if (!searchSettled) {
+      setActiveIndex(-1);
+      return;
+    }
+    if (!dropdownOpen || activeIndex < 0 || activeIndex >= searchResults.length) return;
+    onPreviewTicker(searchResults[activeIndex].ticker);
+  }, [activeIndex, dropdownOpen, onPreviewTicker, searchResults, searchSettled]);
 
   const handleTickerKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
       if (!dropdownOpen || searchResults.length === 0) {
         if (e.key === "Enter") {
+          if (!searchSettled) {
+            e.preventDefault();
+            return;
+          }
           const direct = searchQuery.trim().toUpperCase();
           if (direct) selectFromTypeahead(direct);
         }
@@ -120,8 +147,17 @@ export function useWhatIfScenarioLab({
         setActiveIndex((prev) => (prev > 0 ? prev - 1 : searchResults.length - 1));
       } else if (e.key === "Enter") {
         e.preventDefault();
+        if (!searchSettled) return;
         if (activeIndex >= 0 && activeIndex < searchResults.length) {
-          selectFromTypeahead(searchResults[activeIndex].ticker);
+          const activeRow = searchResults[activeIndex];
+          if (activeRow.whatif_ready === false) {
+            setErrorMessage(
+              activeRow.whatif_ready_detail
+              || "This security does not currently have a published cUSE modeled surface that what-if preview can use.",
+            );
+            return;
+          }
+          selectFromTypeahead(activeRow.ticker);
         } else {
           const direct = searchQuery.trim().toUpperCase();
           if (direct) selectFromTypeahead(direct);
@@ -130,7 +166,7 @@ export function useWhatIfScenarioLab({
         setDropdownOpen(false);
       }
     },
-    [activeIndex, dropdownOpen, searchQuery, searchResults, selectFromTypeahead],
+    [activeIndex, dropdownOpen, searchQuery, searchResults, searchSettled, selectFromTypeahead],
   );
 
   const handleTickerFocus = useCallback(() => {
@@ -163,7 +199,7 @@ export function useWhatIfScenarioLab({
   const liveQuantityByScenarioKey = useMemo(() => {
     const out = new Map<string, number>();
     for (const row of holdingsRows) {
-      const key = scenarioKey(row.account_id, row.ticker);
+      const key = scenarioKey(row.account_id, row.ticker, row.ric);
       out.set(key, Number(out.get(key) || 0) + Number(row.quantity || 0));
     }
     return out;
@@ -171,14 +207,15 @@ export function useWhatIfScenarioLab({
 
   useEffect(() => {
     if (!accountId) return;
-    const key = scenarioKey(accountId, scenarioTicker);
+    const scenarioRic = scenarioUniverseRow && "ric" in scenarioUniverseRow ? (scenarioUniverseRow.ric ?? null) : null;
+    const key = scenarioKey(accountId, scenarioTicker, scenarioRic);
     const staged = scenarioDrafts[key];
     if (staged) {
       setQuantityText(staged.quantity_text);
       return;
     }
     setQuantityText("");
-  }, [accountId, scenarioDrafts, scenarioTicker]);
+  }, [accountId, scenarioDrafts, scenarioTicker, scenarioUniverseRow]);
 
   const scenarioRows = useMemo(
     () =>
@@ -227,23 +264,36 @@ export function useWhatIfScenarioLab({
       setErrorMessage("Enter a ticker for the what-if row.");
       return;
     }
-    if (qty === null) {
-      setErrorMessage("Quantity must be numeric.");
+    if (!scenarioUniverseRow || normalizeTicker(scenarioUniverseRow.ticker) !== ticker) {
+      setErrorMessage("Wait for typeahead to resolve this ticker before staging the what-if row.");
       return;
     }
-    const key = scenarioKey(account, ticker);
+    if (scenarioUniverseRow && scenarioUniverseRow.whatif_ready === false) {
+      setErrorMessage(
+        scenarioUniverseRow.whatif_ready_detail
+        || "This ticker is searchable, but it does not currently have a published cUSE modeled surface for what-if preview.",
+      );
+      return;
+    }
+    if (qty === null) {
+      setErrorMessage("Quantity must be numeric and non-zero.");
+      return;
+    }
+    const scenarioRic = "ric" in scenarioUniverseRow ? (scenarioUniverseRow.ric ?? null) : null;
+    const key = scenarioKey(account, ticker, scenarioRic);
     setScenarioDrafts((prev) => ({
       ...prev,
       [key]: {
         key,
         account_id: account,
         ticker,
+        ric: scenarioRic,
         quantity_text: quantityText.trim(),
         source: "what_if",
       },
     }));
     setResultMessage(`Staged trade delta for ${ticker} in ${account}.`);
-  }, [accountId, clearMessages, quantityText, scenarioTicker, validAccountIds]);
+  }, [accountId, clearMessages, quantityText, scenarioTicker, scenarioUniverseRow, validAccountIds]);
 
   const updateScenarioRow = useCallback((key: string, quantityValue: string) => {
     setPreviewData(null);
@@ -268,8 +318,20 @@ export function useWhatIfScenarioLab({
       setErrorMessage(`Fix quantity for ${existing.ticker} before stepping it.`);
       return;
     }
-    updateScenarioRow(key, fmtQty(currentQty + delta));
-  }, [scenarioDrafts, updateScenarioRow]);
+    const nextQty = currentQty + delta;
+    if (Math.abs(nextQty) <= 1e-12) {
+      setPreviewData(null);
+      clearMessages();
+      setScenarioDrafts((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setResultMessage(`Removed staged trade delta for ${existing.ticker}.`);
+      return;
+    }
+    updateScenarioRow(key, fmtQty(nextQty));
+  }, [clearMessages, scenarioDrafts, updateScenarioRow]);
 
   const removeScenarioRow = useCallback((key: string) => {
     setPreviewData(null);
@@ -332,7 +394,7 @@ export function useWhatIfScenarioLab({
     const hasFullRemovalFromDelta = scenarioRows.some((row) => {
       const qty = parseQty(row.quantity_text);
       if (qty === null) return false;
-      const liveQty = Number(liveQuantityByScenarioKey.get(scenarioKey(row.account_id, row.ticker)) || 0);
+      const liveQty = Number(liveQuantityByScenarioKey.get(scenarioKey(row.account_id, row.ticker, row.ric)) || 0);
       return Math.abs(liveQty) > 1e-12 && Math.abs(liveQty + qty) <= 1e-12;
     });
     if (
@@ -370,6 +432,7 @@ export function useWhatIfScenarioLab({
       await Promise.all([
         mutate(apiPath.holdingsAccounts()),
         mutate(apiPath.holdingsPositions(null)),
+        mutate(apiPath.exploreContext()),
         mutate(apiPath.refreshStatus()),
         mutate(apiPath.operatorStatus()),
       ]);
@@ -440,8 +503,12 @@ export function useWhatIfScenarioLab({
   const normalizedAccountId = normalizeAccountId(accountId);
   const hasValidAccount = Boolean(normalizedAccountId) && (validAccountIds.size === 0 || validAccountIds.has(normalizedAccountId));
   const hasEntryTicker = Boolean(scenarioTicker);
+  const hasResolvedEntry = Boolean(
+    scenarioUniverseRow && normalizeTicker(scenarioUniverseRow.ticker) === scenarioTicker,
+  );
+  const hasPreviewReadyEntry = hasResolvedEntry && scenarioUniverseRow?.whatif_ready !== false;
   const hasValidEntryQty = entryQty !== null;
-  const stageReady = !controlsBusy && hasValidAccount && hasEntryTicker && hasValidEntryQty;
+  const stageReady = !controlsBusy && hasValidAccount && hasEntryTicker && hasPreviewReadyEntry && hasValidEntryQty;
   const previewReady = !controlsBusy && scenarioRows.length > 0;
   const previewNeedsAttention = previewReady && !previewData;
   const applyReady = !controlsBusy && scenarioRows.length > 0;

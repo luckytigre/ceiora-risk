@@ -1,10 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
-import ExposureBarChart from "@/features/cuse4/components/ExposureBarChart";
-import TickerWeeklyPriceChart from "@/features/cuse4/components/TickerWeeklyPriceChart";
 import { exposureMethodLabel, normalizeExposureOrigin } from "@/lib/exposureOrigin";
 import type { FactorCatalogEntry, FactorExposure, UniverseTickerItem, WeeklyPricePoint } from "@/lib/types/cuse4";
+
+const ExposureBarChart = dynamic(() => import("@/features/cuse4/components/ExposureBarChart"), {
+  ssr: false,
+});
+const TickerWeeklyPriceChart = dynamic(() => import("@/features/cuse4/components/TickerWeeklyPriceChart"), {
+  ssr: false,
+});
 
 interface PositionSummary {
   shares: number;
@@ -73,33 +79,43 @@ function humanizeReason(value: string | null | undefined): string {
 
 export default function TickerQuoteCard({
   item,
+  expanded,
+  onExpandedChange,
+  historyRequested,
   selectedPosition,
   historyPoints,
   historyLoading,
   historyError,
   chartFactors,
   factorCatalog,
+  factorVisualsLoading,
+  factorVisualsUnavailable,
 }: {
   item: UniverseTickerItem;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  historyRequested: boolean;
   selectedPosition?: PositionSummary;
   historyPoints: WeeklyPricePoint[];
   historyLoading: boolean;
   historyError: unknown;
   chartFactors: FactorExposure[];
   factorCatalog?: FactorCatalogEntry[];
+  factorVisualsLoading: boolean;
+  factorVisualsUnavailable: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [spotlight, setSpotlight] = useState(false);
   const modelStatus = item.model_status ?? "ineligible";
   const exposureOrigin = normalizeExposureOrigin(item.exposure_origin, modelStatus);
   const hasModelExposures = chartFactors.length > 0;
+  const quoteSource = String(item.quote_source || "").trim();
 
   useEffect(() => {
-    setExpanded(false);
+    onExpandedChange(false);
     setSpotlight(true);
     const timer = window.setTimeout(() => setSpotlight(false), 2400);
     return () => window.clearTimeout(timer);
-  }, [item.ticker]);
+  }, [item.ticker, onExpandedChange]);
 
   const historySummary = useMemo(() => {
     if (!historyPoints.length) return null;
@@ -118,9 +134,13 @@ export default function TickerQuoteCard({
   const returnTone = historySummary
     ? (historySummary.isPositive ? "positive" : "negative")
     : "muted";
-  const returnText = historySummary?.totalReturnPct != null
-    ? `${historySummary.totalReturnPct >= 0 ? "+" : ""}${historySummary.totalReturnPct.toFixed(1)}%`
-    : "—";
+  const returnText = !historyRequested
+    ? "Open for 5Y trend"
+    : historyLoading
+      ? "Loading 5Y trend..."
+      : historySummary?.totalReturnPct != null
+        ? `${historySummary.totalReturnPct >= 0 ? "+" : ""}${historySummary.totalReturnPct.toFixed(1)}%`
+        : "—";
   const sharesOutstanding = (
     typeof item.market_cap === "number"
       && Number.isFinite(item.market_cap)
@@ -174,13 +194,20 @@ export default function TickerQuoteCard({
       ? [{ label: "Projection As Of", value: formatDateLabel(item.projection_asof) }]
       : []),
   ];
+  const noteMessage = (
+    quoteSource === "registry_runtime"
+      ? String(item.quote_source_detail || "").trim()
+      : String(item.model_warning || "").trim()
+  ) || (!hasModelExposures
+    ? `Model ineligible: ${humanizeReason(item.model_status_reason || item.eligibility_reason)}`
+    : "");
 
   return (
     <section className={`explore-quote-module${expanded ? " open" : ""}${spotlight && !expanded ? " fresh" : ""}`}>
       <button
         type="button"
         className={`explore-quote-trigger${expanded ? " open" : ""}`}
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={() => onExpandedChange(!expanded)}
         aria-expanded={expanded}
       >
         <span className="explore-quote-trigger-copy">
@@ -226,16 +253,26 @@ export default function TickerQuoteCard({
               <div className="explore-quote-spark-panel">
                 <div className="explore-quote-spark-summary">
                   <span className={`explore-quote-spark-latest explore-quote-return ${returnTone}`}>
-                    {returnText === "—" ? "5Y trend unavailable" : `5Y ${returnText}`}
+                    {returnText === "—"
+                      ? "5Y trend unavailable"
+                      : returnText.startsWith("Open") || returnText.startsWith("Loading")
+                        ? returnText
+                        : `5Y ${returnText}`}
                   </span>
                   <span className="explore-quote-spark-range">
-                    {historySummary?.firstDate && historySummary?.lastDate
+                    {!historyRequested
+                      ? "Expanded view loads 5Y history"
+                      : historyLoading
+                        ? "Fetching history range"
+                        : historySummary?.firstDate && historySummary?.lastDate
                       ? `${formatDateLabel(historySummary.firstDate)} to ${formatDateLabel(historySummary.lastDate)}`
                       : "No history range"}
                   </span>
                 </div>
 
-                {historyLoading ? (
+                {!historyRequested ? (
+                  <div className="explore-quote-spark-empty">Expand again once opened to view the 5Y trend.</div>
+                ) : historyLoading ? (
                   <div className="explore-quote-spark-empty loading-pulse">Loading 5Y history...</div>
                 ) : historyError ? (
                   <div className="explore-quote-spark-empty">5Y history is temporarily unavailable.</div>
@@ -264,23 +301,39 @@ export default function TickerQuoteCard({
             <div className="explore-quote-chart-panel">
               <div className="explore-quote-chart-head">
                 <span>Factor Exposures</span>
-                <span>{hasModelExposures ? "All Factors" : "Unavailable"}</span>
+                <span>
+                  {factorVisualsLoading && hasModelExposures
+                    ? "Enhancing labels"
+                    : factorVisualsUnavailable
+                      ? hasModelExposures
+                        ? "Fallback labels"
+                        : "Temporarily unavailable"
+                      : hasModelExposures
+                        ? "All Factors"
+                        : "Unavailable"}
+                </span>
               </div>
-              {expanded && hasModelExposures ? (
+              {expanded && hasModelExposures && (!factorVisualsLoading || factorCatalog?.length || factorVisualsUnavailable) ? (
                 <div className="explore-quote-chart-scroll">
                   <ExposureBarChart factors={chartFactors} factorCatalog={factorCatalog} />
                 </div>
               ) : (
                 <div className="explore-quote-chart-empty">
-                  {hasModelExposures ? "Expand to load factor exposures." : "Factor exposures are unavailable for this ticker."}
+                  {expanded && hasModelExposures && factorVisualsLoading
+                    ? "Loading factor metadata..."
+                    : hasModelExposures
+                    ? "Expand to load factor exposures."
+                    : factorVisualsUnavailable
+                      ? "Factor visuals are temporarily unavailable."
+                      : "Factor exposures are unavailable for this ticker."}
                 </div>
               )}
             </div>
           </div>
 
-          {(!hasModelExposures || item.model_warning) && (
+          {noteMessage && (
             <div className="explore-quote-note">
-              {item.model_warning || `Model ineligible: ${humanizeReason(item.model_status_reason || item.eligibility_reason)}`}
+              {noteMessage}
             </div>
           )}
         </div>

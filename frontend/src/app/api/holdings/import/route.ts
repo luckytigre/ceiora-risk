@@ -7,5 +7,6 @@ export async function POST(req: NextRequest) {
   return proxyJson(req, `${backendOrigin()}/api/holdings/import`, {
     method: "POST",
     headers: { "content-type": "application/json" },
+    forwardPrivilegedHeaders: false,
   });
 }

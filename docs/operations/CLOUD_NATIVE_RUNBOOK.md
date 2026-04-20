@@ -1,20 +1,20 @@
 # Cloud-Native Runbook
 
-Date: 2026-03-27
+Date: 2026-04-14
 Owner: Codex
-Status: `run_app` no-edge production is live; custom-domain edge remains a rollback/reference path only
+Status: current live topology is `run_app` with `edge_enabled=false`; `app.ceiora.com` is served through Firebase Hosting and backends are private behind the frontend
 
 ## Purpose
 
 Define the process split and environment contract needed to run the app in a cloud-native shape without relying on one all-in-one web process.
 
-This runbook covers the live `run_app` Cloud Run production shape as well as the rollback/reference path for the retired custom-domain edge.
-Resolve the current live origins from `terraform output endpoint_mode`, `terraform output edge_enabled`, and `terraform output public_origins`; do not assume `app.ceiora.com` / `control.ceiora.com` are live.
+This runbook covers both supported Cloud Run topology modes.
+Resolve the current live origins from `terraform output endpoint_mode`, `terraform output edge_enabled`, and `terraform output public_origins`; do not assume a topology from stale rollout notes.
 
 ## Topology Modes
 
 - `endpoint_mode=custom_domains`
-  - rollback/reference mode
+  - rollback-only topology
   - requires `edge_enabled=true`
   - canonical public origins are the frozen `app.ceiora.com`, `api.ceiora.com`, and `control.ceiora.com` hostnames
   - no explicit origin/image overrides are required beyond the normal custom-domain rollout inputs
@@ -34,16 +34,15 @@ The Terraform contract now exposes:
 - `load_balancer_dns_records`
 - `load_balancer_host_routing`
 
-## Frozen Production Hostnames
+## Current Public Origins
 
-- when `endpoint_mode=custom_domains`:
-  - frontend: `https://app.ceiora.com`
-  - serve API: `https://api.ceiora.com`
-  - control API: `https://control.ceiora.com`
+- frontend: `https://app.ceiora.com`
+- serve runtime origin: resolve from `terraform output public_origins` and treat it as frontend-only private backend target, not a public user hostname
+- control runtime origin: resolve from `terraform output public_origins` and treat it as frontend-only private backend target, not a public user hostname
 
-Temporary smoke validation should use Cloud Run `run.app` hostnames first.
-During a `run_app + edge_enabled=true` soak, validate both the `run.app` path and the still-live custom-domain rollback path.
-Do not destroy the custom-domain edge until the `run.app` path is clean.
+Current operator rule:
+- users should only navigate through `https://app.ceiora.com`
+- do not publish or rely on `api.ceiora.com` / `control.ceiora.com`; those aliases were removed from live DNS
 
 ## Process Split
 
@@ -121,6 +120,7 @@ Expected behavior:
 - public durable serving-payload reads/writes stay behind `backend/data/serving_outputs.py`, while lower Neon/SQLite authority helpers remain non-public implementation detail
 - public runtime/control state reads and writes stay behind `backend/data/runtime_state.py`, while lower Neon/fallback authority helpers remain non-public implementation detail
 - `source_sync` remains a `local-ingest` concern; cloud-serving surfaces should not call the source-only cycle in `backend/services/neon_source_sync_cycle.py`
+- `source_sync` remains strictly `local-ingest` owned; `cloud-job` execution must fail closed rather than offering a generic env-toggle bypass for source publication from cloud compute
 - Neon mirror artifact persistence, sync-health publication, and offline parity-repair helpers stay behind `backend/services/neon_mirror_reporting.py`; cloud-serving surfaces should not reassemble those payloads ad hoc
 
 ### Backend control app
@@ -144,6 +144,9 @@ Expected behavior:
 - dispatches cPAR builds via `POST /api/cpar/build` (control-only route)
 - does not need to expose public dashboard read routes
 - uses Neon-backed runtime/control truth and should fail closed when that authority is unavailable
+- startup must fail closed if the Cloud Run dispatch contract is incomplete for the active surface
+  - control app requires project/region plus all four job-name vars
+  - serve app should not boot with an ambiguous partial dispatch contract
 - serving publication sequencing lives in `backend/analytics/refresh_publication.py`; do not split publish-only republish, durable publish, and post-publish health patch back across ad hoc `pipeline.py` branches
 - workspace `data_db` / `cache_db` inputs handed to serving lanes are explicit file targets, not an automatic local-core-read override by themselves
 
@@ -158,19 +161,22 @@ Required for split deployment:
   - that fallback is local/single-origin compatibility behavior, not the intended cloud steady state
 
 Auth contract:
+- the frontend now owns the shared signed-cookie app session and protects app pages plus `/api/*` before proxying upstream
+- because Firebase Hosting forwards the `__session` cookie on Cloud Run rewrites, the shared app session must use the `__session` cookie name
+- the frontend runtime requires:
+  - `CEIORA_SHARED_LOGIN_USERNAME`
+  - `CEIORA_SHARED_LOGIN_PASSWORD`
+  - `CEIORA_SESSION_SECRET`
+  - `CEIORA_PRIMARY_ACCOUNT_USERNAME`
 - the frontend service must not mount `OPERATOR_API_TOKEN` or `EDITOR_API_TOKEN`
 - privileged frontend `/api/*` routes forward caller-supplied auth headers instead:
   - `X-Operator-Token`
   - `X-Editor-Token`
-  - `Authorization: Bearer <token>`
 - in cloud mode, `X-Refresh-Token` is not a public control-plane credential
-
-Cloud steady-state values:
-- `BACKEND_API_ORIGIN=https://api.ceiora.com`
-- `BACKEND_CONTROL_ORIGIN=https://control.ceiora.com`
+- when `CLOUD_RUN_BACKEND_IAM_AUTH=true`, the frontend proxy layer uses `Authorization: Bearer <Cloud Run ID token>` for backend service-to-service invocation
 
 run_app contract values:
-- `frontend_public_origin=https://<frontend-service>.run.app`
+- `frontend_public_origin=https://app.ceiora.com`
 - `BACKEND_API_ORIGIN=https://<serve-service>.run.app`
 - `BACKEND_CONTROL_ORIGIN=https://<control-service>.run.app`
 - all three `*_image_ref` inputs must be explicit rather than inheriting `:latest`
@@ -184,6 +190,11 @@ Local compatibility values:
 The split-origin decision is intentionally isolated to Next App Router proxy handlers and their shared helper:
 
 - `frontend/src/app/api/_backend.ts`
+
+Current rule:
+- browser `/api/*` traffic must terminate in owned App Router route handlers
+- the old catch-all `next.config.js` `/api/*` rewrite is no longer part of the supported contract
+- if `private_backend_invocation_enabled=true`, the frontend runtime proxies to backend `run.app` service URLs with Cloud Run IAM auth instead of relying on public backend hosts
 - `frontend/src/app/api/refresh/route.ts`
 - `frontend/src/app/api/refresh/status/route.ts`
 - `frontend/src/app/api/operator/status/route.ts`
@@ -191,6 +202,22 @@ The split-origin decision is intentionally isolated to Next App Router proxy han
 - `frontend/src/app/api/data/diagnostics/route.ts`
 
 Pages and components should not select backend origins directly.
+
+## Shared Auth And Private-Backend Deployment Notes
+
+The shared frontend auth boundary and the private-backend cutover are live.
+
+Current steady-state notes:
+1. `app.ceiora.com` is served through Firebase Hosting with a Cloud Run rewrite to the frontend service.
+2. The shared app session is stored in the `__session` cookie so Firebase forwards it on rewritten requests.
+3. `private_backend_invocation_enabled=true` is active.
+4. `serve` and `control` no longer allow unauthenticated direct invocation.
+5. The frontend service account invokes `serve` and `control` with Cloud Run IAM auth.
+6. The old HTTPS load balancer has been removed.
+7. The temporary ACME challenge route still exists in the frontend codebase and can be removed once Firebase control-plane certificate status settles beyond propagation.
+
+Execution record:
+- `docs/operations/cutover_evidence/FRONTEND_AUTH_EXECUTION_20260415T010336Z.md`
 
 ## Refresh Ownership
 
@@ -216,6 +243,22 @@ Refresh execution ownership is deliberately split:
   - Control-only `POST /api/cpar/build` route (operator-token protected)
 
 This prevents a serve-only process from reconciling or mutating shared refresh state as though it owned the worker.
+
+Operator diagnostics contract:
+- `cache_not_ready` means the durable payload is genuinely unpublished/missing for the requested surface
+- serving-authority connection/query failures must surface as an explicit authority-unavailable operator error, not as `cache_not_ready`
+- this distinction is now part of the operator contract, not just logging hygiene; Step 3 hardened the route/service behavior so cloud-read failures are not misreported as unpublished payloads
+
+## Current Cutover Notes
+
+- As of the active Phase 4 window:
+  - the historical cutover/rollback drill started from `custom_domains`
+  - `edge_enabled=true` was the drill-time edge posture
+  - control-surface rollback has been drill-validated against the corrected bundle `backend/runtime/cloud_rollouts/phase4_entry_20260414T201917Z`
+- The recorded rollback drill used direct Cloud Run service/job updates because the full Terraform custom-domain path in that shell was blocked by missing Cloudflare auth.
+- Treat the Phase 4 evidence log and rollback drill note as the authoritative execution record:
+  - `docs/operations/cutover_evidence/PHASE4_ENTRY_20260414T193820Z.md`
+  - `docs/operations/cutover_evidence/PHASE4_ROLLBACK_DRILL_20260414T215254Z.md`
 
 ## Cloud Readiness Gates
 
@@ -336,12 +379,13 @@ Current Cloud Run Job prep:
 
 Current Cloud Run service prep:
 - the Terraform `prod` root now defines frontend, serve, and control service resources
-- all three services are intentionally public at the Cloud Run layer for the first `run.app` smoke phase
+- current no-edge production keeps only the frontend public at the Cloud Run layer
+- `serve` and `control` are private by IAM and are invoked through the frontend service account
 - the control service stays operator-token-protected in-app
 - the Terraform root now separates public topology from edge presence:
-  - `endpoint_mode=custom_domains` + `edge_enabled=true` is the current production shape
+  - `endpoint_mode=custom_domains` + `edge_enabled=true` is the rollback contract
   - `endpoint_mode=run_app` + `edge_enabled=true` is the soak/rollback shape
-  - `endpoint_mode=run_app` + `edge_enabled=false` is the no-edge steady state
+  - `endpoint_mode=run_app` + `edge_enabled=false` is the current no-edge production shape
 - all three services pin request-based billing by explicitly setting `cpu_idle=true` in Terraform
 - any direct `gcloud run deploy` rollout must preserve request-based billing with `--cpu-throttling`
 - the live service headroom is now:

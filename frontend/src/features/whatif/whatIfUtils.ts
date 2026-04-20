@@ -7,6 +7,7 @@ export interface ScenarioDraftRow {
   key: string;
   account_id: string;
   ticker: string;
+  ric?: string | null;
   quantity_text: string;
   source: string;
 }
@@ -34,8 +35,9 @@ export function normalizeTicker(raw: string | null | undefined): string {
   return String(raw || "").trim().toUpperCase();
 }
 
-export function scenarioKey(accountId: string, ticker: string): string {
-  return `${normalizeAccountId(accountId)}::${normalizeTicker(ticker)}`;
+export function scenarioKey(accountId: string, ticker: string, ric?: string | null): string {
+  const normalizedRic = normalizeTicker(ric);
+  return `${normalizeAccountId(accountId)}::${normalizedRic || normalizeTicker(ticker)}`;
 }
 
 export function parseQty(raw: string): number | null {
@@ -43,7 +45,8 @@ export function parseQty(raw: string): number | null {
   if (!clean) return null;
   if (!STRICT_QTY_RE.test(clean)) return null;
   const out = Number.parseFloat(clean);
-  return Number.isFinite(out) ? out : null;
+  if (!Number.isFinite(out) || Math.abs(out) <= 1e-12) return null;
+  return out;
 }
 
 export function fmtQty(n: number): string {
@@ -85,6 +88,7 @@ export function buildScenarioPayloadRows({
     rows.push({
       account_id: row.account_id,
       ticker: row.ticker,
+      ric: row.ric || null,
       quantity: qty,
       source: row.source || "what_if",
     });

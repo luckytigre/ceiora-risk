@@ -26,6 +26,7 @@ COPY backend/scripts /app/backend/scripts
 COPY backend/services /app/backend/services
 COPY backend/universe /app/backend/universe
 COPY backend/vendor /app/backend/vendor
+COPY docs/reference/migrations/neon /app/docs/reference/migrations/neon
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install ./backend

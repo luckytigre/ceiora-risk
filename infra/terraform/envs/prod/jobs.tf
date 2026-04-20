@@ -10,6 +10,7 @@ resource "google_cloud_run_v2_job" "core_weekly" {
   template {
     template {
       service_account = module.service_accounts.email_by_key["jobs"]
+      max_retries     = 1
       timeout         = "7200s"
 
       containers {
@@ -69,7 +70,8 @@ resource "google_cloud_run_v2_job" "cold_core" {
   template {
     template {
       service_account = module.service_accounts.email_by_key["jobs"]
-      timeout         = "14400s"
+      max_retries     = 0
+      timeout         = "9000s"
 
       containers {
         image   = local.control_image_ref
@@ -128,6 +130,7 @@ resource "google_cloud_run_v2_job" "cpar_build" {
   template {
     template {
       service_account = module.service_accounts.email_by_key["jobs"]
+      max_retries     = 3
       timeout         = "3600s"
 
       containers {
@@ -136,8 +139,8 @@ resource "google_cloud_run_v2_job" "cpar_build" {
 
         resources {
           limits = {
-            cpu    = "8"
-            memory = "32Gi"
+            cpu    = "2"
+            memory = "4Gi"
           }
         }
 
@@ -187,6 +190,7 @@ resource "google_cloud_run_v2_job" "serve_refresh" {
   template {
     template {
       service_account = module.service_accounts.email_by_key["jobs"]
+      max_retries     = 0
       timeout         = "3600s"
 
       containers {
@@ -195,8 +199,8 @@ resource "google_cloud_run_v2_job" "serve_refresh" {
 
         resources {
           limits = {
-            cpu    = "8"
-            memory = "32Gi"
+            cpu    = "2"
+            memory = "4Gi"
           }
         }
 

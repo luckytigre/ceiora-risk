@@ -67,6 +67,45 @@ def test_persist_current_payloads_roundtrip(tmp_path: Path, monkeypatch) -> None
     assert json.loads(str(row[3]))["risk_shares"]["style"] == 50.0
 
 
+def test_load_runtime_payload_state_reports_missing_sqlite(tmp_path: Path, monkeypatch) -> None:
+    data_db = tmp_path / "data.db"
+    monkeypatch.setattr(serving_outputs, "DATA_DB", data_db)
+    monkeypatch.setattr(serving_outputs.config, "SERVING_OUTPUTS_PRIMARY_READS", False)
+    monkeypatch.setattr(serving_outputs.config, "APP_RUNTIME_ROLE", "local-ingest")
+    monkeypatch.setattr(serving_outputs.config, "DATA_BACKEND", "sqlite")
+
+    out = serving_outputs.load_runtime_payload_state("health_diagnostics")
+
+    assert out["status"] == "missing"
+    assert out["source"] == "sqlite"
+    assert out["value"] is None
+
+
+def test_load_runtime_payload_state_reports_neon_error(monkeypatch) -> None:
+    monkeypatch.setattr(serving_outputs.config, "SERVING_OUTPUTS_PRIMARY_READS", True)
+    monkeypatch.setattr(serving_outputs.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(serving_outputs.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(serving_outputs.config, "neon_surface_enabled", lambda surface: surface == "serving_outputs")
+    monkeypatch.setattr(
+        serving_outputs,
+        "_load_current_payload_states_neon",
+        lambda _names: {
+            "health_diagnostics": {
+                "status": "error",
+                "source": "neon",
+                "value": None,
+                "error": {"type": "OperationalError", "message": "timed out"},
+            }
+        },
+    )
+
+    out = serving_outputs.load_runtime_payload_state("health_diagnostics")
+
+    assert out["status"] == "error"
+    assert out["source"] == "neon"
+    assert out["error"]["type"] == "OperationalError"
+
+
 def test_persist_current_payloads_partial_write_preserves_existing_rows(tmp_path: Path, monkeypatch) -> None:
     data_db = tmp_path / "data.db"
     monkeypatch.setattr(serving_outputs, "DATA_DB", data_db)
@@ -388,10 +427,14 @@ def test_load_runtime_payloads_only_calls_fallback_for_missing_keys(monkeypatch)
 
     monkeypatch.setattr(
         serving_outputs,
-        "load_current_payloads",
+        "load_current_payload_states",
         lambda names: {
-            "risk": {"risk_shares": {"style": 50.0}},
-            "model_sanity": None,
+            "risk": {
+                "status": "ok",
+                "source": "neon",
+                "value": {"risk_shares": {"style": 50.0}},
+            },
+            "model_sanity": {"status": "missing", "source": "neon", "value": None},
         },
     )
     monkeypatch.setattr(serving_outputs.config, "serving_outputs_cache_fallback_enabled", lambda: True)

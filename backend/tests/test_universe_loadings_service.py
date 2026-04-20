@@ -5,12 +5,14 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from backend.analytics.services.universe_loadings import (
     build_universe_ticker_loadings,
     load_latest_factor_coverage,
 )
 from backend.risk_model.factor_catalog import build_factor_catalog_for_factors, factor_id_for_name
+from backend.risk_model.projected_loadings import ProjectedLoadingResult
 from backend.universe.schema import ensure_cuse4_schema
 
 
@@ -688,3 +690,196 @@ def test_build_universe_ticker_loadings_preserves_factor_ids_in_covariance_path(
     serialized_ids = {entry["factor_id"] for entry in out["factor_catalog"]}
     assert "industry_market" not in serialized_ids
     assert "industry_style_beta_score" not in serialized_ids
+
+
+# ---------------------------------------------------------------------------
+# _load_admitted_runtime_tickers — Neon fallback
+# ---------------------------------------------------------------------------
+
+def test_load_admitted_runtime_tickers_neon_fallback_when_no_local_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When local data_db is absent and Neon reads are enabled, the security registry
+    is queried from Neon.  Universe loadings must then exclude tickers that are not in
+    that registry (e.g. ETF price-table tickers that were never model-universe members).
+    """
+    import pytest
+    from backend.analytics.services import universe_loadings as ul_mod
+
+    # Simulate Neon returning a registry of two tickers only.
+    def _fake_neon_admitted() -> set[str] | None:
+        return {"AAPL", "MSFT"}
+
+    monkeypatch.setattr(ul_mod, "_load_admitted_runtime_tickers_neon", _fake_neon_admitted)
+    monkeypatch.setattr(
+        "backend.data.core_read_backend.use_neon_core_reads", lambda: True
+    )
+
+    # data_db does not exist → should trigger Neon fallback.
+    result = ul_mod._load_admitted_runtime_tickers(tmp_path / "nonexistent.db")
+    assert result == {"AAPL", "MSFT"}
+
+
+def test_load_admitted_runtime_tickers_returns_none_when_no_local_db_and_neon_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When local data_db is absent and Neon reads are disabled, the function returns
+    None (no filter — safe open set, consistent with pre-Neon behaviour).
+    """
+    import pytest
+    from backend.analytics.services import universe_loadings as ul_mod
+
+    monkeypatch.setattr(
+        "backend.data.core_read_backend.use_neon_core_reads", lambda: False
+    )
+
+    result = ul_mod._load_admitted_runtime_tickers(tmp_path / "nonexistent.db")
+    assert result is None
+
+
+def test_load_admitted_runtime_tickers_neon_fallback_when_registry_absent_from_local_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When local data_db exists but has no security_registry table and Neon reads are
+    enabled, the Neon fallback is used instead of returning None.
+    """
+    import pytest
+    from backend.analytics.services import universe_loadings as ul_mod
+    import sqlite3
+
+    db_path = tmp_path / "data.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("CREATE TABLE some_other_table (id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+
+    def _fake_neon_admitted() -> set[str] | None:
+        return {"SPY", "QQQ"}
+
+    monkeypatch.setattr(ul_mod, "_load_admitted_runtime_tickers_neon", _fake_neon_admitted)
+    monkeypatch.setattr(
+        "backend.data.core_read_backend.use_neon_core_reads", lambda: True
+    )
+
+    result = ul_mod._load_admitted_runtime_tickers(db_path)
+    assert result == {"SPY", "QQQ"}
+
+
+def test_build_universe_ticker_loadings_excludes_non_registry_tickers_via_neon(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end: when serve-refresh runs in a fresh container (no local SQLite),
+    tickers that are in the Neon prices table but NOT in the security registry must be
+    excluded from the universe so _assert_current_membership_coverage does not fire.
+    """
+    import pytest
+    from backend.analytics.services import universe_loadings as ul_mod
+
+    # Registry admits only AAPL and MSFT — ETF tickers AAXJ/ACWI must be excluded.
+    def _fake_neon_admitted() -> set[str] | None:
+        return {"AAPL", "MSFT"}
+
+    monkeypatch.setattr(ul_mod, "_load_admitted_runtime_tickers_neon", _fake_neon_admitted)
+    monkeypatch.setattr(
+        "backend.data.core_read_backend.use_neon_core_reads", lambda: True
+    )
+
+    prices_df = pd.DataFrame(
+        {"ticker": ["AAPL", "MSFT", "AAXJ", "ACWI"], "close": [200.0, 400.0, 50.0, 90.0]}
+    )
+    out = build_universe_ticker_loadings(
+        exposures_df=pd.DataFrame(),
+        fundamentals_df=pd.DataFrame(),
+        prices_df=prices_df,
+        cov=pd.DataFrame(),
+        data_db=tmp_path / "nonexistent.db",  # does not exist — triggers Neon path
+    )
+
+    assert "AAXJ" not in out["by_ticker"], "ETF ticker not in registry must be excluded"
+    assert "ACWI" not in out["by_ticker"], "ETF ticker not in registry must be excluded"
+    # AAPL and MSFT are admitted (price data only, so ineligible but present)
+    assert "AAPL" in out["by_ticker"]
+    assert "MSFT" in out["by_ticker"]
+
+
+def test_load_admitted_runtime_tickers_fails_closed_when_neon_authority_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.analytics.services import universe_loadings as ul_mod
+
+    monkeypatch.setattr(
+        "backend.data.core_read_backend.use_neon_core_reads", lambda: True
+    )
+    monkeypatch.setattr(
+        ul_mod,
+        "_load_admitted_runtime_tickers_neon",
+        lambda: (_ for _ in ()).throw(RuntimeError("neon unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="neon unavailable"):
+        ul_mod._load_admitted_runtime_tickers(tmp_path / "nonexistent.db")
+
+
+def test_build_universe_ticker_loadings_maps_projected_factor_names_through_catalog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.analytics.services import universe_loadings as ul_mod
+
+    monkeypatch.setattr(ul_mod, "_load_admitted_runtime_tickers", lambda _data_db: {"SPY"})
+    monkeypatch.setattr(ul_mod, "_overlay_persisted_cuse_membership", lambda **kwargs: None)
+
+    factor_catalog = build_factor_catalog_for_factors(
+        ["Market", "Academic Educational Services", "Book-to-Price"],
+        method_version="test",
+    )
+    market_id = factor_id_for_name("Market", family="market")
+    industry_id = factor_id_for_name("Academic Educational Services", family="industry")
+    style_id = factor_id_for_name(
+        "Book-to-Price",
+        family="style",
+        source_column="book_to_price_score",
+    )
+    cov = pd.DataFrame(
+        np.diag([1.0, 0.25, 0.09]),
+        index=[market_id, industry_id, style_id],
+        columns=[market_id, industry_id, style_id],
+    )
+    projected = {
+        "SPY": ProjectedLoadingResult(
+            ric="SPY.P",
+            ticker="SPY",
+            exposures={
+                "Market": 1.0,
+                "Academic & Educational Services": 0.2,
+                "Book-to-Price": 0.05,
+            },
+            specific_var=0.01,
+            specific_vol=0.1,
+            r_squared=0.95,
+            obs_count=252,
+            lookback_days=252,
+            projection_asof="2026-04-13",
+            status="ok",
+        )
+    }
+
+    out = build_universe_ticker_loadings(
+        exposures_df=pd.DataFrame(),
+        fundamentals_df=pd.DataFrame(),
+        prices_df=pd.DataFrame([{"ticker": "SPY", "ric": "SPY.P", "close": 500.0}]),
+        cov=cov,
+        data_db=tmp_path / "nonexistent.db",
+        factor_catalog_by_name=factor_catalog,
+        projected_loadings=projected,
+        projection_universe_rows=[{"ticker": "SPY", "ric": "SPY.P"}],
+        projection_core_state_through_date="2026-04-13",
+    )
+
+    spy = out["by_ticker"]["SPY"]
+    assert spy["model_status"] == "projected_only"
+    assert spy["projection_method"] == "ols_returns_regression"
+    assert spy["projection_asof"] == "2026-04-13"
+    assert spy["exposures"][market_id] == 1.0
+    assert spy["exposures"][industry_id] == 0.2
+    assert spy["exposures"][style_id] == 0.05

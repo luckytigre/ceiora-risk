@@ -1,15 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { useAppSettings } from "@/components/AppSettingsContext";
+import { useAuthSession } from "@/components/AuthSessionContext";
 import { useBackground } from "@/components/BackgroundContext";
-import {
-  clearStoredAuthTokens,
-  EDITOR_TOKEN_STORAGE_KEY,
-  OPERATOR_TOKEN_STORAGE_KEY,
-  readStoredAuthTokens,
-  writeStoredAuthToken,
-} from "@/lib/authTokens";
 
 const BACKGROUND_OPTIONS = [
   {
@@ -29,27 +25,28 @@ const BACKGROUND_OPTIONS = [
   },
 ] as const;
 
+const THEME_OPTIONS = [
+  {
+    value: "dark",
+    label: "Dark",
+    description: "Warm-neutral graphite field for the main analytical shell.",
+  },
+  {
+    value: "light",
+    label: "Light",
+    description: "Pale mineral field for daytime work without losing Ceiora density.",
+  },
+] as const;
+
 export default function SettingsPage() {
-  const { cparFactorHistoryMode, setCparFactorHistoryMode } = useAppSettings();
+  const searchParams = useSearchParams();
+  const { loading, session, context, error } = useAuthSession();
+  const { cparFactorHistoryMode, setCparFactorHistoryMode, themeMode, setThemeMode } = useAppSettings();
   const { mode: backgroundMode, setMode: setBackgroundMode } = useBackground();
-  const [tokens, setTokens] = useState(() => readStoredAuthTokens());
   const useMarketAdjustedHistory = cparFactorHistoryMode === "market_adjusted";
   const selectedBackground = BACKGROUND_OPTIONS.find((option) => option.value === backgroundMode) ?? BACKGROUND_OPTIONS[0];
-  const usingOperatorForEditor = Boolean(tokens.operatorToken) && !tokens.editorToken;
-
-  function handleTokenChange(key: typeof OPERATOR_TOKEN_STORAGE_KEY | typeof EDITOR_TOKEN_STORAGE_KEY, value: string) {
-    writeStoredAuthToken(key, value);
-    setTokens(readStoredAuthTokens());
-  }
-
-  function handleClearTokens() {
-    clearStoredAuthTokens();
-    setTokens(readStoredAuthTokens());
-  }
-
-  useEffect(() => {
-    setTokens(readStoredAuthTokens());
-  }, []);
+  const selectedTheme = THEME_OPTIONS.find((option) => option.value === themeMode) ?? THEME_OPTIONS[0];
+  const adminRedirected = searchParams.get("error") === "admin_required";
 
   return (
     <div className="settings-page">
@@ -57,60 +54,79 @@ export default function SettingsPage() {
         <div className="settings-header">
           <div className="settings-kicker">Settings</div>
         </div>
-
+        {adminRedirected ? (
+          <div className="settings-empty-row">
+            Admin settings are only available to app-admin sessions. You have been returned to the standard settings surface.
+          </div>
+        ) : null}
         <section className="settings-section">
           <div className="settings-section-header settings-section-header-global">
-            <h3>Cloud Auth</h3>
-            <div className="settings-section-desc">
-              Stored only in this browser&apos;s local storage. Privileged actions send these headers to same-origin
-              frontend `/api/*` routes, which then forward them upstream.
+            <h3>Session</h3>
+          </div>
+          {error ? (
+            <div className="settings-empty-row">Session context unavailable: {error}</div>
+          ) : null}
+          <div className="settings-session-summary">
+            <div className="settings-session-row">
+              <span className="settings-option-label">Identity</span>
+              <span className="settings-session-value">
+                {loading ? "Loading…" : context?.display_name || context?.email || session?.username || "Unknown"}
+              </span>
             </div>
-          </div>
-          <div className="settings-auth-grid">
-            <label className="settings-auth-card">
-              <span className="settings-option-label">Operator token</span>
-              <span className="settings-option-help">Required for refresh, operator status, health diagnostics, and data diagnostics.</span>
-              <input
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                className="settings-auth-input"
-                value={tokens.operatorToken}
-                onChange={(event) => handleTokenChange(OPERATOR_TOKEN_STORAGE_KEY, event.target.value)}
-                placeholder="Paste operator token"
-              />
-            </label>
-            <label className="settings-auth-card">
-              <span className="settings-option-label">Editor token</span>
-              <span className="settings-option-help">Optional. If blank, holdings writes can still use the operator token.</span>
-              <input
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                className="settings-auth-input"
-                value={tokens.editorToken}
-                onChange={(event) => handleTokenChange(EDITOR_TOKEN_STORAGE_KEY, event.target.value)}
-                placeholder="Paste editor token"
-              />
-            </label>
-          </div>
-          <div className="settings-auth-footer">
-            <div className="settings-option-help">
-              {tokens.operatorToken || tokens.editorToken
-                ? usingOperatorForEditor
-                  ? "Editor routes will fall back to the stored operator token."
-                  : "Privileged frontend routes will forward only the tokens stored in this browser."
-                : "No browser auth tokens stored."}
+            <div className="settings-session-row">
+              <span className="settings-option-label">Provider</span>
+              <span className="settings-session-value">
+                {loading ? "Loading…" : session?.authProvider === "neon" ? "Neon Auth" : "Shared session"}
+              </span>
             </div>
-            <button type="button" className="settings-auth-clear" onClick={handleClearTokens}>
-              Clear stored tokens
-            </button>
+            {session?.authProvider === "neon" || context?.account_enforcement_enabled ? (
+              <div className="settings-session-row">
+                <span className="settings-option-label">Personal account</span>
+                <span className="settings-session-value">
+                  {loading ? "Loading…" : context?.default_account_id || "None provisioned"}
+                </span>
+              </div>
+            ) : (
+              <div className="settings-session-row">
+                <span className="settings-option-label">Account scope</span>
+                <span className="settings-session-value">{loading ? "Loading…" : "Shared access mode"}</span>
+              </div>
+            )}
           </div>
+          {session?.isAdmin && context?.admin_settings_enabled !== false ? (
+            <div className="settings-auth-footer">
+              <div className="settings-option-help">
+                Privileged maintenance controls now live on a separate admin-only settings surface.
+              </div>
+              <Link href="/settings/admin" className="settings-auth-clear">
+                Open admin settings
+              </Link>
+            </div>
+          ) : null}
         </section>
-
         <section className="settings-section">
           <div className="settings-section-header settings-section-header-global">
             <h3>Global</h3>
+          </div>
+          <div className="settings-inline-row">
+            <div className="settings-inline-copy">
+              <div className="settings-option-label">Theme</div>
+              <div className="settings-option-help">{selectedTheme.description}</div>
+            </div>
+            <div className="settings-segmented-control" role="tablist" aria-label="Theme mode">
+              {THEME_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={themeMode === option.value}
+                  className={`settings-segmented-option${themeMode === option.value ? " active" : ""}`}
+                  onClick={() => setThemeMode(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="settings-inline-row">
             <div className="settings-inline-copy">

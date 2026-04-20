@@ -1,11 +1,12 @@
 // cPAR-only frontend API helpers for the namespaced cPAR route family.
-// Prefer this over `@/lib/api` in cPAR-owned frontend code.
+// Prefer this over generic frontend API alias layers in cPAR-owned frontend code.
 
 import { ApiError, apiFetch } from "@/lib/apiTransport";
 
 export { ApiError, apiFetch };
 
 export const cparApiPath = {
+  cparExploreContext: () => "/api/cpar/explore/context",
   cparMeta: () => "/api/cpar/meta",
   cparSearch: (query: string, limit: number) =>
     `/api/cpar/search?q=${encodeURIComponent(query)}&limit=${limit}`,

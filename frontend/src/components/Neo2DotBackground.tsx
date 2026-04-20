@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useBackground, type BgMode } from "./BackgroundContext";
+import { useAppSettings } from "./AppSettingsContext";
 
 /* ── Shared helpers ─────────────────────────────────────────── */
 
@@ -16,6 +17,14 @@ function hash01(a: number, b: number) {
 
 function frac(v: number) {
   return v - Math.floor(v);
+}
+
+function readCssRgbTriplet(name: string, fallback: [number, number, number]): [number, number, number] {
+  if (typeof window === "undefined") return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const parts = raw.split(",").map((part) => Number(part.trim()));
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) return fallback;
+  return [parts[0], parts[1], parts[2]];
 }
 
 /* ── Mode: "topo" — topographic isoline dots ─────────────── */
@@ -34,14 +43,15 @@ function terrainHeight(x: number, z: number) {
 }
 
 function drawTopo(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const dotRgb = readCssRgbTriplet("--neo-dot-rgb", [145, 147, 151]);
   const sceneZoom = 0.65;
   const scenePanX = -2000;
   const cxS = w * 0.5;
   const cyS = h * 0.52;
   const invZoom = 1 / sceneZoom;
-  const step = 4.2 * SCALE;
-  const isoStep = 0.32;
-  const bandTol = 0.048;
+  const step = 4.9 * SCALE;
+  const isoStep = 0.3;
+  const bandTol = 0.064;
   const e = 8 * SCALE;
 
   const sf = (sx: number, sy: number) => {
@@ -58,18 +68,18 @@ function drawTopo(ctx: CanvasRenderingContext2D, w: number, h: number) {
       const hz = (sf(sx, sy + e) - sf(sx, sy - e)) / (2 * e);
       const grad = Math.hypot(hx, hz);
       const dense = clamp((grad - 0.008) / 0.02, 0, 1);
-      if (dense > 0.58) { if (((xi + yi * 3) % 18) !== 0) continue; }
-      else if (dense > 0.40) { if (((xi + yi * 2) % 8) !== 0) continue; }
-      else if (dense > 0.28) { if (((xi + yi * 2) % 6) !== 0) continue; }
+      if (dense > 0.62) { if (((xi + yi * 3) % 16) !== 0) continue; }
+      else if (dense > 0.44) { if (((xi + yi * 2) % 7) !== 0) continue; }
+      else if (dense > 0.26) { if (((xi + yi * 2) % 5) !== 0) continue; }
 
       const band = Math.abs(frac(val / isoStep) - 0.5);
       if (band > bandTol) continue;
-      if (hash01(xi * 0.173, yi * 0.197) > 0.84) continue;
+      if (hash01(xi * 0.173, yi * 0.197) > 0.88) continue;
       if (sx < -24 || sx > w + 24 || sy < -24 || sy > h + 24) continue;
 
-      const alpha = clamp(0.24 + (bandTol - band) * 0.35, 0.18, 0.52);
-      const size = 1.3 * sceneZoom * 0.85 * SCALE;
-      ctx.fillStyle = `rgba(176,176,176,${alpha.toFixed(3)})`;
+      const alpha = clamp(0.16 + (bandTol - band) * 0.58, 0.1, 0.36);
+      const size = 0.78 + dense * 0.1;
+      ctx.fillStyle = `rgba(${dotRgb[0]},${dotRgb[1]},${dotRgb[2]},${alpha.toFixed(3)})`;
       ctx.beginPath();
       ctx.arc(sx, sy, size, 0, Math.PI * 2);
       ctx.fill();
@@ -149,11 +159,10 @@ function drawRibbon(ctx: CanvasRenderingContext2D, w: number, h: number, r: Ribb
 
 function drawFlow(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.lineCap = "round";
-
-  /* Subtle tints derived from theme accents, lifted to light pastel range:
-     accent-blue #3ba9e1  → [155,200,225]   accent-green #31f6ff → [150,220,225]
-     accent-purple #d757ba → [210,165,200]   accent-yellow #ff8f2a → [220,190,155]
-     neutral grey baseline: [176,176,176]                                        */
+  const ribbonA0 = readCssRgbTriplet("--flow-ribbon-a0-rgb", [155, 200, 225]);
+  const ribbonA1 = readCssRgbTriplet("--flow-ribbon-a1-rgb", [210, 165, 200]);
+  const ribbonB0 = readCssRgbTriplet("--flow-ribbon-b0-rgb", [176, 180, 190]);
+  const ribbonB1 = readCssRgbTriplet("--flow-ribbon-b1-rgb", [150, 220, 225]);
 
   const ribbons: Ribbon[] = [
     // Ribbon A: enters top-left, swoops down, pinches left-of-center,
@@ -162,7 +171,7 @@ function drawFlow(ctx: CanvasRenderingContext2D, w: number, h: number) {
       p0: [-0.25, -0.30], p1: [0.05, 1.00], p2: [0.55, -0.05], p3: [1.30, -0.34],
       s0: 682, s1: 55, s2: 308, s3: 748,
       n: 25, alpha: [0.06, 0.20], lw: 0.7,
-      c0: [155, 200, 225], c1: [210, 165, 200],
+      c0: ribbonA0, c1: ribbonA1,
     },
     // Ribbon B: enters bottom-right, arcs high, pinches right-of-center,
     // then fans wide as it descends to exit bottom-left.
@@ -170,7 +179,7 @@ function drawFlow(ctx: CanvasRenderingContext2D, w: number, h: number) {
       p0: [1.28, 1.11], p1: [0.90, -0.40], p2: [0.40, 0.68], p3: [-0.25, 1.13],
       s0: 638, s1: 60, s2: 286, s3: 715,
       n: 23, alpha: [0.05, 0.18], lw: 0.65,
-      c0: [176, 180, 190], c1: [150, 220, 225],
+      c0: ribbonB0, c1: ribbonB1,
     },
   ];
 
@@ -189,10 +198,12 @@ const RENDERERS: Record<BgMode, (ctx: CanvasRenderingContext2D, w: number, h: nu
 /* Parallax: viewport-sized canvas (position:fixed), shifted via GPU transform */
 const PARALLAX_RATE = 0.18;
 const OVERSCAN = 0.7;
+const DRAW_PADDING = 96;
 
 export default function Neo2DotBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { mode } = useBackground();
+  const { themeMode } = useAppSettings();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -202,7 +213,14 @@ export default function Neo2DotBackground() {
 
     const draw = () => {
       const w = window.innerWidth;
-      const h = Math.ceil(window.innerHeight * (1 + OVERSCAN));
+      const viewportH = window.innerHeight;
+      const docH = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+        viewportH,
+      );
+      const scrollExtent = Math.max(docH - viewportH, 0);
+      const h = Math.ceil(viewportH * (1 + OVERSCAN) + scrollExtent * PARALLAX_RATE + DRAW_PADDING);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
@@ -219,8 +237,15 @@ export default function Neo2DotBackground() {
 
     const onResize = () => requestAnimationFrame(draw);
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [mode]);
+    const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
+    resizeObserver.observe(document.documentElement);
+    resizeObserver.observe(document.body);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      resizeObserver.disconnect();
+    };
+  }, [mode, themeMode]);
 
   /* Scroll-driven parallax — pure GPU transform, no re-rendering */
   useEffect(() => {
@@ -241,7 +266,7 @@ export default function Neo2DotBackground() {
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
-  }, [mode]);
+  }, [mode, themeMode]);
 
   if (mode === "none") return null;
 

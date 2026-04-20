@@ -402,6 +402,148 @@ def _details_payload(row: dict[str, Any]) -> dict[str, Any]:
     return decoded if isinstance(decoded, dict) else {}
 
 
+_ROW_COUNT_KEYS = {
+    "row_count",
+    "rows_upserted",
+    "rows_written",
+    "payload_count",
+    "published_payload_count",
+    "factor_rows_flushed",
+    "residual_rows_flushed",
+    "eligibility_rows_flushed",
+    "verified_row_count",
+    "expected_row_count",
+}
+
+_COUNTER_KEYS = {
+    "dates_processed",
+    "computed_dates",
+    "items_processed",
+    "items_total",
+}
+
+
+def _coerce_nonnegative_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return parsed
+
+
+def _record_metric(target: dict[str, int], key: str, value: Any) -> None:
+    parsed = _coerce_nonnegative_int(value)
+    if parsed is None:
+        return
+    target[str(key)] = parsed
+
+
+def _extract_stage_row_counts(
+    value: Any,
+    *,
+    row_counts: dict[str, int],
+    counters: dict[str, int],
+    prefix: str = "",
+) -> None:
+    if isinstance(value, dict):
+        table = value.get("table")
+        has_table_row_count = table is not None and "row_count" in value
+        if has_table_row_count:
+            _record_metric(row_counts, str(table), value.get("row_count"))
+        for key, child in value.items():
+            key_str = str(key)
+            if key_str == "metrics":
+                continue
+            if key_str == "row_counts" and isinstance(child, dict):
+                for nested_key, nested_value in child.items():
+                    metric_name = f"{prefix}{nested_key}" if prefix else str(nested_key)
+                    _record_metric(row_counts, metric_name, nested_value)
+                continue
+            if key_str in _ROW_COUNT_KEYS:
+                if has_table_row_count and key_str == "row_count":
+                    continue
+                metric_name = f"{prefix}{key_str}" if prefix else key_str
+                _record_metric(row_counts, metric_name, child)
+                continue
+            if key_str in _COUNTER_KEYS:
+                metric_name = f"{prefix}{key_str}" if prefix else key_str
+                _record_metric(counters, metric_name, child)
+                continue
+            if isinstance(child, dict):
+                child_prefix = f"{prefix}{key_str}." if prefix else f"{key_str}."
+                _extract_stage_row_counts(
+                    child,
+                    row_counts=row_counts,
+                    counters=counters,
+                    prefix=child_prefix,
+                )
+            elif isinstance(child, list):
+                _extract_stage_row_counts(
+                    child,
+                    row_counts=row_counts,
+                    counters=counters,
+                    prefix=prefix,
+                )
+    elif isinstance(value, list):
+        for item in value:
+            _extract_stage_row_counts(
+                item,
+                row_counts=row_counts,
+                counters=counters,
+                prefix=prefix,
+            )
+
+
+def normalize_stage_metrics(
+    details: dict[str, Any] | None,
+    *,
+    duration_seconds: float | None = None,
+) -> dict[str, Any]:
+    payload = dict(details or {})
+    metrics = payload.get("metrics")
+    if isinstance(metrics, dict):
+        normalized = dict(metrics)
+    else:
+        normalized = {}
+    row_counts: dict[str, int] = {}
+    counters: dict[str, int] = {}
+    _extract_stage_row_counts(payload, row_counts=row_counts, counters=counters)
+    if row_counts:
+        normalized["row_counts"] = row_counts
+    else:
+        normalized.pop("row_counts", None)
+    if counters:
+        normalized["counters"] = counters
+    else:
+        normalized.pop("counters", None)
+    effective_duration = duration_seconds
+    if effective_duration is None:
+        try:
+            existing_duration = payload.get("duration_seconds")
+            if existing_duration is not None:
+                effective_duration = round(float(existing_duration), 3)
+        except (TypeError, ValueError):
+            effective_duration = None
+    if effective_duration is not None:
+        normalized["duration_seconds"] = round(float(effective_duration), 3)
+    else:
+        normalized.pop("duration_seconds", None)
+    progress: dict[str, Any] = {}
+    unit = payload.get("unit")
+    if unit not in (None, ""):
+        progress["unit"] = unit
+    for key in ("items_processed", "items_total", "progress_pct"):
+        if payload.get(key) is not None:
+            progress[key] = payload.get(key)
+    if progress:
+        normalized["progress"] = progress
+    else:
+        normalized.pop("progress", None)
+    return normalized
+
+
 def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return {
@@ -459,6 +601,7 @@ def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 stage_duration_sum += float(stage_duration)
             except (TypeError, ValueError):
                 stage_duration = None
+        details["metrics"] = normalize_stage_metrics(details, duration_seconds=stage_duration)
         stage_summaries.append(
             {
                 "stage_name": str(r.get("stage_name") or ""),
@@ -469,6 +612,7 @@ def summarize_run_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "duration_seconds": stage_duration,
                 "heartbeat_at": details.get("heartbeat_at") or r.get("updated_at"),
                 "details": details,
+                "metrics": details.get("metrics") or {},
                 "error_type": r.get("error_type"),
                 "error_message": r.get("error_message"),
             }

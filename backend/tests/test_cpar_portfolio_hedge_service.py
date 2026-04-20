@@ -111,12 +111,12 @@ def test_portfolio_hedge_service_returns_partial_account_payload(monkeypatch: py
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 3}],
+        lambda **kwargs: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 3}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [
+        lambda **kwargs: [
             {"account_id": "acct_main", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": None},
             {"account_id": "acct_main", "ric": "MSFT.OQ", "ticker": "MSFT", "quantity": 5.0, "source": "seed", "updated_at": None},
             {"account_id": "acct_main", "ric": "EMPTY.OQ", "ticker": "EMPTY", "quantity": 2.0, "source": "seed", "updated_at": None},
@@ -157,8 +157,8 @@ def test_portfolio_hedge_service_returns_partial_account_payload(monkeypatch: py
     assert payload["excluded_positions_count"] == 2
     assert payload["coverage_breakdown"] == {
         "covered": {"positions_count": 1, "gross_market_value": pytest.approx(2010.0)},
-        "missing_price": {"positions_count": 1, "gross_market_value": pytest.approx(0.0)},
-        "missing_cpar_fit": {"positions_count": 0, "gross_market_value": pytest.approx(0.0)},
+        "missing_price": {"positions_count": 0, "gross_market_value": pytest.approx(0.0)},
+        "missing_cpar_fit": {"positions_count": 1, "gross_market_value": pytest.approx(0.0)},
         "insufficient_history": {"positions_count": 1, "gross_market_value": pytest.approx(505.0)},
     }
     assert payload["hedge_status"] == "hedge_ok"
@@ -227,7 +227,7 @@ def test_portfolio_hedge_service_returns_partial_account_payload(monkeypatch: py
             factor_id = contribution["factor_id"]
             reconciled[factor_id] = float(reconciled.get(factor_id, 0.0) + float(contribution["beta"]))
     assert reconciled == {"SPY": pytest.approx(0.9), "XLK": pytest.approx(0.3)}
-    assert {row["coverage"] for row in payload["positions"]} == {"covered", "insufficient_history", "missing_price"}
+    assert {row["coverage"] for row in payload["positions"]} == {"covered", "insufficient_history", "missing_cpar_fit"}
 
 
 def test_portfolio_hedge_service_factor_chart_preserves_positive_and_negative_contribution_legs(
@@ -237,12 +237,12 @@ def test_portfolio_hedge_service_factor_chart_preserves_positive_and_negative_co
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_long_short", "account_name": "Long Short", "positions_count": 2}],
+        lambda **kwargs: [{"account_id": "acct_long_short", "account_name": "Long Short", "positions_count": 2}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [
+        lambda **kwargs: [
             {"account_id": "acct_long_short", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": None},
             {"account_id": "acct_long_short", "ric": "SHRT.OQ", "ticker": "SHRT", "quantity": -5.0, "source": "seed", "updated_at": None},
         ],
@@ -287,12 +287,12 @@ def test_portfolio_hedge_service_keeps_zero_net_factor_rows_available(
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_flat", "account_name": "Flat", "positions_count": 2}],
+        lambda **kwargs: [{"account_id": "acct_flat", "account_name": "Flat", "positions_count": 2}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [
+        lambda **kwargs: [
             {"account_id": "acct_flat", "ric": "LONG.OQ", "ticker": "LONG", "quantity": 10.0, "source": "seed", "updated_at": None},
             {"account_id": "acct_flat", "ric": "SHRT.OQ", "ticker": "SHRT", "quantity": -10.0, "source": "seed", "updated_at": None},
         ],
@@ -338,12 +338,12 @@ def test_portfolio_hedge_service_returns_empty_payload_for_account_without_posit
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_empty", "account_name": "Empty", "positions_count": 0}],
+        lambda **kwargs: [{"account_id": "acct_empty", "account_name": "Empty", "positions_count": 0}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [],
+        lambda **kwargs: [],
     )
 
     payload = cpar_portfolio_hedge_service.load_cpar_portfolio_hedge_payload(
@@ -370,12 +370,12 @@ def test_portfolio_hedge_service_returns_unavailable_payload_when_no_rows_are_co
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_unavailable", "account_name": "Unavailable", "positions_count": 2}],
+        lambda **kwargs: [{"account_id": "acct_unavailable", "account_name": "Unavailable", "positions_count": 2}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [
+        lambda **kwargs: [
             {"account_id": "acct_unavailable", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": None},
             {"account_id": "acct_unavailable", "ric": "MISS.OQ", "ticker": "MISS", "quantity": 2.0, "source": "seed", "updated_at": None},
         ],
@@ -410,11 +410,11 @@ def test_portfolio_hedge_service_returns_unavailable_payload_when_no_rows_are_co
     assert payload["factor_variance_contributions"] == []
     assert payload["coverage_breakdown"] == {
         "covered": {"positions_count": 0, "gross_market_value": pytest.approx(0.0)},
-        "missing_price": {"positions_count": 1, "gross_market_value": pytest.approx(0.0)},
-        "missing_cpar_fit": {"positions_count": 0, "gross_market_value": pytest.approx(0.0)},
+        "missing_price": {"positions_count": 0, "gross_market_value": pytest.approx(0.0)},
+        "missing_cpar_fit": {"positions_count": 1, "gross_market_value": pytest.approx(0.0)},
         "insufficient_history": {"positions_count": 1, "gross_market_value": pytest.approx(2010.0)},
     }
-    assert {row["coverage"] for row in payload["positions"]} == {"insufficient_history", "missing_price"}
+    assert {row["coverage"] for row in payload["positions"]} == {"insufficient_history", "missing_cpar_fit"}
     assert all(row["thresholded_contributions"] == [] for row in payload["positions"])
 
 
@@ -423,12 +423,12 @@ def test_portfolio_hedge_service_raises_when_account_is_missing(monkeypatch: pyt
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 1}],
+        lambda **kwargs: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 1}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [],
+        lambda **kwargs: [],
     )
 
     with pytest.raises(cpar_portfolio_hedge_service.CparPortfolioAccountNotFound, match="acct_missing"):
@@ -444,12 +444,12 @@ def test_portfolio_hedge_service_pins_one_package_for_fit_and_covariance(monkeyp
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 1}],
+        lambda **kwargs: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 1}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [
+        lambda **kwargs: [
             {"account_id": "acct_main", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": None},
         ],
     )
@@ -487,7 +487,7 @@ def test_portfolio_hedge_service_maps_holdings_failures_to_unavailable(monkeypat
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: (_ for _ in ()).throw(cpar_portfolio_snapshot_service.holdings_reads.HoldingsReadError("neon unavailable")),
+        lambda **kwargs: (_ for _ in ()).throw(cpar_portfolio_snapshot_service.holdings_reads.HoldingsReadError("neon unavailable")),
     )
 
     with pytest.raises(cpar_meta_service.CparReadUnavailable, match="Holdings read failed"):
@@ -504,7 +504,7 @@ def test_portfolio_hedge_service_does_not_swallow_unexpected_holdings_bugs(
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: (_ for _ in ()).throw(ValueError("bad holdings row shape")),
+        lambda **kwargs: (_ for _ in ()).throw(ValueError("bad holdings row shape")),
     )
 
     with pytest.raises(ValueError, match="bad holdings row shape"):
@@ -521,12 +521,12 @@ def test_portfolio_hedge_service_maps_typed_source_failures_to_unavailable(
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 1}],
+        lambda **kwargs: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 1}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [
+        lambda **kwargs: [
             {"account_id": "acct_main", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": None},
         ],
     )
@@ -558,12 +558,12 @@ def test_portfolio_hedge_service_does_not_swallow_unexpected_shared_source_bugs(
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_accounts",
-        lambda: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 1}],
+        lambda **kwargs: [{"account_id": "acct_main", "account_name": "Main", "positions_count": 1}],
     )
     monkeypatch.setattr(
         cpar_portfolio_snapshot_service.holdings_reads,
         "load_holdings_positions",
-        lambda *, account_id: [
+        lambda **kwargs: [
             {"account_id": "acct_main", "ric": "AAPL.OQ", "ticker": "AAPL", "quantity": 10.0, "source": "seed", "updated_at": None},
         ],
     )

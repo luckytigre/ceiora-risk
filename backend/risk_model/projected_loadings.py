@@ -74,6 +74,107 @@ def _neon_projection_reads_enabled() -> bool:
     return bool(str(config.neon_dsn() or "").strip()) and config.neon_primary_model_data_enabled()
 
 
+def _persist_projected_loadings_postgres(
+    *,
+    results: dict[str, ProjectedLoadingResult],
+    as_of_date: str,
+) -> None:
+    from backend.data import model_output_writers as writers
+
+    conn = connect(dsn=resolve_dsn(None), autocommit=False)
+    try:
+        writers.ensure_postgres_schema(conn)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        as_of_date = str(as_of_date or "").strip()
+
+        loading_rows: list[tuple[Any, ...]] = []
+        meta_rows: list[tuple[Any, ...]] = []
+        touched_rics = sorted(
+            {
+                str(result.ric or "").strip().upper()
+                for result in results.values()
+                if str(result.ric or "").strip()
+            }
+        )
+
+        with conn.cursor() as cur:
+            if touched_rics and as_of_date:
+                cur.execute(
+                    """
+                    DELETE FROM projected_instrument_loadings
+                    WHERE as_of_date = %s
+                      AND ric = ANY(%s)
+                    """,
+                    (as_of_date, touched_rics),
+                )
+                cur.execute(
+                    """
+                    DELETE FROM projected_instrument_meta
+                    WHERE as_of_date = %s
+                      AND ric = ANY(%s)
+                    """,
+                    (as_of_date, touched_rics),
+                )
+
+            for result in results.values():
+                if result.status != "ok":
+                    continue
+                as_of = str(result.projection_asof or as_of_date or "").strip()
+                for factor_name, exposure in result.exposures.items():
+                    loading_rows.append((
+                        result.ric,
+                        result.ticker,
+                        as_of,
+                        factor_name,
+                        exposure,
+                    ))
+                meta_rows.append((
+                    result.ric,
+                    as_of,
+                    "ols_returns_regression",
+                    result.lookback_days,
+                    result.obs_count,
+                    result.r_squared,
+                    result.specific_var,
+                    result.specific_vol,
+                    now_iso,
+                ))
+
+            if loading_rows:
+                cur.executemany(
+                    """
+                    INSERT INTO projected_instrument_loadings
+                        (ric, ticker, as_of_date, factor_name, exposure)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (ric, as_of_date, factor_name) DO UPDATE SET
+                        ticker = EXCLUDED.ticker,
+                        exposure = EXCLUDED.exposure
+                    """,
+                    loading_rows,
+                )
+            if meta_rows:
+                cur.executemany(
+                    """
+                    INSERT INTO projected_instrument_meta
+                        (ric, as_of_date, projection_method, lookback_days, obs_count,
+                         r_squared, projected_specific_var, projected_specific_vol, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (ric, as_of_date) DO UPDATE SET
+                        projection_method = EXCLUDED.projection_method,
+                        lookback_days = EXCLUDED.lookback_days,
+                        obs_count = EXCLUDED.obs_count,
+                        r_squared = EXCLUDED.r_squared,
+                        projected_specific_var = EXCLUDED.projected_specific_var,
+                        projected_specific_vol = EXCLUDED.projected_specific_vol,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    meta_rows,
+                )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _load_factor_returns_wide(
     data_db: Path,
     *,
@@ -525,7 +626,7 @@ def _persist_projected_loadings(
     *,
     as_of_date: str,
 ) -> None:
-    """Write projected loadings and metadata to data.db."""
+    """Write projected loadings to local SQLite and the Neon authority store."""
     conn = sqlite3.connect(str(data_db))
     try:
         _ensure_schema(conn)
@@ -553,7 +654,7 @@ def _persist_projected_loadings(
                 (as_of_date, *touched_rics),
             )
 
-        for ticker, result in results.items():
+        for result in results.values():
             if result.status != "ok":
                 continue
             as_of = str(result.projection_asof or as_of_date or "").strip()
@@ -599,3 +700,6 @@ def _persist_projected_loadings(
         conn.commit()
     finally:
         conn.close()
+
+    if _neon_projection_reads_enabled():
+        _persist_projected_loadings_postgres(results=results, as_of_date=as_of_date)

@@ -321,3 +321,102 @@ def load_cuse_membership_lookup(
         if as_of_date and ric:
             out[(as_of_date, ric)] = row
     return out
+
+
+def _load_latest_returns_projection_scope_rows_sqlite(
+    *,
+    data_db: Path,
+) -> list[dict[str, str]]:
+    db_path = _resolve_data_db(data_db)
+    if not db_path.exists():
+        return []
+    conn = sqlite3.connect(str(db_path))
+    try:
+        if not _sqlite_table_exists(conn, "cuse_security_membership_daily"):
+            return []
+        cols = _sqlite_table_columns(conn, "cuse_security_membership_daily")
+        required = {
+            "as_of_date",
+            "ric",
+            "ticker",
+            "policy_path",
+            "projection_candidate_status",
+        }
+        if not required.issubset(cols):
+            return []
+        rows = conn.execute(
+            """
+            SELECT ticker, ric
+            FROM cuse_security_membership_daily
+            WHERE policy_path = 'returns_projection_candidate'
+              AND projection_candidate_status = 'candidate'
+              AND as_of_date = (
+                    SELECT MAX(as_of_date)
+                    FROM cuse_security_membership_daily
+                    WHERE policy_path = 'returns_projection_candidate'
+                      AND projection_candidate_status = 'candidate'
+                )
+              AND ticker IS NOT NULL AND TRIM(ticker) <> ''
+              AND ric IS NOT NULL AND TRIM(ric) <> ''
+            ORDER BY ticker, ric
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {"ticker": str(row[0]).strip().upper(), "ric": str(row[1]).strip().upper()}
+        for row in rows
+        if row and row[0] and row[1]
+    ]
+
+
+def _load_latest_returns_projection_scope_rows_postgres() -> list[dict[str, str]]:
+    if not _neon_membership_reads_enabled():
+        return []
+    conn = connect(dsn=resolve_dsn(None), autocommit=True)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ticker, ric
+                FROM cuse_security_membership_daily
+                WHERE policy_path = 'returns_projection_candidate'
+                  AND projection_candidate_status = 'candidate'
+                  AND as_of_date = (
+                        SELECT MAX(as_of_date)
+                        FROM cuse_security_membership_daily
+                        WHERE policy_path = 'returns_projection_candidate'
+                          AND projection_candidate_status = 'candidate'
+                    )
+                  AND ticker IS NOT NULL AND BTRIM(ticker) <> ''
+                  AND ric IS NOT NULL AND BTRIM(ric) <> ''
+                ORDER BY ticker, ric
+                """
+            )
+            rows = cur.fetchall()
+    except Exception:
+        return []
+    finally:
+        conn.close()
+    return [
+        {"ticker": str(row[0]).strip().upper(), "ric": str(row[1]).strip().upper()}
+        for row in rows
+        if row and row[0] and row[1]
+    ]
+
+
+def load_latest_returns_projection_scope_rows(
+    *,
+    data_db: Path | None = None,
+) -> list[dict[str, str]]:
+    db_path = _resolve_data_db(data_db)
+    if _prefer_neon_reads():
+        rows = _load_latest_returns_projection_scope_rows_postgres()
+        if rows:
+            return rows
+    rows = _load_latest_returns_projection_scope_rows_sqlite(data_db=db_path)
+    if rows:
+        return rows
+    if not _prefer_neon_reads():
+        return _load_latest_returns_projection_scope_rows_postgres()
+    return []

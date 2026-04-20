@@ -15,6 +15,94 @@ from backend.analytics.refresh_context import (
 )
 from backend.data import sqlite
 
+_LIVE_REGRESSION_MIN_MODELED_COUNT = 100
+_LIVE_REGRESSION_MIN_PROJECTED_COUNT = 25
+_LIVE_REGRESSION_COLLAPSE_FRACTION = 0.25
+
+
+def _universe_loadings_modeled_counts(payload: Any) -> dict[str, int]:
+    by_ticker = dict((payload or {}).get("by_ticker") or {})
+    counts = {
+        "ticker_count": int(len(by_ticker)),
+        "modeled_ticker_count": 0,
+        "core_estimated_ticker_count": 0,
+        "projected_only_ticker_count": 0,
+        "ineligible_ticker_count": 0,
+    }
+    for raw_row in by_ticker.values():
+        status = str(dict(raw_row or {}).get("model_status") or "").strip()
+        if status == "core_estimated":
+            counts["core_estimated_ticker_count"] += 1
+            counts["modeled_ticker_count"] += 1
+        elif status == "projected_only":
+            counts["projected_only_ticker_count"] += 1
+            counts["modeled_ticker_count"] += 1
+        elif status == "ineligible":
+            counts["ineligible_ticker_count"] += 1
+    return counts
+
+
+def _collapsed_vs_live(*, live_count: int, candidate_count: int, minimum_live: int) -> bool:
+    if int(live_count) < int(minimum_live):
+        return False
+    threshold = max(1, int(np.ceil(float(live_count) * _LIVE_REGRESSION_COLLAPSE_FRACTION)))
+    return int(candidate_count) < threshold
+
+
+def universe_loadings_payload_integrity(
+    cached_payload: Any,
+) -> tuple[bool, str]:
+    if not isinstance(cached_payload, dict):
+        return False, "missing_cached_payload"
+    counts = _universe_loadings_modeled_counts(cached_payload)
+    if counts["ticker_count"] <= 0:
+        return False, "missing_by_ticker"
+    if counts["modeled_ticker_count"] <= 0:
+        return False, "no_modeled_tickers"
+    return True, "payload_integrity_ok"
+
+
+def universe_loadings_live_regression_guard(
+    candidate_payload: Any,
+    *,
+    current_live_payload: Any,
+) -> tuple[bool, str]:
+    candidate_ok, candidate_reason = universe_loadings_payload_integrity(candidate_payload)
+    if not candidate_ok:
+        return False, candidate_reason
+    live_ok, _ = universe_loadings_payload_integrity(current_live_payload)
+    if not live_ok:
+        return True, "no_live_baseline"
+
+    live_counts = _universe_loadings_modeled_counts(current_live_payload)
+    candidate_counts = _universe_loadings_modeled_counts(candidate_payload)
+
+    if live_counts["modeled_ticker_count"] > 0 and candidate_counts["modeled_ticker_count"] <= 0:
+        return False, "modeled_tickers_regressed_to_zero_vs_live"
+    if live_counts["core_estimated_ticker_count"] > 0 and candidate_counts["core_estimated_ticker_count"] <= 0:
+        return False, "core_estimated_regressed_to_zero_vs_live"
+    if live_counts["projected_only_ticker_count"] > 0 and candidate_counts["projected_only_ticker_count"] <= 0:
+        return False, "projected_only_regressed_to_zero_vs_live"
+    if _collapsed_vs_live(
+        live_count=live_counts["modeled_ticker_count"],
+        candidate_count=candidate_counts["modeled_ticker_count"],
+        minimum_live=_LIVE_REGRESSION_MIN_MODELED_COUNT,
+    ):
+        return False, "modeled_ticker_count_collapsed_vs_live"
+    if _collapsed_vs_live(
+        live_count=live_counts["core_estimated_ticker_count"],
+        candidate_count=candidate_counts["core_estimated_ticker_count"],
+        minimum_live=_LIVE_REGRESSION_MIN_MODELED_COUNT,
+    ):
+        return False, "core_estimated_ticker_count_collapsed_vs_live"
+    if _collapsed_vs_live(
+        live_count=live_counts["projected_only_ticker_count"],
+        candidate_count=candidate_counts["projected_only_ticker_count"],
+        minimum_live=_LIVE_REGRESSION_MIN_PROJECTED_COUNT,
+    ):
+        return False, "projected_only_ticker_count_collapsed_vs_live"
+    return True, "live_regression_check_ok"
+
 
 def can_reuse_cached_universe_loadings(
     cached_payload: Any,
@@ -22,11 +110,9 @@ def can_reuse_cached_universe_loadings(
     source_dates: SourceDatesPayload,
     risk_engine_meta: RiskEngineMetaPayload,
 ) -> tuple[bool, str]:
-    if not isinstance(cached_payload, dict):
-        return False, "missing_cached_payload"
-    by_ticker = cached_payload.get("by_ticker")
-    if not isinstance(by_ticker, dict) or not by_ticker:
-        return False, "missing_by_ticker"
+    ok, reason = universe_loadings_payload_integrity(cached_payload)
+    if not ok:
+        return False, reason
     cached_source_dates = cached_payload.get("source_dates")
     if not isinstance(cached_source_dates, dict):
         return False, "missing_cached_source_dates"

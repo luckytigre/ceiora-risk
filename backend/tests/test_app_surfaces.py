@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from fastapi.testclient import TestClient
+
 from backend.app_factory import create_app
 
 
@@ -48,3 +50,14 @@ def test_full_app_exposes_both_surfaces() -> None:
     assert "/api/health/diagnostics" in paths
     assert "/api/data/diagnostics" in paths
     assert "/api/health" in paths
+
+
+def test_full_app_returns_422_for_invalid_json_body_without_crashing() -> None:
+    app = create_app(surface="full")
+    client = TestClient(app)
+
+    res = client.post("/api/cpar/explore/whatif", content=b'{"scenario_rows": [}')
+
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert isinstance(detail, list)

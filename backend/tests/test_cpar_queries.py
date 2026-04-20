@@ -174,6 +174,20 @@ def test_package_instrument_fits_for_rics_returns_matching_rows() -> None:
     assert rows[0]["fit_quality_status"] == "limited_history"
 
 
+def test_package_instrument_fits_for_tickers_returns_matching_rows() -> None:
+    conn = _seed_query_db()
+
+    rows = cpar_queries.package_instrument_fits_for_tickers(
+        _fetch_rows_factory(conn),
+        package_run_id="run_new",
+        tickers=["aapl", "missing"],
+    )
+
+    assert [row["ric"] for row in rows] == ["AAPL.L", "AAPL.OQ"]
+    assert rows[0]["ticker"] == "AAPL"
+    assert rows[1]["portfolio_use_status"] == "covered"
+
+
 def test_previous_successful_instrument_fit_returns_prior_successful_package() -> None:
     conn = _seed_query_db()
 

@@ -14,6 +14,15 @@ import {
   type ScriptableContext,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import { useAppSettings } from "./AppSettingsContext";
+import {
+  alphaColor,
+  chartGridColor,
+  chartLongColor,
+  chartShortColor,
+  chartTextColor,
+  tooltipOptions,
+} from "@/lib/charts/chartTheme";
 
 interface FactorHistoryPointLike {
   date: string;
@@ -41,7 +50,7 @@ const zeroLinePlugin: Plugin<"line"> = {
     ctx.save();
     ctx.beginPath();
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = "rgba(169, 182, 210, 0.30)";
+    ctx.strokeStyle = chartTextColor("secondary", 0.3);
     ctx.lineWidth = 1;
     ctx.moveTo(chart.chartArea.left, yPixel);
     ctx.lineTo(chart.chartArea.right, yPixel);
@@ -51,6 +60,7 @@ const zeroLinePlugin: Plugin<"line"> = {
 };
 
 export default function FactorHistoryChart({ factor, points, factorVol }: FactorHistoryChartProps) {
+  const { themeMode } = useAppSettings();
   if (!points || points.length === 0) {
     return (
       <div className="detail-history-empty">
@@ -63,7 +73,7 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
   const values = points.map((p) => p.cum_return * 100);
   const latestReturn = values[values.length - 1] ?? 0;
   const isPositive = latestReturn >= 0;
-  const lineColor = isPositive ? "#6bcf9a" : "#e0577f";
+  const lineColor = isPositive ? chartLongColor() : chartShortColor();
 
   const data: ChartData<"line", number[], string> = {
     labels,
@@ -76,7 +86,7 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
         pointRadius: 0,
         pointHoverRadius: 3,
         pointHoverBackgroundColor: lineColor,
-        pointHoverBorderColor: "#fff",
+        pointHoverBorderColor: chartTextColor("primary"),
         pointHoverBorderWidth: 1.5,
         tension: 0.25,
         fill: true,
@@ -85,15 +95,9 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
           const { ctx: canvasCtx, chartArea } = chart;
           if (!chartArea) return "transparent";
           const gradient = canvasCtx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          if (isPositive) {
-            gradient.addColorStop(0, "rgba(79, 160, 116, 0.45)");
-            gradient.addColorStop(0.4, "rgba(79, 160, 116, 0.12)");
-            gradient.addColorStop(1, "rgba(79, 160, 116, 0.02)");
-          } else {
-            gradient.addColorStop(0, "rgba(196, 63, 116, 0.02)");
-            gradient.addColorStop(0.6, "rgba(196, 63, 116, 0.12)");
-            gradient.addColorStop(1, "rgba(196, 63, 116, 0.45)");
-          }
+          gradient.addColorStop(0, alphaColor(lineColor, isPositive ? 0.45 : 0.02));
+          gradient.addColorStop(isPositive ? 0.4 : 0.6, alphaColor(lineColor, 0.12));
+          gradient.addColorStop(1, alphaColor(lineColor, isPositive ? 0.02 : 0.45));
           return gradient;
         },
       },
@@ -110,13 +114,8 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "rgba(20, 22, 30, 0.92)",
-        borderColor: "rgba(154, 171, 214, 0.18)",
-        borderWidth: 1,
-        cornerRadius: 4,
+        ...tooltipOptions(),
         padding: { top: 6, bottom: 6, left: 10, right: 10 },
-        titleColor: "rgba(232, 237, 249, 0.6)",
-        bodyColor: "#e8edf9",
         titleFont: { size: 10, weight: "normal" as const },
         bodyFont: { size: 11, weight: 500 },
         displayColors: false,
@@ -135,7 +134,7 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
         border: { display: false },
         grid: { display: false },
         ticks: {
-          color: "rgba(169, 182, 210, 0.5)",
+          color: chartTextColor("secondary", 0.5),
           autoSkip: true,
           maxTicksLimit: 6,
           callback: (_value, idx) => {
@@ -147,9 +146,9 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
       },
       y: {
         border: { display: false },
-        grid: { color: "rgba(154, 171, 214, 0.10)" },
+        grid: { color: chartGridColor(0.45) },
         ticks: {
-          color: "rgba(169, 182, 210, 0.5)",
+          color: chartTextColor("secondary", 0.5),
           callback: (v) => `${Number(v).toFixed(0)}%`,
           font: { size: 9 },
         },
@@ -159,7 +158,7 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
 
   return (
     <div className="detail-history-chart">
-      <Line data={data} options={options} plugins={[zeroLinePlugin]} />
+      <Line key={`factor-history-${themeMode}`} data={data} options={options} plugins={[zeroLinePlugin]} />
     </div>
   );
 }

@@ -22,17 +22,19 @@ def load_cpar_ticker_history_payload(
     years: int,
     data_db=None,
 ) -> dict[str, object]:
-    quote = cpar_ticker_service.load_cpar_ticker_payload(
+    package, _fit, _registry_row, clean_ticker, resolved_ric = cpar_ticker_service.resolve_cpar_ticker_identity(
         ticker=ticker,
         ric=ric,
         data_db=data_db,
     )
-    resolved_ric = str(quote.get("ric") or "").strip().upper()
-    if not resolved_ric:
-        raise cpar_ticker_service.CparTickerNotFound(f"{ticker} is missing a valid cPAR RIC mapping.")
 
-    package_date = str(quote.get("package_date") or "")
-    latest_date = datetime.fromisoformat(package_date).date()
+    package_date = str(package.get("package_date") or "")
+    try:
+        latest_date = datetime.fromisoformat(package_date).date()
+    except (TypeError, ValueError) as exc:
+        raise cpar_meta_service.CparReadUnavailable(
+            f"Active cPAR package has an invalid package_date: {package_date or 'missing'}"
+        ) from exc
     date_from = latest_date - timedelta(days=max(int(years), 1) * 366)
 
     try:
@@ -61,10 +63,12 @@ def load_cpar_ticker_history_payload(
         week_close[_week_ending_friday(day).isoformat()] = close
 
     if not week_close:
-        raise cpar_ticker_service.CparTickerNotFound(f"No price history found for {quote.get('ticker') or ticker}.")
+        raise cpar_ticker_service.CparTickerNotFound(
+            f"No price history found for {clean_ticker or ticker}."
+        )
 
     return {
-        "ticker": quote.get("ticker") or str(ticker or "").strip().upper(),
+        "ticker": clean_ticker,
         "ric": resolved_ric,
         "years": int(years),
         "points": [

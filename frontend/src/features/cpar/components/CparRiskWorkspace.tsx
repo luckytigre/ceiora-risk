@@ -6,12 +6,11 @@ import CparRiskCovarianceSection from "@/features/cpar/components/CparRiskCovari
 import CparRiskDecompChart from "@/features/cpar/components/CparRiskDecompChart";
 import CparRiskFactorSummaryCard from "@/features/cpar/components/CparRiskFactorSummaryCard";
 import CparRiskPositionsContributionTable from "@/features/cpar/components/CparRiskPositionsContributionTable";
-import { useCparMeta, useCparRisk } from "@/hooks/useCparApi";
+import { useCparRisk } from "@/hooks/useCparApi";
 import {
   normalizeCparRiskData,
   readCparDependencyErrorMessage,
   readCparError,
-  sameCparPackageIdentity,
 } from "@/lib/cparTruth";
 import {
   COMBINED_DECOMP_SUBTITLE,
@@ -19,14 +18,28 @@ import {
   RISK_DECOMP_SECTION_TITLE,
 } from "@/lib/riskDecompBars";
 
+function CparRiskLoadingCards() {
+  return (
+    <div className="cpar-page">
+      <section className="chart-card" data-testid="cpar-risk-loading">
+        <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
+        <div className="section-subtitle">{COMBINED_DECOMP_SUBTITLE}</div>
+        <div className="detail-history-empty loading-pulse">Loading first cPAR risk snapshot...</div>
+      </section>
+      <section className="chart-card">
+        <h3>Risk Surface</h3>
+        <div className="detail-history-empty loading-pulse">Loading factor summary and aggregate positions...</div>
+      </section>
+    </div>
+  );
+}
+
 function CparRiskWorkspaceInner() {
-  const { data: meta, error: metaError, isLoading: metaLoading } = useCparMeta();
-  const metaState = metaError ? readCparError(metaError) : null;
   const {
     data: risk,
     error: riskError,
     isLoading: riskLoading,
-  } = useCparRisk(Boolean(meta) && !metaState);
+  } = useCparRisk(true);
   const normalizedRisk = useMemo(() => normalizeCparRiskData(risk), [risk]);
   const rawLoadingShares = useMemo(
     () => deriveRawLoadingSharesFromCparLoadings(
@@ -38,27 +51,14 @@ function CparRiskWorkspaceInner() {
   );
   const volScaledShares = normalizedRisk?.vol_scaled_shares ?? normalizedRisk?.risk_shares ?? { market: 0, industry: 0, style: 0, idio: 100 };
   const riskState = riskError ? readCparError(riskError) : null;
-  const packageMismatch = Boolean(meta && normalizedRisk && !sameCparPackageIdentity(meta, normalizedRisk));
 
-  if ((metaLoading && !meta) || (!metaState && riskLoading && !risk)) {
-    return <CparPageLoadingState message="Loading cPAR risk..." />;
+  if (riskLoading && !risk) {
+    return <CparRiskLoadingCards />;
   }
 
   return (
     <div className="cpar-page">
-      {metaState ? (
-        <section className="chart-card cpar-alert-card" data-testid="cpar-portfolio-not-ready">
-          <h3>{metaState.kind === "not_ready" ? "cPAR Risk Not Ready" : "cPAR Risk Unavailable"}</h3>
-          <div className="section-subtitle">{metaState.message}</div>
-          <div className="detail-history-empty compact">
-            This page is package-based and read-only. Publish a durable cPAR package first, then reload.
-          </div>
-        </section>
-      ) : null}
-
-      {metaState ? (
-        null
-      ) : riskState ? (
+      {riskState ? (
         <section className="chart-card" data-testid="cpar-portfolio-error">
           <h3>Risk Surface</h3>
           <div className={`cpar-inline-message ${riskState.kind === "missing" ? "warning" : "error"}`}>
@@ -70,15 +70,6 @@ function CparRiskWorkspaceInner() {
                   : "Risk surface unavailable."}
             </strong>
             <span>{readCparDependencyErrorMessage(riskError)}</span>
-          </div>
-        </section>
-      ) : packageMismatch ? (
-        <section className="chart-card" data-testid="cpar-portfolio-package-mismatch">
-          <h3>Risk Surface</h3>
-          <div className="cpar-inline-message error">
-            <strong>Active package changed during read.</strong>
-            <span>The risk workflow no longer matches the active package metadata.</span>
-            <span>Reload the page to pin one cPAR package before reading the aggregate risk surface.</span>
           </div>
         </section>
       ) : normalizedRisk ? (
@@ -97,7 +88,7 @@ function CparRiskWorkspaceInner() {
           </div>
           <CparRiskFactorSummaryCard portfolio={normalizedRisk} />
           <CparRiskPositionsContributionTable rows={normalizedRisk.positions} />
-          <CparRiskCovarianceSection covMatrix={normalizedRisk.cov_matrix} factors={meta?.factors ?? []} />
+          <CparRiskCovarianceSection covMatrix={normalizedRisk.cov_matrix} factors={normalizedRisk.factors ?? []} />
         </>
       ) : null}
     </div>

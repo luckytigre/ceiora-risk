@@ -51,6 +51,7 @@ from backend.analytics.services.universe_loadings import (
     load_latest_factor_coverage as _load_latest_factor_coverage_impl,
 )
 from backend.data import core_reads, model_outputs, rebuild_cross_section_snapshot, runtime_state, serving_outputs, sqlite
+from backend.data.cuse_membership_reads import load_latest_returns_projection_scope_rows
 from backend.risk_model.factor_catalog import (
     build_factor_catalog_for_factors,
     factor_id_to_entry_map,
@@ -300,11 +301,27 @@ def _validate_projection_only_serving_outputs(
         )
 
 
-def _projection_core_state_through_date_from_payloads(payloads: dict[str, Any]) -> str | None:
+def _projection_active_asof_from_payloads(payloads: dict[str, Any]) -> str | None:
     refresh_meta = dict(payloads.get("refresh_meta") or {})
     refresh_meta_risk = dict(refresh_meta.get("risk_engine") or {})
     risk_payload = dict(payloads.get("risk") or {})
     risk_payload_meta = dict(risk_payload.get("risk_engine") or {})
+    projection_dates: list[str] = []
+    for value in (
+        refresh_meta.get("projection_package_asof"),
+        refresh_meta_risk.get("projection_package_asof"),
+        risk_payload_meta.get("projection_package_asof"),
+    ):
+        clean = str(value or "").strip()
+        if clean:
+            projection_dates.append(clean)
+    universe_payload = dict(payloads.get("universe_loadings") or {})
+    for row in dict(universe_payload.get("by_ticker") or {}).values():
+        clean = str((row or {}).get("projection_asof") or "").strip()
+        if clean:
+            projection_dates.append(clean)
+    if projection_dates:
+        return max(projection_dates)
     for value in (
         refresh_meta_risk.get("core_state_through_date"),
         risk_payload_meta.get("core_state_through_date"),
@@ -322,8 +339,8 @@ def _load_projection_ok_tickers_for_payloads(
     data_db: Path,
     payloads: dict[str, Any],
 ) -> set[str]:
-    core_state_through_date = _projection_core_state_through_date_from_payloads(payloads)
-    if not core_state_through_date:
+    projection_asof = _projection_active_asof_from_payloads(payloads)
+    if not projection_asof:
         return set()
     conn = sqlite3.connect(str(data_db))
     try:
@@ -335,7 +352,7 @@ def _load_projection_ok_tickers_for_payloads(
     projected_loadings_map = load_persisted_projected_loadings(
         data_db=data_db,
         projection_rics=projection_rows,
-        as_of_date=core_state_through_date,
+        as_of_date=projection_asof,
     )
     return _projection_ok_tickers(projected_loadings_map)
 
@@ -696,6 +713,7 @@ def run_refresh(
         cov = cov.rename(index=factor_name_to_id, columns=factor_name_to_id)
 
     # 3. Build/cached full-universe loadings first (portfolio is a final projection only).
+    projection_package_asof: str | None = None
     universe_loadings_reused = False
     universe_loadings_reuse_reason = "not_attempted"
     cached_universe_loadings = (
@@ -784,11 +802,16 @@ def run_refresh(
                     canonical_projection_rows = load_projection_only_universe_rows(_canonical_proj_conn)
                 finally:
                     _canonical_proj_conn.close()
+            authoritative_projection_rows = load_latest_returns_projection_scope_rows(
+                data_db=effective_data_db,
+            )
             projection_universe_rows = _merge_projection_universe_rows(
                 effective_projection_rows,
                 canonical_projection_rows,
+                authoritative_projection_rows,
             )
             persisted_projection_asof = None
+            projection_package_asof = None
             if projection_universe_rows and active_core_state_through_date:
                 persisted_projection_asof = latest_persisted_projection_asof(
                     data_db=effective_data_db,
@@ -802,12 +825,13 @@ def run_refresh(
             should_refresh_projection_outputs = bool(
                 refresh_projected_loadings
                 or recomputed_this_refresh
-                or (
-                    projection_universe_rows
-                    and active_core_state_through_date
-                    and persisted_projection_asof != active_core_state_through_date
-                )
             )
+            if projection_universe_rows:
+                projection_package_asof = (
+                    active_core_state_through_date
+                    if should_refresh_projection_outputs and active_core_state_through_date
+                    else (persisted_projection_asof or active_core_state_through_date)
+                )
             if projection_universe_rows and should_refresh_projection_outputs and active_core_state_through_date:
                 _emit_refresh_progress(
                     progress_callback,
@@ -825,7 +849,7 @@ def run_refresh(
                     projected_refresh_t0,
                     projection_ticker_count=len(projection_universe_rows),
                 )
-            if projection_universe_rows and active_core_state_through_date:
+            if projection_universe_rows and projection_package_asof:
                 _emit_refresh_progress(
                     progress_callback,
                     message="Loading persisted returns-projected instrument loadings",
@@ -835,7 +859,7 @@ def run_refresh(
                 projected_loadings_map = load_persisted_projected_loadings(
                     data_db=effective_data_db,
                     projection_rics=projection_universe_rows,
-                    as_of_date=active_core_state_through_date,
+                    as_of_date=projection_package_asof,
                 )
                 effective_ok_tickers = _projection_ok_tickers(projected_loadings_map)
                 missing_projection_tickers = {
@@ -851,7 +875,7 @@ def run_refresh(
                             for row in projection_universe_rows
                             if str(row.get("ticker") or "").strip().upper() in missing_projection_tickers
                         ],
-                        as_of_date=active_core_state_through_date,
+                        as_of_date=projection_package_asof,
                     )
                     if canonical_projected_loadings:
                         projected_loadings_map = dict(projected_loadings_map or {})
@@ -859,16 +883,17 @@ def run_refresh(
                             if ticker not in projected_loadings_map:
                                 projected_loadings_map[ticker] = payload
                 logger.info(
-                    "Loaded persisted projected loadings for %d/%d projection-only instruments at core_state_through_date=%s.",
+                    "Loaded persisted projected loadings for %d/%d projection-only instruments at projection_package_asof=%s.",
                     sum(1 for p in projected_loadings_map.values() if p.status == "ok"),
                     len(projection_universe_rows),
-                    active_core_state_through_date,
+                    projection_package_asof,
                 )
                 _record_substage_timing(
                     "projected_loadings_load",
                     projected_load_t0,
                     projection_ticker_count=len(projection_universe_rows),
                     projected_ok_count=sum(1 for p in projected_loadings_map.values() if p.status == "ok"),
+                    projection_package_asof=projection_package_asof,
                 )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Projection-only loadings refresh/load failed; serving will mark them unavailable: %s", exc)
@@ -891,7 +916,7 @@ def run_refresh(
             factor_catalog_by_name=factor_catalog_by_name,
             projected_loadings=projected_loadings_map,
             projection_universe_rows=projection_universe_rows,
-            projection_core_state_through_date=active_core_state_through_date,
+            projection_core_state_through_date=projection_package_asof,
         )
         universe_loadings_reuse_reason = "rebuilt"
         logger.info(
@@ -1128,6 +1153,13 @@ def run_refresh(
     health_refreshed = bool(staged.get("health_refreshed", False))
     health_refresh_state = str(staged.get("health_refresh_state") or ("recomputed" if health_refreshed else "deferred"))
     persisted_payloads = dict(staged.get("persisted_payloads") or {})
+    if projection_package_asof:
+        refresh_meta_payload = dict(persisted_payloads.get("refresh_meta") or {})
+        refresh_meta_risk = dict(refresh_meta_payload.get("risk_engine") or {})
+        refresh_meta_payload["projection_package_asof"] = str(projection_package_asof)
+        refresh_meta_risk["projection_package_asof"] = str(projection_package_asof)
+        refresh_meta_payload["risk_engine"] = refresh_meta_risk
+        persisted_payloads["refresh_meta"] = refresh_meta_payload
     _validate_projection_only_payloads(
         projection_ok_tickers=_projection_ok_tickers(projected_loadings_map),
         payloads=persisted_payloads,

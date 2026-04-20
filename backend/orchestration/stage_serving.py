@@ -5,7 +5,21 @@ from __future__ import annotations
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
+import time
 from typing import Any, Callable
+
+
+def _memory_high_water_mb() -> float | None:
+    try:
+        import resource
+    except ImportError:
+        return None
+    usage = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss or 0.0)
+    if usage <= 0.0:
+        return None
+    divisor = 1024.0 * 1024.0 if sys.platform == "darwin" else 1024.0
+    return round(usage / divisor, 2)
 
 
 def run_serving_stage(
@@ -104,11 +118,23 @@ def run_serving_stage(
         out["_skip_risk_engine"] = bool(skip_risk_engine)
         return out
 
+    stage_t0 = time.perf_counter()
     out = _run_refresh_inner()
+    total_seconds = time.perf_counter() - stage_t0
+    rows_written = int(
+        out.get("published_payload_count")
+        or out.get("payload_count")
+        or 0
+    )
     return {
         "status": str(out.get("status") or "ok"),
         "serving_mode": serving_mode,
         "skip_risk_engine": bool(out.get("_skip_risk_engine")),
         "skip_risk_engine_reason": str(out.get("_skip_risk_engine_reason") or ""),
         "refresh": out,
+        "metrics": {
+            "compute_seconds": round(float(total_seconds), 3),
+            "rows_written": int(rows_written),
+            "memory_high_water_mb": _memory_high_water_mb(),
+        },
     }

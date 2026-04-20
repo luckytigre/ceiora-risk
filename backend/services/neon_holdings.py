@@ -377,6 +377,7 @@ def apply_ticker_bucket_scenario(
     rejected_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
     seen_keys: set[tuple[str, str]] = set()
+    seen_resolved_keys: set[tuple[str, str]] = set()
 
     for idx, raw in enumerate(list(scenario_rows or []), start=1):
         account_id = _normalize_account_id(raw.get("account_id"))
@@ -410,6 +411,15 @@ def apply_ticker_bucket_scenario(
                 }
             )
             continue
+        if abs(qty) <= 0:
+            rejected_rows.append(
+                {
+                    "row_number": idx,
+                    "reason_code": "zero_quantity",
+                    "message": f"quantity must be non-zero for {account_id}/{ticker or raw.get('ric')!s}",
+                }
+            )
+            continue
         dup_key = (account_id, ticker)
         if dup_key in seen_keys:
             rejected_rows.append(
@@ -421,7 +431,36 @@ def apply_ticker_bucket_scenario(
             )
             continue
         seen_keys.add(dup_key)
-        resolved_ric, alternatives = _resolve_ticker_to_ric(pg_conn, ticker)
+        resolved_ric = None
+        resolved_ticker = ticker
+        alternatives: list[str] = []
+        provided_ric = _normalize_ric(raw.get("ric"))
+        if provided_ric:
+            ric_exists, registry_ticker = _ric_exists(pg_conn, provided_ric)
+            if not ric_exists:
+                rejected_rows.append(
+                    {
+                        "row_number": idx,
+                        "reason_code": "unknown_ric",
+                        "message": f"RIC not found in security registry: {provided_ric}",
+                    }
+                )
+                continue
+            resolved_ric = provided_ric
+            if registry_ticker:
+                normalized_registry_ticker = _normalize_ticker(registry_ticker)
+                if ticker and normalized_registry_ticker and ticker != normalized_registry_ticker:
+                    rejected_rows.append(
+                        {
+                            "row_number": idx,
+                            "reason_code": "identifier_mismatch",
+                            "message": f"ticker/ric mismatch for {account_id}: {ticker} does not match {provided_ric}",
+                        }
+                    )
+                    continue
+                resolved_ticker = _normalize_ticker(registry_ticker)
+        if not resolved_ric:
+            resolved_ric, alternatives = _resolve_ticker_to_ric(pg_conn, ticker)
         if not resolved_ric:
             rejected_rows.append(
                 {
@@ -431,6 +470,17 @@ def apply_ticker_bucket_scenario(
                 }
             )
             continue
+        resolved_dup_key = (account_id, resolved_ric)
+        if resolved_dup_key in seen_resolved_keys:
+            rejected_rows.append(
+                {
+                    "row_number": idx,
+                    "reason_code": "duplicate_resolved_instrument",
+                    "message": f"duplicate account_id+ric in payload after ticker resolution: {account_id}/{resolved_ric}",
+                }
+            )
+            continue
+        seen_resolved_keys.add(resolved_dup_key)
         if alternatives:
             warnings.append(
                 f"row {idx}: ticker {ticker} resolved to {resolved_ric}; alternatives={','.join(alternatives[:10])}"
@@ -439,7 +489,7 @@ def apply_ticker_bucket_scenario(
             {
                 "row_number": idx,
                 "account_id": account_id,
-                "ticker": ticker,
+                "ticker": resolved_ticker,
                 "ric": resolved_ric,
                 "quantity": qty,
                 "source": str(raw.get("source") or default_source).strip() or str(default_source),

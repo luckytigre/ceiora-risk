@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field, FiniteFloat
 
+from backend.api.auth import parse_app_principal
+from backend.data.account_scope import AccountScopeAuthRequired
+from backend.data.account_scope import AccountScopeDenied
+from backend.data.account_scope import AccountScopeProvisioningError
+from backend.data.account_scope import account_enforcement_enabled
+from backend.data.account_scope import resolve_account_scope
+from backend.data.account_scope import validate_requested_account
+from backend.data.neon import connect, resolve_dsn
 from backend.services import (
+    cpar_explore_context_service,
     cpar_explore_whatif_service,
     cpar_factor_history_service,
     cpar_meta_service,
@@ -22,6 +31,32 @@ from backend.services import (
 router = APIRouter()
 MAX_CPAR_WHATIF_SCENARIO_ROWS = cpar_portfolio_whatif_service.MAX_CPAR_WHATIF_ROWS
 MAX_CPAR_EXPLORE_WHATIF_ROWS = cpar_explore_whatif_service.MAX_CPAR_EXPLORE_WHATIF_ROWS
+
+
+def _resolve_holdings_scope(
+    *,
+    x_app_session_token: str | None,
+):
+    principal = parse_app_principal(
+        x_app_session_token=x_app_session_token,
+    )
+    if not account_enforcement_enabled():
+        return resolve_account_scope(None, principal=principal)
+    conn = connect(dsn=resolve_dsn(None), autocommit=True)
+    try:
+        return resolve_account_scope(conn, principal=principal)
+    finally:
+        conn.close()
+
+
+def _raise_account_scope_error(exc: Exception) -> None:
+    if isinstance(exc, AccountScopeAuthRequired):
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    if isinstance(exc, AccountScopeDenied):
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if isinstance(exc, AccountScopeProvisioningError):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise exc
 
 
 class CparWhatIfScenarioRow(BaseModel):
@@ -133,9 +168,45 @@ async def get_cpar_ticker_history(
 
 
 @router.get("/cpar/risk")
-async def get_cpar_risk():
+async def get_cpar_risk(
+    x_app_session_token: str | None = Header(default=None, alias="X-App-Session-Token"),
+):
     try:
-        return cpar_risk_service.load_cpar_risk_payload()
+        allowed_account_ids = None
+        if account_enforcement_enabled():
+            scope = _resolve_holdings_scope(
+                x_app_session_token=x_app_session_token,
+            )
+            allowed_account_ids = list(scope.account_ids)
+        return cpar_risk_service.load_cpar_risk_payload(
+            allowed_account_ids=allowed_account_ids,
+        )
+    except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
+        _raise_account_scope_error(exc)
+        raise
+    except cpar_meta_service.CparReadNotReady as exc:
+        _raise_cpar_not_ready(str(exc))
+    except cpar_meta_service.CparReadUnavailable as exc:
+        _raise_cpar_unavailable(str(exc))
+
+
+@router.get("/cpar/explore/context")
+async def get_cpar_explore_context(
+    x_app_session_token: str | None = Header(default=None, alias="X-App-Session-Token"),
+):
+    try:
+        allowed_account_ids = None
+        if account_enforcement_enabled():
+            scope = _resolve_holdings_scope(
+                x_app_session_token=x_app_session_token,
+            )
+            allowed_account_ids = list(scope.account_ids)
+        return cpar_explore_context_service.load_cpar_explore_context_payload(
+            allowed_account_ids=allowed_account_ids,
+        )
+    except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
+        _raise_account_scope_error(exc)
+        raise
     except cpar_meta_service.CparReadNotReady as exc:
         _raise_cpar_not_ready(str(exc))
     except cpar_meta_service.CparReadUnavailable as exc:
@@ -166,12 +237,23 @@ async def get_cpar_factor_history(
 async def get_cpar_portfolio_hedge(
     account_id: str = Query(..., min_length=1),
     mode: Literal["factor_neutral", "market_neutral"] = Query(default="factor_neutral"),
+    x_app_session_token: str | None = Header(default=None, alias="X-App-Session-Token"),
 ):
     try:
+        scope = None
+        if account_enforcement_enabled():
+            scope = _resolve_holdings_scope(
+                x_app_session_token=x_app_session_token,
+            )
+            validate_requested_account(scope, account_id)
         return cpar_portfolio_hedge_service.load_cpar_portfolio_hedge_payload(
             account_id=account_id,
             mode=str(mode),
+            allowed_account_ids=None if scope is None else list(scope.account_ids),
         )
+    except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
+        _raise_account_scope_error(exc)
+        raise
     except cpar_meta_service.CparReadNotReady as exc:
         _raise_cpar_not_ready(str(exc))
     except cpar_meta_service.CparReadUnavailable as exc:
@@ -183,6 +265,7 @@ async def get_cpar_portfolio_hedge(
 @router.post("/cpar/portfolio/whatif")
 async def post_cpar_portfolio_whatif(
     payload: CparPortfolioWhatIfRequest,
+    x_app_session_token: str | None = Header(default=None, alias="X-App-Session-Token"),
 ):
     scenario_rows = [dict(row) for row in payload.model_dump().get("scenario_rows", [])]
     if len(scenario_rows) > MAX_CPAR_WHATIF_SCENARIO_ROWS:
@@ -191,11 +274,21 @@ async def post_cpar_portfolio_whatif(
             detail=f"Too many cPAR what-if rows. Max {MAX_CPAR_WHATIF_SCENARIO_ROWS}.",
         )
     try:
+        scope = None
+        if account_enforcement_enabled():
+            scope = _resolve_holdings_scope(
+                x_app_session_token=x_app_session_token,
+            )
+            validate_requested_account(scope, payload.account_id)
         return cpar_portfolio_whatif_service.load_cpar_portfolio_whatif_payload(
             account_id=payload.account_id,
             mode=str(payload.mode),
             scenario_rows=scenario_rows,
+            allowed_account_ids=None if scope is None else list(scope.account_ids),
         )
+    except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
+        _raise_account_scope_error(exc)
+        raise
     except cpar_meta_service.CparReadNotReady as exc:
         _raise_cpar_not_ready(str(exc))
     except cpar_meta_service.CparReadUnavailable as exc:
@@ -209,6 +302,7 @@ async def post_cpar_portfolio_whatif(
 @router.post("/cpar/explore/whatif")
 async def post_cpar_explore_whatif(
     payload: CparExploreWhatIfRequest,
+    x_app_session_token: str | None = Header(default=None, alias="X-App-Session-Token"),
 ):
     scenario_rows = [dict(row) for row in payload.model_dump().get("scenario_rows", [])]
     if len(scenario_rows) > MAX_CPAR_EXPLORE_WHATIF_ROWS:
@@ -217,9 +311,20 @@ async def post_cpar_explore_whatif(
             detail=f"Too many cPAR explore what-if rows. Max {MAX_CPAR_EXPLORE_WHATIF_ROWS}.",
         )
     try:
+        scope = None
+        if account_enforcement_enabled():
+            scope = _resolve_holdings_scope(
+                x_app_session_token=x_app_session_token,
+            )
+            for row in scenario_rows:
+                validate_requested_account(scope, str(row.get("account_id") or ""))
         return cpar_explore_whatif_service.load_cpar_explore_whatif_payload(
             scenario_rows=scenario_rows,
+            allowed_account_ids=None if scope is None else list(scope.account_ids),
         )
+    except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
+        _raise_account_scope_error(exc)
+        raise
     except cpar_meta_service.CparReadNotReady as exc:
         _raise_cpar_not_ready(str(exc))
     except cpar_meta_service.CparReadUnavailable as exc:

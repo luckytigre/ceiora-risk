@@ -183,8 +183,16 @@ def compute_exposures_modes(
     factor_details: list[FactorDetailPayload],
     factor_coverage: dict[str, FactorCoveragePayload] | None = None,
     factor_coverage_asof: str | None = None,
+    modes: tuple[str, ...] | list[str] | None = None,
 ) -> ExposureModesPayload:
     """Compute the 3-mode exposure data for all factors."""
+    requested_modes = tuple(
+        dict.fromkeys(
+            ("raw", "sensitivity", "risk_contribution")
+            if modes is None
+            else modes
+        )
+    )
     all_factors: set[str] = set()
     for pos in positions:
         all_factors.update(pos.get("exposures", {}).keys())
@@ -205,7 +213,10 @@ def compute_exposures_modes(
                 for i in range(len(cov_factors))
             }
 
-    result: ExposureModesPayload = {"raw": [], "sensitivity": [], "risk_contribution": []}
+    result: ExposureModesPayload = {
+        mode: []
+        for mode in requested_modes
+    }
 
     for factor in sorted(all_factors):
         raw_exp = _finite_float(exposure_map.get(factor), 0.0)
@@ -216,9 +227,9 @@ def compute_exposures_modes(
         marginal_var = _finite_float(detail.get("marginal_var_contrib"), 0.0) if detail else 0.0
         cov_adj = _finite_float(cov_adj_map.get(factor), 0.0)
 
-        drilldown_raw = []
-        drilldown_sens = []
-        drilldown_risk = []
+        drilldown_raw = [] if "raw" in result else None
+        drilldown_sens = [] if "sensitivity" in result else None
+        drilldown_risk = [] if "risk_contribution" in result else None
         for pos in positions:
             pos_exp = _finite_float(pos.get("exposures", {}).get(factor, 0.0), 0.0)
             if abs(pos_exp) > 1e-8:
@@ -231,71 +242,77 @@ def compute_exposures_modes(
                     risk_pct_contrib = (risk_var_contrib / marginal_var) * risk_pct
                 else:
                     risk_pct_contrib = 0.0
-                drilldown_raw.append({
-                    "ticker": pos["ticker"],
-                    "weight": weight,
-                    "exposure": round(pos_exp, 4),
-                    "contribution": round(raw_contrib, 6),
-                    "model_status": str(pos.get("model_status") or ""),
-                    "exposure_origin": str(pos.get("exposure_origin") or ""),
-                })
-                drilldown_sens.append({
-                    "ticker": pos["ticker"],
-                    "weight": weight,
-                    "exposure": round(pos_exp, 4),
-                    "sensitivity": round(pos_sens, 6),
-                    "contribution": round(sens_contrib, 6),
-                    "model_status": str(pos.get("model_status") or ""),
-                    "exposure_origin": str(pos.get("exposure_origin") or ""),
-                })
-                drilldown_risk.append({
-                    "ticker": pos["ticker"],
-                    "weight": weight,
-                    "exposure": round(pos_exp, 4),
-                    "sensitivity": round(pos_exp * cov_adj, 8),
-                    "contribution": round(risk_pct_contrib, 8),
-                    "model_status": str(pos.get("model_status") or ""),
-                    "exposure_origin": str(pos.get("exposure_origin") or ""),
-                })
+                if drilldown_raw is not None:
+                    drilldown_raw.append({
+                        "ticker": pos["ticker"],
+                        "weight": weight,
+                        "exposure": round(pos_exp, 4),
+                        "contribution": round(raw_contrib, 6),
+                        "model_status": str(pos.get("model_status") or ""),
+                        "exposure_origin": str(pos.get("exposure_origin") or ""),
+                    })
+                if drilldown_sens is not None:
+                    drilldown_sens.append({
+                        "ticker": pos["ticker"],
+                        "weight": weight,
+                        "exposure": round(pos_exp, 4),
+                        "sensitivity": round(pos_sens, 6),
+                        "contribution": round(sens_contrib, 6),
+                        "model_status": str(pos.get("model_status") or ""),
+                        "exposure_origin": str(pos.get("exposure_origin") or ""),
+                    })
+                if drilldown_risk is not None:
+                    drilldown_risk.append({
+                        "ticker": pos["ticker"],
+                        "weight": weight,
+                        "exposure": round(pos_exp, 4),
+                        "sensitivity": round(pos_exp * cov_adj, 8),
+                        "contribution": round(risk_pct_contrib, 8),
+                        "model_status": str(pos.get("model_status") or ""),
+                        "exposure_origin": str(pos.get("exposure_origin") or ""),
+                    })
 
         fv_rounded = round(factor_vol, 6)
         cov_stats = coverage_map.get(factor, {})
         cross_section_n = int(cov_stats.get("cross_section_n", 0) or 0)
         eligible_n = int(cov_stats.get("eligible_n", 0) or 0)
         coverage_pct = float(cov_stats.get("coverage_pct", 0.0) or 0.0)
-        result["raw"].append({
-            "factor_id": factor,
-            "value": round(raw_exp, 6),
-            "factor_vol": fv_rounded,
-            "cross_section_n": cross_section_n,
-            "eligible_n": eligible_n,
-            "coverage_pct": round(coverage_pct, 6),
-            "factor_coverage_asof": factor_coverage_asof,
-            "coverage_date": factor_coverage_asof,
-            "drilldown": drilldown_raw,
-        })
-        result["sensitivity"].append({
-            "factor_id": factor,
-            "value": round(sensitivity, 6),
-            "factor_vol": fv_rounded,
-            "cross_section_n": cross_section_n,
-            "eligible_n": eligible_n,
-            "coverage_pct": round(coverage_pct, 6),
-            "factor_coverage_asof": factor_coverage_asof,
-            "coverage_date": factor_coverage_asof,
-            "drilldown": drilldown_sens,
-        })
-        result["risk_contribution"].append({
-            "factor_id": factor,
-            "value": round(risk_pct, 4),
-            "factor_vol": fv_rounded,
-            "cross_section_n": cross_section_n,
-            "eligible_n": eligible_n,
-            "coverage_pct": round(coverage_pct, 6),
-            "factor_coverage_asof": factor_coverage_asof,
-            "coverage_date": factor_coverage_asof,
-            "drilldown": drilldown_risk,
-        })
+        if "raw" in result:
+            result["raw"].append({
+                "factor_id": factor,
+                "value": round(raw_exp, 6),
+                "factor_vol": fv_rounded,
+                "cross_section_n": cross_section_n,
+                "eligible_n": eligible_n,
+                "coverage_pct": round(coverage_pct, 6),
+                "factor_coverage_asof": factor_coverage_asof,
+                "coverage_date": factor_coverage_asof,
+                "drilldown": drilldown_raw or [],
+            })
+        if "sensitivity" in result:
+            result["sensitivity"].append({
+                "factor_id": factor,
+                "value": round(sensitivity, 6),
+                "factor_vol": fv_rounded,
+                "cross_section_n": cross_section_n,
+                "eligible_n": eligible_n,
+                "coverage_pct": round(coverage_pct, 6),
+                "factor_coverage_asof": factor_coverage_asof,
+                "coverage_date": factor_coverage_asof,
+                "drilldown": drilldown_sens or [],
+            })
+        if "risk_contribution" in result:
+            result["risk_contribution"].append({
+                "factor_id": factor,
+                "value": round(risk_pct, 4),
+                "factor_vol": fv_rounded,
+                "cross_section_n": cross_section_n,
+                "eligible_n": eligible_n,
+                "coverage_pct": round(coverage_pct, 6),
+                "factor_coverage_asof": factor_coverage_asof,
+                "coverage_date": factor_coverage_asof,
+                "drilldown": drilldown_risk or [],
+            })
 
     return result
 

@@ -53,7 +53,6 @@ Current cUSE4 integration is still the default app wiring in several places, inc
   - `/exposures`
   - `/explore`
   - `/health`
-- shared frontend helpers such as `frontend/src/lib/analyticsTruth.ts`
 
 These surfaces are not "generic factor-model abstractions."
 They are the current cUSE4-first application surfaces unless explicitly documented otherwise.
@@ -66,16 +65,6 @@ Preferred cUSE4 frontend import surfaces now include:
 - `frontend/src/lib/cuse4Truth.ts`
 - `frontend/src/lib/cuse4Refresh.ts`
 - `frontend/src/features/cuse4/components/*` for shared visual components used by the default cUSE4 pages/features
-
-Transitional mixed-family compatibility files still exist:
-
-- `frontend/src/hooks/useApi.ts`
-- `frontend/src/lib/api.ts`
-- `frontend/src/lib/types.ts`
-- `frontend/src/lib/analyticsTruth.ts`
-- `frontend/src/lib/refresh.ts`
-
-These compatibility files should not be the default import path for new cUSE4 work.
 
 Current default-named cUSE4 route family includes:
 
@@ -116,7 +105,7 @@ Current shared holdings surface:
   - modeled snapshot and truth summary via `frontend/src/hooks/useCuse4Api.ts`
 - cPAR participation there is explicit and read-only:
   - method/coverage overlay sourced through `frontend/src/hooks/useCparApi.ts`
-- do not hide that mixed ownership behind the transitional mixed-family barrels
+- do not hide that mixed ownership behind generic alias barrels
 
 Legacy redirects remain in place from:
 
@@ -162,14 +151,8 @@ Preferred cPAR frontend import surfaces now include:
 - shared `frontend/src/lib/types/holdings.ts` only where cPAR intentionally reuses shared holdings/account plumbing
 - `frontend/src/lib/apiTransport.ts` only for neutral low-level fetch/error handling
 
-The mixed-family compatibility barrels:
-
-- `frontend/src/hooks/useApi.ts`
-- `frontend/src/lib/api.ts`
-- `frontend/src/lib/types.ts`
-
-may remain for compatibility, but they should not be the default import path for cPAR-owned frontend code after the current cleanup slice.
-They also should not be the owner of shared holdings/account reuse inside cPAR surfaces; that shared plumbing should stay explicit through the holdings owners above.
+The legacy mixed-family compatibility barrels have been retired.
+Shared holdings/account reuse inside cPAR surfaces should stay explicit through the holdings owners above rather than through generic alias layers.
 
 ## Why The Asymmetry Exists
 

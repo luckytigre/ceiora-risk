@@ -138,6 +138,42 @@ def test_load_holdings_positions_normalizes_request_and_shapes_rows(
     assert conn.closed is True
 
 
+def test_load_holdings_positions_applies_account_scope_when_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    cursor = _FakeCursor(rows=[], capture=captured)
+    conn = _FakeConn(cursor)
+
+    monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
+    monkeypatch.setattr(holdings_reads, "connect", lambda *, dsn, autocommit: conn)
+
+    holdings_reads.load_holdings_positions(
+        account_id="ACCT_MAIN",
+        allowed_account_ids=("acct_main", "acct_alt"),
+    )
+
+    assert captured["params"] == ("acct_main", ["acct_main", "acct_alt"])
+    assert "AND p.account_id = ANY(%s)" in str(captured["sql"])
+
+
+def test_load_holdings_accounts_returns_no_rows_for_empty_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"connect": False}
+
+    monkeypatch.setattr(holdings_reads, "resolve_dsn", lambda _explicit=None: "postgresql://example")
+
+    def _connect(*, dsn: str, autocommit: bool):
+        called["connect"] = True
+        raise AssertionError("connect should not be called for an empty enforced scope")
+
+    monkeypatch.setattr(holdings_reads, "connect", _connect)
+
+    assert holdings_reads.load_holdings_accounts(allowed_account_ids=[]) == []
+    assert called["connect"] is False
+
+
 def test_load_all_holdings_positions_shapes_rows_without_account_filter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

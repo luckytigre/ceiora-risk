@@ -79,6 +79,25 @@ export interface PortfolioData extends ServingSnapshotMeta {
   position_count: number;
   source_dates?: SourceDates;
   _cached: boolean;
+  _account_scoped?: boolean;
+  account_id?: string | null;
+}
+
+export interface CuseExploreHeldPosition {
+  ticker: string;
+  shares: number;
+  weight: number;
+  market_value: number;
+  long_short: string;
+  price: number;
+}
+
+export interface CuseExploreContextData extends ServingSnapshotMeta {
+  held_positions: CuseExploreHeldPosition[];
+  source_dates?: SourceDates;
+  _cached: boolean;
+  _account_scoped?: boolean;
+  account_id?: string | null;
 }
 
 export interface FactorDrilldownItem {
@@ -108,6 +127,8 @@ export interface ExposuresData extends ServingSnapshotMeta {
   factors: FactorExposure[];
   source_dates?: SourceDates;
   _cached: boolean;
+  _account_scoped?: boolean;
+  account_id?: string | null;
 }
 
 export interface FactorHistoryPoint {
@@ -185,6 +206,42 @@ export interface RiskData extends ServingSnapshotMeta {
     update_available?: boolean;
   };
   _cached: boolean;
+  _account_scoped?: boolean;
+  account_id?: string | null;
+}
+
+export interface CuseRiskPageSummaryRiskData extends ServingSnapshotMeta {
+  risk_shares: RiskShares;
+  vol_scaled_shares?: RiskShares;
+  factor_details: FactorDetail[];
+  factor_catalog?: FactorCatalogEntry[];
+  source_dates?: SourceDates;
+  risk_engine?: RiskData["risk_engine"];
+  model_sanity?: RiskData["model_sanity"];
+  _cached: boolean;
+  _account_scoped?: boolean;
+  account_id?: string | null;
+}
+
+export interface CuseRiskPageExposureModeData extends ExposuresData {}
+
+export interface CuseRiskPageCovarianceData extends ServingSnapshotMeta {
+  cov_matrix: CovMatrix;
+  _cached: boolean;
+  _account_scoped?: boolean;
+  account_id?: string | null;
+}
+
+export interface CuseRiskPageSummaryData {
+  portfolio: PortfolioData;
+  risk: CuseRiskPageSummaryRiskData;
+  exposures: {
+    raw: CuseRiskPageExposureModeData;
+  };
+  _cached: boolean;
+  _account_scoped?: boolean;
+  account_id?: string | null;
+  truth_surface?: string | null;
 }
 
 export interface UniverseTickerItem {
@@ -220,6 +277,9 @@ export interface UniverseTickerItem {
   quote_source?: string | null;
   quote_source_label?: string | null;
   quote_source_detail?: string | null;
+  whatif_ready?: boolean;
+  whatif_ready_label?: string | null;
+  whatif_ready_detail?: string | null;
 }
 
 export interface UniverseTickerData {
@@ -259,6 +319,9 @@ export interface UniverseSearchItem {
   quote_source?: string | null;
   quote_source_label?: string | null;
   quote_source_detail?: string | null;
+  whatif_ready?: boolean;
+  whatif_ready_label?: string | null;
+  whatif_ready_detail?: string | null;
 }
 
 export interface UniverseSearchData {

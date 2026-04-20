@@ -12,6 +12,7 @@ Runs WLS regression for each trading day:
 from __future__ import annotations
 
 import logging
+import sys
 import sqlite3
 import time
 from pathlib import Path
@@ -104,6 +105,47 @@ CREATE TABLE IF NOT EXISTS daily_universe_eligibility_summary (
     missing_return_n INTEGER NOT NULL DEFAULT 0
 );
 """
+
+
+def _memory_high_water_mb() -> float | None:
+    try:
+        import resource
+    except ImportError:
+        return None
+    usage = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss or 0.0)
+    if usage <= 0.0:
+        return None
+    divisor = 1024.0 * 1024.0 if sys.platform == "darwin" else 1024.0
+    return round(usage / divisor, 2)
+
+
+def _attach_stage_metrics(df: pd.DataFrame, metrics: dict[str, Any]) -> pd.DataFrame:
+    try:
+        df.attrs["stage_metrics"] = metrics
+    except Exception:
+        pass
+    return df
+
+
+def _eligibility_context_row_count(eligibility_ctx) -> int:
+    total = 0
+    try:
+        total += int(sum(len(snapshot) for snapshot in (eligibility_ctx.exposure_snapshots or {}).values()))
+    except Exception:
+        pass
+    for attr in (
+        "market_cap_panel",
+        "trbc_economic_sector_short_panel",
+        "trbc_business_sector_panel",
+        "trbc_industry_panel",
+        "hq_country_code_panel",
+    ):
+        panel = getattr(eligibility_ctx, attr, None)
+        try:
+            total += int(len(panel))
+        except Exception:
+            continue
+    return total
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -549,15 +591,30 @@ def compute_daily_factor_returns(
         DataFrame with columns: date, factor_name, factor_return, robust_se, t_stat, r_squared, residual_vol
     """
     t0 = time.time()
+    read_seconds = 0.0
+    compute_seconds = 0.0
+    write_seconds = 0.0
+    query_count = 0
+    rows_read = 0
+    rows_written = 0
+    largest_batch_rows = 0
     logger.info("Loading data for daily factor returns...")
 
     # Invalidate stale cache rows if methodology changed, then check cached dates.
+    read_t0 = time.perf_counter()
     _ensure_cache_version(
         cache_db,
         min_cross_section_age_days=min_cross_section_age_days,
     )
+    read_seconds += time.perf_counter() - read_t0
+    query_count += 2
+    read_t0 = time.perf_counter()
     all_trading_dates = _load_trading_dates(data_db)
     model_history_start_date = _active_model_history_start_date(data_db)
+    read_seconds += time.perf_counter() - read_t0
+    query_count += 2
+    rows_read += int(len(all_trading_dates))
+    largest_batch_rows = max(largest_batch_rows, int(len(all_trading_dates)))
     factor_history_start_date = _first_usable_model_date(
         all_trading_dates,
         model_history_start_date=model_history_start_date,
@@ -588,20 +645,63 @@ def compute_daily_factor_returns(
         )
     if not trading_dates:
         logger.warning("No trading dates inside active cUSE history window — cannot compute daily factor returns")
-        return _load_all_from_cache(
+        read_t0 = time.perf_counter()
+        cached_df = _load_all_from_cache(
             cache_db,
             lookback_days,
             model_history_start_date=factor_history_start_date,
         )
+        read_seconds += time.perf_counter() - read_t0
+        query_count += 1
+        rows_read += int(len(cached_df))
+        largest_batch_rows = max(largest_batch_rows, int(len(cached_df)))
+        return _attach_stage_metrics(
+            cached_df,
+            {
+                "read_seconds": round(float(read_seconds), 3),
+                "query_seconds": round(float(read_seconds), 3),
+                "compute_seconds": round(float(compute_seconds), 3),
+                "write_seconds": round(float(write_seconds), 3),
+                "query_count": int(query_count),
+                "rows_read": int(rows_read),
+                "rows_written": int(rows_written),
+                "largest_batch_rows": int(largest_batch_rows),
+                "memory_high_water_mb": _memory_high_water_mb(),
+            },
+        )
+    read_t0 = time.perf_counter()
     cached_dates = _load_cached_dates(cache_db)
+    read_seconds += time.perf_counter() - read_t0
+    query_count += 3
+    rows_read += int(len(cached_dates))
+    largest_batch_rows = max(largest_batch_rows, int(len(cached_dates)))
     dates_to_compute = [d for d in trading_dates if d not in cached_dates]
 
     if not dates_to_compute:
         logger.info("All dates already cached, loading from cache")
-        return _load_all_from_cache(
+        read_t0 = time.perf_counter()
+        cached_df = _load_all_from_cache(
             cache_db,
             lookback_days,
             model_history_start_date=factor_history_start_date,
+        )
+        read_seconds += time.perf_counter() - read_t0
+        query_count += 1
+        rows_read += int(len(cached_df))
+        largest_batch_rows = max(largest_batch_rows, int(len(cached_df)))
+        return _attach_stage_metrics(
+            cached_df,
+            {
+                "read_seconds": round(float(read_seconds), 3),
+                "query_seconds": round(float(read_seconds), 3),
+                "compute_seconds": round(float(compute_seconds), 3),
+                "write_seconds": round(float(write_seconds), 3),
+                "query_count": int(query_count),
+                "rows_read": int(rows_read),
+                "rows_written": int(rows_written),
+                "largest_batch_rows": int(largest_batch_rows),
+                "memory_high_water_mb": _memory_high_water_mb(),
+            },
         )
 
     logger.info(
@@ -627,14 +727,32 @@ def compute_daily_factor_returns(
     first_compute_idx = all_trading_dates.index(dates_to_compute[0])
     price_start_date = all_trading_dates[max(0, first_compute_idx - 1)]
     price_end_date = dates_to_compute[-1]
+    read_t0 = time.perf_counter()
     prices_df = _load_prices_for_window(
         data_db,
         start_date=price_start_date,
         end_date=price_end_date,
     )
+    read_seconds += time.perf_counter() - read_t0
+    query_count += 1
+    rows_read += int(len(prices_df))
+    largest_batch_rows = max(largest_batch_rows, int(len(prices_df)))
     if prices_df.empty:
         logger.warning("No prices data in resolved window — cannot compute daily factor returns")
-        return pd.DataFrame(columns=["date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol"])
+        return _attach_stage_metrics(
+            pd.DataFrame(columns=["date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol"]),
+            {
+                "read_seconds": round(float(read_seconds), 3),
+                "query_seconds": round(float(read_seconds), 3),
+                "compute_seconds": round(float(compute_seconds), 3),
+                "write_seconds": round(float(write_seconds), 3),
+                "query_count": int(query_count),
+                "rows_read": int(rows_read),
+                "rows_written": int(rows_written),
+                "largest_batch_rows": int(largest_batch_rows),
+                "memory_high_water_mb": _memory_high_water_mb(),
+            },
+        )
     logger.info(
         "Loaded bounded prices for factor returns: rows=%s rics=%s trading_dates=%s start=%s end=%s",
         len(prices_df),
@@ -655,6 +773,7 @@ def compute_daily_factor_returns(
             }
         )
 
+    compute_t0 = time.perf_counter()
     prices_wide = prices_df.pivot(index="date", columns="ric", values="close")
     prices_wide = prices_wide.sort_index()
     daily_returns = prices_wide.pct_change(fill_method=None)
@@ -669,6 +788,7 @@ def compute_daily_factor_returns(
         .str.upper()
         .to_dict()
     )
+    compute_seconds += time.perf_counter() - compute_t0
 
     # Centralized structural-eligibility context for all daily cross-sections.
     lag_days = max(0, int(min_cross_section_age_days))
@@ -676,10 +796,36 @@ def compute_daily_factor_returns(
         _shift_date_by_days(d, lag_days)
         for d in dates_to_compute
     })
-    eligibility_ctx = build_eligibility_context(data_db, dates=eligibility_dates)
+    # Factor-return recompute can run against a scratch workspace database even when
+    # cloud runtime is Neon-primary. Keep eligibility inputs on the same authority
+    # surface as prices/returns to avoid mixed-date windows across backends.
+    read_t0 = time.perf_counter()
+    eligibility_ctx = build_eligibility_context(
+        data_db,
+        dates=eligibility_dates,
+        force_local=True,
+    )
+    read_seconds += time.perf_counter() - read_t0
+    query_count += 1
+    eligibility_rows = _eligibility_context_row_count(eligibility_ctx)
+    rows_read += int(eligibility_rows)
+    largest_batch_rows = max(largest_batch_rows, int(eligibility_rows))
     if not eligibility_ctx.exposure_dates:
         logger.warning("No exposure snapshots available — cannot compute daily factor returns")
-        return pd.DataFrame(columns=["date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol"])
+        return _attach_stage_metrics(
+            pd.DataFrame(columns=["date", "factor_name", "factor_return", "robust_se", "t_stat", "r_squared", "residual_vol"]),
+            {
+                "read_seconds": round(float(read_seconds), 3),
+                "query_seconds": round(float(read_seconds), 3),
+                "compute_seconds": round(float(compute_seconds), 3),
+                "write_seconds": round(float(write_seconds), 3),
+                "query_count": int(query_count),
+                "rows_read": int(rows_read),
+                "rows_written": int(rows_written),
+                "largest_batch_rows": int(largest_batch_rows),
+                "memory_high_water_mb": _memory_high_water_mb(),
+            },
+        )
     logger.info(
         "Eligibility context ready: snapshots=%s first_snapshot=%s last_snapshot=%s",
         len(eligibility_ctx.exposure_dates),
@@ -726,6 +872,7 @@ def compute_daily_factor_returns(
     }
     structural_counts = _load_structural_counts(cache_db)
 
+    compute_t0 = time.perf_counter()
     for i, date in enumerate(dates_to_compute):
         eligibility_date = _shift_date_by_days(date, lag_days)
         build_result = frame_builder.build(date=date, eligibility_date=eligibility_date)
@@ -872,7 +1019,11 @@ def compute_daily_factor_returns(
         if len(batch_results) > 3000 or len(batch_residuals) > 25000:
             pending_results = len(batch_results)
             pending_residuals = len(batch_residuals)
+            flush_t0 = time.perf_counter()
             _save_daily_results_and_residuals(cache_db, batch_results, batch_residuals)
+            write_seconds += time.perf_counter() - flush_t0
+            rows_written += int(pending_results + pending_residuals)
+            largest_batch_rows = max(largest_batch_rows, int(max(pending_results, pending_residuals)))
             batch_results = []
             batch_residuals = []
             logger.info(
@@ -883,7 +1034,11 @@ def compute_daily_factor_returns(
             )
         if len(batch_eligibility) > 500:
             pending_eligibility = len(batch_eligibility)
+            flush_t0 = time.perf_counter()
             _save_daily_eligibility_summary(cache_db, batch_eligibility)
+            write_seconds += time.perf_counter() - flush_t0
+            rows_written += int(pending_eligibility)
+            largest_batch_rows = max(largest_batch_rows, int(pending_eligibility))
             batch_eligibility = []
             logger.info(
                 "Flushed eligibility summary batch: through_date=%s rows=%s",
@@ -918,13 +1073,18 @@ def compute_daily_factor_returns(
                         "progress_kind": "dates",
                     }
                 )
+    compute_seconds += time.perf_counter() - compute_t0
 
     # Save remaining
     pending_results = len(batch_results)
     pending_residuals = len(batch_residuals)
     pending_eligibility = len(batch_eligibility)
+    flush_t0 = time.perf_counter()
     _save_daily_results_and_residuals(cache_db, batch_results, batch_residuals)
     _save_daily_eligibility_summary(cache_db, batch_eligibility)
+    write_seconds += time.perf_counter() - flush_t0
+    rows_written += int(pending_results + pending_residuals + pending_eligibility)
+    largest_batch_rows = max(largest_batch_rows, int(max(pending_results, pending_residuals, pending_eligibility)))
     if pending_results or pending_residuals or pending_eligibility:
         logger.info(
             "Flushed final cache batch: factor_rows=%s residual_rows=%s eligibility_rows=%s",
@@ -957,10 +1117,29 @@ def compute_daily_factor_returns(
         skip_counts,
     )
 
-    return _load_all_from_cache(
+    read_t0 = time.perf_counter()
+    out_df = _load_all_from_cache(
         cache_db,
         lookback_days,
         model_history_start_date=factor_history_start_date,
+    )
+    read_seconds += time.perf_counter() - read_t0
+    query_count += 1
+    rows_read += int(len(out_df))
+    largest_batch_rows = max(largest_batch_rows, int(len(out_df)))
+    return _attach_stage_metrics(
+        out_df,
+        {
+            "read_seconds": round(float(read_seconds), 3),
+            "query_seconds": round(float(read_seconds), 3),
+            "compute_seconds": round(float(compute_seconds), 3),
+            "write_seconds": round(float(write_seconds), 3),
+            "query_count": int(query_count),
+            "rows_read": int(rows_read),
+            "rows_written": int(rows_written),
+            "largest_batch_rows": int(largest_batch_rows),
+            "memory_high_water_mb": _memory_high_water_mb(),
+        },
     )
 
 

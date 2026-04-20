@@ -7,6 +7,7 @@ import {
   triggerRefreshProfile,
   useOperatorStatus,
 } from "@/hooks/useCuse4Api";
+import { useOperatorTokenAvailable } from "@/hooks/useOperatorTokenAvailable";
 import { runServeRefreshAndRevalidate } from "@/lib/cuse4Refresh";
 
 function parseError(error: unknown): {
@@ -66,7 +67,8 @@ export default function ApiErrorState({
 }) {
   const [refreshState, setRefreshState] = useState<"idle" | "running" | "done" | "failed">("idle");
   const parsed = parseError(error);
-  const { data: operator } = useOperatorStatus();
+  const operatorTokenAvailable = useOperatorTokenAvailable();
+  const { data: operator } = useOperatorStatus(operatorTokenAvailable);
   const allowedProfiles = new Set(operator?.runtime?.allowed_profiles ?? []);
   const onlyServeRefreshAllowed = allowedProfiles.size > 0 && allowedProfiles.size === 1 && allowedProfiles.has("serve-refresh");
 
@@ -90,10 +92,10 @@ export default function ApiErrorState({
     <div className="chart-card">
       <h3>{title}</h3>
       <div className="detail-history-empty">{parsed.message}</div>
-      {parsed.actionEndpoint && parsed.actionMethod === "POST" && (
+      {operatorTokenAvailable && parsed.actionEndpoint && parsed.actionMethod === "POST" && (
         <div style={{ marginTop: 10 }}>
           <button
-            className="btn btn-secondary"
+            className="btn-action"
             onClick={handleRefresh}
             disabled={refreshState === "running"}
           >
@@ -102,14 +104,14 @@ export default function ApiErrorState({
               : refreshProfileLabel(parsed.refreshProfile, onlyServeRefreshAllowed)}
           </button>
           {refreshState === "done" && (
-            <div style={{ marginTop: 8, color: "rgba(169,182,210,0.8)", fontSize: 12 }}>
+            <div style={{ marginTop: 8, color: "var(--text-secondary)", fontSize: 12 }}>
               {parsed.refreshProfile === "serve-refresh" || (!parsed.refreshProfile && onlyServeRefreshAllowed)
                 ? "Refresh completed."
                 : "Refresh started. Reload in a few seconds."}
             </div>
           )}
           {refreshState === "failed" && (
-            <div style={{ marginTop: 8, color: "rgba(204,53,88,0.9)", fontSize: 12 }}>
+            <div style={{ marginTop: 8, color: "var(--negative)", fontSize: 12 }}>
               Could not start refresh from this page.
             </div>
           )}

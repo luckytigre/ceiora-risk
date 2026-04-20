@@ -1,9 +1,17 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import CparTickerQuoteCard from "@/features/cpar/components/CparTickerQuoteCard";
 import CparExploreWhatIfSection from "@/features/cpar/components/CparExploreWhatIfSection";
-import { useCparRisk, useCparSearch, useCparTicker, useCparTickerHistory } from "@/hooks/useCparApi";
+import {
+  preloadCparTickerBundle,
+  useCparExploreContext,
+  useCparSearch,
+  useCparTicker,
+  useCparTickerHistory,
+} from "@/hooks/useCparApi";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { readCparError } from "@/lib/cparTruth";
 import type { CparSearchItem } from "@/lib/types/cpar";
 import { normalizeTicker, type CparExplorePositionSummary } from "@/features/cpar/components/cparExploreUtils";
@@ -11,9 +19,10 @@ import { normalizeTicker, type CparExplorePositionSummary } from "@/features/cpa
 export default function CparExplorePage() {
   const [query, setQuery] = useState("");
   const [selectedInstrument, setSelectedInstrument] = useState<CparSearchItem | null>(null);
+  const debouncedQuery = useDebouncedValue(query, 140);
 
-  const { data: searchData, error: searchError, isLoading: searchLoading, isValidating: searchValidating } = useCparSearch(query, 10);
-  const { data: riskData, error: riskError } = useCparRisk();
+  const { data: searchData, error: searchError, isLoading: searchLoading, isValidating: searchValidating } = useCparSearch(debouncedQuery, 10);
+  const { data: exploreContextData, error: exploreContextError } = useCparExploreContext();
   const { data: tickerData, isLoading, error: tickerError } = useCparTicker(
     selectedInstrument?.ticker || null,
     selectedInstrument?.ric || null,
@@ -33,22 +42,22 @@ export default function CparExplorePage() {
 
   const positionMap = useMemo(() => {
     const map = new Map<string, CparExplorePositionSummary>();
-    for (const row of riskData?.positions ?? []) {
+    for (const row of exploreContextData?.held_positions ?? []) {
       const key = String(row.ticker || row.ric || "").trim().toUpperCase();
       if (!key) continue;
       map.set(key, {
         shares: Number(row.quantity || 0),
         weight: Number(row.portfolio_weight || 0),
         market_value: Number(row.market_value || 0),
-        long_short: Number(row.quantity || 0) >= 0 ? "LONG" : "SHORT",
+        long_short: row.long_short,
       });
     }
     return map;
-  }, [riskData]);
+  }, [exploreContextData]);
 
   const priceMap = useMemo(() => {
     const map = new Map<string, number>();
-    for (const row of riskData?.positions ?? []) {
+    for (const row of exploreContextData?.held_positions ?? []) {
       const key = String(row.ticker || row.ric || "").trim().toUpperCase();
       if (!key || row.price == null) continue;
       map.set(key, Number(row.price));
@@ -56,16 +65,18 @@ export default function CparExplorePage() {
     if (item?.ticker) {
       const key = String(item.ticker || item.ric || "").trim().toUpperCase();
       const price = Number(item.source_context.latest_price_context?.price || 0);
-      if (key && price > 0) map.set(key, price);
+        if (key && price > 0) map.set(key, price);
     }
     return map;
-  }, [item, riskData]);
+  }, [exploreContextData, item]);
 
-  const selectedPosition = selectedInstrument?.ticker
-    ? positionMap.get(String(selectedInstrument.ticker).toUpperCase())
+  const selectedPosition = selectedInstrument
+    ? positionMap.get(String(selectedInstrument.ticker || "").toUpperCase())
+      ?? positionMap.get(String(selectedInstrument.ric || "").toUpperCase())
     : undefined;
 
   const selectInstrument = useCallback((nextItem: CparSearchItem) => {
+    preloadCparTickerBundle(nextItem.ticker || nextItem.ric, nextItem.ric, 5);
     setSelectedInstrument(nextItem);
     setQuery(nextItem.ticker || nextItem.ric);
   }, []);
@@ -80,15 +91,25 @@ export default function CparExplorePage() {
     }
   }, [selectedInstrument]);
 
-  const riskState = riskError ? readCparError(riskError) : null;
+  const exploreContextState = exploreContextError ? readCparError(exploreContextError) : null;
   const searchState = searchError ? readCparError(searchError) : null;
   const tickerState = tickerError ? readCparError(tickerError) : null;
+  const searchPending = query.trim() !== debouncedQuery.trim();
+  const settledQuery = debouncedQuery.trim().toUpperCase();
+  const searchRequestSettled = !searchPending && !searchLoading && !searchValidating;
+  const searchResultsCurrent =
+    settledQuery.length === 0
+      || (
+        searchRequestSettled
+        && (searchData?.query ?? "").trim().toUpperCase() === settledQuery
+      );
+  const visibleSearchResults = searchResultsCurrent ? results : [];
 
   return (
     <div className="explore-page-stack" data-testid="cpar-explore-page">
-      {riskState && (
+      {exploreContextState && (
         <div className="explore-error">
-          {riskState.message}
+          {exploreContextState.message}
         </div>
       )}
       {!isLoading && selectedInstrument && tickerState && (
@@ -103,8 +124,11 @@ export default function CparExplorePage() {
       )}
 
       {isLoading && selectedInstrument && (
-        <div className="cpar-explore-loading-chip" role="status" aria-live="polite">
-          Loading {selectedInstrument.ticker || selectedInstrument.ric}...
+        <div className="analytics-stage-overlay" aria-hidden="true">
+          <AnalyticsLoadingViz
+            message={`Loading ${selectedInstrument.ticker || selectedInstrument.ric}...`}
+            className="analytics-stage-inline"
+          />
         </div>
       )}
 
@@ -122,11 +146,13 @@ export default function CparExplorePage() {
         priceMap={priceMap}
         selectedInstrument={selectedInstrument}
         searchQuery={query}
-        searchLoading={searchLoading || searchValidating}
+        searchLoading={searchPending || searchLoading || searchValidating}
+        searchSettled={searchRequestSettled}
         onSearchQueryChange={handleSearchQueryChange}
-        searchResults={results}
+        searchResults={visibleSearchResults}
         onSelectInstrument={selectInstrument}
         positionMap={positionMap}
+        onPreviewInstrument={(item) => preloadCparTickerBundle(item.ticker || item.ric, item.ric, 5)}
       />
     </div>
   );

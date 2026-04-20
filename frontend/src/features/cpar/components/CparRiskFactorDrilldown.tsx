@@ -190,12 +190,11 @@ export default function CparRiskFactorDrilldown({
           {!historyLoading && historyData?.points && historyData.points.length > 0 ? (
             <div className="detail-history-stats">
               <span
-                className="detail-history-stat"
-                style={{
-                  color: (historyData.points[historyData.points.length - 1]?.cum_return ?? 0) >= 0
-                    ? "rgba(107, 207, 154, 0.85)"
-                    : "rgba(224, 87, 127, 0.85)",
-                }}
+                className={`detail-history-stat ${
+                  (historyData.points[historyData.points.length - 1]?.cum_return ?? 0) >= 0
+                    ? "positive"
+                    : "negative"
+                }`}
               >
                 {`${(historyData.points[historyData.points.length - 1]?.cum_return ?? 0) >= 0 ? "+" : ""}${(
                   (historyData.points[historyData.points.length - 1]?.cum_return ?? 0) * 100

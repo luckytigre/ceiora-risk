@@ -1,10 +1,16 @@
 "use client";
 
+import { createInternalNeonAuth } from "@neondatabase/auth";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useBackground, type BgMode } from "./BackgroundContext";
+import BrandLockup from "@/components/BrandLockup";
+import { useAppSettings } from "./AppSettingsContext";
+import { useAuthSession } from "@/components/AuthSessionContext";
 import { useOperatorStatus } from "@/hooks/useCuse4Api";
+import { useOperatorTokenAvailable } from "@/hooks/useOperatorTokenAvailable";
+import { isPublicShellPath } from "@/lib/appAccess";
+import { clearStoredAuthTokens } from "@/lib/authTokens";
 import { runServeRefreshAndRevalidate } from "@/lib/cuse4Refresh";
 
 const CUSE_TABS = [
@@ -22,12 +28,15 @@ const CPAR_TABS = [
 
 const POSITIONS_TABS = [{ href: "/positions", label: "Positions", matchPrefix: "/positions" }];
 
-const BG_OPTIONS: { value: BgMode; label: string }[] = [
-  { value: "topo", label: "Topographic" },
-  { value: "flow", label: "Flow" },
-  { value: "none", label: "None" },
-];
 const LANDING_FAMILY_TRANSITION_EVENT = "landing-family-transition-start";
+
+function readCssTriplet(name: string, fallback: [number, number, number]): [number, number, number] {
+  if (typeof window === "undefined") return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const parts = raw.split(",").map((part) => Number(part.trim()));
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) return fallback;
+  return [parts[0], parts[1], parts[2]];
+}
 
 function parseIsoMs(iso?: string | null): number | null {
   if (!iso) return null;
@@ -53,19 +62,22 @@ function formatAgeFromIso(iso: string | null | undefined, nowMs: number): string
 
 export default function TabNav() {
   const pathname = usePathname();
+  const { session, context, neonProjectUrl } = useAuthSession();
   const activePath = pathname || "";
+  const isPublicShell = isPublicShellPath(activePath);
   const isPositionsPage = activePath === "/positions";
   const activeFamily = activePath.startsWith("/cpar") ? "cpar" : activePath.startsWith("/cuse") ? "cuse" : null;
   const [transitionFamily, setTransitionFamily] = useState<"cuse" | "cpar" | null>(null);
   const prevFamilyRef = useRef<string | null>(null);
   const badgeSlotRef = useRef<HTMLSpanElement>(null);
-  const showOperatorChrome = activePath.startsWith("/cuse") || activePath === "/positions" || activePath === "/data";
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshActionState, setRefreshActionState] = useState<"idle" | "running" | "failed">("idle");
   const [clockMs, setClockMs] = useState<number>(0);
   const navRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { mode, setMode } = useBackground();
+  const { themeMode } = useAppSettings();
+  const operatorTokenAvailable = useOperatorTokenAvailable();
+  const showOperatorChrome = operatorTokenAvailable && (activePath.startsWith("/cuse") || activePath === "/positions" || activePath === "/data");
   const { data: operatorStatusData, mutate: mutateOperatorStatus } = useOperatorStatus(showOperatorChrome);
   const holdingsSync = operatorStatusData?.holdings_sync;
   const neonSyncHealth = operatorStatusData?.neon_sync_health;
@@ -132,24 +144,28 @@ export default function TabNav() {
       navRef.current.style.boxShadow = "";
       return;
     }
+    const navBgRgb = readCssTriplet("--nav-bg-rgb", themeMode === "light" ? [239, 238, 233] : [16, 16, 19]);
+    const navPositionsRgb = readCssTriplet("--nav-bg-positions-rgb", themeMode === "light" ? [245, 244, 240] : [0, 0, 0]);
+    const shadowRgb = readCssTriplet("--nav-shadow-rgb", themeMode === "light" ? [86, 92, 104] : [2, 6, 14]);
     if (isPositionsPage) {
-      navRef.current.style.backgroundColor = "rgba(0, 0, 0, 0.94)";
-      navRef.current.style.boxShadow = "0 10px 28px rgba(0, 0, 0, 0.38)";
+      navRef.current.style.backgroundColor = `rgba(${navPositionsRgb[0]}, ${navPositionsRgb[1]}, ${navPositionsRgb[2]}, 0.94)`;
+      navRef.current.style.boxShadow = `0 10px 28px rgba(${shadowRgb[0]}, ${shadowRgb[1]}, ${shadowRgb[2]}, ${themeMode === "light" ? 0.16 : 0.38})`;
       return;
     }
     const onScroll = () => {
       if (!navRef.current) return;
       const y = window.scrollY;
       const t = Math.min(1, y / 120);
-      const bgOpacity = 0.78 - t * 0.26;
-      const shadowOpacity = 0.25 + t * 0.35;
+      const bgOpacity = themeMode === "light" ? 0.95 - t * 0.08 : 0.99 - t * 0.07;
+      const shadowOpacity = themeMode === "light" ? 0.1 + t * 0.1 : 0.18 + t * 0.18;
       const shadowSpread = 8 + t * 18;
-      navRef.current.style.backgroundColor = `rgba(16, 16, 19, ${bgOpacity})`;
-      navRef.current.style.boxShadow = `0 ${shadowSpread}px ${shadowSpread * 2.5}px rgba(2, 6, 14, ${shadowOpacity})`;
+      navRef.current.style.backgroundColor = `rgba(${navBgRgb[0]}, ${navBgRgb[1]}, ${navBgRgb[2]}, ${bgOpacity})`;
+      navRef.current.style.boxShadow = `0 ${shadowSpread}px ${shadowSpread * 2.5}px rgba(${shadowRgb[0]}, ${shadowRgb[1]}, ${shadowRgb[2]}, ${shadowOpacity})`;
     };
     window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
     return () => window.removeEventListener("scroll", onScroll);
-  }, [isLanding, isPositionsPage]);
+  }, [isLanding, isPositionsPage, themeMode]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -316,37 +332,34 @@ export default function TabNav() {
     syncIndicator();
   }, [activePath, tabs, syncIndicator]);
 
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    if (session?.authProvider === "neon" && neonProjectUrl) {
+      try {
+        await createInternalNeonAuth(neonProjectUrl).adapter.signOut();
+      } catch {}
+    }
+    clearStoredAuthTokens();
+    window.location.assign("/");
+  }
+
+  if (isPublicShell) {
+    return null;
+  }
+
   return (
     <nav
       ref={navRef}
       className={`dash-tabs${isLanding ? " dash-tabs-landing" : ""}${isPositionsPage ? " dash-tabs-positions" : ""}`}
     >
       <div className="dash-tabs-brand-cluster">
-        <Link href="/" className="dash-tabs-brand">
-          Ceiora
-        </Link>
-        <span
-          ref={badgeSlotRef}
-          className={`dash-tabs-family-badge-slot${effectiveFamily ? " is-active" : ""}${!activeFamily && transitionFamily ? " is-preview" : ""}`}
-          aria-hidden={effectiveFamily ? undefined : "true"}
-        >
-          {effectiveFamily ? (
-            <span
-              className={`dash-tabs-family-badge dash-tabs-family-badge-${effectiveFamily}`}
-              style={!activeFamily ? { visibility: "hidden" } : undefined}
-            >
-              {effectiveFamily === "cuse" ? (
-                <>
-                  <span className="dash-tabs-family-badge-prefix">c</span>USE
-                </>
-              ) : (
-                <>
-                  <span className="dash-tabs-family-badge-prefix">c</span>PAR
-                </>
-              )}
-            </span>
-          ) : null}
-        </span>
+        <BrandLockup
+          href="/home"
+          className="dash-tabs-brand"
+          markClassName="dash-tabs-brand-mark"
+          wordmarkClassName="dash-tabs-brand-wordmark"
+          markTitle="Ceiora"
+        />
       </div>
 
       <div ref={tabsCenterRef} className="dash-tabs-center">
@@ -388,13 +401,37 @@ export default function TabNav() {
             </button>
           </>
         )}
+        <span
+          ref={badgeSlotRef}
+          className={`dash-tabs-family-badge-slot dash-tabs-family-badge-slot-right${effectiveFamily ? " is-active" : ""}${!activeFamily && transitionFamily ? " is-preview" : ""}`}
+          aria-hidden={effectiveFamily ? undefined : "true"}
+        >
+          {effectiveFamily ? (
+            <span
+              className={`dash-tabs-family-badge dash-tabs-family-badge-${effectiveFamily}`}
+              style={!activeFamily ? { visibility: "hidden" } : undefined}
+            >
+              {effectiveFamily === "cuse" ? (
+                <>
+                  <span className="dash-tabs-family-badge-prefix">c</span>USE
+                </>
+              ) : (
+                <>
+                  <span className="dash-tabs-family-badge-prefix">c</span>PAR
+                </>
+              )}
+            </span>
+          ) : null}
+        </span>
         <div ref={menuRef} style={{ position: "relative" }}>
           <button
             className="dash-menu-btn"
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label="Menu"
+            aria-expanded={menuOpen}
           >
             <svg
+              className="dash-menu-icon"
               width="18"
               height="18"
               viewBox="0 0 18 18"
@@ -403,60 +440,69 @@ export default function TabNav() {
               strokeWidth="1.5"
               strokeLinecap="round"
             >
-              {menuOpen ? (
-                <>
-                  <line x1="4" y1="4" x2="14" y2="14" />
-                  <line x1="14" y1="4" x2="4" y2="14" />
-                </>
-              ) : (
-                <>
-                  <line x1="3" y1="5" x2="15" y2="5" />
-                  <line x1="3" y1="9" x2="15" y2="9" />
-                  <line x1="3" y1="13" x2="15" y2="13" />
-                </>
-              )}
+              <line className="dash-menu-line dash-menu-line-1" x1="3" y1="5" x2="15" y2="5" />
+              <line className="dash-menu-line dash-menu-line-2" x1="3" y1="9" x2="15" y2="9" />
+              <line className="dash-menu-line dash-menu-line-3" x1="3" y1="13" x2="15" y2="13" />
             </svg>
           </button>
 
           {menuOpen && (
             <div className="dash-dropdown">
-              <div className="dash-dropdown-section">Navigation</div>
-              <Link
-                href="/positions"
-                className={`dash-dropdown-item${pathname === "/positions" ? " active" : ""}`}
-                onClick={() => setMenuOpen(false)}
-              >
-                Positions
-              </Link>
-              <div className="dash-dropdown-section">Settings</div>
-              <Link
-                href="/settings"
-                className={`dash-dropdown-item${pathname === "/settings" ? " active" : ""}`}
-                onClick={() => setMenuOpen(false)}
-              >
-                Global settings
-              </Link>
-              <Link
-                href="/data"
-                className={`dash-dropdown-item${pathname === "/data" ? " active" : ""}`}
-                onClick={() => setMenuOpen(false)}
-              >
-                cUSE data
-              </Link>
-              <span className="dash-dropdown-item disabled" aria-disabled="true">cPAR data</span>
-              <div className="dash-dropdown-section">Background</div>
-              {BG_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  className={`dash-dropdown-item${mode === opt.value ? " active" : ""}`}
-                  onClick={() => {
-                    setMode(opt.value);
-                    setMenuOpen(false);
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              <div className="dash-dropdown-group">
+                <div className="dash-dropdown-section">Navigation</div>
+                <div className="dash-dropdown-group-items">
+                  <Link
+                    href="/positions"
+                    className={`dash-dropdown-item${pathname === "/positions" ? " active" : ""}`}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Positions
+                  </Link>
+                </div>
+              </div>
+              <div className="dash-dropdown-group">
+                <div className="dash-dropdown-section">Settings</div>
+                <div className="dash-dropdown-group-items">
+                  <Link
+                    href="/settings"
+                    className={`dash-dropdown-item${pathname === "/settings" ? " active" : ""}`}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Global settings
+                  </Link>
+                  {session?.isAdmin && context?.admin_settings_enabled !== false ? (
+                    <Link
+                      href="/settings/admin"
+                      className={`dash-dropdown-item${pathname === "/settings/admin" ? " active" : ""}`}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Admin settings
+                    </Link>
+                  ) : null}
+                  <Link
+                    href="/data"
+                    className={`dash-dropdown-item${pathname === "/data" ? " active" : ""}`}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    cUSE data
+                  </Link>
+                  <span className="dash-dropdown-item disabled" aria-disabled="true">cPAR data</span>
+                </div>
+              </div>
+              <div className="dash-dropdown-group">
+                <div className="dash-dropdown-section">Account</div>
+                <div className="dash-dropdown-group-items">
+                  <button
+                    className="dash-dropdown-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      void handleLogout();
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

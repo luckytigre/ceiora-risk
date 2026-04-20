@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useBackground, type BgMode } from "./BackgroundContext";
 
-export default function LandingBackgroundLock() {
+export default function LandingBackgroundLock({ bodyClassName }: { bodyClassName?: string }) {
   const { mode, setMode } = useBackground();
   const initialModeRef = useRef<BgMode | null>(null);
 
@@ -23,6 +23,14 @@ export default function LandingBackgroundLock() {
       }
     };
   }, [setMode]);
+
+  useEffect(() => {
+    if (!bodyClassName || typeof document === "undefined") return;
+    document.body.classList.add(bodyClassName);
+    return () => {
+      document.body.classList.remove(bodyClassName);
+    };
+  }, [bodyClassName]);
 
   return null;
 }

@@ -108,6 +108,8 @@ def test_persist_model_outputs_writes_neon_first_when_configured(
         "model_factor_returns_daily": 1,
         "model_factor_covariance_daily": 1,
         "model_specific_risk_daily": 1,
+        "cuse_security_membership_daily": 0,
+        "cuse_security_stage_results_daily": 0,
     }
     assert out["neon_write"]["status"] == "ok"
     assert out["sqlite_mirror_write"]["status"] == "ok"

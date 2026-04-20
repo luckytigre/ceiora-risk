@@ -160,9 +160,7 @@ def reset_core_caches(cache_db: Path) -> dict[str, int]:
 
 def profile_runs_broad_neon_mirror(profile: str) -> bool:
     return str(profile or "").strip().lower() in {
-        "source-daily",
         "source-daily-plus-core-if-due",
         "core-weekly",
         "cold-core",
-        "universe-add",
     }

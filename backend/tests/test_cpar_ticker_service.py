@@ -66,6 +66,11 @@ def test_cpar_ticker_service_builds_quote_payload(monkeypatch: pytest.MonkeyPatc
         lambda *args, **kwargs: _fit(),
     )
     monkeypatch.setattr(
+        cpar_ticker_service,
+        "_load_registry_row",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
         cpar_ticker_service.cpar_source_reads,
         "load_latest_price_rows",
         lambda *args, **kwargs: [{"ric": "AAPL.OQ", "date": "2026-03-14", "adj_close": 210.0, "close": 210.0, "currency": "USD"}],
@@ -102,6 +107,11 @@ def test_cpar_ticker_service_maps_source_failures_to_unavailable(monkeypatch: py
         cpar_ticker_service.cpar_outputs,
         "load_active_package_instrument_fit",
         lambda *args, **kwargs: _fit(),
+    )
+    monkeypatch.setattr(
+        cpar_ticker_service,
+        "_load_registry_row",
+        lambda **kwargs: None,
     )
     monkeypatch.setattr(
         cpar_ticker_service.cpar_source_reads,
@@ -162,8 +172,8 @@ def test_cpar_ticker_service_falls_back_to_registry_only_detail(monkeypatch: pyt
 def test_cpar_ticker_history_service_builds_weekly_points(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         cpar_ticker_history_service.cpar_ticker_service,
-        "load_cpar_ticker_payload",
-        lambda **kwargs: {"ticker": "AAPL", "ric": "AAPL.OQ", "package_date": "2026-03-14"},
+        "resolve_cpar_ticker_identity",
+        lambda **kwargs: (_package(), _fit(), None, "AAPL", "AAPL.OQ"),
     )
     monkeypatch.setattr(
         cpar_ticker_history_service.cpar_source_reads,
@@ -182,3 +192,56 @@ def test_cpar_ticker_history_service_builds_weekly_points(monkeypatch: pytest.Mo
         {"date": "2026-03-13", "close": 102.0},
         {"date": "2026-03-20", "close": 105.0},
     ]
+
+
+def test_cpar_ticker_history_service_uses_identity_resolver_not_full_quote(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cpar_ticker_history_service.cpar_ticker_service,
+        "resolve_cpar_ticker_identity",
+        lambda **kwargs: (_package(), _fit(), None, "AAPL", "AAPL.OQ"),
+    )
+    monkeypatch.setattr(
+        cpar_ticker_history_service.cpar_source_reads,
+        "load_price_rows_for_rics",
+        lambda *args, **kwargs: [
+            {"ric": "AAPL.OQ", "date": "2026-03-10", "adj_close": 100.0, "close": 100.0},
+        ],
+    )
+    monkeypatch.setattr(
+        cpar_ticker_history_service.cpar_ticker_service,
+        "load_cpar_ticker_payload",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("full quote payload should not be loaded for history")),
+    )
+
+    payload = cpar_ticker_history_service.load_cpar_ticker_history_payload(ticker="AAPL", years=1)
+
+    assert payload["ric"] == "AAPL.OQ"
+
+
+def test_cpar_ticker_history_service_raises_clean_not_found_without_quote_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cpar_ticker_history_service.cpar_ticker_service,
+        "resolve_cpar_ticker_identity",
+        lambda **kwargs: (_package(), _fit(), None, "AAPL", "AAPL.OQ"),
+    )
+    monkeypatch.setattr(
+        cpar_ticker_history_service.cpar_source_reads,
+        "load_price_rows_for_rics",
+        lambda *args, **kwargs: [],
+    )
+
+    with pytest.raises(cpar_ticker_service.CparTickerNotFound, match="No price history found for AAPL"):
+        cpar_ticker_history_service.load_cpar_ticker_history_payload(ticker="AAPL", years=1)
+
+
+def test_cpar_ticker_history_service_maps_invalid_package_date_to_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    bad_package = dict(_package())
+    bad_package["package_date"] = "not-a-date"
+    monkeypatch.setattr(
+        cpar_ticker_history_service.cpar_ticker_service,
+        "resolve_cpar_ticker_identity",
+        lambda **kwargs: (bad_package, _fit(), None, "AAPL", "AAPL.OQ"),
+    )
+
+    with pytest.raises(cpar_meta_service.CparReadUnavailable, match="invalid package_date"):
+        cpar_ticker_history_service.load_cpar_ticker_history_payload(ticker="AAPL", years=1)

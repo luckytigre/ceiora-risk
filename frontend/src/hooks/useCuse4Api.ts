@@ -1,18 +1,22 @@
 "use client";
 
 // cUSE4-only hook and mutation barrel for the default frontend surfaces.
-// Prefer this over `@/hooks/useApi` in cUSE4-owned frontend code.
+// Prefer this over generic frontend API-hook alias layers in cUSE4-owned frontend code.
 
-import useSWR from "swr";
-import { ApiError, apiFetch } from "@/lib/apiTransport";
+import useSWR, { preload } from "swr";
+import { ApiError, apiFetch, apiPrivilegedFetch } from "@/lib/apiTransport";
 import { cuse4ApiPath } from "@/lib/cuse4Api";
 import type {
   DataDiagnosticsData,
+  CuseExploreContextData,
   ExposuresData,
   FactorHistoryData,
   HealthDiagnosticsData,
   OperatorStatusData,
   PortfolioData,
+  CuseRiskPageCovarianceData,
+  CuseRiskPageExposureModeData,
+  CuseRiskPageSummaryData,
   RefreshStatusData,
   RiskData,
   UniverseFactorsData,
@@ -61,6 +65,30 @@ export function usePortfolio() {
   return useSWR<PortfolioData>(cuse4ApiPath.portfolio(), apiFetch, SWR_OPTS);
 }
 
+export function useCuseExploreContext() {
+  return useSWR<CuseExploreContextData>(cuse4ApiPath.exploreContext(), apiFetch, SWR_OPTS);
+}
+
+export function useCuseRiskPageSnapshot() {
+  return useSWR<CuseRiskPageSummaryData>(cuse4ApiPath.riskPageSnapshot(), apiFetch, SWR_OPTS);
+}
+
+export function useCuseRiskPageExposureMode(mode: string, enabled = true) {
+  const key = enabled ? cuse4ApiPath.riskPageExposureMode(mode) : null;
+  return useSWR<CuseRiskPageExposureModeData>(key, apiFetch, {
+    ...SWR_OPTS,
+    keepPreviousData: true,
+  });
+}
+
+export function useCuseRiskPageCovariance(enabled = true) {
+  return useSWR<CuseRiskPageCovarianceData>(
+    enabled ? cuse4ApiPath.riskPageCovariance() : null,
+    apiFetch,
+    SWR_OPTS,
+  );
+}
+
 export function useExposures(mode: string) {
   return useSWR<ExposuresData>(cuse4ApiPath.exposures(mode), apiFetch, SWR_OPTS);
 }
@@ -80,39 +108,65 @@ export function useUniverseTicker(ticker: string | null) {
   return useSWR<UniverseTickerData>(key, apiFetch, SWR_OPTS);
 }
 
-export function useUniverseTickerHistory(ticker: string | null, years = 5) {
+export function useUniverseTickerHistory(ticker: string | null, years = 5, enabled = true) {
   const clean = ticker?.trim().toUpperCase() || null;
-  const key = clean ? cuse4ApiPath.universeTickerHistory(clean, years) : null;
+  const key = enabled && clean ? cuse4ApiPath.universeTickerHistory(clean, years) : null;
   return useSWR<UniverseTickerHistoryData>(key, apiFetch, SWR_OPTS);
 }
 
 export function useUniverseSearch(query: string, limit = 8) {
   const q = query.trim();
   const key = q.length > 0 ? cuse4ApiPath.universeSearch(q, limit) : null;
-  return useSWR<UniverseSearchData>(key, apiFetch, SWR_OPTS);
+  return useSWR<UniverseSearchData>(key, apiFetch, {
+    ...SWR_OPTS,
+    keepPreviousData: true,
+  });
 }
 
-export function useUniverseFactors() {
-  return useSWR<UniverseFactorsData>(cuse4ApiPath.universeFactors(), apiFetch, SWR_OPTS);
+export function useUniverseFactors(enabled = true) {
+  return useSWR<UniverseFactorsData>(enabled ? cuse4ApiPath.universeFactors() : null, apiFetch, SWR_OPTS);
+}
+
+export function preloadUniverseTickerDetail(ticker: string) {
+  const clean = ticker?.trim().toUpperCase() || null;
+  if (!clean) return;
+  void preload(cuse4ApiPath.universeTicker(clean), apiFetch);
+}
+
+export function preloadUniverseTickerHistory(ticker: string, years = 5) {
+  const clean = ticker?.trim().toUpperCase() || null;
+  if (!clean) return;
+  void preload(cuse4ApiPath.universeTickerHistory(clean, years), apiFetch);
+}
+
+export function preloadUniverseFactors() {
+  void preload(cuse4ApiPath.universeFactors(), apiFetch);
+}
+
+export function preloadUniverseTickerBundle(ticker: string, years = 5) {
+  const clean = ticker?.trim().toUpperCase() || null;
+  if (!clean) return;
+  void preload(cuse4ApiPath.universeTicker(clean), apiFetch);
+  void preload(cuse4ApiPath.universeTickerHistory(clean, years), apiFetch);
 }
 
 export function useHealthDiagnostics(enabled = true) {
-  return useSWR<HealthDiagnosticsData>(enabled ? cuse4ApiPath.healthDiagnostics() : null, apiFetch, HEAVY_DIAGNOSTICS_OPTS);
+  return useSWR<HealthDiagnosticsData>(enabled ? cuse4ApiPath.healthDiagnostics() : null, apiPrivilegedFetch, HEAVY_DIAGNOSTICS_OPTS);
 }
 
 export function useDataDiagnostics(opts?: { includeExactRowCounts?: boolean; includeExpensiveChecks?: boolean }) {
-  return useSWR<DataDiagnosticsData>(cuse4ApiPath.dataDiagnostics(opts), apiFetch, HEAVY_DIAGNOSTICS_OPTS);
+  return useSWR<DataDiagnosticsData>(cuse4ApiPath.dataDiagnostics(opts), apiPrivilegedFetch, HEAVY_DIAGNOSTICS_OPTS);
 }
 
 export function useOperatorStatus(enabled = true) {
-  return useSWR<OperatorStatusData>(enabled ? cuse4ApiPath.operatorStatus() : null, apiFetch, {
+  return useSWR<OperatorStatusData>(enabled ? cuse4ApiPath.operatorStatus() : null, apiPrivilegedFetch, {
     ...SWR_OPTS,
     refreshInterval: operatorStatusRefreshInterval,
   });
 }
 
 export function useRefreshStatus(enabled = true) {
-  return useSWR<RefreshStatusData>(enabled ? cuse4ApiPath.refreshStatus() : null, apiFetch, {
+  return useSWR<RefreshStatusData>(enabled ? cuse4ApiPath.refreshStatus() : null, apiPrivilegedFetch, {
     ...SWR_OPTS,
     refreshInterval: refreshStatusRefreshInterval,
   });
@@ -123,7 +177,7 @@ export async function triggerRefreshProfile(profile: string): Promise<{
   message?: string;
   refresh?: RefreshStatusData["refresh"];
 }> {
-  return apiFetch(cuse4ApiPath.refreshProfile(profile), { method: "POST" });
+  return apiPrivilegedFetch(cuse4ApiPath.refreshProfile(profile), { method: "POST" });
 }
 
 export async function triggerServeRefresh(): Promise<{

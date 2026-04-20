@@ -112,6 +112,16 @@ def test_invalid_stage_window_is_rejected_before_worker_start() -> None:
         )
 
 
+def test_cold_core_stage_window_is_rejected_before_worker_start() -> None:
+    with pytest.raises(ValueError, match="cold-core does not support partial stage windows"):
+        refresh_manager.start_refresh(
+            force_risk_recompute=False,
+            profile="cold-core",
+            from_stage="factor_returns",
+            to_stage="risk_model",
+        )
+
+
 def test_force_core_conflict_is_rejected_before_worker_start() -> None:
     with pytest.raises(ValueError, match="force_core requires a stage window"):
         refresh_manager.start_refresh(
@@ -529,7 +539,7 @@ def test_planned_stages_insert_source_sync_and_neon_readiness_for_neon_core_prof
 
     _, _, selected = run_model_pipeline.planned_stages_for_profile(profile="core-weekly")
 
-    assert selected == ["source_sync", "neon_readiness", "factor_returns", "risk_model", "serving_refresh"]
+    assert selected == ["source_sync", "neon_readiness", "raw_history", "factor_returns", "risk_model", "serving_refresh"]
 
 
 def test_planned_stages_allow_explicit_skip_source_sync_for_neon_core_profiles(
@@ -543,7 +553,7 @@ def test_planned_stages_allow_explicit_skip_source_sync_for_neon_core_profiles(
         skip_source_sync=True,
     )
 
-    assert selected == ["neon_readiness", "factor_returns", "risk_model", "serving_refresh"]
+    assert selected == ["neon_readiness", "raw_history", "factor_returns", "risk_model", "serving_refresh"]
 
 
 def test_skip_source_sync_rejects_ingest_capable_profiles(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -853,6 +863,61 @@ def test_neon_readiness_stage_skips_when_core_is_not_running(monkeypatch: pytest
     assert out["reason"] == "core_policy_skip_within_interval"
 
 
+def test_raw_history_stage_runs_recent_window_even_when_core_is_not_due(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    cache_db = tmp_path / "cache.db"
+    sqlite3.connect(str(data_db)).close()
+    sqlite3.connect(str(cache_db)).close()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(run_model_pipeline.config, "RAW_HISTORY_RECENT_WINDOW_DAYS", 30)
+    monkeypatch.setattr(run_model_pipeline, "previous_or_same_xnys_session", lambda value: value)
+
+    def _fake_rebuild_raw_cross_section_history(
+        db_path: Path,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        frequency: str = "weekly",
+        progress_callback=None,
+    ) -> dict[str, object]:
+        captured["db_path"] = db_path
+        captured["start_date"] = start_date
+        captured["end_date"] = end_date
+        captured["frequency"] = frequency
+        return {"status": "ok", "rows_upserted": 10, "table": "barra_raw_cross_section_history"}
+
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "rebuild_raw_cross_section_history",
+        _fake_rebuild_raw_cross_section_history,
+    )
+
+    out = run_model_pipeline._run_stage(
+        profile="source-daily-plus-core-if-due",
+        stage="raw_history",
+        as_of_date="2026-03-26",
+        should_run_core=False,
+        serving_mode="light",
+        force_core=False,
+        core_reason="within_interval",
+        data_db=data_db,
+        cache_db=cache_db,
+        raw_history_policy="recent-daily",
+    )
+
+    assert out["status"] == "ok"
+    assert captured == {
+        "db_path": data_db,
+        "start_date": "2026-02-24",
+        "end_date": "2026-03-26",
+        "frequency": "daily",
+    }
+
+
 def test_neon_readiness_stage_prepares_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(run_model_pipeline.config, "NEON_AUTHORITATIVE_REBUILDS", True)
     monkeypatch.setattr(run_model_pipeline.config, "DATA_BACKEND", "neon")
@@ -1058,6 +1123,56 @@ def test_risk_model_stage_writes_workspace_cache_without_global_path_mutation(
     assert captured["cache_db"] == workspace_cache_db
     assert captured["refresh_mode"] == "cold-core"
     assert captured["source_dates"]["prices_asof"] == "2026-03-14"
+    assert out["metrics"]["compute_seconds"] >= 0.0
+    assert out["metrics"]["write_seconds"] >= 0.0
+    assert out["metrics"]["rows_written"] == 0
+
+
+def test_factor_returns_stage_surfaces_stage_metrics_from_dataframe_attrs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    data_db = tmp_path / "data.db"
+    cache_db = tmp_path / "cache.db"
+    df = pd.DataFrame(
+        [{"date": "2026-03-14", "factor_name": "Market", "factor_return": 0.01}]
+    )
+    df.attrs["stage_metrics"] = {
+        "read_seconds": 1.25,
+        "compute_seconds": 2.5,
+        "write_seconds": 0.75,
+        "query_count": 4,
+        "rows_read": 1234,
+        "rows_written": 567,
+        "largest_batch_rows": 400,
+    }
+
+    monkeypatch.setattr(
+        run_model_pipeline,
+        "compute_daily_factor_returns",
+        lambda *args, **kwargs: df,
+    )
+
+    out = run_model_pipeline._run_stage(
+        profile="core-weekly",
+        stage="factor_returns",
+        as_of_date="2026-03-14",
+        should_run_core=True,
+        serving_mode="full",
+        force_core=False,
+        core_reason="due",
+        data_db=data_db,
+        cache_db=cache_db,
+    )
+
+    assert out["status"] == "ok"
+    assert out["factor_return_rows_loaded"] == 1
+    assert out["metrics"]["read_seconds"] == 1.25
+    assert out["metrics"]["compute_seconds"] == 2.5
+    assert out["metrics"]["write_seconds"] == 0.75
+    assert out["metrics"]["query_count"] == 4
+    assert out["metrics"]["rows_read"] == 1234
+    assert out["metrics"]["rows_written"] == 567
 
 
 def test_explicit_neon_core_window_fails_without_neon_readiness(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

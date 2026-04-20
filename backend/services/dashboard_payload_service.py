@@ -14,7 +14,9 @@ from backend.services.cuse4_dashboard_payload_service import (
     get_dashboard_payload_readers,
     load_exposures_response,
     load_portfolio_response,
+    load_risk_covariance_response,
     load_risk_response,
+    load_risk_summary_response,
     load_runtime_payload,
 )
 
@@ -25,6 +27,8 @@ __all__ = [
     "get_dashboard_payload_readers",
     "load_exposures_response",
     "load_portfolio_response",
+    "load_risk_covariance_response",
     "load_risk_response",
+    "load_risk_summary_response",
     "load_runtime_payload",
 ]

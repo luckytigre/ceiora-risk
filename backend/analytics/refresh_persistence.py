@@ -8,11 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from backend import config
+from backend.analytics import reuse_policy
 from backend.data.cuse_membership_reads import load_cuse_membership_rows
 from backend.data import model_outputs, runtime_state, serving_outputs, sqlite
-from backend.risk_model.cuse_membership import membership_row_to_overlay
+from backend.risk_model.cuse_membership import build_cuse_membership_payloads, membership_row_to_overlay
 
 logger = logging.getLogger(__name__)
+
+_MAX_ALLOWED_MEMBERSHIP_MISSES = 25
+_MAX_ALLOWED_MEMBERSHIP_MISS_FRACTION = 0.05
+_MAX_ALLOWED_MEMBERSHIP_MISS_COUNT_FOR_FRACTION = 5
 
 _UNIVERSE_OVERLAY_FIELDS = (
     "model_status",
@@ -31,6 +36,26 @@ _UNIVERSE_OVERLAY_FIELDS = (
     "projection_candidate_status",
     "projection_output_status",
     "served_exposure_available",
+)
+
+_MEMBERSHIP_PAYLOAD_COLUMNS = (
+    "as_of_date",
+    "ric",
+    "ticker",
+    "policy_path",
+    "realized_role",
+    "output_status",
+    "projection_candidate_status",
+    "projection_output_status",
+    "reason_code",
+    "quality_label",
+    "source_snapshot_status",
+    "projection_method",
+    "projection_basis_status",
+    "projection_source_package_date",
+    "served_exposure_available",
+    "run_id",
+    "updated_at",
 )
 
 
@@ -53,53 +78,68 @@ def _membership_warning(
     return existing_warning
 
 
+def _membership_rows_from_payload(
+    membership_payload: list[tuple[Any, ...]] | None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for payload_row in membership_payload or []:
+        if not payload_row:
+            continue
+        rows.append(
+            {
+                _MEMBERSHIP_PAYLOAD_COLUMNS[idx]: payload_row[idx]
+                for idx in range(min(len(payload_row), len(_MEMBERSHIP_PAYLOAD_COLUMNS)))
+            }
+        )
+    return rows
+
+
+def _build_membership_lookup(
+    rows: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    lookup: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        ticker = str(row.get("ticker") or "").strip().upper()
+        ric = str(row.get("ric") or "").strip().upper()
+        if ticker:
+            lookup[ticker] = dict(row)
+        if ric:
+            lookup[ric] = dict(row)
+    return lookup
+
+
 def _load_current_membership_lookup(
     *,
     data_db: Path,
     universe_payload: dict[str, Any],
-) -> dict[tuple[str, str], dict[str, Any]]:
-    by_ticker = dict(universe_payload.get("by_ticker") or {})
-    relevant_dates = sorted(
-        {
-            str(row.get("as_of_date") or universe_payload.get("as_of_date") or "").strip()
-            for row in by_ticker.values()
-            if str(row.get("as_of_date") or universe_payload.get("as_of_date") or "").strip()
-        }
-    )
-    if not relevant_dates:
+    membership_rows: list[dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    if not dict(universe_payload.get("by_ticker") or {}):
         return {}
-    rows = load_cuse_membership_rows(data_db=data_db, as_of_dates=relevant_dates)
-    lookup: dict[tuple[str, str], dict[str, Any]] = {}
-    for row in rows:
-        as_of_date = str(row.get("as_of_date") or "").strip()
-        ticker = str(row.get("ticker") or "").strip().upper()
-        ric = str(row.get("ric") or "").strip().upper()
-        if as_of_date and ticker:
-            lookup[(as_of_date, ticker)] = dict(row)
-        if as_of_date and ric:
-            lookup[(as_of_date, ric)] = dict(row)
-    return lookup
+    rows = list(membership_rows or [])
+    if not rows:
+        rows = load_cuse_membership_rows(data_db=data_db, as_of_dates=None)
+    return _build_membership_lookup(rows)
 
 
 def _assert_current_membership_coverage(
     *,
     universe_payload: dict[str, Any],
-    membership_lookup: dict[tuple[str, str], dict[str, Any]],
+    membership_lookup: dict[str, dict[str, Any]],
 ) -> None:
     by_ticker = dict(universe_payload.get("by_ticker") or {})
     missing: list[str] = []
     for ticker, raw_row in by_ticker.items():
         row = dict(raw_row or {})
-        as_of_date = str(row.get("as_of_date") or universe_payload.get("as_of_date") or "").strip()
         clean_ticker = str(row.get("ticker") or ticker).strip().upper()
         clean_ric = str(row.get("ric") or "").strip().upper()
-        if not as_of_date or not (clean_ticker or clean_ric):
+        if not (clean_ticker or clean_ric):
             continue
-        if (as_of_date, clean_ticker) in membership_lookup:
+        if clean_ticker in membership_lookup:
             continue
-        if clean_ric and (as_of_date, clean_ric) in membership_lookup:
+        if clean_ric and clean_ric in membership_lookup:
             continue
-        missing.append(f"{clean_ticker or clean_ric}@{as_of_date}")
+        missing.append(clean_ticker or clean_ric)
     if missing:
         sample = ", ".join(sorted(missing)[:20])
         raise RuntimeError(
@@ -108,10 +148,40 @@ def _assert_current_membership_coverage(
         )
 
 
+def _assert_membership_coverage_not_partial(
+    *,
+    universe_payload: dict[str, Any],
+    matched: int,
+    missing: list[str],
+) -> None:
+    if not missing:
+        return
+    total = int(matched + len(missing))
+    if total <= 0:
+        return
+    missing_count = int(len(missing))
+    missing_fraction = float(missing_count) / float(total)
+    if (
+        missing_count <= _MAX_ALLOWED_MEMBERSHIP_MISSES
+        and (
+            missing_count <= _MAX_ALLOWED_MEMBERSHIP_MISS_COUNT_FOR_FRACTION
+            or missing_fraction <= _MAX_ALLOWED_MEMBERSHIP_MISS_FRACTION
+        )
+    ):
+        return
+    sample = ", ".join(sorted(missing)[:20])
+    raise RuntimeError(
+        "Current cUSE membership coverage is too incomplete for serving publish: "
+        f"matched={matched} missing={missing_count} total={total} "
+        f"missing_pct={round(missing_fraction * 100.0, 2)} sample={sample}"
+    )
+
+
 def _apply_current_membership_to_universe_payload(
     *,
     data_db: Path,
     universe_payload: dict[str, Any],
+    membership_rows: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     by_ticker = dict(universe_payload.get("by_ticker") or {})
     if not by_ticker:
@@ -119,30 +189,40 @@ def _apply_current_membership_to_universe_payload(
     membership_lookup = _load_current_membership_lookup(
         data_db=data_db,
         universe_payload=universe_payload,
-    )
-    _assert_current_membership_coverage(
-        universe_payload=universe_payload,
-        membership_lookup=membership_lookup,
+        membership_rows=membership_rows,
     )
     if not membership_lookup:
+        # Membership is completely absent — fail hard so the publish is blocked
+        # rather than serving a universe with no membership truth applied.
+        _assert_current_membership_coverage(
+            universe_payload=universe_payload,
+            membership_lookup=membership_lookup,
+        )
         return universe_payload, False
 
     updated = False
+    dropped: list[str] = []
+    matched = 0
     updated_by_ticker: dict[str, dict[str, Any]] = {}
     for ticker, raw_row in by_ticker.items():
         row = dict(raw_row or {})
-        as_of_date = str(row.get("as_of_date") or universe_payload.get("as_of_date") or "").strip()
         clean_ticker = str(row.get("ticker") or ticker).strip().upper()
         clean_ric = str(row.get("ric") or "").strip().upper()
         membership_row = None
-        if as_of_date and clean_ticker:
-            membership_row = membership_lookup.get((as_of_date, clean_ticker))
-        if membership_row is None and as_of_date and clean_ric:
-            membership_row = membership_lookup.get((as_of_date, clean_ric))
+        if clean_ticker:
+            membership_row = membership_lookup.get(clean_ticker)
+        if membership_row is None and clean_ric:
+            membership_row = membership_lookup.get(clean_ric)
         if membership_row is None:
-            updated_by_ticker[ticker] = row
+            # Membership exists for the core set but this ticker has no row —
+            # it is outside the modelled universe (e.g. an ETF price ticker that
+            # was never admitted by security_registry). Drop it from the serving
+            # payload so the universe stays consistent with what was modelled.
+            dropped.append(clean_ticker or clean_ric or ticker)
+            updated = True
             continue
 
+        matched += 1
         overlay = membership_row_to_overlay(
             membership_row,
             payload_exposures=dict(row.get("exposures") or {}),
@@ -161,17 +241,34 @@ def _apply_current_membership_to_universe_payload(
         updated_by_ticker[ticker] = row
         updated = True
 
+    _assert_membership_coverage_not_partial(
+        universe_payload=universe_payload,
+        matched=matched,
+        missing=dropped,
+    )
+
+    if dropped:
+        logger.warning(
+            "Dropped %d tickers from serving universe with no cUSE membership coverage: %s%s",
+            len(dropped),
+            ", ".join(sorted(dropped)[:20]),
+            "" if len(dropped) <= 20 else f" ... (+{len(dropped) - 20} more)",
+        )
+
     if not updated:
         return universe_payload, False
 
     updated_payload = dict(universe_payload)
     updated_payload["by_ticker"] = updated_by_ticker
 
+    dropped_set = set(dropped)
     if isinstance(updated_payload.get("index"), list):
         updated_index: list[dict[str, Any]] = []
         for raw_index_row in updated_payload["index"]:
             index_row = dict(raw_index_row or {})
             clean_ticker = str(index_row.get("ticker") or "").strip().upper()
+            if clean_ticker in dropped_set:
+                continue
             source_row = updated_by_ticker.get(clean_ticker)
             if source_row is not None:
                 for field in _UNIVERSE_OVERLAY_FIELDS:
@@ -261,6 +358,7 @@ def _overlay_current_membership_truth(
     cache_db: Path,
     snapshot_id: str,
     persisted_payloads: dict[str, Any],
+    membership_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     universe_payload = dict(persisted_payloads.get("universe_loadings") or {})
     if not universe_payload:
@@ -268,6 +366,7 @@ def _overlay_current_membership_truth(
     updated_universe_payload, universe_updated = _apply_current_membership_to_universe_payload(
         data_db=data_db,
         universe_payload=universe_payload,
+        membership_rows=membership_rows,
     )
     if not universe_updated:
         return persisted_payloads
@@ -331,6 +430,15 @@ def persist_refresh_outputs(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     model_outputs_write: dict[str, Any] = {"status": "skipped"}
     serving_outputs_write: dict[str, Any] = {"status": "skipped"}
+    completed_at = datetime.now(timezone.utc).isoformat()
+    cuse_membership_payload, cuse_stage_results_payload = build_cuse_membership_payloads(
+        data_db=data_db,
+        universe_payload=dict((persisted_payloads or {}).get("universe_loadings") or {}),
+        risk_engine_state=risk_engine_state,
+        run_id=run_id,
+        updated_at=completed_at,
+    )
+    current_membership_rows = _membership_rows_from_payload(cuse_membership_payload)
     try:
         if not recomputed_this_refresh:
             model_outputs_write = {
@@ -346,13 +454,15 @@ def persist_refresh_outputs(
                 refresh_mode=refresh_mode,
                 status="ok",
                 started_at=refresh_started_at,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=completed_at,
                 source_dates=source_dates,
                 params=params,
                 risk_engine_state=risk_engine_state,
                 cov=cov,
                 specific_risk_by_ticker=specific_risk_by_security,
                 persisted_payloads=persisted_payloads,
+                cuse_membership_payload=cuse_membership_payload,
+                cuse_stage_results_payload=cuse_stage_results_payload,
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to persist relational model outputs")
@@ -370,7 +480,20 @@ def persist_refresh_outputs(
         cache_db=cache_db,
         snapshot_id=snapshot_id,
         persisted_payloads=persisted_payloads,
+        membership_rows=current_membership_rows,
     )
+    candidate_universe_payload = persisted_payloads.get("universe_loadings")
+    if isinstance(candidate_universe_payload, dict) and candidate_universe_payload:
+        live_universe_payload = serving_outputs.load_current_payload("universe_loadings")
+        regression_ok, regression_reason = reuse_policy.universe_loadings_live_regression_guard(
+            candidate_universe_payload,
+            current_live_payload=live_universe_payload,
+        )
+        if not regression_ok:
+            raise RuntimeError(
+                "cUSE serving publish blocked because the candidate universe regressed versus the current live modeled snapshot: "
+                f"{regression_reason}"
+            )
 
     try:
         serving_outputs_write = serving_outputs.persist_current_payloads(

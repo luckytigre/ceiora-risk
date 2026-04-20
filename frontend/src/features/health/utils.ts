@@ -11,6 +11,13 @@ import type {
   FactorCatalogEntry,
 } from "@/lib/types/cuse4";
 import { factorDisplayName } from "@/lib/factorLabels";
+import {
+  chartGridColor,
+  chartLongColor,
+  chartShortColor,
+  chartTextColor,
+  tooltipOptions,
+} from "@/lib/charts/chartTheme";
 import type { ChartData, ChartOptions } from "./charts";
 
 export const COLLAPSED_ROWS = 12;
@@ -67,7 +74,7 @@ export function buildHistogramData(hist: HealthHistogram): ChartData<"bar", numb
       {
         label: "Count",
         data: hist.counts.map((v) => Number(v) || 0),
-        backgroundColor: "rgba(169, 182, 210, 0.52)",
+        backgroundColor: chartTextColor("secondary", 0.52),
         borderWidth: 0,
         borderRadius: 0,
       },
@@ -82,10 +89,8 @@ export function histogramOptions(xLabel = "", yLabel = "Count"): ChartOptions<"b
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "rgba(20, 22, 30, 0.92)",
-        borderColor: "rgba(154, 171, 214, 0.18)",
+        ...tooltipOptions(),
         borderWidth: 1,
-        cornerRadius: 4,
         displayColors: false,
       },
     },
@@ -94,17 +99,17 @@ export function histogramOptions(xLabel = "", yLabel = "Count"): ChartOptions<"b
         border: { display: false },
         grid: { display: false },
         ticks: {
-          color: "rgba(169, 182, 210, 0.5)",
+          color: chartTextColor("secondary", 0.5),
           maxTicksLimit: 8,
           font: { size: 9 },
         },
-        title: xLabel ? { display: true, text: xLabel, color: "rgba(169, 182, 210, 0.55)", font: { size: 10 } } : undefined,
+        title: xLabel ? { display: true, text: xLabel, color: chartTextColor("secondary", 0.55), font: { size: 10 } } : undefined,
       },
       y: {
         border: { display: false },
-        grid: { color: "rgba(154, 171, 214, 0.12)" },
-        ticks: { color: "rgba(169, 182, 210, 0.5)", font: { size: 9 } },
-        title: yLabel ? { display: true, text: yLabel, color: "rgba(169, 182, 210, 0.55)", font: { size: 10 } } : undefined,
+        grid: { color: chartGridColor(0.6) },
+        ticks: { color: chartTextColor("secondary", 0.5), font: { size: 9 } },
+        title: yLabel ? { display: true, text: yLabel, color: chartTextColor("secondary", 0.55), font: { size: 10 } } : undefined,
       },
     },
   };
@@ -119,7 +124,7 @@ export function r2ChartData(data: HealthDiagnosticsData): ChartData<"line", numb
       {
         label: "Week-End R²",
         data: rows.map((r) => (Number(r.r2) || 0) * 100),
-        borderColor: "rgba(169, 182, 210, 0.72)",
+        borderColor: chartTextColor("secondary", 0.72),
         borderWidth: 1.3,
         pointRadius: 0,
         tension: 0.2,
@@ -127,7 +132,7 @@ export function r2ChartData(data: HealthDiagnosticsData): ChartData<"line", numb
       {
         label: "12w Mean",
         data: rows.map((r) => (Number(r.roll60) || 0) * 100),
-        borderColor: "rgba(107, 207, 154, 0.9)",
+        borderColor: chartLongColor(0.9),
         borderWidth: 1.6,
         pointRadius: 0,
         tension: 0.24,
@@ -135,7 +140,7 @@ export function r2ChartData(data: HealthDiagnosticsData): ChartData<"line", numb
       {
         label: "52w Mean",
         data: rows.map((r) => (Number(r.roll252) || 0) * 100),
-        borderColor: "rgba(224, 87, 127, 0.84)",
+        borderColor: chartShortColor(0.84),
         borderWidth: 1.6,
         pointRadius: 0,
         tension: 0.24,
@@ -151,26 +156,21 @@ export const commonLineOptions: ChartOptions<"line"> = {
   plugins: {
     legend: {
       display: true,
-      labels: {
-        boxWidth: 9,
-        boxHeight: 9,
-        color: "rgba(169, 182, 210, 0.72)",
-        font: { size: 10 },
+        labels: {
+          boxWidth: 9,
+          boxHeight: 9,
+          color: chartTextColor("secondary", 0.72),
+          font: { size: 10 },
+        },
       },
-    },
-    tooltip: {
-      backgroundColor: "rgba(20, 22, 30, 0.92)",
-      borderColor: "rgba(154, 171, 214, 0.18)",
-      borderWidth: 1,
-      cornerRadius: 4,
-    },
+    tooltip: tooltipOptions(),
   },
   scales: {
     x: {
       border: { display: false },
       grid: { display: false },
       ticks: {
-        color: "rgba(169, 182, 210, 0.5)",
+        color: chartTextColor("secondary", 0.5),
         autoSkip: true,
         maxTicksLimit: 8,
         callback: (_v, idx, ticks) => compactDateLabel(String(ticks[idx]?.label ?? "")),
@@ -179,8 +179,8 @@ export const commonLineOptions: ChartOptions<"line"> = {
     },
     y: {
       border: { display: false },
-      grid: { color: "rgba(154, 171, 214, 0.12)" },
-      ticks: { color: "rgba(169, 182, 210, 0.5)", font: { size: 9 } },
+      grid: { color: chartGridColor(0.6) },
+      ticks: { color: chartTextColor("secondary", 0.5), font: { size: 9 } },
     },
   },
 };

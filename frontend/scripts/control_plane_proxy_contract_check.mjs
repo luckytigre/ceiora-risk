@@ -37,13 +37,13 @@ assert(
   `${backendHelperPath} must forward caller auth headers to upstream services`,
 );
 assert(
-  backendHelper.includes("headers: forwardedAuthHeaders(req, options?.headers)"),
-  `${backendHelperPath} proxyJson must merge caller auth headers into upstream requests`,
+  backendHelper.includes("headers: await upstreamHeaders(req, upstream, options?.headers)"),
+  `${backendHelperPath} proxyJson must merge caller auth headers into upstream requests and support backend service auth`,
 );
 
 const controlRoutes = [
-  { routePath: "src/app/api/refresh/route.ts", authMarker: "forwardedAuthHeaders(req)" },
-  { routePath: "src/app/api/refresh/status/route.ts", authMarker: "forwardedAuthHeaders(req)" },
+  { routePath: "src/app/api/refresh/route.ts", authMarker: "await upstreamHeaders(req, upstream)" },
+  { routePath: "src/app/api/refresh/status/route.ts", authMarker: "await upstreamHeaders(req, upstream)" },
   { routePath: "src/app/api/operator/status/route.ts", authMarker: "proxyJson(" },
   { routePath: "src/app/api/health/diagnostics/route.ts", authMarker: "proxyJson(" },
   { routePath: "src/app/api/data/diagnostics/route.ts", authMarker: "proxyJson(" },

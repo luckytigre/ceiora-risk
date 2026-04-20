@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import backend.risk_model.projected_loadings as projected_loadings_module
 from backend.risk_model.projected_loadings import (
     ProjectedLoadingResult,
     _run_ols,
@@ -336,6 +337,64 @@ class TestComputeProjectedLoadings:
         )
 
         assert loaded == {}
+
+    def test_compute_projected_loadings_persists_to_neon_authority_when_enabled(self, monkeypatch, tmp_path):
+        data_db, core_state_through_date, _ = self._setup_dbs(tmp_path)
+
+        executed_many: list[tuple[str, list[tuple[object, ...]]]] = []
+        executed: list[tuple[str, tuple[object, ...]]] = []
+
+        class _Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def execute(self, query, params=None):
+                executed.append((str(query), tuple(params or ())))
+
+            def executemany(self, query, rows):
+                executed_many.append((str(query), [tuple(row) for row in rows]))
+
+        class _Conn:
+            def __init__(self):
+                self.committed = False
+
+            def cursor(self):
+                return _Cursor()
+
+            def commit(self):
+                self.committed = True
+
+            def close(self):
+                return None
+
+        pg_conn = _Conn()
+        monkeypatch.setattr(projected_loadings_module, "_neon_projection_reads_enabled", lambda: True)
+        monkeypatch.setattr(projected_loadings_module, "connect", lambda **_kwargs: pg_conn)
+        monkeypatch.setattr(projected_loadings_module, "resolve_dsn", lambda _dsn: "postgresql://example")
+        monkeypatch.setattr("backend.data.model_output_writers.ensure_postgres_schema", lambda _conn: None)
+
+        results = compute_projected_loadings(
+            data_db=data_db,
+            projection_rics=[{"ric": "SPY.P", "ticker": "SPY"}],
+            core_state_through_date=core_state_through_date,
+            lookback_days=300,
+            min_obs=60,
+        )
+
+        assert results["SPY"].status == "ok"
+        assert pg_conn.committed is True
+        assert len(executed) == 2
+        assert "DELETE FROM projected_instrument_loadings" in executed[0][0]
+        assert executed[0][1][0] == core_state_through_date
+        assert len(executed_many) == 2
+        assert "INSERT INTO projected_instrument_loadings" in executed_many[0][0]
+        assert "INSERT INTO projected_instrument_meta" in executed_many[1][0]
+        assert len(executed_many[0][1]) == 3
+        assert executed_many[1][1][0][0] == "SPY.P"
+        assert executed_many[1][1][0][1] == core_state_through_date
 
     def test_load_persisted_projected_loadings_prefers_neon_authority_when_enabled(self, monkeypatch):
         class _Cursor:

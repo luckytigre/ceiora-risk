@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import importlib
+import json
 import os
 
 from fastapi.testclient import TestClient
@@ -18,6 +22,29 @@ orchestrator = importlib.import_module("backend.orchestration.run_model_pipeline
 refresh_manager = importlib.import_module("backend.services.refresh_manager")
 refresh_request_policy = importlib.import_module("backend.services.refresh_request_policy")
 refresh_profile_policy = importlib.import_module("backend.services.refresh_profile_policy")
+
+
+def _signed_app_session_token(
+    *,
+    provider: str = "shared",
+    subject: str = "friend@example.com",
+    email: str | None = "friend@example.com",
+    is_admin: bool = False,
+) -> str:
+    payload = {
+        "authProvider": provider,
+        "username": email or subject,
+        "subject": subject,
+        "email": email,
+        "isAdmin": is_admin,
+        "issuedAt": 1,
+        "expiresAt": 4743856000,
+    }
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii").rstrip("=")
+    signature = base64.urlsafe_b64encode(
+        hmac.new(b"test-secret", encoded.encode("utf-8"), hashlib.sha256).digest()
+    ).decode("ascii").rstrip("=")
+    return f"{encoded}.{signature}"
 
 
 def _config_snapshot_with_env(**updates: str | None) -> dict[str, object]:
@@ -74,10 +101,11 @@ def test_cloud_refresh_status_accepts_operator_header(monkeypatch) -> None:
     assert bearer_res.json()["refresh"]["status"] == "idle"
 
 
-def test_cloud_holdings_write_requires_editor_or_operator_token(monkeypatch) -> None:
+def test_cloud_holdings_write_allows_authenticated_app_session(monkeypatch) -> None:
     monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
     monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
     monkeypatch.setattr(auth_module.config, "EDITOR_API_TOKEN", "edit-secret")
+    monkeypatch.setenv("CEIORA_SESSION_SECRET", "test-secret")
     monkeypatch.setattr(
         holdings_route.holdings_service,
         "run_position_upsert",
@@ -91,13 +119,34 @@ def test_cloud_holdings_write_requires_editor_or_operator_token(monkeypatch) -> 
             "import_batch_id": "batch_1",
         },
     )
+    monkeypatch.setattr(
+        holdings_route,
+        "_resolve_holdings_scope",
+        lambda **kwargs: holdings_route.resolve_account_scope(
+            None,
+            principal=auth_module.AppPrincipal(provider="shared", subject="friend@example.com", is_admin=False),
+        ),
+    )
+    monkeypatch.setattr(
+        holdings_route,
+        "validate_requested_account",
+        lambda scope, requested_account_id: requested_account_id or "main",
+    )
 
     client = TestClient(app)
     payload = {"account_id": "main", "ric": "AAPL.OQ", "quantity": 10, "trigger_refresh": False}
     assert client.post("/api/holdings/position", json=payload).status_code == 401
     assert client.post("/api/holdings/position", json=payload, headers={"X-Refresh-Token": "op-secret"}).status_code == 401
-    assert client.post("/api/holdings/position", json=payload, headers={"X-Editor-Token": "edit-secret"}).status_code == 200
-    assert client.post("/api/holdings/position", json=payload, headers={"X-Operator-Token": "op-secret"}).status_code == 200
+    assert (
+        client.post(
+            "/api/holdings/position",
+            json=payload,
+            headers={"X-App-Session-Token": _signed_app_session_token()},
+        ).status_code
+        == 200
+    )
+    assert client.post("/api/holdings/position", json=payload, headers={"X-Editor-Token": "edit-secret"}).status_code == 401
+    assert client.post("/api/holdings/position", json=payload, headers={"X-Operator-Token": "op-secret"}).status_code == 401
 
 
 def test_cloud_expensive_diagnostics_require_operator_token(monkeypatch) -> None:
@@ -119,6 +168,31 @@ def test_cloud_expensive_diagnostics_require_operator_token(monkeypatch) -> None
     assert client.get("/api/data/diagnostics?include_expensive_checks=true", headers={"X-Operator-Token": "op-secret"}).status_code == 200
     assert client.get("/api/health/diagnostics").status_code == 401
     assert client.get("/api/health/diagnostics", headers={"X-Operator-Token": "op-secret"}).status_code == 200
+
+
+def test_cloud_health_diagnostics_reports_authority_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(auth_module.config, "APP_RUNTIME_ROLE", "cloud-serve")
+    monkeypatch.setattr(auth_module.config, "OPERATOR_API_TOKEN", "op-secret")
+    monkeypatch.setattr(health_routes, "require_role", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        health_routes,
+        "load_health_diagnostics_payload",
+        lambda: (_ for _ in ()).throw(
+            health_routes.health_diagnostics_service.HealthDiagnosticsUnavailable(
+                message="Health diagnostics authority is unavailable from neon.",
+                source="neon",
+                error={"type": "OperationalError", "message": "timed out"},
+            )
+        ),
+    )
+
+    client = TestClient(app)
+    res = client.get("/api/health/diagnostics", headers={"X-Operator-Token": "op-secret"})
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["status"] == "unavailable"
+    assert res.json()["detail"]["error"] == "health_diagnostics_authority_unavailable"
+    assert res.json()["detail"]["source"] == "neon"
 
 
 def test_cloud_operator_status_requires_operator_token(monkeypatch) -> None:

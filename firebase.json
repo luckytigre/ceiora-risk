@@ -1,0 +1,19 @@
+{
+  "hosting": {
+    "public": "firebase-hosting-public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "ceiora-prod-frontend",
+          "region": "us-east4"
+        }
+      }
+    ]
+  }
+}

@@ -10,10 +10,12 @@ def load_cpar_portfolio_hedge_payload(
     *,
     account_id: str,
     mode: str,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
     data_db=None,
 ) -> dict[str, object]:
     package, account, positions = cpar_portfolio_snapshot_service.load_cpar_portfolio_account_context(
         account_id=account_id,
+        allowed_account_ids=allowed_account_ids,
         data_db=data_db,
     )
     if not positions:
@@ -33,6 +35,7 @@ def load_cpar_portfolio_hedge_payload(
             rics=rics,
             package_run_id=str(package["package_run_id"]),
             package_date=str(package["package_date"]),
+            positions=positions,
             data_db=data_db,
         )
     )

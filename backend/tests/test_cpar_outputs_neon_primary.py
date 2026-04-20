@@ -8,6 +8,17 @@ from backend.cpar.factor_registry import CPAR1_METHOD_VERSION
 from backend.data import cpar_outputs
 
 
+@pytest.fixture(autouse=True)
+def _stub_shared_price_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cpar_outputs.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda *_args, **_kwargs: [],
+    )
+
+
 class _DummyPgConn:
     def rollback(self) -> None:
         return None
@@ -225,3 +236,68 @@ def test_persist_cpar_package_falls_back_to_sqlite_when_neon_optional(
     assert out["neon_write"]["status"] == "error"
     assert out["sqlite_mirror_write"]["status"] == "ok"
     assert captured["package_run"]["data_authority"] == "sqlite"
+
+
+def test_persist_cpar_package_uses_shared_source_prices_for_runtime_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(cpar_outputs.config, "APP_RUNTIME_ROLE", "local-ingest")
+    monkeypatch.setattr(cpar_outputs.config, "DATA_BACKEND", "neon")
+    monkeypatch.setattr(cpar_outputs.config, "neon_dsn", lambda: "postgresql://example")
+    monkeypatch.setattr(cpar_outputs.config, "neon_primary_model_data_enabled", lambda: True)
+    monkeypatch.setattr(cpar_outputs, "connect", lambda **_kwargs: _DummyPgConn())
+    monkeypatch.setattr(cpar_outputs, "resolve_dsn", lambda _dsn=None: "postgresql://example")
+    monkeypatch.setattr(
+        cpar_outputs.cpar_source_reads,
+        "load_latest_price_rows",
+        lambda rics, **_kwargs: [
+            {"ric": "AAPL.OQ", "date": "2026-03-14", "adj_close": 210.0, "close": 210.0}
+            for ric in rics
+            if str(ric).upper() == "AAPL.OQ"
+        ],
+    )
+
+    monkeypatch.setattr(
+        cpar_outputs.cpar_writers,
+        "write_cpar_outputs_postgres",
+        lambda _pg_conn, **kwargs: captured.update(runtime_coverage=kwargs["runtime_coverage"]) or {"status": "ok"},
+    )
+    monkeypatch.setattr(
+        cpar_outputs.cpar_writers,
+        "write_cpar_outputs_sqlite",
+        lambda _conn, **_kwargs: {"status": "ok"},
+    )
+
+    out = cpar_outputs.persist_cpar_package(
+        data_db=tmp_path / "data.db",
+        package_run=_package_run(),
+        proxy_returns=_proxy_returns(),
+        proxy_transforms=_proxy_transforms(),
+        covariance_rows=_covariance_rows(),
+        instrument_fits=_instrument_fits(),
+    )
+
+    assert out["status"] == "ok"
+    assert captured["runtime_coverage"] == [
+        {
+            "package_run_id": "run_1",
+            "package_date": "2026-03-14",
+            "ric": "AAPL.OQ",
+            "ticker": "AAPL",
+            "price_on_package_date_status": "present",
+            "fit_row_status": "present",
+            "fit_quality_status": "ok",
+            "portfolio_use_status": "covered",
+            "ticker_detail_use_status": "available",
+            "hedge_use_status": "usable",
+            "fit_family": "returns_regression_weekly",
+            "fit_status": "ok",
+            "reason_code": "ok",
+            "quality_label": "ok",
+            "warnings": [],
+            "updated_at": captured["runtime_coverage"][0]["updated_at"],
+        }
+    ]

@@ -48,6 +48,7 @@ interface WhatIfBuilderPanelProps {
   onStage: () => void;
   onTickerBlur: (relatedTarget: EventTarget | null) => void;
   onTickerFocus: () => void;
+  onTickerHover: (ticker: string) => void;
   onTickerKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   onTickerSelect: (ticker: string) => void;
   positionMap: Map<string, ExplorePositionSummary>;
@@ -58,6 +59,8 @@ interface WhatIfBuilderPanelProps {
   resultMessage: string;
   scenarioRows: ScenarioDraftRow[];
   searchQuery: string;
+  searchLoading: boolean;
+  searchSettled: boolean;
   searchResults: UniverseSearchItem[];
   stageReady: boolean;
   updateScenarioRow: (key: string, value: string) => void;
@@ -89,6 +92,7 @@ export default function WhatIfBuilderPanel({
   onStage,
   onTickerBlur,
   onTickerFocus,
+  onTickerHover,
   onTickerKeyDown,
   onTickerSelect,
   positionMap,
@@ -99,6 +103,8 @@ export default function WhatIfBuilderPanel({
   resultMessage,
   scenarioRows,
   searchQuery,
+  searchLoading,
+  searchSettled,
   searchResults,
   stageReady,
   updateScenarioRow,
@@ -132,24 +138,36 @@ export default function WhatIfBuilderPanel({
             disabled={controlsBusy}
             title="Search for a ticker — results appear as you type"
           />
-          {dropdownOpen && searchResults.length > 0 && (
+          {dropdownOpen && searchQuery.trim().length > 0 && (
             <div className="explore-typeahead whatif-typeahead">
-              {searchResults.map((row, index) => {
+              {searchSettled && searchResults.length > 0 ? searchResults.map((row, index) => {
                 const pos = positionMap.get(row.ticker.toUpperCase());
                 const tierLabel = row.risk_tier_label || row.model_status || "Unknown Tier";
                 const contextLabel = row.quote_source_label || row.trbc_economic_sector_short_abbr || row.trbc_economic_sector_short || "—";
+                const whatIfReady = row.whatif_ready !== false;
                 return (
                   <button
-                    key={row.ticker}
+                    key={row.ric || row.ticker}
                     className={`explore-typeahead-item${index === activeIndex ? " active" : ""}${pos ? " held" : ""}`}
-                    onMouseEnter={() => onSetActiveIndex(index)}
-                    onClick={() => onTickerSelect(row.ticker)}
-                    title={row.risk_tier_detail || undefined}
+                    onMouseEnter={() => {
+                      onSetActiveIndex(index);
+                      onTickerHover(row.ticker);
+                    }}
+                    onClick={() => {
+                      if (whatIfReady) onTickerSelect(row.ticker);
+                    }}
+                    title={row.whatif_ready_detail || row.risk_tier_detail || undefined}
+                    disabled={!whatIfReady}
                   >
                     <span className="ticker">{highlightMatch(row.ticker, searchQuery)}</span>
                     <span className="name">{highlightMatch(row.name, searchQuery)}</span>
                     <span className="explore-typeahead-classifications">
                       <span>{tierLabel}</span>
+                      {!whatIfReady && (
+                        <span className="explore-typeahead-ig">
+                          {row.whatif_ready_label || "Not Preview Ready"}
+                        </span>
+                      )}
                       {(row.quote_source_label || row.trbc_industry_group || contextLabel) && (
                         <span className="explore-typeahead-ig">
                           {row.trbc_industry_group || contextLabel}
@@ -169,7 +187,15 @@ export default function WhatIfBuilderPanel({
                     </span>
                   </button>
                 );
-              })}
+              }) : (
+                <div className="explore-typeahead-item disabled" aria-live="polite">
+                  {searchLoading
+                    ? "Searching universe…"
+                    : !searchSettled
+                      ? "Waiting for current search input…"
+                      : "No universe matches yet."}
+                </div>
+              )}
             </div>
           )}
         </div>

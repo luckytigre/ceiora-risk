@@ -211,24 +211,44 @@ def insert_event(
         )
 
 
-def list_holdings_accounts(pg_conn) -> list[dict[str, Any]]:
+def list_holdings_accounts(pg_conn, *, allowed_account_ids: list[str] | tuple[str, ...] | None = None) -> list[dict[str, Any]]:
     with pg_conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT
-                a.account_id,
-                a.account_name,
-                a.is_active,
-                COUNT(p.ric) AS positions_count,
-                COALESCE(SUM(ABS(CAST(p.quantity AS DOUBLE PRECISION))), 0) AS gross_quantity,
-                MAX(p.updated_at) AS last_position_updated_at
-            FROM holdings_accounts a
-            LEFT JOIN holdings_positions_current p
-              ON p.account_id = a.account_id
-            GROUP BY a.account_id, a.account_name, a.is_active
-            ORDER BY a.account_id ASC
-            """
-        )
+        if allowed_account_ids:
+            cur.execute(
+                """
+                SELECT
+                    a.account_id,
+                    a.account_name,
+                    a.is_active,
+                    COUNT(p.ric) AS positions_count,
+                    COALESCE(SUM(ABS(CAST(p.quantity AS DOUBLE PRECISION))), 0) AS gross_quantity,
+                    MAX(p.updated_at) AS last_position_updated_at
+                FROM holdings_accounts a
+                LEFT JOIN holdings_positions_current p
+                  ON p.account_id = a.account_id
+                WHERE a.account_id = ANY(%s)
+                GROUP BY a.account_id, a.account_name, a.is_active
+                ORDER BY a.account_id ASC
+                """,
+                (list(allowed_account_ids),),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT
+                    a.account_id,
+                    a.account_name,
+                    a.is_active,
+                    COUNT(p.ric) AS positions_count,
+                    COALESCE(SUM(ABS(CAST(p.quantity AS DOUBLE PRECISION))), 0) AS gross_quantity,
+                    MAX(p.updated_at) AS last_position_updated_at
+                FROM holdings_accounts a
+                LEFT JOIN holdings_positions_current p
+                  ON p.account_id = a.account_id
+                GROUP BY a.account_id, a.account_name, a.is_active
+                ORDER BY a.account_id ASC
+                """
+            )
         rows = cur.fetchall()
     out: list[dict[str, Any]] = []
     for account_id, account_name, is_active, positions_count, gross_qty, last_updated in rows:
@@ -245,41 +265,83 @@ def list_holdings_accounts(pg_conn) -> list[dict[str, Any]]:
     return out
 
 
-def list_holdings_positions(pg_conn, *, account_id: str | None = None) -> list[dict[str, Any]]:
+def list_holdings_positions(
+    pg_conn,
+    *,
+    account_id: str | None = None,
+    allowed_account_ids: list[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     acct = normalize_account_id(account_id) if account_id is not None else None
     with pg_conn.cursor() as cur:
         if acct:
-            cur.execute(
-                """
-                SELECT
-                    p.account_id,
-                    p.ric,
-                    """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
-                    p.quantity,
-                    p.source,
-                    p.updated_at
-                FROM holdings_positions_current p
-                """ + _REGISTRY_JOIN_SQL + """
-                WHERE account_id = %s
-                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
-                """,
-                (acct,),
-            )
+            if allowed_account_ids:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        p.ric,
+                        """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
+                        p.quantity,
+                        p.source,
+                        p.updated_at
+                    FROM holdings_positions_current p
+                    """ + _REGISTRY_JOIN_SQL + """
+                    WHERE account_id = %s
+                      AND p.account_id = ANY(%s)
+                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                    """,
+                    (acct, list(allowed_account_ids)),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        p.ric,
+                        """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
+                        p.quantity,
+                        p.source,
+                        p.updated_at
+                    FROM holdings_positions_current p
+                    """ + _REGISTRY_JOIN_SQL + """
+                    WHERE account_id = %s
+                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                    """,
+                    (acct,),
+                )
         else:
-            cur.execute(
-                """
-                SELECT
-                    p.account_id,
-                    p.ric,
-                    """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
-                    p.quantity,
-                    p.source,
-                    p.updated_at
-                FROM holdings_positions_current p
-                """ + _REGISTRY_JOIN_SQL + """
-                ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
-                """
-            )
+            if allowed_account_ids:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        p.ric,
+                        """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
+                        p.quantity,
+                        p.source,
+                        p.updated_at
+                    FROM holdings_positions_current p
+                    """ + _REGISTRY_JOIN_SQL + """
+                    WHERE p.account_id = ANY(%s)
+                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                    """,
+                    (list(allowed_account_ids),),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        p.account_id,
+                        p.ric,
+                        """ + _REGISTRY_TICKER_EXPR + """ AS ticker,
+                        p.quantity,
+                        p.source,
+                        p.updated_at
+                    FROM holdings_positions_current p
+                    """ + _REGISTRY_JOIN_SQL + """
+                    ORDER BY p.account_id, """ + _REGISTRY_TICKER_EXPR + """, p.ric
+                    """
+                )
         rows = cur.fetchall()
     out: list[dict[str, Any]] = []
     for account_id, ric, ticker, quantity, source, updated_at in rows:

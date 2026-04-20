@@ -138,7 +138,7 @@ def test_operator_status_reports_cloud_allowed_profiles(monkeypatch) -> None:
     res = client.get("/api/operator/status", headers={"X-Operator-Token": "op-secret"})
 
     assert res.status_code == 200
-    assert res.json()["runtime"]["allowed_profiles"] == ["serve-refresh"]
+    assert res.json()["runtime"]["allowed_profiles"] == ["cold-core", "core-weekly", "serve-refresh"]
     assert "source-daily" in res.json()["runtime"]["local_only_profiles"]
 
 
@@ -550,6 +550,61 @@ def test_job_runs_summary_includes_live_stage_details(tmp_path) -> None:
     assert latest["current_stage"]["details"]["items_processed"] == 250
     assert latest["current_stage"]["details"]["unit"] == "cross_sections"
     assert latest["current_stage"]["heartbeat_at"] is not None
+    assert latest["current_stage"]["metrics"]["progress"] == {
+        "items_processed": 250,
+        "items_total": 800,
+        "progress_pct": 31.25,
+        "unit": "cross_sections",
+    }
+
+
+def test_job_runs_summary_includes_normalized_stage_metrics_for_completed_stage(tmp_path) -> None:
+    from backend.data import job_runs
+
+    db = tmp_path / "data.db"
+    job_runs.ensure_schema(db)
+    job_runs.begin_stage(
+        db_path=db,
+        run_id="job_done",
+        profile="core-weekly",
+        stage_name="neon_readiness",
+        stage_order=1,
+        details={"message": "Starting neon readiness"},
+    )
+    job_runs.finish_stage(
+        db_path=db,
+        run_id="job_done",
+        stage_name="neon_readiness",
+        status="completed",
+        details={
+            "status": "ok",
+            "duration_seconds": 12.5,
+            "copied_tables": [
+                {"table": "security_prices_eod", "row_count": 1200},
+                {"table": "model_factor_returns_daily", "row_count": 340},
+            ],
+            "items_processed": 2,
+            "items_total": 2,
+            "progress_pct": 100.0,
+            "unit": "tables",
+        },
+    )
+
+    out = job_runs.latest_run_summary_by_profile(db_path=db, profiles=["core-weekly"])
+    latest = out["core-weekly"]
+    stage = latest["stages"][0]
+
+    assert stage["metrics"]["duration_seconds"] == 12.5
+    assert stage["metrics"]["row_counts"] == {
+        "security_prices_eod": 1200,
+        "model_factor_returns_daily": 340,
+    }
+    assert stage["metrics"]["progress"] == {
+        "items_processed": 2,
+        "items_total": 2,
+        "progress_pct": 100.0,
+        "unit": "tables",
+    }
 
 
 def test_fail_stale_running_stages_uses_recent_heartbeat(tmp_path) -> None:

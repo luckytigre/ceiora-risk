@@ -102,12 +102,12 @@ def _load_registry_row(
     return ranked[0] if ranked else None
 
 
-def load_cpar_ticker_payload(
+def resolve_cpar_ticker_identity(
     *,
     ticker: str,
     ric: str | None = None,
     data_db=None,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], dict[str, Any] | None, dict[str, Any] | None, str, str]:
     package = cpar_meta_service.require_active_package(data_db=data_db)
     clean_ticker = str(ticker or "").strip().upper()
     clean_ric = str(ric or "").strip().upper() or None
@@ -143,6 +143,21 @@ def load_cpar_ticker_payload(
     resolved_ric = str((fit or {}).get("ric") or (registry_row or {}).get("ric") or "").strip().upper()
     if not resolved_ric:
         raise CparTickerNotFound(f"{clean_ticker} is missing a valid cPAR RIC mapping.")
+
+    return package, fit, registry_row, clean_ticker, resolved_ric
+
+
+def load_cpar_ticker_payload(
+    *,
+    ticker: str,
+    ric: str | None = None,
+    data_db=None,
+) -> dict[str, object]:
+    package, fit, registry_row, clean_ticker, resolved_ric = resolve_cpar_ticker_identity(
+        ticker=ticker,
+        ric=ric,
+        data_db=data_db,
+    )
 
     try:
         price_rows = cpar_source_reads.load_latest_price_rows(

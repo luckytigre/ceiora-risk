@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { controlBackendOrigin, forwardedAuthHeaders } from "@/app/api/_backend";
+import { controlBackendOrigin, upstreamHeaders } from "@/app/api/_backend";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   const upstream = `${controlBackendOrigin()}/api/refresh${req.nextUrl.search}`;
   const res = await fetch(upstream, {
     method: "POST",
-    headers: forwardedAuthHeaders(req),
+    headers: await upstreamHeaders(req, upstream, {}, { forwardPrivilegedHeaders: true }),
     cache: "no-store",
   });
   const body = await res.text();

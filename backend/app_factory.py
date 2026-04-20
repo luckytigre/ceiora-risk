@@ -26,6 +26,10 @@ def _surface_title(surface: str) -> str:
 def _sanitize_validation_payload(value):
     if isinstance(value, float) and not math.isfinite(value):
         return str(value)
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, tuple):
+        return [_sanitize_validation_payload(item) for item in value]
     if isinstance(value, list):
         return [_sanitize_validation_payload(item) for item in value]
     if isinstance(value, dict):
@@ -33,7 +37,41 @@ def _sanitize_validation_payload(value):
     return value
 
 
+def _validate_cloud_dispatch_config(*, surface: str) -> None:
+    if not config.cloud_mode():
+        return
+    if config.DATA_BACKEND != "neon":
+        return
+    if not config.cloud_run_jobs_enabled():
+        return
+
+    clean_surface = str(surface or "full").strip().lower() or "full"
+    if clean_surface != "control":
+        return
+
+    missing: list[str] = []
+    if not config.CLOUD_RUN_PROJECT_ID:
+        missing.append("CLOUD_RUN_PROJECT_ID")
+    if not config.CLOUD_RUN_REGION:
+        missing.append("CLOUD_RUN_REGION")
+    if not config.SERVE_REFRESH_CLOUD_RUN_JOB_NAME:
+        missing.append("SERVE_REFRESH_CLOUD_RUN_JOB_NAME")
+    if not config.CORE_WEEKLY_CLOUD_RUN_JOB_NAME:
+        missing.append("CORE_WEEKLY_CLOUD_RUN_JOB_NAME")
+    if not config.COLD_CORE_CLOUD_RUN_JOB_NAME:
+        missing.append("COLD_CORE_CLOUD_RUN_JOB_NAME")
+    if not config.CPAR_BUILD_CLOUD_RUN_JOB_NAME:
+        missing.append("CPAR_BUILD_CLOUD_RUN_JOB_NAME")
+
+    if missing:
+        raise RuntimeError(
+            f"Step 3 Cutover Guardrail: Control-surface cloud dispatch is enabled but missing critical configuration: {', '.join(missing)}. "
+            "Ensure the full Cloud Run job contract is set before starting the control surface in cloud-serve mode."
+        )
+
+
 def create_app(*, surface: str = "full") -> FastAPI:
+    _validate_cloud_dispatch_config(surface=surface)
     app = FastAPI(title=_surface_title(surface), version="0.1.0")
     app.state.app_surface = str(surface or "full").strip().lower() or "full"
 

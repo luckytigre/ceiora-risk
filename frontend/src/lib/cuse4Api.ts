@@ -1,5 +1,5 @@
 // cUSE4-only frontend API helpers for the default route family.
-// Prefer this over `@/lib/api` in cUSE4-owned frontend code.
+// Prefer this over generic frontend API alias layers in cUSE4-owned frontend code.
 
 import { ApiError, apiFetch } from "@/lib/apiTransport";
 import { holdingsApiPath } from "@/lib/holdingsApi";
@@ -7,6 +7,10 @@ import { holdingsApiPath } from "@/lib/holdingsApi";
 export { ApiError, apiFetch };
 
 export const cuse4ApiPath = {
+  exploreContext: () => "/api/cuse/explore/context",
+  riskPageSnapshot: () => "/api/cuse/risk-page",
+  riskPageExposureMode: (mode: string) => `/api/cuse/risk-page/exposure-mode?mode=${encodeURIComponent(mode)}`,
+  riskPageCovariance: () => "/api/cuse/risk-page/covariance",
   portfolio: () => "/api/portfolio",
   portfolioWhatIf: () => "/api/portfolio/whatif",
   ...holdingsApiPath,

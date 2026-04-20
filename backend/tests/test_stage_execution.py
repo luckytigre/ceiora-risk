@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 stage_execution = importlib.import_module("backend.orchestration.stage_execution")
+from backend.data import job_runs
 from backend.services import neon_authority
 
 
@@ -13,6 +14,7 @@ def _job_runs_stub() -> SimpleNamespace:
         begin_stage=lambda **kwargs: None,
         heartbeat_stage=lambda **kwargs: None,
         finish_stage=lambda **kwargs: None,
+        normalize_stage_metrics=job_runs.normalize_stage_metrics,
     )
 
 
@@ -265,3 +267,81 @@ def test_run_selected_stages_does_not_treat_resumed_risk_model_as_current_invoca
     assert len(captured) == 1
     assert captured[0]["stage"] == "serving_refresh"
     assert captured[0]["upstream_core_recomputed"] is False
+
+
+def test_run_selected_stages_persists_normalized_metrics(tmp_path: Path) -> None:
+    local_data_db = tmp_path / "local_data.db"
+    local_cache_db = tmp_path / "local_cache.db"
+    local_data_db.touch()
+    local_cache_db.touch()
+
+    finished: list[dict[str, object]] = []
+
+    def _finish_stage(**kwargs):
+        finished.append(kwargs)
+
+    job_runs_stub = SimpleNamespace(
+        begin_stage=lambda **kwargs: None,
+        heartbeat_stage=lambda **kwargs: None,
+        finish_stage=_finish_stage,
+        normalize_stage_metrics=job_runs.normalize_stage_metrics,
+    )
+
+    def _run_stage(**kwargs):
+        return {
+            "status": "ok",
+            "rows_upserted": 123,
+            "dates_processed": 7,
+            "model_outputs_write": {
+                "row_counts": {
+                    "model_factor_returns_daily": 7,
+                    "model_specific_risk_daily": 7,
+                }
+            },
+            "items_processed": 7,
+            "items_total": 7,
+            "progress_pct": 100.0,
+            "unit": "dates",
+        }
+
+    out = stage_execution.run_selected_stages(
+        selected=["factor_returns"],
+        stages=["factor_returns"],
+        db_path=local_data_db,
+        cache_db=local_cache_db,
+        profile_key="core-weekly",
+        effective_run_id="run_metrics",
+        as_of="2026-03-14",
+        should_run_core=True,
+        serving_mode="full",
+        force_core=False,
+        core_reason="due",
+        raw_history_policy="none",
+        reset_core_cache=False,
+        enable_ingest=False,
+        prefer_local_source_archive=False,
+        refresh_scope=None,
+        rebuild_backend="sqlite",
+        app_data_dir=str(tmp_path),
+        completed_stages=set(),
+        stage_callback=None,
+        run_stage_fn=_run_stage,
+        job_runs_module=job_runs_stub,
+        neon_authority_module=neon_authority,
+    )
+
+    assert out["overall_status"] == "ok"
+    assert len(finished) == 1
+    details = finished[0]["details"]
+    metrics = details["metrics"]
+    assert metrics["duration_seconds"] >= 0.0
+    assert metrics["row_counts"]["rows_upserted"] == 123
+    assert metrics["row_counts"]["model_outputs_write.model_factor_returns_daily"] == 7
+    assert metrics["row_counts"]["model_outputs_write.model_specific_risk_daily"] == 7
+    assert metrics["counters"]["dates_processed"] == 7
+    assert metrics["progress"] == {
+        "items_processed": 7,
+        "items_total": 7,
+        "progress_pct": 100.0,
+        "unit": "dates",
+    }
