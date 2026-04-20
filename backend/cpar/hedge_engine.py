@@ -253,7 +253,18 @@ def _prune_correlated_substitutes(
 
 
 def _apply_leg_cap(candidate_ids: list[str], thresholded_loadings: Mapping[str, float]) -> list[str]:
-    if len(candidate_ids) <= MAX_HEDGE_LEGS:
+    return _apply_leg_cap_with_limit(candidate_ids, thresholded_loadings, max_hedge_legs=MAX_HEDGE_LEGS)
+
+
+def _apply_leg_cap_with_limit(
+    candidate_ids: list[str],
+    thresholded_loadings: Mapping[str, float],
+    *,
+    max_hedge_legs: int,
+) -> list[str]:
+    if max_hedge_legs <= 0:
+        return []
+    if len(candidate_ids) <= max_hedge_legs:
         return candidate_ids
     keep: list[str] = []
     if MARKET_FACTOR_ID in candidate_ids:
@@ -264,7 +275,7 @@ def _apply_leg_cap(candidate_ids: list[str], thresholded_loadings: Mapping[str, 
         if factor_id != MARKET_FACTOR_ID
     ]
     non_market.sort(key=lambda factor_id: (-abs(float(thresholded_loadings.get(factor_id, 0.0))), factor_id))
-    keep.extend(non_market[: max(0, MAX_HEDGE_LEGS - len(keep))])
+    keep.extend(non_market[: max(0, max_hedge_legs - len(keep))])
     return keep
 
 
@@ -275,6 +286,7 @@ def build_factor_neutral_hedge(
     fit_status: str,
     hedge_use_status: str | None = None,
     previous_hedge_weights: Mapping[str, float] | None = None,
+    max_hedge_legs: int = MAX_HEDGE_LEGS,
 ) -> HedgePreview:
     underlying = _sorted_loadings(thresholded_loadings)
     if str(hedge_use_status or "").strip() in {"missing_price", "insufficient_history"}:
@@ -312,7 +324,7 @@ def build_factor_neutral_hedge(
             non_market_reduction_ratio=1.0,
         )
     pruned = _prune_correlated_substitutes(candidates, underlying, covariance)
-    capped = _apply_leg_cap(pruned, underlying)
+    capped = _apply_leg_cap_with_limit(pruned, underlying, max_hedge_legs=max_hedge_legs)
     hedge_weights = {factor_id: -float(underlying.get(factor_id, 0.0)) for factor_id in capped}
     hedge_weights = {
         factor_id: weight
@@ -344,6 +356,82 @@ def build_factor_neutral_hedge(
     )
 
 
+def build_factor_neutral_recommendation(
+    thresholded_loadings: Mapping[str, float],
+    covariance: Mapping[object, object],
+    *,
+    fit_status: str,
+    hedge_use_status: str | None = None,
+    previous_hedge_weights: Mapping[str, float] | None = None,
+    max_hedge_legs: int = 10,
+) -> HedgePreview:
+    underlying = _sorted_loadings(thresholded_loadings)
+    if str(hedge_use_status or "").strip() in {"missing_price", "insufficient_history"}:
+        return _build_preview(
+            mode="factor_neutral_recommendation",
+            status="hedge_unavailable",
+            reason=f"hedge_use_status_{str(hedge_use_status)}",
+            underlying_loadings=underlying,
+            hedge_weights={},
+            covariance=covariance,
+            previous_hedge_weights=previous_hedge_weights,
+            non_market_reduction_ratio=None,
+        )
+    if str(fit_status) == "insufficient_history":
+        return _build_preview(
+            mode="factor_neutral_recommendation",
+            status="hedge_unavailable",
+            reason="fit_status_insufficient_history",
+            underlying_loadings=underlying,
+            hedge_weights={},
+            covariance=covariance,
+            previous_hedge_weights=previous_hedge_weights,
+            non_market_reduction_ratio=None,
+        )
+    candidates = _candidate_factor_ids(underlying)
+    if not candidates:
+        return _build_preview(
+            mode="factor_neutral_recommendation",
+            status="hedge_ok",
+            reason="no_material_factor_exposures",
+            underlying_loadings=underlying,
+            hedge_weights={},
+            covariance=covariance,
+            previous_hedge_weights=previous_hedge_weights,
+            non_market_reduction_ratio=1.0,
+        )
+    selected = sorted(
+        candidates,
+        key=lambda factor_id: (-abs(float(underlying.get(factor_id, 0.0))), factor_id),
+    )[: max(0, max_hedge_legs)]
+    hedge_weights = {factor_id: -float(underlying.get(factor_id, 0.0)) for factor_id in selected}
+    hedge_weights = {
+        factor_id: weight
+        for factor_id, weight in hedge_weights.items()
+        if abs(float(weight)) >= TINY_POSITION_THRESHOLD
+    }
+    pre_magnitude = float(sum(abs(float(beta)) for beta in underlying.values()))
+    post_magnitude = float(
+        sum(
+            abs(float(underlying.get(factor_id, 0.0)) + float(hedge_weights.get(factor_id, 0.0)))
+            for factor_id in underlying.keys()
+        )
+    )
+    reduction_ratio = 1.0 if pre_magnitude <= 0.0 else max(0.0, 1.0 - (post_magnitude / pre_magnitude))
+    status = "hedge_ok" if reduction_ratio >= 0.50 else "hedge_degraded"
+    reason = None if status == "hedge_ok" else "residual_trade_space_loadings_remain_after_leg_cap"
+    return _build_preview(
+        mode="factor_neutral_recommendation",
+        status=status,
+        reason=reason,
+        underlying_loadings=underlying,
+        hedge_weights=hedge_weights,
+        covariance=covariance,
+        previous_hedge_weights=previous_hedge_weights,
+        non_market_reduction_ratio=reduction_ratio,
+    )
+
+
 def build_hedge_preview(
     *,
     mode: str,
@@ -352,6 +440,7 @@ def build_hedge_preview(
     fit_status: str,
     hedge_use_status: str | None = None,
     previous_hedge_weights: Mapping[str, float] | None = None,
+    max_hedge_legs: int = MAX_HEDGE_LEGS,
 ) -> HedgePreview:
     clean_mode = str(mode or "").strip().lower()
     if clean_mode == "market_neutral":
@@ -369,5 +458,6 @@ def build_hedge_preview(
             fit_status=fit_status,
             hedge_use_status=hedge_use_status,
             previous_hedge_weights=previous_hedge_weights,
+            max_hedge_legs=max_hedge_legs,
         )
     raise ValueError(f"Unsupported hedge mode: {mode}")

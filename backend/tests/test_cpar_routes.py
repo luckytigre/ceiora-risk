@@ -26,6 +26,8 @@ EXPECTED_CPAR_ROUTE_SET = {
     ("GET", "/api/cpar/risk"),
     ("GET", "/api/cpar/factors/history"),
     ("GET", "/api/cpar/portfolio/hedge"),
+    ("GET", "/api/cpar/position/hedge"),
+    ("GET", "/api/cpar/portfolio/hedge/recommendation"),
     ("POST", "/api/cpar/portfolio/whatif"),
     ("POST", "/api/cpar/explore/whatif"),
 }
@@ -1141,6 +1143,101 @@ def test_cpar_portfolio_hedge_route_forwards_allowed_account_ids(monkeypatch) ->
 
     assert res.status_code == 200
     assert captured["kwargs"]["allowed_account_ids"] == ["acct_main", "acct_alt"]
+
+
+def test_cpar_position_hedge_route_returns_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_position_hedge_service,
+        "load_cpar_position_hedge_payload",
+        lambda **kwargs: {
+            "scope": kwargs["scope"],
+            "position": {"ric": kwargs["ric"], "base_notional": 1000.0},
+            "packages": {
+                "market_neutral": {"mode": "market_neutral", "trade_rows": []},
+                "factor_neutral": {"mode": "factor_neutral", "trade_rows": []},
+            },
+        },
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/position/hedge?ric=AAPL.OQ&scope=all_permitted_accounts")
+
+    assert res.status_code == 200
+    assert res.json()["position"]["ric"] == "AAPL.OQ"
+    assert res.json()["packages"]["factor_neutral"]["mode"] == "factor_neutral"
+
+
+def test_cpar_position_hedge_route_forwards_account_scope(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(cpar_routes, "account_enforcement_enabled", lambda: True)
+    monkeypatch.setattr(
+        cpar_routes,
+        "_resolve_holdings_scope",
+        lambda **kwargs: AccountScope(
+            enforced=True,
+            is_admin=False,
+            subject="friend@example.com",
+            default_account_id="acct_main",
+            account_ids=("acct_main", "acct_alt"),
+        ),
+    )
+    monkeypatch.setattr(cpar_routes, "validate_requested_account", lambda scope, requested_account_id: requested_account_id)
+
+    def _load_payload(**kwargs):
+        captured["kwargs"] = dict(kwargs)
+        return {
+            "scope": kwargs["scope"],
+            "position": {"ric": kwargs["ric"], "base_notional": 1000.0},
+            "packages": {},
+        }
+
+    monkeypatch.setattr(
+        cpar_routes.cpar_position_hedge_service,
+        "load_cpar_position_hedge_payload",
+        _load_payload,
+    )
+
+    client = TestClient(_test_app())
+    res = client.get(
+        "/api/cpar/position/hedge?ric=AAPL.OQ&scope=account&account_id=acct_main",
+        headers={"X-App-Session-Token": "signed"},
+    )
+
+    assert res.status_code == 200
+    assert captured["kwargs"]["allowed_account_ids"] == ["acct_main", "acct_alt"]
+    assert captured["kwargs"]["account_id"] == "acct_main"
+
+
+def test_cpar_portfolio_hedge_recommendation_route_returns_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cpar_routes.cpar_portfolio_hedge_recommendation_service,
+        "load_cpar_portfolio_hedge_recommendation_payload",
+        lambda **kwargs: {
+            "scope": kwargs["scope"],
+            "display_factor_chart": [],
+            "hedge_recommendation": {
+                "mode": "factor_neutral",
+                "max_hedge_legs": 10,
+                "trade_rows": [],
+            },
+        },
+    )
+
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/portfolio/hedge/recommendation?scope=all_permitted_accounts")
+
+    assert res.status_code == 200
+    assert res.json()["scope"] == "all_permitted_accounts"
+    assert res.json()["hedge_recommendation"]["max_hedge_legs"] == 10
+
+
+def test_cpar_portfolio_hedge_recommendation_route_requires_account_id_for_account_scope(monkeypatch) -> None:
+    client = TestClient(_test_app())
+    res = client.get("/api/cpar/portfolio/hedge/recommendation?scope=account")
+
+    assert res.status_code == 400
+    assert "account_id is required" in res.json()["detail"]
 
 
 def test_router_registry_includes_cpar_router() -> None:

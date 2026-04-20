@@ -20,8 +20,10 @@ from backend.services import (
     cpar_explore_whatif_service,
     cpar_factor_history_service,
     cpar_meta_service,
+    cpar_portfolio_hedge_recommendation_service,
     cpar_portfolio_hedge_service,
     cpar_portfolio_whatif_service,
+    cpar_position_hedge_service,
     cpar_risk_service,
     cpar_search_service,
     cpar_ticker_history_service,
@@ -260,6 +262,72 @@ async def get_cpar_portfolio_hedge(
         _raise_cpar_unavailable(str(exc))
     except cpar_portfolio_hedge_service.CparPortfolioAccountNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/cpar/position/hedge")
+async def get_cpar_position_hedge(
+    ric: str = Query(..., min_length=1),
+    scope: Literal["all_permitted_accounts", "account"] = Query(default="all_permitted_accounts"),
+    account_id: str | None = Query(default=None),
+    x_app_session_token: str | None = Header(default=None, alias="X-App-Session-Token"),
+):
+    try:
+        holdings_scope = None
+        if account_enforcement_enabled():
+            holdings_scope = _resolve_holdings_scope(
+                x_app_session_token=x_app_session_token,
+            )
+            if scope == "account":
+                validate_requested_account(holdings_scope, str(account_id or ""))
+        return cpar_position_hedge_service.load_cpar_position_hedge_payload(
+            ric=ric,
+            scope=str(scope),
+            account_id=account_id,
+            allowed_account_ids=None if holdings_scope is None else list(holdings_scope.account_ids),
+        )
+    except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
+        _raise_account_scope_error(exc)
+        raise
+    except cpar_meta_service.CparReadNotReady as exc:
+        _raise_cpar_not_ready(str(exc))
+    except cpar_meta_service.CparReadUnavailable as exc:
+        _raise_cpar_unavailable(str(exc))
+    except cpar_position_hedge_service.CparPositionHedgeNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/cpar/portfolio/hedge/recommendation")
+async def get_cpar_portfolio_hedge_recommendation(
+    scope: Literal["all_permitted_accounts", "account"] = Query(default="all_permitted_accounts"),
+    account_id: str | None = Query(default=None),
+    x_app_session_token: str | None = Header(default=None, alias="X-App-Session-Token"),
+):
+    try:
+        holdings_scope = None
+        if account_enforcement_enabled():
+            holdings_scope = _resolve_holdings_scope(
+                x_app_session_token=x_app_session_token,
+            )
+            if scope == "account":
+                validate_requested_account(holdings_scope, str(account_id or ""))
+        return cpar_portfolio_hedge_recommendation_service.load_cpar_portfolio_hedge_recommendation_payload(
+            scope=str(scope),
+            account_id=account_id,
+            allowed_account_ids=None if holdings_scope is None else list(holdings_scope.account_ids),
+        )
+    except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
+        _raise_account_scope_error(exc)
+        raise
+    except cpar_meta_service.CparReadNotReady as exc:
+        _raise_cpar_not_ready(str(exc))
+    except cpar_meta_service.CparReadUnavailable as exc:
+        _raise_cpar_unavailable(str(exc))
+    except cpar_portfolio_hedge_recommendation_service.CparPortfolioAccountNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/cpar/portfolio/whatif")
