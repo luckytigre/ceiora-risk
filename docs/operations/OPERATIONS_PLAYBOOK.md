@@ -47,7 +47,7 @@
   - cUSE live universe: `4159` tickers, `2983` `core_estimated`, `258` `projected_only`
   - returns-projected ETF cohort restored: `SPY`, `QQQ`, `URA`, `XLE`, `SMH`
   - cPAR aggregate risk restored with `covered_positions_count = 24`, `missing_price = 0`, `missing_cpar_fit = 0`
-- The full implementation record and validation trail live in [CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/architecture/CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN.md).
+- The full implementation record and validation trail live in [CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN_2026-04-15.md](/Users/shaun/Library/CloudStorage/Dropbox/045%20-%20Vibing/ceiora-risk/docs/archive/implementation-trackers/CUSE_CPAR_AUTHORITY_AND_READ_SURFACE_PLAN_2026-04-15.md).
 
 ## Hobby Launch Profile (Low Cost, 1-2 Users)
 - Run a single backend process/worker only.

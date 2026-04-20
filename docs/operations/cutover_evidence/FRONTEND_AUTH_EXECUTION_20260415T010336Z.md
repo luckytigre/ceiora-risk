@@ -9,7 +9,7 @@ Status: completed live; auth, private-backend, Firebase frontend-only domain cut
 Track the execution status for the frontend auth and custom-domain plan after the repo-side phases were implemented.
 
 Reference plan:
-- `docs/architecture/FRONTEND_AUTH_AND_CUSTOM_DOMAIN_PLAN.md`
+- `docs/archive/implementation-trackers/FRONTEND_AUTH_AND_CUSTOM_DOMAIN_PLAN_2026-04-14.md`
 
 ## Completed In Repo
 
