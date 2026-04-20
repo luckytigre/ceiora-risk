@@ -334,7 +334,7 @@ function LoginShell({
           <aside className="public-login-masthead">
             <span className="public-login-masthead-rule" aria-hidden="true" />
             <h1 className="public-login-headline">
-              <em>{provider === "neon" ? "Create" : "Resume"}</em> where<br />
+              <em>{provider === "neon" ? "Pick up" : "Resume"}</em> where<br />
               you left off
             </h1>
             <p className="public-login-copy">
