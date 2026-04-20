@@ -610,23 +610,23 @@ main {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   min-height: 48px;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: blur(8px) saturate(1.03);
+  -webkit-backdrop-filter: blur(8px) saturate(1.03);
   transition: background-color 0.24s ease, border-bottom-color 0.24s ease;
 }
 
 .dash-tabs-landing {
-  background-color: rgba(var(--nav-bg-rgb), 0.94);
+  background-color: rgba(var(--nav-bg-rgb), 0.89);
   border-bottom-color: var(--rule-soft);
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: blur(10px) saturate(1.04);
+  -webkit-backdrop-filter: blur(10px) saturate(1.04);
 }
 
 .dash-tabs-positions {
   border-bottom-color: rgba(255, 255, 255, 0.06);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: blur(8px) saturate(1.03);
+  -webkit-backdrop-filter: blur(8px) saturate(1.03);
 }
 
 .dash-tabs-brand {

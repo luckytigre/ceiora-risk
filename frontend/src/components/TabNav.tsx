@@ -177,6 +177,8 @@ export default function TabNav() {
     if (isLanding) {
       navRef.current.style.backgroundColor = "";
       navRef.current.style.boxShadow = "";
+      navRef.current.style.backdropFilter = "";
+      navRef.current.style.setProperty("-webkit-backdrop-filter", "");
       return;
     }
     const navBgRgb = readCssTriplet("--nav-bg-rgb", themeMode === "light" ? [239, 238, 233] : [16, 16, 19]);
@@ -185,6 +187,8 @@ export default function TabNav() {
     if (isPositionsPage) {
       navRef.current.style.backgroundColor = `rgba(${navPositionsRgb[0]}, ${navPositionsRgb[1]}, ${navPositionsRgb[2]}, 0.94)`;
       navRef.current.style.boxShadow = `0 10px 28px rgba(${shadowRgb[0]}, ${shadowRgb[1]}, ${shadowRgb[2]}, ${themeMode === "light" ? 0.16 : 0.38})`;
+      navRef.current.style.backdropFilter = "blur(8px) saturate(1.03)";
+      navRef.current.style.setProperty("-webkit-backdrop-filter", "blur(8px) saturate(1.03)");
       return;
     }
     const onScroll = () => {
@@ -196,6 +200,8 @@ export default function TabNav() {
       const shadowSpread = 8 + t * 18;
       navRef.current.style.backgroundColor = `rgba(${navBgRgb[0]}, ${navBgRgb[1]}, ${navBgRgb[2]}, ${bgOpacity})`;
       navRef.current.style.boxShadow = `0 ${shadowSpread}px ${shadowSpread * 2.5}px rgba(${shadowRgb[0]}, ${shadowRgb[1]}, ${shadowRgb[2]}, ${shadowOpacity})`;
+      navRef.current.style.backdropFilter = "blur(8px) saturate(1.03)";
+      navRef.current.style.setProperty("-webkit-backdrop-filter", "blur(8px) saturate(1.03)");
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
