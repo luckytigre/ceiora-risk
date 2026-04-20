@@ -146,7 +146,7 @@ export default function FactorHistoryChart({ factor, points, factorVol }: Factor
       },
       y: {
         border: { display: false },
-        grid: { color: chartGridColor(0.45) },
+        grid: { color: chartGridColor(0.05) },
         ticks: {
           color: chartTextColor("secondary", 0.5),
           callback: (v) => `${Number(v).toFixed(0)}%`,

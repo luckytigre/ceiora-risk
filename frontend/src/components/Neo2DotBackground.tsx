@@ -230,7 +230,12 @@ export default function Neo2DotBackground() {
       ctx.clearRect(0, 0, w, h);
 
       const renderer = RENDERERS[mode];
-      if (renderer) renderer(ctx, w, h);
+      if (renderer) {
+        ctx.save();
+        ctx.globalAlpha = themeMode === "light" ? 4.5 : 1;
+        renderer(ctx, w, h);
+        ctx.restore();
+      }
     };
 
     draw();
