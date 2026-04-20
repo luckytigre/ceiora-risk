@@ -46,6 +46,11 @@ output "edge_enabled" {
   value       = local.edge_enabled
 }
 
+output "private_backend_invocation_enabled" {
+  description = "Whether the frontend currently invokes serve/control privately through Cloud Run IAM-authenticated service URLs."
+  value       = var.private_backend_invocation_enabled
+}
+
 output "public_origins" {
   description = "Canonical public origins for the current topology contract. In run_app mode these must be explicit inputs."
   value       = local.public_origins
@@ -88,6 +93,22 @@ output "frontend_build_contract" {
     public_frontend_origin = local.frontend_public_origin
     build_api_origin       = local.frontend_backend_api_origin
     runtime_control_origin = local.frontend_backend_control_origin
+  }
+}
+
+output "auth_runtime_contract" {
+  description = "Non-secret auth/runtime contract values that should stay visible in Terraform state and outputs."
+  value = {
+    APP_AUTH_PROVIDER               = var.app_auth_provider
+    APP_ACCOUNT_ENFORCEMENT_ENABLED = var.app_account_enforcement_enabled
+    APP_AUTH_BOOTSTRAP_ENABLED      = var.app_auth_bootstrap_enabled
+    APP_ADMIN_SETTINGS_ENABLED      = var.app_admin_settings_enabled
+    APP_SHARED_AUTH_ACCEPT_LEGACY   = var.app_shared_auth_accept_legacy
+    NEON_AUTH_BASE_URL              = var.neon_auth_base_url
+    NEON_AUTH_ISSUER                = var.neon_auth_issuer
+    NEON_AUTH_AUDIENCE              = var.neon_auth_audience
+    NEON_AUTH_ALLOWED_EMAILS        = var.neon_auth_allowed_emails
+    NEON_AUTH_BOOTSTRAP_ADMINS      = var.neon_auth_bootstrap_admins
   }
 }
 

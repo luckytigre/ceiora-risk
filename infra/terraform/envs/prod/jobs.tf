@@ -130,6 +130,7 @@ resource "google_cloud_run_v2_job" "cpar_build" {
   template {
     template {
       service_account = module.service_accounts.email_by_key["jobs"]
+      max_retries     = 3
       timeout         = "3600s"
 
       containers {
@@ -189,6 +190,7 @@ resource "google_cloud_run_v2_job" "serve_refresh" {
   template {
     template {
       service_account = module.service_accounts.email_by_key["jobs"]
+      max_retries     = 0
       timeout         = "3600s"
 
       containers {

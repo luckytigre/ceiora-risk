@@ -55,6 +55,51 @@ resource "google_cloud_run_v2_service" "frontend" {
       }
 
       env {
+        name  = "APP_AUTH_PROVIDER"
+        value = var.app_auth_provider
+      }
+
+      env {
+        name  = "APP_ACCOUNT_ENFORCEMENT_ENABLED"
+        value = var.app_account_enforcement_enabled ? "true" : "false"
+      }
+
+      env {
+        name  = "APP_SHARED_AUTH_ACCEPT_LEGACY"
+        value = var.app_shared_auth_accept_legacy ? "true" : "false"
+      }
+
+      env {
+        name  = "NEON_AUTH_BASE_URL"
+        value = var.neon_auth_base_url
+      }
+
+      env {
+        name  = "NEON_AUTH_ISSUER"
+        value = var.neon_auth_issuer
+      }
+
+      env {
+        name  = "NEON_AUTH_AUDIENCE"
+        value = var.neon_auth_audience
+      }
+
+      env {
+        name  = "NEON_AUTH_JWKS_JSON"
+        value = var.neon_auth_jwks_json
+      }
+
+      env {
+        name  = "NEON_AUTH_ALLOWED_EMAILS"
+        value = local.neon_auth_allowed_emails_csv
+      }
+
+      env {
+        name  = "NEON_AUTH_BOOTSTRAP_ADMINS"
+        value = local.neon_auth_bootstrap_admins_csv
+      }
+
+      env {
         name = "CEIORA_SHARED_LOGIN_USERNAME"
         value_source {
           secret_key_ref {
@@ -154,6 +199,36 @@ resource "google_cloud_run_v2_service" "serve" {
       }
 
       env {
+        name  = "APP_ACCOUNT_ENFORCEMENT_ENABLED"
+        value = var.app_account_enforcement_enabled ? "true" : "false"
+      }
+
+      env {
+        name  = "APP_AUTH_BOOTSTRAP_ENABLED"
+        value = var.app_auth_bootstrap_enabled ? "true" : "false"
+      }
+
+      env {
+        name  = "APP_ADMIN_SETTINGS_ENABLED"
+        value = var.app_admin_settings_enabled ? "true" : "false"
+      }
+
+      env {
+        name  = "APP_SHARED_AUTH_ACCEPT_LEGACY"
+        value = var.app_shared_auth_accept_legacy ? "true" : "false"
+      }
+
+      env {
+        name  = "NEON_AUTH_ALLOWED_EMAILS"
+        value = local.neon_auth_allowed_emails_csv
+      }
+
+      env {
+        name  = "NEON_AUTH_BOOTSTRAP_ADMINS"
+        value = local.neon_auth_bootstrap_admins_csv
+      }
+
+      env {
         name = "NEON_DATABASE_URL"
         value_source {
           secret_key_ref {
@@ -168,6 +243,16 @@ resource "google_cloud_run_v2_service" "serve" {
         value_source {
           secret_key_ref {
             secret  = module.secret_manager.secret_ids["operator_api_token"]
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "CEIORA_SESSION_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = module.secret_manager.secret_ids["session_secret"]
             version = "latest"
           }
         }

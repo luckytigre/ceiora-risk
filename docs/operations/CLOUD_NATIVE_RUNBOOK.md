@@ -252,8 +252,8 @@ Operator diagnostics contract:
 ## Current Cutover Notes
 
 - As of the active Phase 4 window:
-  - live topology is `custom_domains`
-  - `edge_enabled=true`
+  - the historical cutover/rollback drill started from `custom_domains`
+  - `edge_enabled=true` was the drill-time edge posture
   - control-surface rollback has been drill-validated against the corrected bundle `backend/runtime/cloud_rollouts/phase4_entry_20260414T201917Z`
 - The recorded rollback drill used direct Cloud Run service/job updates because the full Terraform custom-domain path in that shell was blocked by missing Cloudflare auth.
 - Treat the Phase 4 evidence log and rollback drill note as the authoritative execution record:
@@ -379,12 +379,13 @@ Current Cloud Run Job prep:
 
 Current Cloud Run service prep:
 - the Terraform `prod` root now defines frontend, serve, and control service resources
-- all three services are intentionally public at the Cloud Run layer for the first `run.app` smoke phase
+- current no-edge production keeps only the frontend public at the Cloud Run layer
+- `serve` and `control` are private by IAM and are invoked through the frontend service account
 - the control service stays operator-token-protected in-app
 - the Terraform root now separates public topology from edge presence:
-  - `endpoint_mode=custom_domains` + `edge_enabled=true` is the current production shape
+  - `endpoint_mode=custom_domains` + `edge_enabled=true` is the rollback contract
   - `endpoint_mode=run_app` + `edge_enabled=true` is the soak/rollback shape
-  - `endpoint_mode=run_app` + `edge_enabled=false` is the no-edge steady state
+  - `endpoint_mode=run_app` + `edge_enabled=false` is the current no-edge production shape
 - all three services pin request-based billing by explicitly setting `cpu_idle=true` in Terraform
 - any direct `gcloud run deploy` rollout must preserve request-based billing with `--cpu-throttling`
 - the live service headroom is now:

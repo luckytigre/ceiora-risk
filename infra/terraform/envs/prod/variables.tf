@@ -108,6 +108,72 @@ variable "private_backend_invocation_enabled" {
   default     = false
 }
 
+variable "app_auth_provider" {
+  description = "Frontend auth provider contract."
+  type        = string
+  default     = "shared"
+}
+
+variable "app_account_enforcement_enabled" {
+  description = "Whether authenticated app reads and writes are account-scoped."
+  type        = bool
+  default     = false
+}
+
+variable "app_auth_bootstrap_enabled" {
+  description = "Whether backend account bootstrap is enabled for authenticated users."
+  type        = bool
+  default     = false
+}
+
+variable "app_admin_settings_enabled" {
+  description = "Whether privileged admin/settings surfaces are enabled on the backend."
+  type        = bool
+  default     = false
+}
+
+variable "app_shared_auth_accept_legacy" {
+  description = "Whether the runtime still accepts the legacy shared-auth path."
+  type        = bool
+  default     = true
+}
+
+variable "neon_auth_base_url" {
+  description = "Base URL for the active Neon Auth tenant."
+  type        = string
+  default     = ""
+}
+
+variable "neon_auth_issuer" {
+  description = "Issuer URL for Neon Auth JWT verification."
+  type        = string
+  default     = ""
+}
+
+variable "neon_auth_audience" {
+  description = "Expected Neon Auth JWT audience."
+  type        = string
+  default     = ""
+}
+
+variable "neon_auth_jwks_json" {
+  description = "JWKS JSON used by the frontend auth bootstrap contract."
+  type        = string
+  default     = ""
+}
+
+variable "neon_auth_allowed_emails" {
+  description = "Email allowlist for the current friend-scale Neon auth rollout."
+  type        = list(string)
+  default     = []
+}
+
+variable "neon_auth_bootstrap_admins" {
+  description = "Emails that should receive admin bootstrap in the current Neon auth rollout."
+  type        = list(string)
+  default     = []
+}
+
 variable "frontend_max_instances" {
   description = "Maximum Cloud Run instances for the frontend service."
   type        = number
