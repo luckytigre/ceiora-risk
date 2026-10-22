@@ -234,10 +234,15 @@ export async function middleware(req: NextRequest) {
       url.search = "";
       return NextResponse.redirect(url);
     }
-    const url = req.nextUrl.clone();
-    url.pathname = loginReturnTo;
-    url.search = "";
-    return NextResponse.redirect(url);
+    // Parse query separately and reject URL parser forms that change origin
+    // (for example, a slash followed by a backslash).
+    const fallback = new URL(DEFAULT_APP_HOME_PATH, req.url);
+    try {
+      const url = new URL(loginReturnTo, req.url);
+      return NextResponse.redirect(url.origin === fallback.origin ? url : fallback);
+    } catch {
+      return NextResponse.redirect(fallback);
+    }
   }
   if (onLoginPage && hasStaleSession) {
     const url = req.nextUrl.clone();

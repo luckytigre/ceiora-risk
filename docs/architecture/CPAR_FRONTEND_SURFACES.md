@@ -298,6 +298,9 @@ legs. Position risk_mix retains its existing thresholded basis and is not copied
 from aggregate rows to individual accounts. Missing or quantity-mismatched mixes
 remain unavailable. The selector stays usable while a model is loading or failed.
 
-The isolated UI port currently leaves thesis capability disabled. Production
-persistence, authenticated provider lifetime and all holdings mutation invariants
-must pass the gates in `../implementation/LITE_UI_PORT_PLAN.md` before activation.
+The isolated integration now includes authenticated thesis persistence and
+transaction guards, verified against disposable local PostgreSQL. Capability remains
+disabled by default until explicit schema deployment and owner rollout. cPAR Risk
+keeps its aggregate instrument table and uses a separately loaded authorized account
+ledger for the By thesis view; it never mutates aggregate rows. See
+`../implementation/LITE_UI_PORT_PLAN.md` and the rollout runbook for remaining gates.

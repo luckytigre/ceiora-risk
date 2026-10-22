@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from backend.data.portfolio_write_guard import lock_if_installed, prevent_allocated_rekey
+
 import csv
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
@@ -190,6 +192,7 @@ def apply_holdings_import(
     notes: str | None,
     dry_run: bool,
 ) -> dict[str, Any]:
+    lock_if_installed(pg_conn)
     acct = _normalize_account_id(account_id)
     if acct is None:
         raise ValueError("invalid account_id")
@@ -373,6 +376,7 @@ def apply_ticker_bucket_scenario(
     default_source: str = "what_if",
     dry_run: bool = False,
 ) -> dict[str, Any]:
+    lock_if_installed(pg_conn)
     accepted_rows: list[dict[str, Any]] = []
     rejected_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -558,7 +562,11 @@ def apply_ticker_bucket_scenario(
             )
             continue
 
+        if target_qty != 0:
+            prevent_allocated_rekey(pg_conn, account_id=account_id, removed_rics=[str(item["ric"]) for item in existing_rows if str(item["ric"]) != resolved_ric])
         for existing in existing_rows:
+            if str(existing["ric"]) == resolved_ric and target_qty != 0:
+                continue  # Retain this holding identity and its saved thesis legs.
             _delete_position(pg_conn, account_id=account_id, ric=str(existing["ric"]))
             _insert_event(
                 pg_conn,
@@ -766,6 +774,7 @@ def apply_single_position_edit(
     notes: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
+    lock_if_installed(pg_conn)
     acct = _normalize_account_id(account_id)
     if acct is None:
         raise ValueError("invalid account_id")

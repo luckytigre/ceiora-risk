@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { manualPositionKey, thesisPositionKey, useTheses } from "@/components/ThesisContext";
+import { isConcreteThesisPosition } from "@/lib/thesisIdentity";
 import useFocusTrap from "@/hooks/useFocusTrap";
 import { useConfirm } from "@/components/ConfirmDialogProvider";
 
@@ -59,24 +60,26 @@ function orderedByKeys<T>(items: T[], keys: string[], keyOf: (item: T) => string
 function fmtQuantity(value: number): string { return value.toLocaleString(undefined, { maximumFractionDigits: 4 }); }
 function direction(value: number): string { return `${value < 0 ? "Short" : "Long"} ${fmtQuantity(Math.abs(value))}`; }
 function signedQuantity(value: number): string { return `${value < 0 ? "−" : "+"}${fmtQuantity(Math.abs(value))}`; }
-function fmtMoney(value: number): string {
+function fmtMoney(value: number | null): string {
+  if (value === null) return "—";
   const sign = value < -1e-9 ? "−" : "";
   if (Math.abs(value) >= 1e6) return `${sign}$${(Math.abs(value) / 1e6).toFixed(2)}M`;
   if (Math.abs(value) >= 1e3) return `${sign}$${(Math.abs(value) / 1e3).toFixed(1)}K`;
   return `${sign}$${Math.abs(value).toFixed(0)}`;
 }
-function legMarketValue(leg: DragDescriptor): number {
+function legMarketValue(leg: DragDescriptor): number | null {
   const price = leg.price == null ? Number.NaN : Number(leg.price);
   if (Number.isFinite(price)) return price * leg.sourceQuantity;
   const fullMarketValue = leg.marketValue == null ? Number.NaN : Number(leg.marketValue);
   if (Number.isFinite(fullMarketValue) && Math.abs(leg.quantity) > 1e-9) return fullMarketValue * (leg.sourceQuantity / leg.quantity);
-  return 0;
+  return null;
 }
 
 export default function InlineThesisRows<T>({ rows, colSpan, getPosition, renderCells, grouped, emptyLabel = "No positions are loaded.", groupedSortMetric, groupedSortAscending = false, groupedMarketValueAbsolute = true, groupedTickerDirection, manualOrder = false, orderScope, marketValueColumnIndex, headerControlsId, ungroupedLimit }: InlineThesisRowsProps<T>) {
   const { available, theses, allocations, manualOrders, busy, createThesis, renameThesis, deleteThesis, saveManualOrder, replacePositionAllocations } = useTheses();
-  grouped = grouped && available;
-  manualOrder = manualOrder && available;
+  const concrete = rows.every(row => { const p = getPosition(row); return isConcreteThesisPosition(p.accountId, p.ric); });
+  grouped = grouped && available && concrete;
+  manualOrder = manualOrder && available && concrete;
   const confirm = useConfirm();
   const [pending, setPending] = useState<{ leg: DragDescriptor; destinationId: string } | null>(null);
   const [partial, setPartial] = useState("");
@@ -216,14 +219,18 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
           const sortValue = ({ leg }: (typeof legs)[number]) => {
             if (groupedSortMetric === "quantity") return leg.sourceQuantity;
             const marketValue = legMarketValue(leg);
-            return groupedMarketValueAbsolute ? Math.abs(marketValue) : marketValue;
+            return marketValue === null ? null : groupedMarketValueAbsolute ? Math.abs(marketValue) : marketValue;
           };
-          const delta = sortValue(left) - sortValue(right);
+          const leftValue = sortValue(left); const rightValue = sortValue(right);
+          if (leftValue === null) return rightValue === null ? 0 : 1;
+          if (rightValue === null) return -1;
+          const delta = leftValue - rightValue;
           if (Math.abs(delta) > 1e-9) return groupedSortAscending ? delta : -delta;
           return left.leg.ticker.localeCompare(right.leg.ticker);
         });
       }
-      const marketValue = legs.reduce((sum, item) => sum + legMarketValue(item.leg), 0);
+      const legValues = legs.map(item => legMarketValue(item.leg));
+      const marketValue = legValues.some(value => value === null) ? null : legValues.reduce<number>((sum, value) => sum + (value ?? 0), 0);
       return { ...group, legs, marketValue };
     });
   }, [allocationsByPosition, getPosition, groupedMarketValueAbsolute, groupedSortAscending, groupedSortMetric, groupedTickerDirection, manualOrder, manualOrders, orderScope, rows, theses]);
@@ -321,7 +328,7 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
   if (!grouped) {
     return <>{flatRows.length ? flatRows.map((row) => {
       const position = getPosition(row);
-      const positionKey = manualPositionKey(position.accountId, position.ric);
+      const positionKey = manualPositionKey(position.accountId, position.ric || position.ticker);
       return <tr key={positionKey} className={`${manualOrder ? "manual-sort-row" : ""}${rowOrderTargetKey === positionKey ? " order-target" : ""}`} draggable={manualOrder && !busy} onDragStart={(event) => { if (!manualOrder) return; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(FLAT_ORDER_MIME, positionKey); setDragOverGroupId(null); setThesisOrderTargetId(null); }} onDragEnd={endDrag} onDragOver={(event) => { if (!manualOrder || !event.dataTransfer.types.includes(FLAT_ORDER_MIME)) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setRowOrderTargetKey(positionKey); }} onDrop={(event) => { if (!manualOrder || !event.dataTransfer.types.includes(FLAT_ORDER_MIME)) return; event.preventDefault(); const sourceKey = event.dataTransfer.getData(FLAT_ORDER_MIME); endDrag(); reorderFlatRows(sourceKey, positionKey); }}>{renderCells(row, position.quantity, false)}</tr>;
     }) : <tr><td colSpan={colSpan} className="holdings-empty-row">{emptyLabel}</td></tr>}</>;
   }

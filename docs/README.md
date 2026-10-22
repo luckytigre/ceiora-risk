@@ -21,6 +21,7 @@ Read the canonical docs first. Use workstream plans and archived material only w
 - `operations/OPERATIONS_PLAYBOOK.md`
 - `operations/CLOUD_NATIVE_RUNBOOK.md`
 - `operations/CPAR_OPERATIONS_PLAYBOOK.md`
+- `operations/THESIS_WORKSPACE_ROLLOUT.md`
 
 ### Stable Reference
 

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 import { AppSettingsProvider } from "@/components/AppSettingsContext";
+import ThesisWorkspaceBoundary from "@/components/ThesisWorkspaceBoundary";
 import AuthSessionGate from "@/components/AuthSessionGate";
 import { AuthSessionProvider } from "@/components/AuthSessionContext";
 import { BackgroundProvider } from "@/components/BackgroundContext";
@@ -50,7 +51,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <Suspense fallback={null}><TabNav /></Suspense>
                 <main className="dash-main">
                   <AuthSessionGate>
-                    <PageTransition>{children}</PageTransition>
+                    <ThesisWorkspaceBoundary><PageTransition>{children}</PageTransition></ThesisWorkspaceBoundary>
                   </AuthSessionGate>
                 </main>
               </BackgroundProvider>

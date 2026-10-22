@@ -8735,3 +8735,9 @@ main {
     flex-shrink: 0;
   }
 }
+
+.thesis-save-feedback {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  margin-bottom: var(--sp-2);
+}

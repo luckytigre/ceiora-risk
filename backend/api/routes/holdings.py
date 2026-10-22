@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from backend.data.portfolio_write_guard import PortfolioAllocationConflict
+
 from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -180,6 +182,8 @@ async def post_holdings_import(
     except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
         _raise_account_scope_error(exc)
         raise
+    except PortfolioAllocationConflict as exc:
+        raise HTTPException(status_code=409, detail={"code": "thesis_allocation_conflict", "message": str(exc)}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
@@ -213,6 +217,8 @@ async def post_holdings_position(
     except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
         _raise_account_scope_error(exc)
         raise
+    except PortfolioAllocationConflict as exc:
+        raise HTTPException(status_code=409, detail={"code": "thesis_allocation_conflict", "message": str(exc)}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
@@ -244,6 +250,8 @@ async def post_holdings_position_remove(
     except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
         _raise_account_scope_error(exc)
         raise
+    except PortfolioAllocationConflict as exc:
+        raise HTTPException(status_code=409, detail={"code": "thesis_allocation_conflict", "message": str(exc)}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001

@@ -7,6 +7,8 @@ import MethodLabel from "@/components/MethodLabel";
 import InlineShareDraftEditor from "@/features/holdings/components/InlineShareDraftEditor";
 import { exposureMethodDisplayLabel, exposureMethodRank, exposureMethodTone } from "@/lib/exposureOrigin";
 import ThesisAllocationCell from "@/components/ThesisAllocationCell";
+import AccountThesisWorkspace from "@/features/holdings/components/AccountThesisWorkspace";
+import { isConcreteThesisPosition } from "@/lib/thesisIdentity";
 import { useTheses } from "@/components/ThesisContext";
 import InlineThesisRows from "@/components/InlineThesisRows";
 import MethodHelpLabel from "@/components/MethodHelpLabel";
@@ -74,7 +76,9 @@ export default function ExposurePositionsTable({
   const [tickerManual, setTickerManual] = useState(false);
   const [marketValueSortMode, setMarketValueSortMode] = useState<MarketValueSortMode>("abs");
   const [showAllRows, setShowAllRows] = useState(false);
-  const { available: thesesAvailable } = useTheses();
+  const { available: thesisCapability } = useTheses();
+  const concretePositions = positions.every(row => isConcreteThesisPosition(row.account, row.ric));
+  const thesesAvailable = thesisCapability && concretePositions;
   const [viewMode, setViewMode] = useState<"positions" | "theses">("positions");
 
   const sorted = [...positions].sort((a, b) => {
@@ -157,15 +161,28 @@ export default function ExposurePositionsTable({
     if (key === "ticker" && sortKey === "ticker" && tickerManual) return <> <span className="th-sort-mode">manual</span> ↕</>;
     return sortKey === key ? (sortAsc ? " ↑" : " ↓") : "";
   };
+  if (viewMode === "theses" && thesisCapability) return <section className="chart-card">
+    <div className="thesis-section-heading">
+      <h3>Positions</h3>
+      <div className="thesis-view-toggle" role="group" aria-label="Risk positions view">
+        <button type="button" onClick={() => setViewMode("positions")}>By instrument</button>
+        <button type="button" className="active" onClick={() => setViewMode("theses")}>By thesis</button>
+      </div>
+    </div>
+    <AccountThesisWorkspace analytics={positions} family="cuse" />
+  </section>;
+
+
   return (
     <div className="dash-table-module">
+      {thesisCapability && !concretePositions ? <p className="section-subtitle">Instrument view summarizes model rows. Choose By thesis to organize your account positions.</p> : null}
       <div className="dash-table">
         <div className="dash-table-sticky-chrome">
           <div className="thesis-section-heading">
             <div className="module-title-with-help"><h3>Positions</h3><HelpLabel label="Positions organization" plain="In thesis view, drag a row, right-click it, or press Enter to move all or part of a position." iconOnly /></div>
             <div className="thesis-heading-actions">
               {viewMode === "theses" ? <div id="cuse-risk-thesis-controls" className="thesis-header-controls" /> : null}
-              <div style={thesesAvailable ? undefined : { display: "none" }} className="thesis-view-toggle" role="group" aria-label="Risk positions view">
+              <div style={thesisCapability ? undefined : { display: "none" }} className="thesis-view-toggle" role="group" aria-label="Risk positions view">
                 <button type="button" className={viewMode === "positions" ? "active" : ""} onClick={() => setViewMode("positions")}>By instrument</button>
                 <button type="button" className={viewMode === "theses" ? "active" : ""} onClick={() => setViewMode("theses")}>By thesis</button>
               </div>

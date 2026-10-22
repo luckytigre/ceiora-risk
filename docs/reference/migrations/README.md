@@ -9,3 +9,7 @@
 - `neon/NEON_HOLDINGS_IMPORT_BEHAVIOR.md`
 
 Historical Neon execution notes and the retired Stage-1 operator runbook now live under `docs/archive/migrations/neon/`.
+
+Portfolio thesis workspace: `neon/NEON_PORTFOLIO_THESES_SCHEMA.sql` is an explicit
+additive migration requiring holdings/app-auth prerequisites. See
+`../../operations/THESIS_WORKSPACE_ROLLOUT.md` for owner gates and rollback behavior.

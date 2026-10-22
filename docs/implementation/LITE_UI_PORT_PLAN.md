@@ -1,7 +1,7 @@
 # Ceiora Lite UI production integration
 
 Date: 2026-10-22
-Status: adversarial plan review accepted; P0 completed, P1 implemented and verified locally; P2–P5 pending.
+Status: P0–P4 implemented and accepted for local integration; P5 local regression and handoff evidence recorded. Live rollout gates remain open.
 Branch: feat/lite-ui-port
 Integration checkout: /Users/shaun/Projects/ceiora-risk-ui-port
 Production checkout: /Users/shaun/Library/CloudStorage/Dropbox/40 - Creating/Factor Model Project/ceiora-risk
@@ -185,4 +185,14 @@ checks after any rebase. Do not auto-deploy or merge this work as part of planni
   production-built browser smoke. See P1_EVIDENCE.md and ADVERSARIAL_REVIEW.md.
 - Browser testing found/fixed missing DASH middleware matcher and explicit
   all-accounts holdings-hook argument; screenshot review fixed narrow header overlap.
-- P2–P5: not implemented.
+- P2–P4: implemented with additive PostgreSQL storage, authenticated owner-scoped
+  routes, revision conflicts, atomic holdings safeguards and the gated thesis UI.
+  Both Risk pages expose a separate concrete-account ledger for thesis editing;
+  aggregate model rows remain immutable. Signed decimal persistence, writer races,
+  revocation, rollback, stale UI responses and identity isolation passed local
+  checks. See P2_P4_EVIDENCE.md and the updated adversarial acceptance.
+- P5: production build/CSS/type checks, targeted backend suites, real PostgreSQL
+  contracts and built-browser end-to-end tests passed. This is local integration
+  acceptance. Current remote-main reconciliation, clean dependency install/CI,
+  production-like Neon validation, real auth/account configuration, deployment and
+  live smoke are still rollout gates. No merge or deployment has occurred.

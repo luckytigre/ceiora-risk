@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useTheses, thesisPositionKey } from "@/components/ThesisContext";
+import { isConcreteThesisPosition } from "@/lib/thesisIdentity";
 import { useConfirm } from "@/components/ConfirmDialogProvider";
 
 interface ThesisAllocationCellProps {
@@ -76,7 +77,7 @@ export default function ThesisAllocationCell({
     setOpen(false);
   };
 
-  if (!available || disabled || !accountId || !ric || !ticker || Math.abs(positionQuantity) <= 1e-9) {
+  if (!available || !isConcreteThesisPosition(accountId, ric) || disabled || !accountId || !ric || !ticker || Math.abs(positionQuantity) <= 1e-9) {
     return <span className="thesis-cell-disabled">—</span>;
   }
 

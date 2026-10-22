@@ -8,6 +8,8 @@ import HelpLabel from "@/components/HelpLabel";
 import { describeCparPositionMethod, formatCparMarketValueThousands } from "@/lib/cparTruth";
 import type { CparPackageMeta, CparPortfolioPositionRow } from "@/lib/types/cpar";
 import ThesisAllocationCell from "@/components/ThesisAllocationCell";
+import AccountThesisWorkspace from "@/features/holdings/components/AccountThesisWorkspace";
+import { isConcreteThesisPosition } from "@/lib/thesisIdentity";
 import { useTheses } from "@/components/ThesisContext";
 import InlineThesisRows from "@/components/InlineThesisRows";
 import MethodHelpLabel from "@/components/MethodHelpLabel";
@@ -68,7 +70,9 @@ export default function CparRiskPositionsContributionTable({
   const [marketValueSortMode, setMarketValueSortMode] = useState<MarketValueSortMode>("abs");
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [activeAnchorEl, setActiveAnchorEl] = useState<HTMLElement | null>(null);
-  const { available: thesesAvailable } = useTheses();
+  const { available: thesisCapability } = useTheses();
+  const concretePositions = rows.every(row => isConcreteThesisPosition(row.account_id, row.ric));
+  const thesesAvailable = thesisCapability && concretePositions;
   const [viewMode, setViewMode] = useState<"positions" | "theses">("positions");
   const coveredCount = useMemo(
     () => rows.filter((row) => row.coverage === "covered").length,
@@ -169,6 +173,18 @@ export default function CparRiskPositionsContributionTable({
     return sortKey === key ? (sortAsc ? " ↑" : " ↓") : "";
   };
 
+  if (viewMode === "theses" && thesisCapability) return <section className="chart-card">
+    <div className="thesis-section-heading">
+      <h3>Positions</h3>
+      <div className="thesis-view-toggle" role="group" aria-label="cPAR risk positions view">
+        <button type="button" onClick={() => setViewMode("positions")}>By instrument</button>
+        <button type="button" className="active" onClick={() => setViewMode("theses")}>By thesis</button>
+      </div>
+    </div>
+    <AccountThesisWorkspace analytics={rows} family="cpar" />
+  </section>;
+
+
   return (
     <section className="chart-card" data-testid="cpar-risk-positions">
       <div className="thesis-section-heading">
@@ -182,7 +198,7 @@ export default function CparRiskPositionsContributionTable({
         </div>
         <div className="thesis-heading-actions">
           {viewMode === "theses" ? <div id="cpar-risk-thesis-controls" className="thesis-header-controls" /> : null}
-          <div style={thesesAvailable ? undefined : { display: "none" }} className="thesis-view-toggle" role="group" aria-label="cPAR risk positions view">
+          <div style={thesisCapability ? undefined : { display: "none" }} className="thesis-view-toggle" role="group" aria-label="cPAR risk positions view">
             <button type="button" className={viewMode === "positions" ? "active" : ""} onClick={() => setViewMode("positions")}>By instrument</button>
             <button type="button" className={viewMode === "theses" ? "active" : ""} onClick={() => setViewMode("theses")}>By thesis</button>
           </div>
@@ -193,6 +209,7 @@ export default function CparRiskPositionsContributionTable({
         <span className="cpar-detail-chip">{rows.length - coveredCount} excluded rows</span>
       </div>
 
+      {thesisCapability && !concretePositions ? <p className="section-subtitle">Instrument view summarizes model rows. Choose By thesis to organize your account positions.</p> : null}
       <div className="dash-table">
         <table>
           <thead>

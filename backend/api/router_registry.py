@@ -12,6 +12,7 @@ from backend.api.routes.exposures import router as exposures_router
 from backend.api.routes.health import router as health_router
 from backend.api.routes.holdings import router as holdings_router
 from backend.api.routes.operator import router as operator_router
+from backend.api.routes.portfolio_theses import router as portfolio_theses_router
 from backend.api.routes.portfolio import router as portfolio_router
 from backend.api.routes.refresh import router as refresh_router
 from backend.api.routes.risk import router as risk_router
@@ -22,6 +23,7 @@ SERVE_API_ROUTERS = [
     cuse_explore_router,
     cuse_risk_page_router,
     portfolio_router,
+    portfolio_theses_router,
     exposures_router,
     risk_router,
     holdings_router,
@@ -43,6 +45,7 @@ API_ROUTERS = [
     cuse_explore_router,
     cuse_risk_page_router,
     portfolio_router,
+    portfolio_theses_router,
     exposures_router,
     risk_router,
     holdings_router,

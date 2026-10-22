@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from backend.data.portfolio_write_guard import PortfolioAllocationConflict
+
 from collections.abc import Callable
 from dataclasses import dataclass
 import logging
@@ -163,8 +165,10 @@ def run_holdings_import(
         )
         out["preview_rejections"] = parsed.get("rejected", [])[:100]
         return out
-    except Exception:
+    except Exception as exc:
         conn.rollback()
+        if getattr(exc, "sqlstate", None) in {"PTH01", "PTH04", "40001", "40P01"}:
+            raise PortfolioAllocationConflict("Adjust thesis allocations before reducing or reversing this holding, or refresh and retry.") from exc
         raise
     finally:
         conn.close()
@@ -209,8 +213,10 @@ def run_position_upsert(
             bool(trigger_refresh and not dry_run and str(out.get("status")) == "ok")
         )
         return out
-    except Exception:
+    except Exception as exc:
         conn.rollback()
+        if getattr(exc, "sqlstate", None) in {"PTH01", "PTH04", "40001", "40P01"}:
+            raise PortfolioAllocationConflict("Adjust thesis allocations before reducing or reversing this holding, or refresh and retry.") from exc
         raise
     finally:
         conn.close()
@@ -251,8 +257,10 @@ def run_position_remove(
             bool(trigger_refresh and not dry_run and str(out.get("status")) == "ok")
         )
         return out
-    except Exception:
+    except Exception as exc:
         conn.rollback()
+        if getattr(exc, "sqlstate", None) in {"PTH01", "PTH04", "40001", "40P01"}:
+            raise PortfolioAllocationConflict("Adjust thesis allocations before reducing or reversing this holding, or refresh and retry.") from exc
         raise
     finally:
         conn.close()
@@ -287,8 +295,10 @@ def run_whatif_apply(
                     change_count=change_count,
                 )
         return out
-    except Exception:
+    except Exception as exc:
         conn.rollback()
+        if getattr(exc, "sqlstate", None) in {"PTH01", "PTH04", "40001", "40P01"}:
+            raise PortfolioAllocationConflict("Adjust thesis allocations before reducing or reversing this holding, or refresh and retry.") from exc
         raise
     finally:
         conn.close()

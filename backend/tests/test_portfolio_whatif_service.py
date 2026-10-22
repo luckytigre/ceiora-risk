@@ -761,7 +761,17 @@ def test_preview_portfolio_whatif_accepts_held_name_from_published_portfolio_ove
     assert out["current"]["exposure_modes"]["raw"][0]["factor_id"] == "market"
 
 
+class _NoThesisSchemaCursor:
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+    def execute(self, sql, params=None):
+        assert "to_regprocedure" in sql or "to_regclass" in sql
+    def fetchone(self): return (False,)
+
+
 class _FakeConn:
+    def cursor(self):
+        return _NoThesisSchemaCursor()
     def __init__(self) -> None:
         self.commits = 0
         self.rollbacks = 0
@@ -814,11 +824,11 @@ def test_apply_ticker_bucket_scenario_applies_delta_to_full_ticker_bucket(monkey
 
     assert out["status"] == "ok"
     assert out["accepted_rows"] == 1
-    assert out["applied_deletes"] == 2
+    assert out["applied_deletes"] == 1
     assert out["applied_upserts"] == 1
-    assert deletes == ["acct_a:AAA.N", "acct_a:AAA.K"]
+    assert deletes == ["acct_a:AAA.K"]
     assert upserts == [("acct_a:AAA.N:AAA:what_if:batch_1", 35.0)]
-    assert events.count("replace_ticker_bucket_delete") == 2
+    assert events.count("replace_ticker_bucket_delete") == 1
     assert events.count("replace_ticker_bucket_set") == 1
     assert conn.commits == 1
 

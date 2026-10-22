@@ -1,6 +1,9 @@
 # P0/P1 execution evidence
 
 Date: 2026-10-22
+Historical P0/P1 checkpoint: provider-absent statements below describe that stage.
+P2_P4_EVIDENCE.md records the subsequent gated persistence/UI integration.
+
 Scope: independent integration checkout, production-built frontend, synthetic local
 backend used only by the preview/test process. No credentials retrieved, packages
 installed, live data accessed, production migration run, merge, or deployment.

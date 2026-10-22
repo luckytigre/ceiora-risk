@@ -2,7 +2,7 @@
 
 Date: 2026-10-22
 Reviewer: independent adversarial_review agent, read-only review.
-Scope: comprehensive plan and isolated P0/P1 implementation; no rollout approval.
+Scope: comprehensive plan and isolated P0–P4 implementation; no rollout approval.
 
 ## Findings incorporated
 
@@ -31,9 +31,45 @@ matcher. Browser testing found /dash absent from middleware config. Added
 redirect through the browser. Reviewer rechecked all protected prefixes and the
 portfolio API catch-all; no analogous matcher omissions remained.
 
-## Acceptance
+## P0/P1 acceptance
 
 Reviewer accepted isolated, gated P0/P1 with no remaining Critical/High static
 findings after corrections. This does not certify production thesis persistence,
 auth lifecycle, atomic holdings mutations, or production deployment. Those remain
 P2–P5 gates. See P1_EVIDENCE.md for actual runtime checks and their limits.
+
+## P2–P4 findings resolved
+
+- Preserve surviving account/RIC rows during what-if apply; reject allocated RIC
+  consolidation and roll back the whole multi-account operation on conflicts.
+- Acquire a common transaction advisory lock before read-modify-write operations,
+  including direct SQL mutation triggers and parent membership/account operations.
+  Reject unsupported isolation and TRUNCATE rather than bypassing invariants.
+- Check allocation limits independently in every owner workspace sharing a holding.
+  Revocation and account deactivation atomically remove scope, allocations and orders.
+- Validate the canonical authenticated principal before opening owned transactions;
+  capability defaults off and shared-auth activation requires explicit mapping.
+- Verify workspace IDs as well as revisions in every DTO; reject cross-workspace
+  responses, reset on identity changes and suppress obsolete refresh results.
+- Risk aggregates and missing-RIC analytics cannot become mutable thesis legs.
+  Provide a separate authorized concrete-account ledger in each family's Risk view,
+  with current-ledger versus last-served analytics context visible.
+- Preserve decimal wire precision and signed short allocations. Reject quantities
+  the Number-based editor cannot safely represent instead of silently rounding.
+
+## Final local acceptance
+
+Independent reviewer accepted P2–P4 with no outstanding Critical/High findings.
+Reviewed code plus reported real PostgreSQL tests and browser-to-database flow
+support local integration acceptance. The final browser run includes both Risk
+ledgers, signed decimal reload persistence, stale-writer 409, delayed stale refresh,
+foreign-workspace rejection, recovery and logout cleanup.
+
+Live Neon migration, production auth/account configuration, current-main
+reconciliation, clean-install CI, deployment/owner enablement and live smoke remain
+separate gates. No production credentials, data or deployment were reviewed.
+
+Final auth regression review also caught malformed returnTo URL parser exceptions.
+The redirect now preserves query parameters, checks same origin, and falls back
+on invalid URLs; browser checks cover query retention, external and malformed
+slash-backslash forms.
