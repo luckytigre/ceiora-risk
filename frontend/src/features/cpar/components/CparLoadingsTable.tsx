@@ -41,9 +41,9 @@ export default function CparLoadingsTable({
           <table>
             <thead>
               <tr>
-                <th onClick={() => handleSort("factor")}>Factor{arrow("factor")}</th>
-                <th onClick={() => handleSort("group")}>Group{arrow("group")}</th>
-                <th className="text-right" onClick={() => handleSort("beta")}>Beta{arrow("beta")}</th>
+                <th className="sortable" onClick={() => handleSort("factor")}>Factor{arrow("factor")}</th>
+                <th className="sortable" onClick={() => handleSort("group")}>Group{arrow("group")}</th>
+                <th className="text-right sortable" onClick={() => handleSort("beta")}>Beta{arrow("beta")}</th>
               </tr>
             </thead>
             <tbody>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
+import Skeleton from "@/components/Skeleton";
 import { useAppSettings } from "@/components/AppSettingsContext";
 import { useAuthSession } from "@/components/AuthSessionContext";
 import { useBackground } from "@/components/BackgroundContext";
@@ -83,38 +84,38 @@ export default function SettingsPage() {
             <div className="settings-session-row">
               <span className="settings-option-label">Identity</span>
               <span className="settings-session-value">
-                {loading ? "Loading…" : context?.display_name || context?.email || session?.username || "Unknown"}
+                {loading ? <Skeleton wide /> : context?.display_name || context?.email || session?.username || "Unknown"}
               </span>
             </div>
             <div className="settings-session-row">
               <span className="settings-option-label">Provider</span>
               <span className="settings-session-value">
-                {loading ? "Loading…" : session?.authProvider === "neon" ? "Neon Auth" : "Shared session"}
+                {loading ? <Skeleton /> : session?.authProvider === "neon" ? "Neon Auth" : "Shared session"}
               </span>
             </div>
             <div className="settings-session-row">
               <span className="settings-option-label">Portfolio type</span>
               <span className="settings-session-value">
-                {loading ? "Loading…" : accountTypeLabel(sessionAccountType)}
+                {loading ? <Skeleton /> : accountTypeLabel(sessionAccountType)}
               </span>
             </div>
             <div className="settings-session-row">
               <span className="settings-option-label">Role</span>
               <span className="settings-session-value">
-                {loading ? "Loading…" : (context?.is_admin || session?.isAdmin) ? "Admin" : "Member"}
+                {loading ? <Skeleton /> : (context?.is_admin || session?.isAdmin) ? "Admin" : "Member"}
               </span>
             </div>
             {session?.authProvider === "neon" || context?.account_enforcement_enabled ? (
               <div className="settings-session-row">
                 <span className="settings-option-label">Default portfolio</span>
                 <span className="settings-session-value">
-                  {loading ? "Loading…" : context?.default_account_id || "None provisioned"}
+                  {loading ? <Skeleton /> : context?.default_account_id || "None provisioned"}
                 </span>
               </div>
             ) : (
               <div className="settings-session-row">
                 <span className="settings-option-label">Account scope</span>
-                <span className="settings-session-value">{loading ? "Loading…" : "Shared access mode"}</span>
+                <span className="settings-session-value">{loading ? <Skeleton /> : "Shared access mode"}</span>
               </div>
             )}
           </div>

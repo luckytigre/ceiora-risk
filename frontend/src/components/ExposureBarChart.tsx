@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -47,6 +48,9 @@ interface ExposureBarChartProps {
   factorCatalog?: FactorCatalogEntry[];
   presentationThreshold?: number;
   visibleFactorIds?: string[];
+  height?: CSSProperties["height"];
+  viewportHeight?: CSSProperties["height"];
+  minimumRowHeight?: number;
 }
 
 export function chartPresentationThreshold(mode: ExposureBarChartProps["mode"]): number {
@@ -111,6 +115,9 @@ export default function ExposureBarChart({
   factorCatalog,
   presentationThreshold: presentationThresholdOverride,
   visibleFactorIds,
+  height: heightOverride,
+  viewportHeight,
+  minimumRowHeight,
 }: ExposureBarChartProps) {
   const { themeMode } = useAppSettings();
   const axisLabel = mode === "risk_contribution"
@@ -450,18 +457,29 @@ export default function ExposureBarChart({
     },
   };
 
-  const height = Math.max(400, sorted.length * 22);
+  const effectiveMinimumRowHeight = minimumRowHeight ?? (viewportHeight ? 18 : 22);
+  const minimumContentHeight = viewportHeight
+    ? Math.max(280, sorted.length * effectiveMinimumRowHeight + 48)
+    : Math.max(400, sorted.length * effectiveMinimumRowHeight);
+  const height = viewportHeight
+    ? `max(100%, ${minimumContentHeight}px)`
+    : heightOverride ?? minimumContentHeight;
 
   return (
     <div>
-      <div style={{ height }}>
-      <Chart
-        key={`exposure-chart-${themeMode}`}
-        type="bar"
-        data={data}
-        options={options}
-          plugins={[zeroLinePlugin, tierSeparatorPlugin, netMarkerPlugin]}
-        />
+      <div
+        className={viewportHeight ? "exposure-chart-viewport" : undefined}
+        style={viewportHeight ? { height: viewportHeight } : undefined}
+      >
+        <div className="exposure-chart-canvas" style={{ height }}>
+          <Chart
+            key={`exposure-chart-${themeMode}`}
+            type="bar"
+            data={data}
+            options={options}
+            plugins={[zeroLinePlugin, tierSeparatorPlugin, netMarkerPlugin]}
+          />
+        </div>
       </div>
       <div className="exposure-axis-row">
         <span className="exposure-axis-hint left">← {leftLabel}</span>

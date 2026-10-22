@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { mutate } from "swr";
 import { useAuthSession } from "@/components/AuthSessionContext";
+import { useConfirm } from "@/components/ConfirmDialogProvider";
 import {
   previewCparExploreWhatIf,
 } from "@/hooks/useCparApi";
@@ -41,6 +42,7 @@ export function useCparExploreScenarioLab({
   onPreviewInstrument,
 }: UseCparExploreScenarioLabArgs) {
   const { session, context } = useAuthSession();
+  const confirm = useConfirm();
   const { data: accountsData } = useHoldingsAccounts();
   const { data: holdingsData } = useHoldingsPositions(null);
 
@@ -375,11 +377,13 @@ export function useCparExploreScenarioLab({
       const liveQty = Number(liveQuantityByKey.get(scenarioKey(row.account_id, row.ric)) || 0);
       return Math.abs(liveQty) > 1e-12 && Math.abs(liveQty + row.quantity) <= 1e-12;
     });
-    if (
-      hasFullRemoval
-      && !window.confirm("This trade delta fully closes one or more positions. Apply these holdings changes?")
-    ) {
-      return;
+    if (hasFullRemoval) {
+      const proceed = await confirm({
+        title: "Close positions?",
+        body: "This trade delta fully closes one or more positions. Apply these holdings changes?",
+        dangerText: "Apply changes",
+      });
+      if (!proceed) return;
     }
     try {
       setBusy(true);

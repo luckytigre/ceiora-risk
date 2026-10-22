@@ -3,6 +3,7 @@
 import { useMemo, type Ref } from "react";
 import CparExposureBarChart from "@/features/cpar/components/CparExposureBarChart";
 import MethodLabel, { type MethodLabelTone } from "@/components/MethodLabel";
+import MethodHelpLabel from "@/components/MethodHelpLabel";
 import { compareNumber, compareText, useSortableRows } from "@/hooks/useSortableRows";
 import { shortFactorLabel } from "@/lib/factorLabels";
 import { describeCparPositionMethod, formatCparPackageDate } from "@/lib/cparTruth";
@@ -245,10 +246,10 @@ export default function CparWhatIfPreviewPanel({
               <table>
                 <thead>
                   <tr>
-                    <th onClick={() => handleRiskShareSort("bucket")}>Bucket{riskShareArrow("bucket")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("current")}>Current Share{riskShareArrow("current")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("hypothetical")}>Hypothetical Share{riskShareArrow("hypothetical")}</th>
-                    <th className="text-right" onClick={() => handleRiskShareSort("delta")}>Share Delta{riskShareArrow("delta")}</th>
+                    <th className="sortable" onClick={() => handleRiskShareSort("bucket")}>Bucket{riskShareArrow("bucket")}</th>
+                    <th className="text-right sortable" onClick={() => handleRiskShareSort("current")}>Current Share{riskShareArrow("current")}</th>
+                    <th className="text-right sortable" onClick={() => handleRiskShareSort("hypothetical")}>Hypothetical Share{riskShareArrow("hypothetical")}</th>
+                    <th className="text-right sortable" onClick={() => handleRiskShareSort("delta")}>Share Delta{riskShareArrow("delta")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -272,12 +273,12 @@ export default function CparWhatIfPreviewPanel({
               <table>
                 <thead>
                   <tr>
-                    <th onClick={() => handleHoldingDeltaSort("account")}>Account{holdingDeltaArrow("account")}</th>
-                    <th onClick={() => handleHoldingDeltaSort("ticker")}>Ticker{holdingDeltaArrow("ticker")}</th>
-                    <th onClick={() => handleHoldingDeltaSort("method")}>Method{holdingDeltaArrow("method")}</th>
-                    <th className="text-right" onClick={() => handleHoldingDeltaSort("current")}>Current{holdingDeltaArrow("current")}</th>
-                    <th className="text-right" onClick={() => handleHoldingDeltaSort("hypothetical")}>Hypothetical{holdingDeltaArrow("hypothetical")}</th>
-                    <th className="text-right" onClick={() => handleHoldingDeltaSort("delta")}>Delta{holdingDeltaArrow("delta")}</th>
+                    <th className="sortable" onClick={() => handleHoldingDeltaSort("account")}>Account{holdingDeltaArrow("account")}</th>
+                    <th className="sortable" onClick={() => handleHoldingDeltaSort("ticker")}>Ticker{holdingDeltaArrow("ticker")}</th>
+                    <th className="sortable" onClick={() => handleHoldingDeltaSort("method")}><span className="col-help-wrap"><MethodHelpLabel family="cpar" />{holdingDeltaArrow("method")}</span></th>
+                    <th className="text-right sortable" onClick={() => handleHoldingDeltaSort("current")}>Current{holdingDeltaArrow("current")}</th>
+                    <th className="text-right sortable" onClick={() => handleHoldingDeltaSort("hypothetical")}>Hypothetical{holdingDeltaArrow("hypothetical")}</th>
+                    <th className="text-right sortable" onClick={() => handleHoldingDeltaSort("delta")}>Delta{holdingDeltaArrow("delta")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -313,10 +314,10 @@ export default function CparWhatIfPreviewPanel({
             <table>
               <thead>
                 <tr>
-                  <th onClick={() => handleFactorDeltaSort("factor")}>Factor{factorDeltaArrow("factor")}</th>
-                  <th className="text-right" onClick={() => handleFactorDeltaSort("current")}>Current{factorDeltaArrow("current")}</th>
-                  <th className="text-right" onClick={() => handleFactorDeltaSort("hypothetical")}>Hypothetical{factorDeltaArrow("hypothetical")}</th>
-                  <th className="text-right" onClick={() => handleFactorDeltaSort("delta")}>Delta{factorDeltaArrow("delta")}</th>
+                  <th className="sortable" onClick={() => handleFactorDeltaSort("factor")}>Factor{factorDeltaArrow("factor")}</th>
+                  <th className="text-right sortable" onClick={() => handleFactorDeltaSort("current")}>Current{factorDeltaArrow("current")}</th>
+                  <th className="text-right sortable" onClick={() => handleFactorDeltaSort("hypothetical")}>Hypothetical{factorDeltaArrow("hypothetical")}</th>
+                  <th className="text-right sortable" onClick={() => handleFactorDeltaSort("delta")}>Delta{factorDeltaArrow("delta")}</th>
                 </tr>
               </thead>
               <tbody>

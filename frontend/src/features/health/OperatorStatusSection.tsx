@@ -74,7 +74,7 @@ export default function OperatorStatusSection({
         <h3>Operator Status</h3>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="operator-header-meta">
-            {data ? fmtTs(data.generated_at) : isLoading ? "Loading..." : "Unavailable"}
+            {data ? fmtTs(data.generated_at) : isLoading ? "Loading…" : "Unavailable"}
           </span>
           {data && (
             <span className={`operator-core-due ${data.core_due.due ? "due" : "clear"}`}>

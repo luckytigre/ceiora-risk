@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Position } from "@/lib/types/cuse4";
 import TableRowToggle from "@/components/TableRowToggle";
 import MethodLabel from "@/components/MethodLabel";
 import InlineShareDraftEditor from "@/features/holdings/components/InlineShareDraftEditor";
 import { exposureMethodDisplayLabel, exposureMethodRank, exposureMethodTone } from "@/lib/exposureOrigin";
+import ThesisAllocationCell from "@/components/ThesisAllocationCell";
+import { useTheses } from "@/components/ThesisContext";
+import InlineThesisRows from "@/components/InlineThesisRows";
+import MethodHelpLabel from "@/components/MethodHelpLabel";
+import HelpLabel from "@/components/HelpLabel";
 
 interface ExposurePositionsTableProps {
   positions: Position[];
@@ -48,7 +53,7 @@ function normalizeRiskMix(pos: Position) {
 
 function riskMixLabel(pos: Position): string {
   const mix = normalizeRiskMix(pos);
-  return `Mkt ${mix.market.toFixed(1)}% / Ind ${mix.industry.toFixed(1)}% / Sty ${mix.style.toFixed(1)}% / Idio ${mix.idio.toFixed(1)}%`;
+  return `${mix.market.toFixed(1)}% / ${mix.industry.toFixed(1)}% / ${mix.style.toFixed(1)}% / ${mix.idio.toFixed(1)}%`;
 }
 
 function riskMixSortValue(pos: Position): number {
@@ -66,8 +71,11 @@ export default function ExposurePositionsTable({
 }: ExposurePositionsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("market_value");
   const [sortAsc, setSortAsc] = useState(false);
+  const [tickerManual, setTickerManual] = useState(false);
   const [marketValueSortMode, setMarketValueSortMode] = useState<MarketValueSortMode>("abs");
   const [showAllRows, setShowAllRows] = useState(false);
+  const { available: thesesAvailable } = useTheses();
+  const [viewMode, setViewMode] = useState<"positions" | "theses">("positions");
 
   const sorted = [...positions].sort((a, b) => {
     if (sortKey === "method") {
@@ -97,6 +105,14 @@ export default function ExposurePositionsTable({
   });
 
   const handleSort = (key: SortKey) => {
+    if (key === "ticker") {
+      if (sortKey !== "ticker") { setSortKey("ticker"); setSortAsc(false); setTickerManual(false); return; }
+      if (tickerManual) { setTickerManual(false); setSortAsc(false); return; }
+      if (!sortAsc) { setSortAsc(true); return; }
+      setTickerManual(thesesAvailable); if (!thesesAvailable) setSortAsc(false);
+      return;
+    }
+    setTickerManual(false);
     if (key === "market_value") {
       if (sortKey !== "market_value") {
         setSortKey("market_value");
@@ -127,33 +143,65 @@ export default function ExposurePositionsTable({
       setSortAsc(false);
     }
   };
-  const arrow = (key: SortKey) => {
+  const arrow = (key: SortKey): ReactNode => {
     if (key === "market_value" && sortKey === "market_value") {
       const mode = marketValueSortMode === "abs" ? "abs" : "sgn";
-      return sortAsc ? ` (${mode}) ↑` : ` (${mode}) ↓`;
+      return (
+        <>
+          {" "}
+          <span className="th-sort-mode">{mode}</span>
+          {sortAsc ? " ↑" : " ↓"}
+        </>
+      );
     }
+    if (key === "ticker" && sortKey === "ticker" && tickerManual) return <> <span className="th-sort-mode">manual</span> ↕</>;
     return sortKey === key ? (sortAsc ? " ↑" : " ↓") : "";
   };
-  const visibleRows = showAllRows ? sorted : sorted.slice(0, COLLAPSED_ROWS);
-
   return (
-    <div className="dash-table">
-      <table>
+    <div className="dash-table-module">
+      <div className="dash-table">
+        <div className="dash-table-sticky-chrome">
+          <div className="thesis-section-heading">
+            <div className="module-title-with-help"><h3>Positions</h3><HelpLabel label="Positions organization" plain="In thesis view, drag a row, right-click it, or press Enter to move all or part of a position." iconOnly /></div>
+            <div className="thesis-heading-actions">
+              {viewMode === "theses" ? <div id="cuse-risk-thesis-controls" className="thesis-header-controls" /> : null}
+              <div style={thesesAvailable ? undefined : { display: "none" }} className="thesis-view-toggle" role="group" aria-label="Risk positions view">
+                <button type="button" className={viewMode === "positions" ? "active" : ""} onClick={() => setViewMode("positions")}>By instrument</button>
+                <button type="button" className={viewMode === "theses" ? "active" : ""} onClick={() => setViewMode("theses")}>By thesis</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <table>
         <thead>
           <tr>
-            <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
-            <th onClick={() => handleSort("method")}>Method{arrow("method")}</th>
-            <th onClick={() => handleSort("trbc_industry_group")}>TRBC Industry{arrow("trbc_industry_group")}</th>
-            <th className="text-right" onClick={() => handleSort("shares")}>Share Count{arrow("shares")}</th>
-            <th className="text-right" onClick={() => handleSort("market_value")}>Market Value{arrow("market_value")}</th>
-            <th className="text-right" onClick={() => handleSort("risk_mix")}>
-              Risk Mix (Mkt/Ind/Sty/Idio){arrow("risk_mix")}
+            <th className="sortable" tabIndex={0} aria-sort={sortKey === "ticker" ? (tickerManual ? "other" : sortAsc ? "ascending" : "descending") : "none"} title={tickerManual ? "Manual ticker order; click for descending" : "Ticker sort rotates through descending, ascending, and manual"} onClick={() => handleSort("ticker")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSort("ticker"); } }}>Ticker{arrow("ticker")}</th>
+            <th className="sortable" onClick={() => handleSort("method")}><span className="col-help-wrap"><MethodHelpLabel family="cuse" />{arrow("method")}</span></th>
+            <th className="sortable" onClick={() => handleSort("trbc_industry_group")}>TRBC Industry{arrow("trbc_industry_group")}</th>
+            <th className="text-right sortable" onClick={() => handleSort("shares")}>Share Count{arrow("shares")}</th>
+            <th className="text-right sortable" onClick={() => handleSort("market_value")}>Market Value{arrow("market_value")}</th>
+            <th className="text-right sortable" onClick={() => handleSort("risk_mix")}>
+              Risk Mix (Mkt / Ind / Sty / Idio){arrow("risk_mix")}
             </th>
+            <th>Thesis</th>
           </tr>
         </thead>
         <tbody>
-          {visibleRows.map((pos) => (
-            <tr key={pos.ticker}>
+          <InlineThesisRows
+            rows={sorted}
+            colSpan={7}
+            grouped={viewMode === "theses"}
+            marketValueColumnIndex={4}
+            headerControlsId="cuse-risk-thesis-controls"
+            manualOrder={sortKey === "ticker" && tickerManual}
+            groupedTickerDirection={sortKey === "ticker" && !tickerManual ? (sortAsc ? "asc" : "desc") : undefined}
+            orderScope="cuse-risk"
+            ungroupedLimit={viewMode === "positions" && !showAllRows ? COLLAPSED_ROWS : undefined}
+            groupedSortMetric={sortKey === "market_value" ? "market_value" : sortKey === "shares" ? "quantity" : undefined}
+            groupedSortAscending={sortAsc}
+            groupedMarketValueAbsolute={marketValueSortMode === "abs"}
+            getPosition={(pos) => ({ accountId: pos.account, ric: pos.ric || "", ticker: pos.ticker, quantity: pos.shares, price: pos.price, marketValue: pos.market_value })}
+            renderCells={(pos, displayQuantity, grouped, sourceGroupId) => <>
               <td>{pos.ticker}</td>
               <td>
                 <MethodLabel
@@ -169,7 +217,7 @@ export default function ExposurePositionsTable({
               </td>
               <td>{pos.trbc_industry_group || "Unmapped"}</td>
               <td className="text-right">
-                {getDraftQuantityText && onDraftQuantityChange && onAdjust ? (
+                {grouped ? fmtShares(displayQuantity) : getDraftQuantityText && onDraftQuantityChange && onAdjust ? (
                   <InlineShareDraftEditor
                     quantityText={getDraftQuantityText(pos)}
                     disabled={!pos.account || String(pos.account).trim().toLowerCase() === "multi"}
@@ -183,19 +231,30 @@ export default function ExposurePositionsTable({
                   fmtShares(pos.shares)
                 )}
               </td>
-              <td className={`text-right ${marketValueTone(pos.market_value)}`.trim()}>{fmtMarketValue(pos.market_value)}</td>
+              <td className={`text-right ${marketValueTone(grouped ? pos.price * displayQuantity : pos.market_value)}`.trim()}>{fmtMarketValue(grouped ? pos.price * displayQuantity : pos.market_value)}</td>
               <td className="text-right">{riskMixLabel(pos)}</td>
-            </tr>
-          ))}
+              <td>
+                <ThesisAllocationCell
+                  accountId={pos.account}
+                  ric={pos.ric || ""}
+                  ticker={pos.ticker}
+                  positionQuantity={pos.shares}
+                  disabled={!pos.account || !pos.ric || String(pos.account).trim().toLowerCase() === "multi"}
+                  summaryMode={grouped && sourceGroupId === "unallocated" ? "unallocated" : "allocations"}
+                />
+              </td>
+            </>}
+          />
         </tbody>
-      </table>
-      <TableRowToggle
+        </table>
+      </div>
+      {viewMode === "positions" ? <TableRowToggle
         totalRows={sorted.length}
         collapsedRows={COLLAPSED_ROWS}
         expanded={showAllRows}
         onToggle={() => setShowAllRows((prev) => !prev)}
         label="positions"
-      />
+      /> : null}
     </div>
   );
 }

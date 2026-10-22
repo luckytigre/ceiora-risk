@@ -17,6 +17,7 @@ import ManualPositionEditor from "@/features/holdings/components/ManualPositionE
 import { useHoldingsManager } from "@/features/holdings/hooks/useHoldingsManager";
 import { buildAnalyticsTruthCompactSummary, summarizeAnalyticsTruth } from "@/lib/cuse4Truth";
 import { exposureMethodDisplayLabel, exposureMethodTone } from "@/lib/exposureOrigin";
+import HelpLabel from "@/components/HelpLabel";
 
 type ModelDiffSortKey = "account" | "ticker" | "method" | "status" | "live" | "modeled" | "delta";
 const SNAPSHOT_WARNING_STYLE = {
@@ -248,7 +249,7 @@ export default function PositionsPage() {
     });
 
   if (cuseLoading) {
-    return <AnalyticsLoadingViz message="Loading positions..." />;
+    return <AnalyticsLoadingViz message="Loading positions…" />;
   }
   if (cuseError || accountError) {
     return <ApiErrorState surface="positions" error={cuseError || accountError} />;
@@ -318,7 +319,7 @@ export default function PositionsPage() {
                 </div>
                 <div className="draft-banner-actions">
                   <button className="btn-action" onClick={() => void handleApplyDrafts()} disabled={busy}>
-                    {busy ? "Applying..." : `RECALC ${draftCount > 0 ? `(${draftCount})` : ""}`}
+                    {busy ? "Applying…" : `RECALC ${draftCount > 0 ? `(${draftCount})` : ""}`}
                   </button>
                   <button className="btn-action" onClick={discardDrafts} disabled={busy}>
                     Discard Drafts
@@ -350,9 +351,16 @@ export default function PositionsPage() {
       />
 
       <div className="chart-card mb-4">
-        <h3>Modeled Snapshot</h3>
-        <div className="section-subtitle">
-          This is the last modeled view across all accounts. It updates only after `RECALC`, so it is shown here as a compact check instead of a second full positions table.
+        <div className="module-title-with-help">
+          <h3>Modeled Snapshot</h3>
+          <HelpLabel
+            label="Modeled Snapshot"
+            plain="This is the last modeled view across all accounts. It updates only after RECALC, so it is shown here as a compact check instead of a second full positions table."
+            iconOnly
+          />
+          {!snapshotMismatch && compactTruthSummary ? (
+            <HelpLabel label="Modeled Snapshot dates" plain={compactTruthSummary} iconOnly />
+          ) : null}
         </div>
         {snapshotMismatch ? (
           <div style={SNAPSHOT_WARNING_STYLE}>
@@ -361,11 +369,6 @@ export default function PositionsPage() {
           </div>
         ) : (
           <>
-            {compactTruthSummary && (
-              <div className="section-subtitle" style={{ marginTop: 12, marginBottom: 0 }}>
-                {compactTruthSummary}
-              </div>
-            )}
             <div className="data-metric-grid" style={{ marginTop: 12 }}>
               <div className="data-metric-card">
                 <h4>Live Holdings Rows</h4>
@@ -408,13 +411,13 @@ export default function PositionsPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th onClick={() => handleModelDiffSort("account")}>Account Scope{modelDiffArrow("account")}</th>
-                      <th onClick={() => handleModelDiffSort("ticker")}>Ticker{modelDiffArrow("ticker")}</th>
-                      <th onClick={() => handleModelDiffSort("method")}>Method{modelDiffArrow("method")}</th>
-                      <th onClick={() => handleModelDiffSort("status")}>Status{modelDiffArrow("status")}</th>
-                      <th className="text-right" onClick={() => handleModelDiffSort("live")}>Live Qty{modelDiffArrow("live")}</th>
-                      <th className="text-right" onClick={() => handleModelDiffSort("modeled")}>Modeled Qty{modelDiffArrow("modeled")}</th>
-                      <th className="text-right" onClick={() => handleModelDiffSort("delta")}>Delta{modelDiffArrow("delta")}</th>
+                      <th className="sortable" onClick={() => handleModelDiffSort("account")}>Account Scope{modelDiffArrow("account")}</th>
+                      <th className="sortable" onClick={() => handleModelDiffSort("ticker")}>Ticker{modelDiffArrow("ticker")}</th>
+                      <th className="sortable" onClick={() => handleModelDiffSort("method")}>Method{modelDiffArrow("method")}</th>
+                      <th className="sortable" onClick={() => handleModelDiffSort("status")}>Status{modelDiffArrow("status")}</th>
+                      <th className="text-right sortable" onClick={() => handleModelDiffSort("live")}>Live Qty{modelDiffArrow("live")}</th>
+                      <th className="text-right sortable" onClick={() => handleModelDiffSort("modeled")}>Modeled Qty{modelDiffArrow("modeled")}</th>
+                      <th className="text-right sortable" onClick={() => handleModelDiffSort("delta")}>Delta{modelDiffArrow("delta")}</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -87,10 +87,10 @@ export default function SectionCovarianceQuality({ data }: { data: HealthDiagnos
         <table>
           <thead>
             <tr>
-              <th onClick={() => handleSort("name")}>Portfolio Sample{arrow("name")}</th>
-              <th className="text-right" onClick={() => handleSort("forecast")}>Forecast Vol{arrow("forecast")}</th>
-              <th className="text-right" onClick={() => handleSort("realized")}>Realized Vol (60d){arrow("realized")}</th>
-              <th className="text-right" onClick={() => handleSort("gap")}>Gap{arrow("gap")}</th>
+              <th className="sortable" onClick={() => handleSort("name")}>Portfolio Sample{arrow("name")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("forecast")}>Forecast Vol{arrow("forecast")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("realized")}>Realized Vol (60d){arrow("realized")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("gap")}>Gap{arrow("gap")}</th>
             </tr>
           </thead>
           <tbody>

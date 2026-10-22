@@ -1,0 +1,96 @@
+diff --git a/frontend/src/app/globals.css b/frontend/src/app/globals.css
+index 4ddaa2f..969681e 100644
+--- a/frontend/src/app/globals.css
++++ b/frontend/src/app/globals.css
+@@ -603,42 +603,6 @@ main {
+   justify-self: start;
+ }
+ 
+-.dash-global-workspace-link {
+-  display: inline-flex;
+-  align-items: center;
+-  min-height: 22px;
+-  margin-left: 5px;
+-  border-left: 1px solid var(--rule-soft);
+-  padding-left: 13px;
+-  color: var(--text-muted);
+-  font-size: var(--fs-xs);
+-  font-weight: 600;
+-  letter-spacing: .11em;
+-  text-decoration: none;
+-  transition: color var(--dur-base) ease;
+-}
+-
+-.dash-global-workspace-link:hover,
+-.dash-global-workspace-link.active {
+-  color: var(--text-primary);
+-}
+-
+-.dash-global-workspace-label {
+-  display: block;
+-  line-height: 1;
+-  transform: translateY(2px);
+-}
+-
+-.dash-global-workspace-link.active::after {
+-  content: "";
+-  width: 3px;
+-  height: 3px;
+-  margin-left: 6px;
+-  background: currentColor;
+-  border-radius: 50%;
+-  opacity: .7;
+-}
+-
+ .dash-tabs-family-badge-slot {
+   width: 76px;
+   position: relative;
+diff --git a/frontend/src/components/TabNav.tsx b/frontend/src/components/TabNav.tsx
+index ffe0efd..19925e8 100644
+--- a/frontend/src/components/TabNav.tsx
++++ b/frontend/src/components/TabNav.tsx
+@@ -351,7 +351,7 @@ export default function TabNav() {
+   const tabs = useMemo(() => {
+     if (activePath === "/positions") return POSITIONS_TABS;
+     if (activePath.startsWith("/cpar")) return CPAR_TABS;
+-    if (activePath.startsWith("/cuse") || activePath === "/data") return CUSE_TABS;
++    if (activePath.startsWith("/cuse") || activePath === "/data" || activePath === "/dash") return CUSE_TABS;
+     return [];
+   }, [activePath]);
+   const effectiveFamily = activeFamily ?? transitionFamily;
+@@ -417,16 +417,16 @@ export default function TabNav() {
+           wordmarkClassName="dash-tabs-brand-wordmark"
+           markTitle="Ceiora"
+         />
++      </div>
++
++      <div ref={tabsCenterRef} className="dash-tabs-center">
+         <Link
+           href="/dash"
+-          className={`dash-global-workspace-link${activePath === "/dash" ? " active" : ""}`}
++          className={`dash-tab-btn ${activePath === "/dash" ? "active" : ""}`}
+           aria-current={activePath === "/dash" ? "page" : undefined}
+         >
+-          <span className="dash-global-workspace-label">DASH</span>
++          DASH
+         </Link>
+-      </div>
+-
+-      <div ref={tabsCenterRef} className="dash-tabs-center">
+         {tabs.map((tab) => (
+           <Link
+             key={tab.href}
+@@ -525,13 +525,6 @@ export default function TabNav() {
+             >
+               Tutorial
+             </Link>
+-            <Link
+-              href="/dash"
+-              className={`dash-dropdown-item${pathname === "/dash" ? " active" : ""}`}
+-              onClick={() => closeMenu()}
+-            >
+-              DASH
+-            </Link>
+             <Link
+               href="/positions"
+               className={`dash-dropdown-item${pathname === "/positions" ? " active" : ""}`}

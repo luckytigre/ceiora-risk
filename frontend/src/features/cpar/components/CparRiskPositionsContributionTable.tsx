@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import TableRowToggle from "@/components/TableRowToggle";
 import MethodLabel from "@/components/MethodLabel";
 import CparPositionHedgePopover from "@/features/cpar/components/CparPositionHedgePopover";
+import HelpLabel from "@/components/HelpLabel";
 import { describeCparPositionMethod, formatCparMarketValueThousands } from "@/lib/cparTruth";
 import type { CparPackageMeta, CparPortfolioPositionRow } from "@/lib/types/cpar";
+import ThesisAllocationCell from "@/components/ThesisAllocationCell";
+import { useTheses } from "@/components/ThesisContext";
+import InlineThesisRows from "@/components/InlineThesisRows";
+import MethodHelpLabel from "@/components/MethodHelpLabel";
 
 const COLLAPSED_ROWS = 8;
 type SortKey = "ticker" | "method" | "trbc_industry_group" | "quantity" | "market_value" | "risk_mix";
 type MarketValueSortMode = "abs" | "signed";
 
 function fmtMarketValue(value: number | null | undefined): string {
-  return formatCparMarketValueThousands(value, { absolute: true });
+  return formatCparMarketValueThousands(value);
 }
 
 function fmtShares(value: number | null | undefined): string {
@@ -38,7 +43,7 @@ function normalizeRiskMix(row: CparPortfolioPositionRow) {
 function riskMixLabel(row: CparPortfolioPositionRow): string {
   const mix = normalizeRiskMix(row);
   if (!mix) return "—";
-  return `Mkt ${mix.market.toFixed(1)}% / Ind ${mix.industry.toFixed(1)}% / Sty ${mix.style.toFixed(1)}% / Idio ${mix.idio.toFixed(1)}%`;
+  return `${mix.market.toFixed(1)}% / ${mix.industry.toFixed(1)}% / ${mix.style.toFixed(1)}% / ${mix.idio.toFixed(1)}%`;
 }
 
 function riskMixSortValue(row: CparPortfolioPositionRow): number {
@@ -59,9 +64,12 @@ export default function CparRiskPositionsContributionTable({
   const [expanded, setExpanded] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("market_value");
   const [sortAsc, setSortAsc] = useState(false);
+  const [tickerManual, setTickerManual] = useState(false);
   const [marketValueSortMode, setMarketValueSortMode] = useState<MarketValueSortMode>("abs");
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [activeAnchorEl, setActiveAnchorEl] = useState<HTMLElement | null>(null);
+  const { available: thesesAvailable } = useTheses();
+  const [viewMode, setViewMode] = useState<"positions" | "theses">("positions");
   const coveredCount = useMemo(
     () => rows.filter((row) => row.coverage === "covered").length,
     [rows],
@@ -98,8 +106,6 @@ export default function CparRiskPositionsContributionTable({
     });
     return nextRows;
   }, [marketValueSortMode, rows, sortAsc, sortKey]);
-  const visibleRows = expanded ? sortedRows : sortedRows.slice(0, COLLAPSED_ROWS);
-
   useEffect(() => {
     if (!activeRowKey) return;
     if (rows.some((row) => rowKey(row) === activeRowKey)) return;
@@ -108,6 +114,14 @@ export default function CparRiskPositionsContributionTable({
   }, [activeRowKey, rows]);
 
   const handleSort = (nextKey: SortKey) => {
+    if (nextKey === "ticker") {
+      if (sortKey !== "ticker") { setSortKey("ticker"); setSortAsc(false); setTickerManual(false); return; }
+      if (tickerManual) { setTickerManual(false); setSortAsc(false); return; }
+      if (!sortAsc) { setSortAsc(true); return; }
+      setTickerManual(thesesAvailable); if (!thesesAvailable) setSortAsc(false);
+      return;
+    }
+    setTickerManual(false);
     if (nextKey === "market_value") {
       if (sortKey !== "market_value") {
         setSortKey("market_value");
@@ -140,20 +154,39 @@ export default function CparRiskPositionsContributionTable({
     setSortAsc(false);
   };
 
-  const arrow = (key: SortKey) => {
+  const arrow = (key: SortKey): ReactNode => {
     if (key === "market_value" && sortKey === "market_value") {
       const mode = marketValueSortMode === "abs" ? "abs" : "sgn";
-      return sortAsc ? ` (${mode}) ↑` : ` (${mode}) ↓`;
+      return (
+        <>
+          {" "}
+          <span className="th-sort-mode">{mode}</span>
+          {sortAsc ? " ↑" : " ↓"}
+        </>
+      );
     }
+    if (key === "ticker" && sortKey === "ticker" && tickerManual) return <> <span className="th-sort-mode">manual</span> ↕</>;
     return sortKey === key ? (sortAsc ? " ↑" : " ↓") : "";
   };
 
   return (
     <section className="chart-card" data-testid="cpar-risk-positions">
-      <h3>Positions (Factor Risk Mix)</h3>
-      <div className="section-subtitle">
-        This is the cPAR aggregate-book analogue of the cUSE risk-page positions table: covered rows show the weighted
-        display-factor mix driving the aggregate portfolio view, while excluded rows stay explicit.
+      <div className="thesis-section-heading">
+        <div className="module-title-with-help">
+          <h3>Positions</h3>
+          <HelpLabel
+            label="Positions"
+            plain="This is the cPAR aggregate-book analogue of the cUSE risk-page positions table. In thesis view, drag a row, right-click it, or press Enter to move all or part of a position."
+            iconOnly
+          />
+        </div>
+        <div className="thesis-heading-actions">
+          {viewMode === "theses" ? <div id="cpar-risk-thesis-controls" className="thesis-header-controls" /> : null}
+          <div style={thesesAvailable ? undefined : { display: "none" }} className="thesis-view-toggle" role="group" aria-label="cPAR risk positions view">
+            <button type="button" className={viewMode === "positions" ? "active" : ""} onClick={() => setViewMode("positions")}>By instrument</button>
+            <button type="button" className={viewMode === "theses" ? "active" : ""} onClick={() => setViewMode("theses")}>By thesis</button>
+          </div>
+        </div>
       </div>
       <div className="cpar-badge-row compact">
         <span className="cpar-detail-chip">{coveredCount} covered rows</span>
@@ -164,22 +197,32 @@ export default function CparRiskPositionsContributionTable({
         <table>
           <thead>
             <tr>
-              <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
-              <th onClick={() => handleSort("method")}>Method{arrow("method")}</th>
-              <th onClick={() => handleSort("trbc_industry_group")}>TRBC Industry{arrow("trbc_industry_group")}</th>
-              <th className="text-right" onClick={() => handleSort("quantity")}>Share Count{arrow("quantity")}</th>
-              <th className="text-right" onClick={() => handleSort("market_value")}>Market Value{arrow("market_value")}</th>
-              <th className="text-right" onClick={() => handleSort("risk_mix")}>Risk Mix (Mkt/Ind/Sty/Idio){arrow("risk_mix")}</th>
+              <th className="sortable" tabIndex={0} aria-sort={sortKey === "ticker" ? (tickerManual ? "other" : sortAsc ? "ascending" : "descending") : "none"} title={tickerManual ? "Manual ticker order; click for descending" : "Ticker sort rotates through descending, ascending, and manual"} onClick={() => handleSort("ticker")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSort("ticker"); } }}>Ticker{arrow("ticker")}</th>
+              <th className="sortable" onClick={() => handleSort("method")}><span className="col-help-wrap"><MethodHelpLabel family="cpar" />{arrow("method")}</span></th>
+              <th className="sortable" onClick={() => handleSort("trbc_industry_group")}>TRBC Industry{arrow("trbc_industry_group")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("quantity")}>Share Count{arrow("quantity")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("market_value")}>Market Value{arrow("market_value")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("risk_mix")}>Risk Mix (Mkt / Ind / Sty / Idio){arrow("risk_mix")}</th>
+              <th>Thesis</th>
             </tr>
           </thead>
           <tbody>
-            {visibleRows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="cpar-empty-row">No holdings rows are available across the active book.</td>
-              </tr>
-            ) : (
-              visibleRows.map((row) => (
-                <tr key={rowKey(row)}>
+            <InlineThesisRows
+              rows={sortedRows}
+              colSpan={7}
+              grouped={viewMode === "theses"}
+              marketValueColumnIndex={4}
+              headerControlsId="cpar-risk-thesis-controls"
+              manualOrder={sortKey === "ticker" && tickerManual}
+              groupedTickerDirection={sortKey === "ticker" && !tickerManual ? (sortAsc ? "asc" : "desc") : undefined}
+              orderScope="cpar-risk"
+              ungroupedLimit={viewMode === "positions" && !expanded ? COLLAPSED_ROWS : undefined}
+              emptyLabel="No holdings rows are available across the active book."
+              groupedSortMetric={sortKey === "market_value" ? "market_value" : sortKey === "quantity" ? "quantity" : undefined}
+              groupedSortAscending={sortAsc}
+              groupedMarketValueAbsolute={marketValueSortMode === "abs"}
+              getPosition={(row) => ({ accountId: row.account_id, ric: row.ric, ticker: row.ticker || row.ric, quantity: row.quantity, price: row.price, marketValue: row.market_value })}
+              renderCells={(row, displayQuantity, grouped, sourceGroupId) => <>
                   <td>
                     {row.coverage === "covered" && typeof row.market_value === "number" ? (
                       <>
@@ -219,23 +262,32 @@ export default function CparRiskPositionsContributionTable({
                     />
                   </td>
                   <td>{row.trbc_industry_group || "Unmapped"}</td>
-                  <td className="text-right">{fmtShares(row.quantity)}</td>
-                  <td className="text-right">{fmtMarketValue(row.market_value)}</td>
+                  <td className="text-right">{fmtShares(grouped ? displayQuantity : row.quantity)}</td>
+                  <td className="text-right">{fmtMarketValue(grouped && typeof row.price === "number" ? row.price * displayQuantity : row.market_value)}</td>
                   <td className="text-right">{riskMixLabel(row)}</td>
-                </tr>
-              ))
-            )}
+                  <td>
+                    <ThesisAllocationCell
+                      accountId={row.account_id}
+                      ric={row.ric}
+                      ticker={row.ticker || row.ric}
+                      positionQuantity={row.quantity}
+                      disabled={!row.account_id || row.account_id === "all_accounts"}
+                      summaryMode={grouped && sourceGroupId === "unallocated" ? "unallocated" : "allocations"}
+                    />
+                  </td>
+              </>}
+            />
           </tbody>
         </table>
       </div>
 
-      <TableRowToggle
+      {viewMode === "positions" ? <TableRowToggle
         totalRows={rows.length}
         collapsedRows={COLLAPSED_ROWS}
         expanded={expanded}
         onToggle={() => setExpanded((current) => !current)}
         label="positions"
-      />
+      /> : null}
     </section>
   );
 }

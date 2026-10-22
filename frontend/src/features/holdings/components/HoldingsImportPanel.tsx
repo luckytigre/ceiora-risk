@@ -118,7 +118,7 @@ export default function HoldingsImportPanel({
           onClick={onRunImport}
           disabled={busy}
         >
-          {busy ? "Running..." : "Run Live Import"}
+          {busy ? "Running…" : "Run Live Import"}
         </button>
       </div>
     </div>

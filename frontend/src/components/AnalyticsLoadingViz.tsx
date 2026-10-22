@@ -96,14 +96,14 @@ function drawStaticGrid(ctx: CanvasRenderingContext2D) {
 }
 
 export default function AnalyticsLoadingViz({
-  message = "Loading analytics...",
+  message = "Loading analytics…",
   stepLabel,
   animate = true,
   className,
 }: AnalyticsLoadingVizProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { themeMode } = useAppSettings();
-  const resolvedMessage = message ?? "Loading analytics...";
+  const resolvedMessage = message ?? "Loading analytics…";
   const ariaLabel = stepLabel
     ? `${resolvedMessage}. ${stepLabel}`
     : resolvedMessage;

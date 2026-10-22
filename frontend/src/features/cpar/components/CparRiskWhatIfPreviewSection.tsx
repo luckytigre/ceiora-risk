@@ -42,12 +42,12 @@ export default function CparRiskWhatIfPreviewSection({
         <table>
           <thead>
             <tr>
-              <th onClick={() => handleSort("instrument")}>Instrument{arrow("instrument")}</th>
-              <th className="text-right" onClick={() => handleSort("current")}>Current Qty{arrow("current")}</th>
-              <th className="text-right" onClick={() => handleSort("delta")}>Delta{arrow("delta")}</th>
-              <th className="text-right" onClick={() => handleSort("hypothetical")}>Hyp Qty{arrow("hypothetical")}</th>
-              <th className="text-right" onClick={() => handleSort("market_value_delta")}>MV Delta{arrow("market_value_delta")}</th>
-              <th onClick={() => handleSort("coverage")}>Coverage{arrow("coverage")}</th>
+              <th className="sortable" onClick={() => handleSort("instrument")}>Instrument{arrow("instrument")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("current")}>Current Qty{arrow("current")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("delta")}>Delta{arrow("delta")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("hypothetical")}>Hyp Qty{arrow("hypothetical")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("market_value_delta")}>MV Delta{arrow("market_value_delta")}</th>
+              <th className="sortable" onClick={() => handleSort("coverage")}>Coverage{arrow("coverage")}</th>
             </tr>
           </thead>
           <tbody>

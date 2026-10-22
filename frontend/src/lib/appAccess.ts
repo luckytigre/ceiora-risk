@@ -1,6 +1,6 @@
 export const DEFAULT_APP_HOME_PATH = "/home";
 
-const PROTECTED_PAGE_PREFIXES = ["/home", "/cuse", "/cpar", "/positions", "/data", "/settings"] as const;
+const PROTECTED_PAGE_PREFIXES = ["/home", "/dash", "/cuse", "/cpar", "/positions", "/data", "/settings"] as const;
 const PRIVILEGED_PAGE_PREFIXES = ["/settings/admin", "/data"] as const;
 const PUBLIC_SHELL_PATHS = ["/", "/login"] as const;
 const PUBLIC_API_PATH_PREFIXES = ["/api/auth/login", "/api/auth/logout", "/api/auth/session"] as const;

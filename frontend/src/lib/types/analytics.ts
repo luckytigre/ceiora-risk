@@ -21,6 +21,7 @@ export interface FactorCatalogEntry {
 }
 
 export interface Position {
+  ric?: string;
   ticker: string;
   name: string;
   long_short: string;

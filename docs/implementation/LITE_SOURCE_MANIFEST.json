@@ -1,0 +1,337 @@
+{
+  "original_head": "23c6270a95b7397a2bad70f0d44ebb6b6bf863ff",
+  "lite_head": "495ba0e36bbe66ee5615d26f579e8eddba706afb",
+  "files": [
+    {
+      "path": "frontend/next.config.js",
+      "action": "retain production baseline; Lite-only overlay",
+      "lite_sha256": "419f1be6b2c9a603d4fb676e22f4ebb2ca18533abb4fbf64efb91afe93c29dfd"
+    },
+    {
+      "path": "frontend/package.json",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "22d10cc3679fd63a346687213dcfbefedb8c72b298fa943e95f1e3226e65397a"
+    },
+    {
+      "path": "frontend/scripts/check_contrast.mjs",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "a2fd590a9a3a1262768c4a6621e8afa7d27aaee899ba041c2d2a1f69fd981980"
+    },
+    {
+      "path": "frontend/scripts/check_css_raw_values.mjs",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "e90f18ecdaf91b8af6e3fba27f25286adc6f9c47aa1c9886e102b19b7756da11"
+    },
+    {
+      "path": "frontend/scripts/check_css_vars.mjs",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "73ece55fd2cce9cbe5eeae44a7ddf274c2f35764254558a37178faf34e089716"
+    },
+    {
+      "path": "frontend/src/app/api/portfolio/[...slug]/route.ts",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "8e8c9830fead95ce6b8c89b798b46250c162a3cd0f086b11fa0f7158e6ee22da"
+    },
+    {
+      "path": "frontend/src/app/cpar/loading.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "ae9141fc8b387c22225c29cd9e7af616d9ee1816d9635184e5d047dbbfb7e8ce"
+    },
+    {
+      "path": "frontend/src/app/dash/page.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "c6333651c67c3c24c86a5c0c9302d2724ce53cc1de1002b684f18b548481a21b"
+    },
+    {
+      "path": "frontend/src/app/data/page.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "58a15dda14d9b51412728010285eb2e10996dfa6106218be96ba9184dfcbdc24"
+    },
+    {
+      "path": "frontend/src/app/globals.css",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "4351be7008732264d7b5a068bb8f270b31cb6a85b9d3ce7549854774b14fbd8d"
+    },
+    {
+      "path": "frontend/src/app/layout.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "04f767744efe40cccc1f972fdb5065ca8d9fd18199fa111d07abcc295e411271"
+    },
+    {
+      "path": "frontend/src/app/login/LoginClient.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "8dda18d4e3d89d1b5666f7451aac4829809b934cacd8eab633dbd5742b40a51d"
+    },
+    {
+      "path": "frontend/src/app/page.tsx",
+      "action": "retain production baseline; Lite-only overlay",
+      "lite_sha256": "5c2ab0b4e276e210212a47d17ae252a85edc45e9f323d29d9edf750bec3334e2"
+    },
+    {
+      "path": "frontend/src/app/palette-preview/page.tsx",
+      "action": "retain production baseline; Lite-only overlay",
+      "lite_sha256": "ee37e5bc2830a9001e0a0397ca6bd016f89de91054e4b0d42894b6580876880c"
+    },
+    {
+      "path": "frontend/src/app/positions/page.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "3f6239ef3f9d235b69e6e674345d7b7367d72fe1acc18f469e4a87cb65145927"
+    },
+    {
+      "path": "frontend/src/app/settings/page.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "4dc285f35de7486f0e37ce74c9cde31b95ccc593d010dcb6dd06e18e018bf6e2"
+    },
+    {
+      "path": "frontend/src/app/tokens.css",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "a7b5cb2d46498af8d6eca70b647811704d31bbd1f59cf4d5f7da10bba541d099"
+    },
+    {
+      "path": "frontend/src/components/AnalyticsLoadingViz.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "dfe23766cbe0d2bb5cdf156a0c59bb340fdf73ddc76d7f2e09690420a327733c"
+    },
+    {
+      "path": "frontend/src/components/ApiErrorState.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "d91301d23ef6e7bd5987a290a737ee5846a5f7aa2756dafac8d023bf06b961f6"
+    },
+    {
+      "path": "frontend/src/components/ConfirmActionModal.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "2efcbd2415141cc8837e8b6d0d5cf8a6c709c766a3cd111f5a0eeff23f716c64"
+    },
+    {
+      "path": "frontend/src/components/ConfirmDialogProvider.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "233cc451fbaf8bbef13c51bd7ea93490b147476568b382df7cb5c790d35ac5a6"
+    },
+    {
+      "path": "frontend/src/components/CovarianceHeatmap.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "d8718a6c984d5c98874fc063238ed8b92cfaabe3a6354b3c87f88ce29e7969f6"
+    },
+    {
+      "path": "frontend/src/components/ExposureBarChart.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "b9a3fbdd86d1d6b6b9b968ace34349df03f605737d0d892b3993527b64209f3c"
+    },
+    {
+      "path": "frontend/src/components/ExposurePositionsTable.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "3dc87e95898a90d450b919e8719e30056e63bb1fab92c184d52bdd5567c035dd"
+    },
+    {
+      "path": "frontend/src/components/FactorDrilldown.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "36535e4ecf697b73bea3c7cfa743ef7a3da386a82cf3b1b187f89e120aa75e81"
+    },
+    {
+      "path": "frontend/src/components/HelpLabel.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "9f62b85b9887d456b13c8f7c5a2f537fb1eee5bd2f8423dcbf5cef3892e8b892"
+    },
+    {
+      "path": "frontend/src/components/InlineThesisRows.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "df656edc181b015936ff7e1b3edf80a9c3511b86e59283d5c4b22f3d51d2ebf7"
+    },
+    {
+      "path": "frontend/src/components/MethodHelpLabel.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "a683b70e9e8e306a5793dc2affdf31a29eb2272da34d5c53a3b6183d83c0acfb"
+    },
+    {
+      "path": "frontend/src/components/Skeleton.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "4916ab71ae123ffa616e228e5207d18f50db0fd92b67e45efd1b37150b2f1d79"
+    },
+    {
+      "path": "frontend/src/components/StickyTableHeaders.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "ba48d2936ea86b4282c111132c06edd3fbb5f7e2806aaad9ba678fba2496d772"
+    },
+    {
+      "path": "frontend/src/components/TabNav.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "cd4d4b1b58fd11995a3560a8ae63b861045caff3fc3ad45831a1b179960f13e9"
+    },
+    {
+      "path": "frontend/src/components/ThesisAllocationCell.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "cb9b14f3c2b3a989e223f64b968fc2e1482159411191e9e3ad938c2b55b0d783"
+    },
+    {
+      "path": "frontend/src/components/ThesisContext.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "f075e661b45ad79082147b6b6b84f8429d31ea7ba8b71fbc4c67a24cdf566ee9"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparHedgeWorkspace.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "15fcfb5694fb41885799d379deb53af9c73435a6d6340098da5fd4b9d137f8c5"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparLoadingsTable.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "581db6262197301d8ce485ab617c3cae524bdc7938fd6a446ca95c839eea2029"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparPortfolioHedgePanel.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "241b47f43907d9fccbc90afcda54d612b8c75ca81c1df8b663f7b8da721767e5"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparPositionHedgePopover.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "771cefe1fd0ad7365b7e47add91525a76dce110f7e14f73cfb0d8eb9d72bfd4c"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparPostHedgeTable.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "f550dd6f7a729d127dc3754f635efb742a8c67aec6080d83fbead9132324fad9"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparRiskFactorDrilldown.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "0cb53883081c7d4b90717fdfa828258084671a6fd3571d0b411fb8df2e3a65f0"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparRiskFactorSummaryCard.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "b40b8c6bc7a088662e2486711079a723cbd768a8bc26ba2eb3048b1c3f38e36a"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparRiskPositionsContributionTable.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "7d6661527115b7d9d5e1df1b80e9f0cf6f3e92bc685217319ced3545f1f1ae3d"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparRiskWhatIfPreviewSection.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "bc46b53b9dae7c6732d40b5834f9c4dadb3bdff677ebd8b5b442bf8994d4c1d1"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparRiskWorkspace.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "0174b29b8ecf2c0f0857b2e944c41f0bb3ef8f65daf3874480bde45e0b04a401"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/CparWhatIfPreviewPanel.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "116a29e444bfd4c10619137515f4a7a1e4c1196d9ac14f9b0465660655f757d5"
+    },
+    {
+      "path": "frontend/src/features/cpar/components/useCparExploreScenarioLab.ts",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "d4192bf9af1f024b19c59bdbbaa2f874c3953c16a0bcbf036c98e9d632c3b3cc"
+    },
+    {
+      "path": "frontend/src/features/cuse4/components/CuseRiskPage.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "b2ae0d4c94884c3657ac9c39994ae5ea9f5bea984763b44c9cdd883e743fdf3e"
+    },
+    {
+      "path": "frontend/src/features/dash/components/DashPage.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "be48306686a5a475e963941e3cf4a76b33c7ff62d2e7ac38e3ad13a6f8d12569"
+    },
+    {
+      "path": "frontend/src/features/dash/components/DashThesisPositionsTable.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "991f29c8e1a9f77c27fff0c7ff53db7a9b54a7252545b0ffc1e4a4a02ba49ee9"
+    },
+    {
+      "path": "frontend/src/features/explore/components/TickerQuoteCard.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "5c34454ca5b54fe19a0a16f1d4611d9ff2bc9416777e4bfb88260bd7410e82cb"
+    },
+    {
+      "path": "frontend/src/features/health/HealthPage.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "5813e68f0576053849c73cc5c0953d48ccd299781e9562a67f0ae04f53ca75f8"
+    },
+    {
+      "path": "frontend/src/features/health/OperatorStatusSection.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "203c44b8c589e7650352e50dde7e82a57348e2f0a5181a1aaa7cc1a77dfe796c"
+    },
+    {
+      "path": "frontend/src/features/health/SectionCovarianceQuality.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "2b344fdf07229e56b0b0f65dcccf0a8df8f1d628803dcf2d1c31c72d297481ec"
+    },
+    {
+      "path": "frontend/src/features/holdings/components/HoldingsImportPanel.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "b428f51656489ab2dc4b2e1277c172ab82531ea132780734d07a354a55376019"
+    },
+    {
+      "path": "frontend/src/features/holdings/components/HoldingsLedgerSection.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "839482d91ed22c1f374884f5bbf25f292cad81a96e02d271e765af2c5f6b2bd4"
+    },
+    {
+      "path": "frontend/src/features/holdings/components/ManualPositionEditor.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "ecd9778912a02a1307c8d251eebee2da9e0a3cf6d8195e7d188d8699159f801f"
+    },
+    {
+      "path": "frontend/src/features/whatif/WhatIfBuilderPanel.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "4ac44b5a6e0f9cab3f141edfe85599f37104632f36ae8fc96f2517bfa7b91819"
+    },
+    {
+      "path": "frontend/src/features/whatif/WhatIfPreviewPanel.tsx",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "f8b420c3f5f228ffcd80e6e8153e6e8ed873aaadf27f846a9f4417200ed3efa8"
+    },
+    {
+      "path": "frontend/src/features/whatif/useWhatIfScenarioLab.ts",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "4ecc9bd03d440b45c33ee23302331966b7d017f722fc0e42d33de929a0ae5222"
+    },
+    {
+      "path": "frontend/src/hooks/useFocusTrap.ts",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "0a73750aa35e1ca76a79f9615d993bf0c0721f75dbbc2d4c40aafea2fc28447f"
+    },
+    {
+      "path": "frontend/src/lib/GLOSSARY.md",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "9606bacca836098c9c0cd68e3f842d4fa7a0468e439005e3064307e9f0c558e2"
+    },
+    {
+      "path": "frontend/src/lib/appAccess.ts",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "d7165d28889e967a9acbeaf4f7b3daa35cec616125e715c88a98e651ac188de7"
+    },
+    {
+      "path": "frontend/src/lib/thesisApi.ts",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "d06a5b5bdb8fa098d166632a2ee9014a76e2e8fba3778eaca7318545ba436357"
+    },
+    {
+      "path": "frontend/src/lib/types/analytics.ts",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "13c546399a1c094ac104f5d152e1e0a060820997380bd0c7de8b4a2e4f87962e"
+    },
+    {
+      "path": "frontend/tailwind.config.ts",
+      "action": "port final tracked Lite state; production corrections follow",
+      "lite_sha256": "21c65c9f5b74801b570348b2b9ba05409af575cf9f252635c36201482b9fcebf"
+    }
+  ],
+  "integration_native_changes": [
+    "DASH query-based family selector and family-native analytics",
+    "Account/RIC holdings ledger adapter with nullable values and stale quantity guard",
+    "Production thesis capability disabled by omitting provider; flat-row fallback and disabled mutation controls",
+    "DASH server auth middleware matcher",
+    "Session-authenticated thesis transport prepared for P2",
+    "Sticky observer detached DOM cleanup",
+    "Narrow viewport navigation containment",
+    "DASH contract and browser regression scripts",
+    "Plan, provenance, adversarial review, and execution evidence"
+  ]
+}

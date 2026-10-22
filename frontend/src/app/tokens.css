@@ -1,0 +1,334 @@
+/* Design tokens — the single source of truth for this app's visual system.
+ *
+ * REFACTOR-01: extracted from globals.css, which had grown to 8,778 lines and
+ * 1,265 selectors. That size is why a half-finished variable rename survived
+ * unnoticed long enough to render text in an inherited colour (CSS-01).
+ *
+ * This is the ONLY file permitted to define custom properties, which is what lets
+ * scripts/check_css_vars.mjs be a single-file check.
+ *
+ * Mirrored into tailwind.config.ts by reference, not by copy, so the two cannot
+ * drift. Changing a colour here is gated by scripts/check_contrast.mjs on build.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --canvas-dark-top: #242429;
+  --canvas-dark-mid: #1f1f24;
+  --canvas-dark-bottom: #18181d;
+  --canvas-light-top: #f2f2ef;
+  --canvas-light-mid: #edede9;
+  --canvas-light-bottom: #e5e4e0;
+
+  /* A11Y-03: ink tiers are ordered by contrast and every tier clears WCAG AA
+     (4.5:1) on its own canvas, as do both signal colours. Enforced on every build
+     by scripts/check_contrast.mjs — changing a value here without re-running it
+     will fail the build.
+
+     That check deliberately does NOT assert a ratio BETWEEN positive and negative.
+     It is unachievable: on this ground a negative that clears AA needs L >= 0.238,
+     and a 3:1 separation then forces positive to L >= 0.814 — effectively white.
+     The non-colour channel is the sign glyph on the value itself. */
+  /* Z-01: the complete stacking scale. Every global layer takes its value from one
+     of these; raw z-index integers do not belong in this file. The two exceptions
+     are values LOCAL to an element that is already its own stacking context, and
+     they are commented as such at their site.
+
+     `main` deliberately does not set z-index. It previously carried `z-index: 1`,
+     which made it a stacking context and trapped every overlay rendered inside it
+     below the nav — which is why values had escalated to 12000 and 20000 without
+     ever taking effect. Re-introducing a z-index on `main` silently breaks every
+     modal in the app. */
+  --z-base:     0;    /* fixed background decoration              */
+  --z-content:  1;    /* in-flow page content                     */
+  --z-sticky:   100;  /* in-page sticky: table headers            */
+  --z-nav:      150;  /* fixed app chrome. MUST outrank --z-sticky, or a
+                         table header scrolling past paints over the nav. */
+  --z-dropdown: 200;  /* menus, typeahead, context menus          */
+  --z-popover:  300;  /* hedge popover, floating chrome           */
+  --z-modal:    400;  /* dialogs, backdrops, full-stage overlays  */
+  --z-tooltip:  500;  /* help bubbles, [data-tip]                 */
+  --z-toast:    600;  /* reserved — no consumer yet               */
+
+  /* TOKEN-01 — type scale. 53 distinct sizes collapsed to 13 named steps.
+     Steps are the sizes actually load-bearing in this UI; accidental values
+     (12.9px, 12.5px, 11.5px, 9.5px) fold into the nearest step. Further
+     consolidation is a DESIGN decision needing a visual pass, not a mechanical
+     one — do not collapse these further without looking at the running app.
+     The clamp() display sizes on the public pages are intentionally not tokens. */
+  --fs-3xs:  8px;
+  --fs-2xs:  9px;
+  --fs-xs:  10px;
+  --fs-sm:  11px;
+  --fs-base:12px;
+  --fs-md:  13px;
+  --fs-lg:  14px;
+  --fs-xl:  16px;
+  --fs-2xl: 18px;
+  --fs-3xl: 20px;
+  --fs-4xl: 22px;
+  --fs-5xl: 24px;
+  --fs-6xl: 28px;
+
+  /* TOKEN-01 — tracking. 33 values collapsed to three roles. */
+  --track-caps:     0.06em;   /* uppercase micro-labels          */
+  --track-display: -0.035em;  /* display headings                */
+  --track-none:     0;
+
+  /* TOKEN-01 — spacing, 4px grid. */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+
+  /* TOKEN-01 — motion. ms only; `s` notation is not used. */
+  --dur-fast: 120ms;   /* hover, colour       */
+  --dur-base: 180ms;   /* enter, exit, land   */
+  --dur-slow: 280ms;   /* scrim, page         */
+
+  /* A11Y-04: one focus ring for the whole app. Applied via :focus-visible so it
+     does not fire on mouse clicks. Never pair `outline: none` with nothing. */
+  --focus-ring: 0 0 0 2px var(--rule-focus);
+
+  /* Derived layers. Defined via calc() against the tier they are pinned to, so
+     they cannot desync if that tier moves. */
+  --z-scrim:      calc(var(--z-dropdown) - 1);  /* just under .dash-dropdown */
+  --z-lite-badge: calc(var(--z-popover) + 1);   /* lite-only; must clear .floating-mode-toggle */
+
+  /* UX-01: a sticky header must be OPAQUE or rows scroll through it while pinned.
+     It must ALSO be invisible when not pinned, which the first attempt got wrong:
+     it was computed from --surface-base over the canvas, but these tables sit
+     directly ON the canvas with no painted ancestor, so a darker value read as a
+     slab across the top of every table. Matched to the canvas instead. */
+  --surface-table-header-dark: var(--canvas-dark-mid);
+  --surface-table-header-light: var(--canvas-light-mid);
+  --surface-table-header: var(--surface-table-header-dark);
+
+  --shadow-color: 2, 6, 14;
+  --shadow-1: 0 10px 24px rgba(var(--shadow-color), 0.20);   /* raised cards, dropdowns */
+  --shadow-2: 0 18px 40px rgba(var(--shadow-color), 0.30);   /* popovers               */
+  --shadow-3: 0 24px 80px rgba(var(--shadow-color), 0.46);   /* modals                 */
+
+  --ink-display-dark: rgba(246, 246, 245, 0.98);
+  --ink-primary-dark: #e8edf9;
+  --ink-secondary-dark: rgba(194, 198, 206, 0.84);
+  --ink-muted-dark: rgba(161, 167, 179, 0.92);
+  --ink-folio-dark: rgba(146, 151, 161, 0.90);
+  --ink-wordmark-dark: rgba(250, 249, 246, 0.995);
+
+  --ink-display-light: rgba(28, 30, 35, 0.97);
+  --ink-primary-light: rgba(38, 40, 47, 0.9);
+  --ink-secondary-light: rgba(48, 53, 61, 0.86);
+  --ink-muted-light: rgba(65, 70, 77, 0.86);
+  --ink-folio-light: rgba(78, 81, 88, 0.84);
+  --ink-wordmark-light: rgba(24, 26, 31, 0.97);
+
+  --surface-base-dark: rgba(18, 21, 30, 0.7);
+  --surface-base-hover-dark: rgba(24, 28, 39, 0.8);
+  --surface-elevated-dark: rgba(14, 19, 33, 0.92);
+  --surface-soft-dark: rgba(34, 38, 47, 0.68);
+  --surface-raised: rgba(14, 19, 33, 0.92);
+  --surface-editorial-dark: rgba(247, 247, 245, 0.975);
+  --surface-popover-dark: rgba(17, 20, 29, 0.94);
+  --surface-tooltip-dark: rgba(30, 34, 44, 0.91);
+  --surface-row-alt-dark: rgba(226, 231, 238, 0.014);
+  --surface-row-hover-dark: rgba(230, 236, 244, 0.026);
+  --surface-row-selected-dark: rgba(230, 236, 244, 0.075);
+
+  --surface-base-light: rgba(255, 255, 255, 0.46);
+  --surface-base-hover-light: rgba(255, 255, 255, 0.62);
+  --surface-elevated-light: rgba(252, 251, 248, 0.92);
+  --surface-soft-light: rgba(244, 242, 236, 0.82);
+  --surface-editorial-light: #f6f5f2;
+  --surface-popover-light: rgba(250, 249, 245, 0.96);
+  --surface-tooltip-light: rgba(251, 250, 246, 0.96);
+  --surface-row-alt-light: rgba(120, 126, 137, 0.042);
+  --surface-row-hover-light: rgba(111, 118, 131, 0.055);
+  --surface-row-selected-light: rgba(111, 118, 131, 0.094);
+
+  --rule-base-dark: rgba(154, 171, 214, 0.24);
+  --rule-strong-dark: rgba(222, 228, 238, 0.62);
+  --rule-focus-dark: rgba(217, 225, 240, 0.42);
+  --rule-soft-dark: rgba(154, 171, 214, 0.08);
+
+  --rule-base-light: rgba(111, 118, 131, 0.2);
+  --rule-strong-light: rgba(84, 91, 104, 0.42);
+  --rule-focus-light: rgba(52, 96, 146, 0.45);
+  --rule-soft-light: rgba(111, 118, 131, 0.12);
+
+  --signal-positive-dark: #79bc9c;
+  --signal-negative-dark: #d27186;
+  --signal-warning-dark: #d8a85b;
+  --signal-neutral-dark: #b6bcc8;
+
+  --signal-positive-light: #317053;
+  --signal-negative-light: #ae4660;
+  --signal-warning-light: #c28f42;
+  --signal-neutral-light: #7d8693;
+
+  --family-cuse: #c063a4;
+  --family-cpar: #5a9ecb;
+  --family-cmac: #e5a15f;
+  --analytics-cuse: var(--family-cuse);
+  --analytics-cpar: var(--family-cpar);
+  --analytics-cmac: var(--family-cmac);
+  --analytics-style: var(--analytics-cuse);
+  --analytics-market: var(--analytics-cpar);
+  --analytics-industry: var(--analytics-cmac);
+  --analytics-idio: #c4cd72;
+  --analytics-cuse-rgb: 192, 99, 164;
+  --analytics-cpar-rgb: 90, 158, 203;
+  --analytics-cmac-rgb: 229, 161, 95;
+  --positive-rgb: 121, 188, 156;
+  --negative-rgb: 210, 113, 134;
+  --method-core-dark: rgba(206, 211, 220, 0.82);
+  --method-fundamental-projection-dark: rgba(214, 181, 104, 0.96);
+  --method-returns-projection-dark: rgba(214, 181, 104, 0.78);
+  --method-core-light: rgba(38, 40, 47, 0.9);
+  --method-fundamental-projection-light: rgba(177, 145, 76, 0.92);
+  --method-returns-projection-light: rgba(177, 145, 76, 0.72);
+  --chart-long-dark: #79bc9c;
+  --chart-short-dark: #d27186;
+  --chart-zero-axis-dark: rgba(214, 220, 232, 0.28);
+  --chart-projection-flank-dark: rgba(185, 191, 203, 0.26);
+  --chart-long-light: #45936f;
+  --chart-short-light: #ae4660;
+  --chart-zero-axis-light: rgba(111, 118, 131, 0.26);
+  --chart-projection-flank-light: rgba(121, 128, 138, 0.24);
+
+  --nav-bg-rgb: 20, 20, 24;
+  --nav-bg-positions-rgb: 8, 10, 13;
+  --nav-shadow-rgb: 2, 6, 14;
+  --neo-dot-rgb: 145, 147, 151;
+  --flow-ribbon-a0-rgb: 155, 200, 225;
+  --flow-ribbon-a1-rgb: 210, 165, 200;
+  --flow-ribbon-b0-rgb: 176, 180, 190;
+  --flow-ribbon-b1-rgb: 150, 220, 225;
+
+  --bg-primary: var(--canvas-dark-mid);
+  --bg-primary-top: var(--canvas-dark-top);
+  --bg-primary-mid: var(--canvas-dark-mid);
+  --bg-primary-bottom: var(--canvas-dark-bottom);
+  --bg-secondary: #111111;
+  --bg-card: var(--surface-base-dark);
+  --bg-card-hover: var(--surface-base-hover-dark);
+  --surface-base: var(--surface-base-dark);
+  --surface-base-hover: var(--surface-base-hover-dark);
+  --surface-elevated: var(--surface-elevated-dark);
+  --surface-soft: var(--surface-soft-dark);
+  --surface-popover: var(--surface-popover-dark);
+  --surface-tooltip: var(--surface-tooltip-dark);
+  --surface-row-hover: var(--surface-row-hover-dark);
+  --surface-row-selected: var(--surface-row-selected-dark);
+  --border: var(--rule-base-dark);
+  --rule-strong: var(--rule-strong-dark);
+  --rule-focus: var(--rule-focus-dark);
+  --rule-soft: var(--rule-soft-dark);
+  --text-primary: var(--ink-primary-dark);
+  --text-secondary: var(--ink-secondary-dark);
+  --text-muted: var(--ink-muted-dark);
+  --text-folio: var(--ink-folio-dark);
+  --accent-blue: var(--family-cpar);
+  --accent-green: var(--chart-long-dark);
+  --accent-red: #cc3558;
+  --accent-yellow: var(--signal-warning-dark);
+  --accent-purple: var(--family-cuse);
+  --text-positive: var(--signal-positive-dark);
+  --text-negative: var(--signal-negative-dark);
+  --signal-neutral: var(--signal-neutral-dark);
+  --tab-active: rgba(244, 244, 242, 0.94);
+  --chart-tooltip-bg: var(--surface-tooltip-dark);
+  --chart-tooltip-border: var(--rule-base-dark);
+  --chart-tooltip-text: #b4bfd3;
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-family);
+  --font-display: "Ivar Text", "Canela", "Bodoni Moda", "Libre Caslon Display", Georgia, serif;
+
+  --exposure-long-color: var(--chart-long-dark);
+  --exposure-short-color: var(--chart-short-dark);
+  --chart-grid: rgba(154, 171, 214, 0.18);
+  --chart-1: #cf70ad;
+  --chart-2: #63add8;
+  --chart-3: #dda15a;
+  --chart-4: #7fc1a1;
+  --chart-5: #cf7f92;
+  --chart-6: #c4cd72;
+  --chart-7: #b789d6;
+  --chart-8: #7aa7e0;
+  --chart-9: #a7c37a;
+  --positive: var(--text-positive);
+  --negative: var(--text-negative);
+  --public-intro-card-surface: var(--surface-editorial-dark);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-primary: var(--canvas-light-mid);
+  --bg-primary-top: var(--canvas-light-top);
+  --bg-primary-mid: var(--canvas-light-mid);
+  --bg-primary-bottom: var(--canvas-light-bottom);
+  --bg-card: var(--surface-base-light);
+  --bg-card-hover: var(--surface-base-hover-light);
+  --surface-base: var(--surface-base-light);
+  --surface-base-hover: var(--surface-base-hover-light);
+  --surface-elevated: var(--surface-elevated-light);
+  --surface-soft: var(--surface-soft-light);
+  --surface-popover: var(--surface-popover-light);
+  --surface-tooltip: var(--surface-tooltip-light);
+  --surface-row-hover: var(--surface-row-hover-light);
+  --surface-row-selected: var(--surface-row-selected-light);
+  --surface-raised: rgba(252, 251, 248, 0.92);
+  --border: var(--rule-base-light);
+  --rule-strong: var(--rule-strong-light);
+  --rule-focus: var(--rule-focus-light);
+  --rule-soft: var(--rule-soft-light);
+  --text-primary: var(--ink-primary-light);
+  --text-secondary: var(--ink-secondary-light);
+  --text-muted: var(--ink-muted-light);
+  --text-folio: var(--ink-folio-light);
+  --surface-table-header: var(--surface-table-header-light);
+  --shadow-color: 86, 92, 104;
+  --shadow-1: 0 10px 24px rgba(var(--shadow-color), 0.10);
+  --shadow-2: 0 18px 40px rgba(var(--shadow-color), 0.16);
+  --shadow-3: 0 24px 80px rgba(var(--shadow-color), 0.24);
+  --text-positive: var(--signal-positive-light);
+  --text-negative: var(--signal-negative-light);
+  --signal-neutral: var(--signal-neutral-light);
+  --tab-active: rgba(26, 28, 34, 0.92);
+  --chart-tooltip-bg: var(--surface-tooltip-light);
+  --chart-tooltip-border: var(--rule-base-light);
+  --chart-tooltip-text: rgba(60, 67, 78, 0.82);
+  --exposure-long-color: var(--chart-long-light);
+  --exposure-short-color: var(--chart-short-light);
+  --positive: var(--signal-positive-light);
+  --negative: var(--signal-negative-light);
+  --positive-rgb: 69, 147, 111;
+  --negative-rgb: 174, 70, 96;
+  --analytics-cuse-rgb: 192, 99, 164;
+  --analytics-cpar-rgb: 90, 158, 203;
+  --analytics-cmac-rgb: 229, 161, 95;
+  --chart-grid: rgba(111, 118, 131, 0.2);
+  --chart-1: #ba5f98;
+  --chart-2: #4f8eb4;
+  --chart-3: #c58b49;
+  --chart-4: #5f9d80;
+  --chart-5: #bd6d81;
+  --chart-6: #a6af60;
+  --chart-7: #9b74ba;
+  --chart-8: #688fbe;
+  --chart-9: #8eaa62;
+  --public-intro-card-surface: var(--surface-editorial-light);
+  --accent-yellow: var(--signal-warning-light);
+  --nav-bg-rgb: 239, 238, 233;
+  --nav-bg-positions-rgb: 245, 244, 240;
+  --nav-shadow-rgb: 86, 92, 104;
+  --neo-dot-rgb: 36, 44, 54;
+  --flow-ribbon-a0-rgb: 119, 144, 170;
+  --flow-ribbon-a1-rgb: 154, 142, 160;
+  --flow-ribbon-b0-rgb: 112, 120, 129;
+  --flow-ribbon-b1-rgb: 114, 143, 149;
+}

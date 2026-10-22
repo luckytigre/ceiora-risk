@@ -287,3 +287,17 @@ The top header is now route-family aware:
 - the global menu also exposes `/settings`, which now owns the cPAR drilldown history-mode toggle
 
 The cUSE4 operator-status signal and `serve-refresh` control are intentionally suppressed on `/cpar*` routes so the first cPAR slice does not imply operator coupling that has not been implemented.
+
+## Shared DASH integration (2026-10-22)
+
+`/dash?model=cpar` is the shared DASH workspace with its own cUSE/cPAR selector.
+It mounts only the selected family data owner; cPAR reads aggregate `/api/cpar/risk`
+and charts `display_factor_chart` through the cPAR chart component. The ledger
+retains account + RIC holdings identities; aggregate rows cannot become allocation
+legs. Position risk_mix retains its existing thresholded basis and is not copied
+from aggregate rows to individual accounts. Missing or quantity-mismatched mixes
+remain unavailable. The selector stays usable while a model is loading or failed.
+
+The isolated UI port currently leaves thesis capability disabled. Production
+persistence, authenticated provider lifetime and all holdings mutation invariants
+must pass the gates in `../implementation/LITE_UI_PORT_PLAN.md` before activation.

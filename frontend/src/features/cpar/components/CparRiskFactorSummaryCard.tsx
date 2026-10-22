@@ -63,18 +63,31 @@ export default function CparRiskFactorSummaryCard({
 
   return (
     <section className="chart-card" data-testid="cpar-risk-factor-summary">
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
-        <h3 style={{ margin: 0 }}>Risk — {modeLabel}</h3>
-        <span
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.04em",
-            color: "var(--text-muted)",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {factorRows.length} factors · Pre Var {formatCparNumber(preHedgeVarianceProxy, 3)}
-        </span>
+      <div className="thesis-section-heading risk-module-heading">
+        <div className="risk-module-title-line">
+          <h3>Risk — {modeLabel}</h3>
+          <span className="risk-module-meta">{factorRows.length} factors · Pre Var {formatCparNumber(preHedgeVarianceProxy, 3)}</span>
+        </div>
+        <div className="settings-segmented-control" role="tablist" aria-label="cPAR exposure mode">
+          {MODES.map((option) => {
+            const active = mode === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`settings-segmented-option${active ? " active" : ""}`}
+                onClick={() => {
+                  setMode(option.key);
+                  setSelectedFactorId(null);
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {factorRows.length === 0 ? (
@@ -83,28 +96,6 @@ export default function CparRiskFactorSummaryCard({
         </div>
       ) : (
         <>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-            <div className="settings-segmented-control" role="tablist" aria-label="cPAR exposure mode">
-              {MODES.map((option) => {
-                const active = mode === option.key;
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={`settings-segmented-option${active ? " active" : ""}`}
-                    onClick={() => {
-                      setMode(option.key);
-                      setSelectedFactorId(null);
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
           <CparRiskFactorLoadingsChart
             rows={factorRows}
             mode={mode}

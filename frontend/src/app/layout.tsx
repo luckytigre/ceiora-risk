@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
@@ -7,6 +8,8 @@ import { AuthSessionProvider } from "@/components/AuthSessionContext";
 import { BackgroundProvider } from "@/components/BackgroundContext";
 import Neo2DotBackground from "@/components/Neo2DotBackground";
 import TabNav from "@/components/TabNav";
+import ConfirmDialogProvider from "@/components/ConfirmDialogProvider";
+import StickyTableHeaders from "@/components/StickyTableHeaders";
 import PageTransition from "@/components/PageTransition";
 import { appAuthProvider, neonAuthProjectUrl } from "@/lib/appAuth";
 import { APP_AUTH_BOOTSTRAP_HEADER, decodeAuthSessionBootstrapHeader } from "@/lib/authSessionBootstrap";
@@ -39,17 +42,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body data-theme="dark" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
         <AuthSessionProvider neonProjectUrl={projectUrl} initialState={initialAuthState}>
-          <AppSettingsProvider>
-            <BackgroundProvider>
-              <Neo2DotBackground />
-              <TabNav />
-              <main className="dash-main">
-                <AuthSessionGate>
-                  <PageTransition>{children}</PageTransition>
-                </AuthSessionGate>
-              </main>
-            </BackgroundProvider>
-          </AppSettingsProvider>
+          <ConfirmDialogProvider>
+            <AppSettingsProvider>
+              <BackgroundProvider>
+                <Neo2DotBackground />
+                <StickyTableHeaders />
+                <Suspense fallback={null}><TabNav /></Suspense>
+                <main className="dash-main">
+                  <AuthSessionGate>
+                    <PageTransition>{children}</PageTransition>
+                  </AuthSessionGate>
+                </main>
+              </BackgroundProvider>
+            </AppSettingsProvider>
+          </ConfirmDialogProvider>
         </AuthSessionProvider>
       </body>
     </html>

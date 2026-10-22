@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { mutate } from "swr";
 import { useAuthSession } from "@/components/AuthSessionContext";
+import { useConfirm } from "@/components/ConfirmDialogProvider";
 import {
   applyPortfolioWhatIf,
   previewPortfolioWhatIf,
@@ -48,6 +49,7 @@ export function useWhatIfScenarioLab({
   onPreviewTicker,
 }: UseWhatIfScenarioLabArgs) {
   const { session, context } = useAuthSession();
+  const confirm = useConfirm();
   const { data: accountsData } = useHoldingsAccounts();
   const { data: holdingsData } = useHoldingsPositions(null);
 
@@ -405,11 +407,13 @@ export function useWhatIfScenarioLab({
       const liveQty = Number(liveQuantityByScenarioKey.get(scenarioKey(row.account_id, row.ticker, row.ric)) || 0);
       return Math.abs(liveQty) > 1e-12 && Math.abs(liveQty + qty) <= 1e-12;
     });
-    if (
-      hasFullRemovalFromDelta
-      && !window.confirm("This trade delta fully closes one or more positions. Apply these changes and run RECALC?")
-    ) {
-      return;
+    if (hasFullRemovalFromDelta) {
+      const proceed = await confirm({
+        title: "Close positions and recalculate?",
+        body: "This trade delta fully closes one or more positions. Apply these changes and run RECALC?",
+        dangerText: "Apply and recalculate",
+      });
+      if (!proceed) return;
     }
 
     try {

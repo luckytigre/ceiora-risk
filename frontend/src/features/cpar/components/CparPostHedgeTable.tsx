@@ -48,11 +48,11 @@ export default function CparPostHedgeTable({
           <table>
             <thead>
               <tr>
-                <th onClick={() => handleSort("factor")}>Factor{arrow("factor")}</th>
-                <th onClick={() => handleSort("group")}>Group{arrow("group")}</th>
-                <th className="text-right" onClick={() => handleSort("pre")}>Pre{arrow("pre")}</th>
-                <th className="text-right" onClick={() => handleSort("hedge")}>Hedge{arrow("hedge")}</th>
-                <th className="text-right" onClick={() => handleSort("post")}>Post{arrow("post")}</th>
+                <th className="sortable" onClick={() => handleSort("factor")}>Factor{arrow("factor")}</th>
+                <th className="sortable" onClick={() => handleSort("group")}>Group{arrow("group")}</th>
+                <th className="text-right sortable" onClick={() => handleSort("pre")}>Pre{arrow("pre")}</th>
+                <th className="text-right sortable" onClick={() => handleSort("hedge")}>Hedge{arrow("hedge")}</th>
+                <th className="text-right sortable" onClick={() => handleSort("post")}>Post{arrow("post")}</th>
               </tr>
             </thead>
             <tbody>

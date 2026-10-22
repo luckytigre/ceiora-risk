@@ -392,7 +392,7 @@ export default function ManualPositionEditor({
           onClick={onUpsert}
           disabled={busy}
         >
-          {busy ? "Applying..." : actionLabel}
+          {busy ? "Applying…" : actionLabel}
         </button>
       </div>
     </div>

@@ -163,12 +163,14 @@ function drawHeatmap(
 
   // Label font size scales with cell size
   const labelFontSize = Math.max(9, Math.min(12, Math.round(cellSize * 0.42)));
+  const labelCenterOffset = step * 0.5;
 
-  // Left-edge labels
+  // Left-edge labels. The first factor's diagonal endpoint has no visible cell
+  // on this edge and is already labeled at the opposite end of the right edge.
   const leftHighlight = hover !== null ? hover.j : -1;
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  for (let j = 0; j < n; j++) {
+  for (let j = 1; j < n; j++) {
     const rx = cx0 + (0 + j - (n - 1)) * step;
     const ry = cy0 + j * step;
     const active = j === leftHighlight;
@@ -176,13 +178,14 @@ function drawHeatmap(
     ctx.font = active
       ? `600 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
       : `${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-    ctx.fillText(labels[j], rx - d - 5, ry);
+    ctx.fillText(labels[j], rx + labelCenterOffset - d - 5, ry + labelCenterOffset);
   }
 
-  // Right-edge labels
+  // Right-edge labels. Mirror the omission at the diagonal endpoint; the final
+  // factor remains labeled at the opposite end of the left edge.
   const rightHighlight = hover !== null ? hover.i : -1;
   ctx.textAlign = "left";
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n - 1; i++) {
     const rx = cx0 + i * step;
     const ry = cy0 + ((n - 1) - i) * step;
     const active = i === rightHighlight;
@@ -190,7 +193,7 @@ function drawHeatmap(
     ctx.font = active
       ? `600 ${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
       : `${labelFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-    ctx.fillText(labels[i], rx + d + 5, ry);
+    ctx.fillText(labels[i], rx - labelCenterOffset + d + 5, ry + labelCenterOffset);
   }
 }
 

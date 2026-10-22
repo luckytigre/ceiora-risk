@@ -137,7 +137,7 @@ export default function TickerQuoteCard({
   const returnText = !historyRequested
     ? "Open for 5Y trend"
     : historyLoading
-      ? "Loading 5Y trend..."
+      ? "Loading 5Y trend…"
       : historySummary?.totalReturnPct != null
         ? `${historySummary.totalReturnPct >= 0 ? "+" : ""}${historySummary.totalReturnPct.toFixed(1)}%`
         : "—";
@@ -320,7 +320,7 @@ export default function TickerQuoteCard({
               ) : (
                 <div className="explore-quote-chart-empty">
                   {expanded && hasModelExposures && factorVisualsLoading
-                    ? "Loading factor metadata..."
+                    ? "Loading factor metadata…"
                     : hasModelExposures
                     ? "Expand to load factor exposures."
                     : factorVisualsUnavailable

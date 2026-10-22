@@ -177,7 +177,7 @@ export default function CparPositionHedgePopover({
         </button>
       </div>
 
-      {isLoading && !data ? <CparInlineLoadingState message="Loading row hedge packages..." /> : null}
+      {isLoading && !data ? <CparInlineLoadingState message="Loading row hedge packages…" /> : null}
 
       {error ? (
         <InlineApiError

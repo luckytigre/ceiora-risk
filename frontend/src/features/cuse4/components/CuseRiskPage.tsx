@@ -62,7 +62,7 @@ function CuseRiskPageLoadingCards() {
         <div className="detail-history-empty loading-pulse">Loading headline factor bars...</div>
       </div>
       <div className="chart-card">
-        <h3>Positions (Factor Risk Mix)</h3>
+        <h3>Positions</h3>
         <div className="detail-history-empty loading-pulse">Loading holdings snapshot...</div>
       </div>
     </div>
@@ -324,9 +324,9 @@ export default function ExposuresPage() {
   return (
     <div>
       <div className="chart-card" style={{ marginBottom: 12 }}>
-        <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
-        <div className="section-subtitle">
-          {COMBINED_DECOMP_SUBTITLE}
+        <div className="module-title-with-help">
+          <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
+          <HelpLabel label={RISK_DECOMP_SECTION_TITLE} plain={COMBINED_DECOMP_SUBTITLE} iconOnly />
         </div>
         <RiskDecompChart
           rows={[
@@ -337,49 +337,20 @@ export default function ExposuresPage() {
       </div>
 
       <div className="chart-card">
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>
-            Risk — {MODES.find((m) => m.key === renderedMode)?.label}
-          </h3>
-          {crossSection && (
-            <span style={{
-              fontSize: 10,
-              letterSpacing: "0.04em",
-              color: "var(--text-muted)",
-              fontVariantNumeric: "tabular-nums",
-            }}>
-              {compactTruthSummary}
-            </span>
-          )}
-        </div>
-        {pendingModeLabel && !modeLoadError && (
-          <div className="section-subtitle">
-            Loading {pendingModeLabel} bars; keeping {MODES.find((entry) => entry.key === renderedMode)?.label} visible.
+        <div className="thesis-section-heading risk-module-heading">
+          <div className="risk-module-title-line">
+            <h3>Risk — {MODES.find((m) => m.key === renderedMode)?.label}</h3>
+            {crossSection ? (
+              <HelpLabel label="Risk exposure data" plain={compactTruthSummary} iconOnly />
+            ) : null}
+            {hasProjectedExtensions ? (
+              <HelpLabel
+                label="Risk exposure methodology"
+                plain="Non-core layers extend the base bars: Fundamental Projection first, Returns Projection outermost."
+                iconOnly
+              />
+            ) : null}
           </div>
-        )}
-        {modeLoadError && (
-          <div className="detail-history-empty" style={{ marginBottom: 10 }}>
-            Unable to load {MODES.find((entry) => entry.key === mode)?.label ?? "selected"} right now. Keeping{" "}
-            {MODES.find((entry) => entry.key === renderedMode)?.label ?? "current"} visible.
-          </div>
-        )}
-        {isAccountScoped && (
-          <div className="section-subtitle">
-            Scoped previews load deeper modes on demand from the current account snapshot.
-          </div>
-        )}
-        {hasProjectedExtensions && (
-          <div
-            style={{
-              marginBottom: 10,
-              fontSize: 12,
-              color: "var(--text-secondary)",
-            }}
-          >
-            Non-core layers extend the base bars: Fundamental Projection first, Returns Projection outermost.
-          </div>
-        )}
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
           <div className="settings-segmented-control" role="tablist" aria-label="Exposure mode">
             {MODES.map((entry) => {
               const active = mode === entry.key;
@@ -398,6 +369,22 @@ export default function ExposuresPage() {
             })}
           </div>
         </div>
+        {pendingModeLabel && !modeLoadError && (
+          <div className="section-subtitle">
+            Loading {pendingModeLabel} bars; keeping {MODES.find((entry) => entry.key === renderedMode)?.label} visible.
+          </div>
+        )}
+        {modeLoadError && (
+          <div className="detail-history-empty" style={{ marginBottom: 10 }}>
+            Unable to load {MODES.find((entry) => entry.key === mode)?.label ?? "selected"} right now. Keeping{" "}
+            {MODES.find((entry) => entry.key === renderedMode)?.label ?? "current"} visible.
+          </div>
+        )}
+        {isAccountScoped && (
+          <div className="section-subtitle">
+            Scoped previews load deeper modes on demand from the current account snapshot.
+          </div>
+        )}
         <ExposureBarChart
           factors={chartFactors}
           mode={renderedMode as "raw" | "sensitivity" | "risk_contribution"}
@@ -425,7 +412,6 @@ export default function ExposuresPage() {
       )}
 
       <div className="chart-card" style={{ marginTop: 12 }}>
-        <h3>Positions (Factor Risk Mix)</h3>
         <ExposurePositionsTable positions={positions} />
       </div>
 
@@ -435,7 +421,7 @@ export default function ExposuresPage() {
           <table>
             <thead>
               <tr>
-                <th onClick={() => handleRiskSort("factor_id")}>
+                <th className="sortable" onClick={() => handleRiskSort("factor_id")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label="Factor"
@@ -449,7 +435,7 @@ export default function ExposuresPage() {
                     {riskArrow("factor_id")}
                   </span>
                 </th>
-                <th onClick={() => handleRiskSort("category")}>
+                <th className="sortable" onClick={() => handleRiskSort("category")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label="Category"
@@ -463,7 +449,7 @@ export default function ExposuresPage() {
                     {riskArrow("category")}
                   </span>
                 </th>
-                <th className="text-right" onClick={() => handleRiskSort("exposure")}>
+                <th className="text-right sortable" onClick={() => handleRiskSort("exposure")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label="Exposure"
@@ -477,7 +463,7 @@ export default function ExposuresPage() {
                     {riskArrow("exposure")}
                   </span>
                 </th>
-                <th className="text-right" onClick={() => handleRiskSort("factor_vol")}>
+                <th className="text-right sortable" onClick={() => handleRiskSort("factor_vol")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label="Factor Vol"
@@ -491,7 +477,7 @@ export default function ExposuresPage() {
                     {riskArrow("factor_vol")}
                   </span>
                 </th>
-                <th className="text-right" onClick={() => handleRiskSort("sensitivity")}>
+                <th className="text-right sortable" onClick={() => handleRiskSort("sensitivity")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label="Sensitivity"
@@ -505,7 +491,7 @@ export default function ExposuresPage() {
                     {riskArrow("sensitivity")}
                   </span>
                 </th>
-                <th className="text-right" onClick={() => handleRiskSort("marginal_var_contrib")}>
+                <th className="text-right sortable" onClick={() => handleRiskSort("marginal_var_contrib")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label="Marg. Var"
@@ -520,7 +506,7 @@ export default function ExposuresPage() {
                     {riskArrow("marginal_var_contrib")}
                   </span>
                 </th>
-                <th className="text-right" onClick={() => handleRiskSort("pct_of_total")}>
+                <th className="text-right sortable" onClick={() => handleRiskSort("pct_of_total")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label="% Total"

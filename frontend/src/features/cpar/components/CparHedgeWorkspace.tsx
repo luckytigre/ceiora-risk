@@ -31,7 +31,7 @@ function CparHedgeWorkspaceInner() {
   }, [accountOptions, selectedScope]);
 
   if (isLoading && !data) {
-    return <CparPageLoadingState message="Loading cPAR hedge workspace..." />;
+    return <CparPageLoadingState message="Loading cPAR hedge workspace…" />;
   }
 
   return (
@@ -82,7 +82,7 @@ function CparHedgeWorkspaceInner() {
 
 export default function CparHedgeWorkspace() {
   return (
-    <Suspense fallback={<CparPageLoadingState message="Loading cPAR hedge workspace..." />}>
+    <Suspense fallback={<CparPageLoadingState message="Loading cPAR hedge workspace…" />}>
       <CparHedgeWorkspaceInner />
     </Suspense>
   );

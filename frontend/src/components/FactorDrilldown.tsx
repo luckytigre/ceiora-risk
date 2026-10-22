@@ -6,6 +6,7 @@ import TableRowToggle from "@/components/TableRowToggle";
 import FactorHistoryChart from "@/components/FactorHistoryChart";
 import HelpLabel from "@/components/HelpLabel";
 import MethodLabel from "@/components/MethodLabel";
+import MethodHelpLabel from "@/components/MethodHelpLabel";
 import { useFactorHistory } from "@/hooks/useCuse4Api";
 import { shortFactorLabel } from "@/lib/factorLabels";
 import type { FactorCatalogEntry } from "@/lib/types/cuse4";
@@ -201,15 +202,15 @@ export default function FactorDrilldown({
         <table>
           <thead>
             <tr>
-              <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
-              <th onClick={() => handleSort("method")}>Method{arrow("method")}</th>
-              <th className="text-right" onClick={() => handleSort("weight")}>
+              <th className="sortable" onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
+              <th className="sortable" onClick={() => handleSort("method")}><span className="col-help-wrap"><MethodHelpLabel family="cuse" />{arrow("method")}</span></th>
+              <th className="text-right sortable" onClick={() => handleSort("weight")}>
                 <span className="col-help-wrap">
                   <HelpLabel label="Weight" plain={hints.weight.plain} math={hints.weight.math} />
                   {arrow("weight")}
                 </span>
               </th>
-              <th className="text-right" onClick={() => handleSort("exposure")}>
+              <th className="text-right sortable" onClick={() => handleSort("exposure")}>
                 <span className="col-help-wrap">
                   <HelpLabel
                     label={isRiskContribution ? "Raw Loading" : "Loading"}
@@ -220,7 +221,7 @@ export default function FactorDrilldown({
                 </span>
               </th>
               {(isSensitivity || isRiskContribution) && (
-                <th className="text-right" onClick={() => handleSort("sensitivity")}>
+                <th className="text-right sortable" onClick={() => handleSort("sensitivity")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label={isRiskContribution ? "Loading × CovAdj" : "Loading × 1σ Vol"}
@@ -231,7 +232,7 @@ export default function FactorDrilldown({
                   </span>
                 </th>
               )}
-              <th className="text-right" onClick={() => handleSort("contribution")}>
+              <th className="text-right sortable" onClick={() => handleSort("contribution")}>
                 <span className="col-help-wrap">
                   <HelpLabel
                     label={isRiskContribution

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "node scripts/assert_node_version.mjs && next dev -H 127.0.0.1 -p 3000",
-    "build": "node scripts/assert_node_version.mjs && NEXT_TELEMETRY_DISABLED=1 next build",
+    "build": "node scripts/assert_node_version.mjs && node scripts/check_css_vars.mjs && node scripts/check_css_raw_values.mjs && node scripts/check_contrast.mjs && NEXT_TELEMETRY_DISABLED=1 next build",
     "clean:artifacts": "rm -rf .next",
     "build:compile": "node scripts/assert_node_version.mjs && npm run clean:artifacts && NEXT_TELEMETRY_DISABLED=1 next build --experimental-build-mode compile && node scripts/assert_build_id.mjs",
     "build:generate": "node scripts/assert_node_version.mjs && node scripts/run_generate_build.mjs",
@@ -25,7 +25,10 @@
     "test:cpar-portfolio": "node scripts/cpar_portfolio_smoke.mjs",
     "test:cpar-portfolio-whatif": "node scripts/cpar_portfolio_whatif_smoke.mjs",
     "test:explore-whatif": "node scripts/explore_whatif_refresh_regression.mjs",
-    "test:explore-whatif-busy": "node scripts/explore_whatif_refresh_busy_regression.mjs"
+    "test:explore-whatif-busy": "node scripts/explore_whatif_refresh_busy_regression.mjs",
+    "test:css-vars": "node scripts/check_css_vars.mjs",
+    "test:contrast": "node scripts/check_contrast.mjs",
+    "test:css-raw": "node scripts/check_css_raw_values.mjs"
   },
   "dependencies": {
     "@neondatabase/auth": "^0.2.0-beta.1",

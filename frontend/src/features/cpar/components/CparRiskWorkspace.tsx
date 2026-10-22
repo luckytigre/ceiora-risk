@@ -3,6 +3,7 @@
 import { Suspense, useMemo } from "react";
 import { CparPageLoadingState } from "@/features/cpar/components/CparLoadingState";
 import InlineApiError from "@/components/InlineApiError";
+import HelpLabel from "@/components/HelpLabel";
 import CparRiskCovarianceSection from "@/features/cpar/components/CparRiskCovarianceSection";
 import CparRiskDecompChart from "@/features/cpar/components/CparRiskDecompChart";
 import CparRiskFactorSummaryCard from "@/features/cpar/components/CparRiskFactorSummaryCard";
@@ -22,8 +23,10 @@ function CparRiskLoadingCards() {
   return (
     <div className="cpar-page">
       <section className="chart-card" data-testid="cpar-risk-loading">
-        <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
-        <div className="section-subtitle">{COMBINED_DECOMP_SUBTITLE}</div>
+        <div className="module-title-with-help">
+          <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
+          <HelpLabel label={RISK_DECOMP_SECTION_TITLE} plain={COMBINED_DECOMP_SUBTITLE} iconOnly />
+        </div>
         <div className="detail-history-empty loading-pulse">Loading first cPAR risk snapshot...</div>
       </section>
       <section className="chart-card">
@@ -70,9 +73,9 @@ function CparRiskWorkspaceInner() {
       ) : normalizedRisk ? (
         <>
           <div className="chart-card" style={{ marginBottom: 12 }}>
-            <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
-            <div className="section-subtitle">
-              {COMBINED_DECOMP_SUBTITLE}
+            <div className="module-title-with-help">
+              <h3>{RISK_DECOMP_SECTION_TITLE}</h3>
+              <HelpLabel label={RISK_DECOMP_SECTION_TITLE} plain={COMBINED_DECOMP_SUBTITLE} iconOnly />
             </div>
             <CparRiskDecompChart
               rows={[
@@ -98,7 +101,7 @@ function CparRiskWorkspaceInner() {
 
 export default function CparRiskWorkspace() {
   return (
-    <Suspense fallback={<CparPageLoadingState message="Loading cPAR risk..." />}>
+    <Suspense fallback={<CparPageLoadingState message="Loading cPAR risk…" />}>
       <CparRiskWorkspaceInner />
     </Suspense>
   );

@@ -318,9 +318,9 @@ function LoginShell({
   onModeChange,
   onSubmit,
 }: LoginShellProps) {
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const neonConfigured = provider !== "neon" || Boolean(neonProjectUrl);
   const sharedDisabled = provider === "shared" && !sharedLoginAllowed;
-  const providerLabel = provider === "neon" ? "Neon Auth" : "Shared access";
   const submitLabel =
     provider === "neon" ? (mode === "signup" ? "Create account" : "Sign in") : "Sign in";
   const routeErrorMessage =
@@ -353,24 +353,20 @@ function LoginShell({
       </header>
       <div className="public-login-page">
         <div className="public-login-stage">
-          <aside className="public-login-masthead">
-            <span className="public-login-masthead-rule" aria-hidden="true" />
-            <h1 className="public-login-headline">
-              <em>{provider === "neon" ? "Pick up" : "Resume"}</em> where<br />
-              you left off
-            </h1>
-            <p className="public-login-copy">
-              {provider === "neon"
-                ? "Personal accounts, personal portfolios, one private session at a time."
-                : "Portfolio factor risk — covariance, exposures, decomposition. Opened in a single private session."}
-            </p>
-          </aside>
-
           <section className="public-login-shell">
+            <header className="public-login-intro">
+              <BrandLockup
+                href="/"
+                className="public-login-brand"
+                markClassName="public-login-brand-mark"
+                wordmarkClassName="public-login-brand-wordmark"
+                markTitle="Ceiora"
+              />
+            </header>
+
             <form onSubmit={onSubmit} className="public-login-form">
-              <div className="public-login-provider-row">
-                <span className="public-login-provider-label">{providerLabel}</span>
-                {provider === "neon" && showCredentialFields && (
+              {provider === "neon" && showCredentialFields ? (
+                <div className="public-login-provider-row">
                   <div className="public-login-mode-toggle" role="tablist" aria-label="Authentication mode">
                     <button
                       type="button"
@@ -387,46 +383,57 @@ function LoginShell({
                       Create account
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : null}
 
               {provider === "neon" && mode === "signup" && showCredentialFields && (
                 <label className="public-login-field">
+                  <span className="public-login-field-label">Display name</span>
                   <input
                     type="text"
                     autoComplete="name"
                     value={displayName}
                     onChange={(event) => onDisplayNameChange?.(event.target.value)}
-                    placeholder=" "
+                    placeholder="Your name"
                   />
-                  <span className="public-login-field-label">Display name</span>
                 </label>
               )}
 
               {showCredentialFields ? (
                 <>
                   <label className="public-login-field">
+                    <span className="public-login-field-label">
+                      {provider === "neon" ? "Email" : "Username"}
+                    </span>
                     <input
                       type={provider === "neon" ? "email" : "text"}
                       autoComplete={provider === "neon" ? "email" : "username"}
                       value={username}
                       onChange={(event) => onUsernameChange?.(event.target.value)}
-                      placeholder=" "
+                      placeholder={provider === "neon" ? "name@company.com" : "Enter your username"}
                     />
-                    <span className="public-login-field-label">
-                      {provider === "neon" ? "Email" : "Username"}
-                    </span>
                   </label>
 
                   <label className="public-login-field">
-                    <input
-                      type="password"
-                      autoComplete={provider === "neon" && mode === "signup" ? "new-password" : "current-password"}
-                      value={password}
-                      onChange={(event) => onPasswordChange?.(event.target.value)}
-                      placeholder=" "
-                    />
                     <span className="public-login-field-label">Password</span>
+                    <span className="public-login-password-control">
+                      <input
+                        type={passwordVisible ? "text" : "password"}
+                        autoComplete={provider === "neon" && mode === "signup" ? "new-password" : "current-password"}
+                        value={password}
+                        onChange={(event) => onPasswordChange?.(event.target.value)}
+                        placeholder="Enter your password"
+                      />
+                      <button
+                        type="button"
+                        className="public-login-password-toggle"
+                        aria-label={passwordVisible ? "Hide password" : "Show password"}
+                        aria-pressed={passwordVisible}
+                        onClick={() => setPasswordVisible((visible) => !visible)}
+                      >
+                        {passwordVisible ? "Hide" : "Show"}
+                      </button>
+                    </span>
                   </label>
                 </>
               ) : null}
@@ -464,9 +471,21 @@ function LoginShell({
                     className="public-login-submit"
                     disabled={status === "submitting" || !authConfigured || sharedDisabled}
                   >
-                    {status === "submitting" ? `${submitLabel}…` : submitLabel}
-                    <span className="public-login-submit-arrow" aria-hidden="true">&rarr;</span>
+                    <span className="public-login-submit-label">
+                      {status === "submitting" ? `${submitLabel}…` : submitLabel}
+                    </span>
+                    <span className="public-login-submit-arrow" aria-hidden="true">→</span>
                   </button>
+                </div>
+              ) : null}
+
+              {showCredentialFields ? (
+                <div className="public-login-secondary-actions">
+                  <button type="button" className="public-login-secondary-link">Forgot password?</button>
+                  <span className="public-login-signup-prompt">
+                    New to Ceiora?
+                    <button type="button" className="public-login-secondary-link">Sign up</button>
+                  </span>
                 </div>
               ) : null}
 

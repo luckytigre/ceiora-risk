@@ -209,10 +209,10 @@ export default function CparRiskFactorDrilldown({
         {historyLoading ? (
           <div className="detail-history-empty loading-pulse">
             {isMarketFactor
-              ? "Loading 5Y daily factor history..."
+              ? "Loading 5Y daily factor history…"
               : usesMarketAdjustedHistory
-                ? "Loading 5Y daily market-adjusted history..."
-                : "Loading 5Y daily residual history..."}
+                ? "Loading 5Y daily market-adjusted history…"
+                : "Loading 5Y daily residual history…"}
           </div>
         ) : historyError ? (
           <div className="detail-history-empty">
@@ -232,16 +232,16 @@ export default function CparRiskFactorDrilldown({
         <table>
           <thead>
             <tr>
-              <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
-              <th onClick={() => handleSort("coverage")}>Coverage{arrow("coverage")}</th>
-              <th className="text-right" onClick={() => handleSort("market_value")}>Mkt Value{arrow("market_value")}</th>
-              <th className="text-right" onClick={() => handleSort("weight")}>
+              <th className="sortable" onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
+              <th className="sortable" onClick={() => handleSort("coverage")}>Coverage{arrow("coverage")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("market_value")}>Mkt Value{arrow("market_value")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("weight")}>
                 <span className="col-help-wrap">
                   <HelpLabel label="Weight" plain={hints.weight.plain} math={hints.weight.math} />
                   {arrow("weight")}
                 </span>
               </th>
-              <th className="text-right" onClick={() => handleSort("beta")}>
+              <th className="text-right sortable" onClick={() => handleSort("beta")}>
                 <span className="col-help-wrap">
                   <HelpLabel
                     label={isRiskContribution ? "Raw Loading" : "Loading"}
@@ -252,7 +252,7 @@ export default function CparRiskFactorDrilldown({
                 </span>
               </th>
               {(isSensitivity || isRiskContribution) ? (
-                <th className="text-right" onClick={() => handleSort("sensitivity")}>
+                <th className="text-right sortable" onClick={() => handleSort("sensitivity")}>
                   <span className="col-help-wrap">
                     <HelpLabel
                       label={isRiskContribution ? "Loading × CovAdj" : "Loading × 1σ Vol"}
@@ -263,7 +263,7 @@ export default function CparRiskFactorDrilldown({
                   </span>
                 </th>
               ) : null}
-              <th className="text-right" onClick={() => handleSort("contribution")}>
+              <th className="text-right sortable" onClick={() => handleSort("contribution")}>
                 <span className="col-help-wrap">
                   <HelpLabel
                     label={isRiskContribution

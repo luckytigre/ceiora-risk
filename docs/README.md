@@ -48,6 +48,9 @@ These are the current repo-level decisions worth knowing before you start editin
 
 ## Temporary Active Workstreams
 
+- `implementation/LITE_UI_PORT_PLAN.md` — Lite UI integration plan, model-neutral DASH, and gated thesis-backend work.
+
+
 Keep these only while the work is actually active:
 
 - `operations/FULL_CLOUD_COMPUTE_CUTOVER_PLAN.md`

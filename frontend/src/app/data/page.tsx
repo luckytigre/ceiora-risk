@@ -58,7 +58,7 @@ export default function DataPage() {
   });
 
   if (isLoading) {
-    return <AnalyticsLoadingViz message="Loading data diagnostics..." />;
+    return <AnalyticsLoadingViz message="Loading data diagnostics…" />;
   }
   if (error) {
     return <ApiErrorState surface="data diagnostics" error={error} />;
@@ -227,12 +227,12 @@ export default function DataPage() {
           <table>
             <thead>
               <tr>
-                <th onClick={() => handleSourceTableSort("dataset")}>Dataset{sourceTableArrow("dataset")}</th>
-                <th className="text-right" onClick={() => handleSourceTableSort("rows")}>Rows{sourceTableArrow("rows")}</th>
-                <th className="text-right" onClick={() => handleSourceTableSort("tickers")}>Tickers{sourceTableArrow("tickers")}</th>
-                <th onClick={() => handleSourceTableSort("date_range")}>Date Range{sourceTableArrow("date_range")}</th>
-                <th onClick={() => handleSourceTableSort("updated")}>Last Updated{sourceTableArrow("updated")}</th>
-                <th onClick={() => handleSourceTableSort("job")}>Last Job{sourceTableArrow("job")}</th>
+                <th className="sortable" onClick={() => handleSourceTableSort("dataset")}>Dataset{sourceTableArrow("dataset")}</th>
+                <th className="text-right sortable" onClick={() => handleSourceTableSort("rows")}>Rows{sourceTableArrow("rows")}</th>
+                <th className="text-right sortable" onClick={() => handleSourceTableSort("tickers")}>Tickers{sourceTableArrow("tickers")}</th>
+                <th className="sortable" onClick={() => handleSourceTableSort("date_range")}>Date Range{sourceTableArrow("date_range")}</th>
+                <th className="sortable" onClick={() => handleSourceTableSort("updated")}>Last Updated{sourceTableArrow("updated")}</th>
+                <th className="sortable" onClick={() => handleSourceTableSort("job")}>Last Job{sourceTableArrow("job")}</th>
               </tr>
             </thead>
             <tbody>
@@ -437,9 +437,9 @@ export default function DataPage() {
           <table>
             <thead>
               <tr>
-                <th onClick={() => handleCacheSort("key")}>Cache Key{cacheArrow("key")}</th>
-                <th onClick={() => handleCacheSort("description")}>Description{cacheArrow("description")}</th>
-                <th onClick={() => handleCacheSort("updated")}>Last Refreshed (UTC){cacheArrow("updated")}</th>
+                <th className="sortable" onClick={() => handleCacheSort("key")}>Cache Key{cacheArrow("key")}</th>
+                <th className="sortable" onClick={() => handleCacheSort("description")}>Description{cacheArrow("description")}</th>
+                <th className="sortable" onClick={() => handleCacheSort("updated")}>Last Refreshed (UTC){cacheArrow("updated")}</th>
               </tr>
             </thead>
             <tbody>

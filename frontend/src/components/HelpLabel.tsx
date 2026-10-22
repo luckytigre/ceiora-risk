@@ -12,11 +12,12 @@ export type HelpInterpretability = {
 type HelpLabelProps = {
   label: string;
   plain: string;
-  math: string;
+  math?: string;
   interpret?: HelpInterpretability;
+  iconOnly?: boolean;
 };
 
-export default function HelpLabel({ label, plain, math, interpret }: HelpLabelProps) {
+export default function HelpLabel({ label, plain, math, interpret, iconOnly = false }: HelpLabelProps) {
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const bubbleRef = useRef<HTMLSpanElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -111,7 +112,7 @@ export default function HelpLabel({ label, plain, math, interpret }: HelpLabelPr
   return (
     <span
       ref={triggerRef}
-      className="col-help-trigger"
+      className={`col-help-trigger${iconOnly ? " icon-only" : ""}`}
       tabIndex={0}
       aria-label={`Explain ${label}`}
       aria-expanded={open}
@@ -128,7 +129,7 @@ export default function HelpLabel({ label, plain, math, interpret }: HelpLabelPr
       onMouseLeave={() => setOpen(false)}
       onBlur={() => setOpen(false)}
     >
-      {label}
+      {iconOnly ? <span className="col-help-icon" aria-hidden="true">i</span> : label}
       {open && isMounted && createPortal(
         <span
           ref={bubbleRef}
@@ -151,7 +152,7 @@ export default function HelpLabel({ label, plain, math, interpret }: HelpLabelPr
               )}
             </span>
           )}
-          <span className="col-help-bubble-math">Math: {math}</span>
+          {math ? <span className="col-help-bubble-math">Math: {math}</span> : null}
         </span>,
         document.body,
       )}

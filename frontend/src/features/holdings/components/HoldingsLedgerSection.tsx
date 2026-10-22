@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import ApiErrorState from "@/features/cuse4/components/ApiErrorState";
 import MethodLabel from "@/components/MethodLabel";
 import TableRowToggle from "@/components/TableRowToggle";
@@ -10,6 +10,11 @@ import type { HoldingsPosition } from "@/lib/types/holdings";
 import { exposureMethodDisplayLabel, exposureMethodRank, exposureMethodTone } from "@/lib/exposureOrigin";
 import { describeCparPositionMethod } from "@/lib/cparTruth";
 import InlineShareDraftEditor from "./InlineShareDraftEditor";
+import ThesisAllocationCell from "@/components/ThesisAllocationCell";
+import { useTheses } from "@/components/ThesisContext";
+import InlineThesisRows from "@/components/InlineThesisRows";
+import MethodHelpLabel from "@/components/MethodHelpLabel";
+import HelpLabel from "@/components/HelpLabel";
 
 interface HoldingsLedgerSectionProps {
   holdingsRows: HoldingsPosition[];
@@ -51,16 +56,13 @@ function cparMethodLabel(row: CparPortfolioPositionRow | null | undefined): stri
   return describeCparPositionMethod(row.coverage, row.fit_status).label;
 }
 
-function fmtQty(n: number): string {
-  return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
-}
-
 function fmtCurrency(n: number | null): string {
   if (n === null || !Number.isFinite(n)) return "—";
   if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
   if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
   return `$${n.toFixed(2)}`;
 }
+function fmtQty(n: number): string { return n.toLocaleString(undefined, { maximumFractionDigits: 6 }); }
 
 function fmtMarketValue(n: number | null): string {
   if (n === null || !Number.isFinite(n)) return "—";
@@ -90,8 +92,11 @@ export default function HoldingsLedgerSection({
 }: HoldingsLedgerSectionProps) {
   const [sortKey, setSortKey] = useState<SortKey>("market_value");
   const [sortAsc, setSortAsc] = useState(false);
+  const [tickerManual, setTickerManual] = useState(false);
   const [marketValueSortMode, setMarketValueSortMode] = useState<MarketValueSortMode>("abs");
   const [showAllRows, setShowAllRows] = useState(false);
+  const { available: thesesAvailable } = useTheses();
+  const [viewMode, setViewMode] = useState<"positions" | "theses">("positions");
 
   const modeledMap = useMemo(() => {
     const out = new Map<string, Position>();
@@ -191,9 +196,15 @@ export default function HoldingsLedgerSection({
     return rows;
   }, [enrichedRows, marketValueSortMode, sortAsc, sortKey]);
 
-  const visibleRows = showAllRows ? sortedRows : sortedRows.slice(0, COLLAPSED_ROWS);
-
   function handleSort(nextKey: SortKey) {
+    if (nextKey === "ticker") {
+      if (sortKey !== "ticker") { setSortKey("ticker"); setSortAsc(false); setTickerManual(false); return; }
+      if (tickerManual) { setTickerManual(false); setSortAsc(false); return; }
+      if (!sortAsc) { setSortAsc(true); return; }
+      setTickerManual(thesesAvailable); if (!thesesAvailable) setSortAsc(false);
+      return;
+    }
+    setTickerManual(false);
     if (nextKey === "market_value") {
       if (sortKey !== "market_value") {
         setSortKey("market_value");
@@ -226,11 +237,18 @@ export default function HoldingsLedgerSection({
     setSortAsc(false);
   }
 
-  function arrow(key: SortKey): string {
+  function arrow(key: SortKey): ReactNode {
     if (key === "market_value" && sortKey === "market_value") {
       const mode = marketValueSortMode === "abs" ? "abs" : "sgn";
-      return sortAsc ? ` (${mode}) ↑` : ` (${mode}) ↓`;
+      return (
+        <>
+          {" "}
+          <span className="th-sort-mode">{mode}</span>
+          {sortAsc ? " ↑" : " ↓"}
+        </>
+      );
     }
+    if (key === "ticker" && sortKey === "ticker" && tickerManual) return <> <span className="th-sort-mode">manual</span> ↕</>;
     return sortKey === key ? (sortAsc ? " ↑" : " ↓") : "";
   }
 
@@ -245,27 +263,55 @@ export default function HoldingsLedgerSection({
 
   return (
     <div className="chart-card mb-4" data-testid="positions-ledger">
-      <h3>Portfolio Holdings [{holdingsRows.length}]</h3>
-      <div className="section-subtitle">
-        Live Neon-backed holdings across all accounts. Inline changes stay local until `RECALC`, then the batch is written once and the modeled snapshot refreshes afterward.
+      <div className="thesis-section-heading">
+        <div className="module-title-with-help">
+          <h3>Portfolio Holdings [{holdingsRows.length}]</h3>
+          <HelpLabel
+            label="Portfolio Holdings"
+            plain="Live holdings across all accounts. In thesis view, drag a row, right-click it, or press Enter to move all or part of a position without changing the underlying holding."
+            iconOnly
+          />
+        </div>
+        <div className="thesis-heading-actions">
+          {viewMode === "theses" ? <div id="holdings-thesis-controls" className="thesis-header-controls" /> : null}
+          <div style={thesesAvailable ? undefined : { display: "none" }} className="thesis-view-toggle" role="group" aria-label="Portfolio holdings view">
+            <button type="button" className={viewMode === "positions" ? "active" : ""} onClick={() => setViewMode("positions")}>By instrument</button>
+            <button type="button" className={viewMode === "theses" ? "active" : ""} onClick={() => setViewMode("theses")}>By thesis</button>
+          </div>
+        </div>
       </div>
       <div className="dash-table">
         <table>
           <thead>
             <tr>
-              <th onClick={() => handleSort("ticker")}>Ticker{arrow("ticker")}</th>
-              <th onClick={() => handleSort("cuse_method")}>cUSE Method{arrow("cuse_method")}</th>
-              <th onClick={() => handleSort("cpar_method")}>cPAR Method{arrow("cpar_method")}</th>
-              <th className="text-right" onClick={() => handleSort("quantity")}>Quantity{arrow("quantity")}</th>
-              <th className="text-right" onClick={() => handleSort("price")}>Price{arrow("price")}</th>
-              <th className="text-right" onClick={() => handleSort("market_value")}>Mkt Val{arrow("market_value")}</th>
-              <th className="text-right" onClick={() => handleSort("source")}>Source{arrow("source")}</th>
-              <th className="text-right" onClick={() => handleSort("account_id")}>Account{arrow("account_id")}</th>
+              <th className="sortable" tabIndex={0} aria-sort={sortKey === "ticker" ? (tickerManual ? "other" : sortAsc ? "ascending" : "descending") : "none"} title={tickerManual ? "Manual ticker order; click for descending" : "Ticker sort rotates through descending, ascending, and manual"} onClick={() => handleSort("ticker")} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSort("ticker"); } }}>Ticker{arrow("ticker")}</th>
+              <th className="sortable" onClick={() => handleSort("cuse_method")}><span className="col-help-wrap"><MethodHelpLabel family="cuse" label="cUSE Method" />{arrow("cuse_method")}</span></th>
+              <th className="sortable" onClick={() => handleSort("cpar_method")}><span className="col-help-wrap"><MethodHelpLabel family="cpar" label="cPAR Method" />{arrow("cpar_method")}</span></th>
+              <th className="text-right sortable" onClick={() => handleSort("quantity")}>Quantity{arrow("quantity")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("price")}>Price{arrow("price")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("market_value")}>Mkt Val{arrow("market_value")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("source")}>Source{arrow("source")}</th>
+              <th className="text-right sortable" onClick={() => handleSort("account_id")}>Account{arrow("account_id")}</th>
+              <th>Thesis</th>
             </tr>
           </thead>
           <tbody>
-            {visibleRows.map(({ row, modeled, cparModeled, price, marketValue }) => (
-              <tr key={`${row.account_id}:${row.ric || row.ticker}`}>
+            <InlineThesisRows
+              rows={sortedRows}
+              colSpan={9}
+              grouped={viewMode === "theses"}
+              marketValueColumnIndex={5}
+              headerControlsId="holdings-thesis-controls"
+              manualOrder={sortKey === "ticker" && tickerManual}
+              groupedTickerDirection={sortKey === "ticker" && !tickerManual ? (sortAsc ? "asc" : "desc") : undefined}
+              orderScope="holdings"
+              ungroupedLimit={viewMode === "positions" && !showAllRows ? COLLAPSED_ROWS : undefined}
+              groupedSortMetric={sortKey === "market_value" ? "market_value" : sortKey === "quantity" ? "quantity" : undefined}
+              groupedSortAscending={sortAsc}
+              groupedMarketValueAbsolute={marketValueSortMode === "abs"}
+              emptyLabel="No holdings are loaded yet."
+              getPosition={({ row, price, marketValue }) => ({ accountId: row.account_id, ric: row.ric, ticker: row.ticker, quantity: Number(row.quantity || 0), price, marketValue })}
+              renderCells={({ row, modeled, cparModeled, price, marketValue }, displayQuantity, grouped, sourceGroupId) => <>
                 <td>{row.ticker || "—"}</td>
                 <td>
                   <MethodLabel
@@ -280,7 +326,7 @@ export default function HoldingsLedgerSection({
                   />
                 </td>
                 <td className="text-right">
-                  <InlineShareDraftEditor
+                  {grouped ? fmtQty(displayQuantity) : <InlineShareDraftEditor
                     quantityText={getDraftQuantityText(row)}
                     disabled={busy}
                     draftActive={hasDraftForRow(row)}
@@ -288,31 +334,33 @@ export default function HoldingsLedgerSection({
                     titleBase={row.ticker || row.ric}
                     onQuantityTextChange={(value) => onDraftQuantityChange(row, value)}
                     onStep={(step) => onAdjust(row, step)}
-                  />
+                  />}
                 </td>
                 <td className="text-right">{fmtCurrency(price)}</td>
-                <td className={`text-right ${marketValueTone(marketValue)}`.trim()}>{fmtMarketValue(marketValue)}</td>
+                <td className={`text-right ${marketValueTone(grouped && price != null ? price * displayQuantity : marketValue)}`.trim()}>{fmtMarketValue(grouped && price != null ? price * displayQuantity : marketValue)}</td>
                 <td className="text-right">{row.source || "—"}</td>
                 <td className="text-right">{row.account_id}</td>
-              </tr>
-            ))}
-            {visibleRows.length === 0 && (
-              <tr>
-                <td colSpan={8} className="holdings-empty-row">
-                  No holdings are loaded yet.
+                <td>
+                  <ThesisAllocationCell
+                    accountId={row.account_id}
+                    ric={row.ric}
+                    ticker={row.ticker}
+                    positionQuantity={row.quantity}
+                    summaryMode={grouped && sourceGroupId === "unallocated" ? "unallocated" : "allocations"}
+                  />
                 </td>
-              </tr>
-            )}
+              </>}
+            />
           </tbody>
         </table>
-        <TableRowToggle
+      </div>
+      {viewMode === "positions" ? <TableRowToggle
           totalRows={sortedRows.length}
           collapsedRows={COLLAPSED_ROWS}
           expanded={showAllRows}
           onToggle={() => setShowAllRows((prev) => !prev)}
           label="holdings"
-        />
-      </div>
+        /> : null}
     </div>
   );
 }

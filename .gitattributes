@@ -1,0 +1,3 @@
+
+# Preserve significant blank context lines in the archived Git patch.
+docs/implementation/LITE_NAVIGATION_SOURCE.patch -whitespace

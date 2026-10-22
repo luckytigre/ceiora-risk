@@ -102,9 +102,9 @@ export default function CparPortfolioHedgePanel({
           <table>
             <thead>
               <tr>
-                <th onClick={() => handleSort("leg")}>Leg{arrow("leg")}</th>
-                <th onClick={() => handleSort("group")}>Group{arrow("group")}</th>
-                <th className="text-right" onClick={() => handleSort("weight")}>Weight{arrow("weight")}</th>
+                <th className="sortable" onClick={() => handleSort("leg")}>Leg{arrow("leg")}</th>
+                <th className="sortable" onClick={() => handleSort("group")}>Group{arrow("group")}</th>
+                <th className="text-right sortable" onClick={() => handleSort("weight")}>Weight{arrow("weight")}</th>
               </tr>
             </thead>
             <tbody>

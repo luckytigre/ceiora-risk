@@ -136,7 +136,7 @@ export default function ApiErrorState({
             disabled={refreshState === "running"}
           >
             {refreshState === "running"
-              ? "Starting refresh..."
+              ? "Starting refresh…"
               : refreshProfileLabel(parsed.refreshProfile, onlyServeRefreshAllowed)}
           </button>
           {refreshState === "done" && (

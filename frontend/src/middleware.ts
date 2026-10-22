@@ -322,6 +322,7 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     "/home/:path*",
+    "/dash/:path*",
     "/cuse/:path*",
     "/cpar/:path*",
     "/positions/:path*",

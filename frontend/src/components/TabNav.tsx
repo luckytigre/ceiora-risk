@@ -3,7 +3,7 @@
 import { createInternalNeonAuth } from "@neondatabase/auth";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import BrandLockup from "@/components/BrandLockup";
 import { useAppSettings } from "./AppSettingsContext";
 import { useAuthSession } from "@/components/AuthSessionContext";
@@ -27,7 +27,6 @@ const CPAR_TABS = [
 ];
 
 const POSITIONS_TABS = [{ href: "/positions", label: "Positions", matchPrefix: "/positions" }];
-
 const LANDING_FAMILY_TRANSITION_EVENT = "landing-family-transition-start";
 
 function readCssTriplet(name: string, fallback: [number, number, number]): [number, number, number] {
@@ -62,6 +61,8 @@ function formatAgeFromIso(iso: string | null | undefined, nowMs: number): string
 
 export default function TabNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const dashFamily = searchParams.get("model") === "cpar" ? "cpar" : "cuse";
   const { session, context, neonProjectUrl } = useAuthSession();
   const isAdmin = Boolean(context?.is_admin || session?.isAdmin);
   const activePath = pathname || "";
@@ -192,7 +193,11 @@ export default function TabNav() {
       navRef.current.style.setProperty("-webkit-backdrop-filter", "blur(8px) saturate(1.03)");
       return;
     }
-    const onScroll = () => {
+    // PERF-01: this wrote four style properties on every scroll event, one of them
+    // driving a backdrop-filter repaint. Coalesce into one write per frame.
+    let frame = 0;
+    const paint = () => {
+      frame = 0;
       if (!navRef.current) return;
       const y = window.scrollY;
       const t = Math.min(1, y / 120);
@@ -204,9 +209,16 @@ export default function TabNav() {
       navRef.current.style.backdropFilter = "blur(8px) saturate(1.03)";
       navRef.current.style.setProperty("-webkit-backdrop-filter", "blur(8px) saturate(1.03)");
     };
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(paint);
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
+    paint();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
   }, [isLanding, isPositionsPage, themeMode]);
 
   // Close menu on outside click
@@ -339,11 +351,12 @@ export default function TabNav() {
     ? "Publish latest holdings edits into the served analytics snapshot"
     : "Run serve-refresh";
   const tabs = useMemo(() => {
+    if (activePath === "/dash") return dashFamily === "cpar" ? CPAR_TABS : CUSE_TABS;
     if (activePath === "/positions") return POSITIONS_TABS;
     if (activePath.startsWith("/cpar")) return CPAR_TABS;
     if (activePath.startsWith("/cuse") || activePath === "/data") return CUSE_TABS;
     return [];
-  }, [activePath]);
+  }, [activePath, dashFamily]);
   const effectiveFamily = activeFamily ?? transitionFamily;
 
   const tabsCenterRef = useRef<HTMLDivElement>(null);
@@ -410,6 +423,13 @@ export default function TabNav() {
       </div>
 
       <div ref={tabsCenterRef} className="dash-tabs-center">
+        <Link
+          href="/dash"
+          className={`dash-tab-btn ${activePath === "/dash" ? "active" : ""}`}
+          aria-current={activePath === "/dash" ? "page" : undefined}
+        >
+          DASH
+        </Link>
         {tabs.map((tab) => (
           <Link
             key={tab.href}

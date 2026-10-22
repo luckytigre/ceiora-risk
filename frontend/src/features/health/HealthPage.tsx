@@ -5,6 +5,7 @@ import { useState } from "react";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
 import ApiErrorState from "@/features/cuse4/components/ApiErrorState";
 import { useAuthSession } from "@/components/AuthSessionContext";
+import { useConfirm } from "@/components/ConfirmDialogProvider";
 import KpiCard from "@/components/KpiCard";
 import {
   triggerDailyMaintenanceRefresh,
@@ -20,7 +21,7 @@ import type { SourceDates } from "@/lib/types/cuse4";
 
 const HealthDiagnosticsRoot = dynamic(() => import("@/features/health/HealthDiagnosticsRoot"), {
   ssr: false,
-  loading: () => <AnalyticsLoadingViz message="Loading health diagnostics..." />,
+  loading: () => <AnalyticsLoadingViz message="Loading health diagnostics…" />,
 });
 
 function fmtAsOfDate(isoDate?: string | null): string {
@@ -35,6 +36,7 @@ function latestSourceDate(dates: SourceDates | undefined): string {
 }
 
 export default function HealthPage() {
+  const confirm = useConfirm();
   const [loadDiagnostics, setLoadDiagnostics] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [dismissUpdatePrompt, setDismissUpdatePrompt] = useState(false);
@@ -52,10 +54,10 @@ export default function HealthPage() {
   const { data: riskData, isLoading: riskLoading, error: riskError } = useRisk();
 
   if (privilegedOperatorEnabled && operatorLoading && !operatorData && riskLoading && !riskData && !loadDiagnostics) {
-    return <AnalyticsLoadingViz message="Loading operator health..." />;
+    return <AnalyticsLoadingViz message="Loading operator health…" />;
   }
   if (isLoading && !operatorData && !riskData) {
-    return <AnalyticsLoadingViz message="Loading model health..." />;
+    return <AnalyticsLoadingViz message="Loading model health…" />;
   }
 
   const coreStateThrough = riskData?.risk_engine?.core_state_through_date
@@ -91,9 +93,11 @@ export default function HealthPage() {
   );
 
   async function handleRefreshPrompt() {
-    const proceed = window.confirm(
-      `Run refresh now?\n\nLatest loadings source date: ${latestSourceAsOf || "n/a"}\nCore state through: ${coreStateThrough || "n/a"}`,
-    );
+    const proceed = await confirm({
+      title: "Run refresh now?",
+      body: `Latest loadings source date: ${latestSourceAsOf || "n/a"}. Core state through: ${coreStateThrough || "n/a"}.`,
+      dangerText: "Run refresh",
+    });
     if (!proceed) return;
     setRefreshState("running");
     try {
