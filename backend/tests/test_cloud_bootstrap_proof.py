@@ -49,15 +49,18 @@ def test_cloud_bootstrap_reads_from_neon_without_local_sqlite(tmp_path: Path, mo
     )
     monkeypatch.setattr(
         serving_outputs,
-        "_load_current_payloads_neon",
+        "_load_current_payload_states_neon",
         lambda payload_names: {
-            str(payload_name): {"payload_name": str(payload_name), "source": "neon"}
+            str(payload_name): {
+                "status": "ok", "source": "neon",
+                "value": {"payload_name": str(payload_name), "source": "neon"},
+            }
             for payload_name in payload_names
         },
     )
     monkeypatch.setattr(
         serving_outputs,
-        "_load_current_payloads_sqlite",
+        "_load_current_payload_states_sqlite",
         lambda payload_names: (_ for _ in ()).throw(
             AssertionError("cloud bootstrap should not read serving payloads from sqlite")
         ),
@@ -114,12 +117,15 @@ def test_cloud_bootstrap_fails_closed_without_local_fallbacks(tmp_path: Path, mo
     )
     monkeypatch.setattr(
         serving_outputs,
-        "_load_current_payloads_neon",
-        lambda payload_names: {str(payload_name): None for payload_name in payload_names},
+        "_load_current_payload_states_neon",
+        lambda payload_names: {
+            str(payload_name): {"status": "missing", "source": "neon", "value": None}
+            for payload_name in payload_names
+        },
     )
     monkeypatch.setattr(
         serving_outputs,
-        "_load_current_payloads_sqlite",
+        "_load_current_payload_states_sqlite",
         lambda payload_names: (_ for _ in ()).throw(
             AssertionError("cloud bootstrap should not fall back to sqlite serving payloads")
         ),
@@ -144,6 +150,9 @@ def test_cloud_bootstrap_fails_closed_without_local_fallbacks(tmp_path: Path, mo
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("cloud bootstrap should not fall back to sqlite cPAR reads")),
     )
 
+    assert serving_outputs.load_current_payload_states(["portfolio"]) == {
+        "portfolio": {"status": "missing", "source": "neon", "value": None}
+    }
     assert serving_outputs.load_current_payload("portfolio") is None
     assert runtime_state.load_runtime_state(
         "risk_engine_meta",

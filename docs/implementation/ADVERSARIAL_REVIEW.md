@@ -112,3 +112,12 @@ preflight and staged approvals. Final static review accepted preparation with no
 code safety blocker; limited statistics visibility is reported explicitly. See
 [rollout-preparation evidence](ROLLOUT_PREP_EVIDENCE.md) for passed direct PostgreSQL
 and Terraform checks and the blocked full pytest rerun. Live rollout remains gated.
+
+
+### Resumed local verification
+
+The previously blocked runtime recovered without intervention. All 19 PostgreSQL
+cases and all 51 selected cloud/thesis contracts passed. The reviewer accepted the
+bootstrap test's current-reader fixture repair and local fast-forward once these
+checks passed. The runtime limitation is resolved; live target/role verification
+and external rollout permissions remain open.

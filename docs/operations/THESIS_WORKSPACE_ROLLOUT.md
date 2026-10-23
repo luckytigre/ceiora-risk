@@ -1,7 +1,8 @@
 # Portfolio thesis workspace rollout
 
 Status: UI port merged into original local main at `776002a`; no remote push or live rollout.
-Rollout preparation is isolated on `feat/thesis-rollout-prep`.
+Rollout preparation from `feat/thesis-rollout-prep` is locally accepted after
+19 PostgreSQL and 51 cloud/thesis contracts; see the rollout evidence for merge details.
 
 ## Runtime ownership
 

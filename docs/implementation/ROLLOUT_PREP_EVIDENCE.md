@@ -40,10 +40,18 @@ branch creation was performed. The earlier merged UI and P5 evidence are unchang
    - A second client holding the writer lane caused the configured five-second lock
      timeout; migration reapplication succeeded after that client released its lock.
    Reproducible local driver: `/Users/shaun/tmp/verify-ceiora-rollout-sql.py`.
-4. The added pytest cases parse successfully. The direct SQL rehearsal above
-   exercised their database behaviors; it does not constitute a pytest-suite pass.
+4. After resumption, the complete PostgreSQL suite passed: **19 passed in 7.94s**,
+   covering the original 13 cases plus six rollout-permission/search-path/timeout
+   cases. The synthetic browser database was reseeded afterward.
+5. Cloud bootstrap, auth/runtime-role, cutover, Cloud Run job and thesis unit
+   contracts passed: **51 passed in 1.70s**. One existing bootstrap fixture patched
+   a superseded payload-only helper; it now patches the actual state-return reader.
+   An explicit missing-Neon-state assertion prevents unrelated connection errors
+   from satisfying the fail-closed case. Production runtime files were unchanged.
+   The reviewer accepted this fixture repair. One existing Starlette/httpx
+   deprecation warning remains; no dependency changes were required.
 
-## Runtime limitation
+## Initial runtime limitation — resolved
 
 The attempted full PostgreSQL pytest rerun could not start: new Docker runs and
 new Python executions/copies in the existing amd64 backend container stalled.
@@ -52,7 +60,9 @@ commands were terminated without restarting the user's preview or Docker service
 No dependencies or system configuration were changed. The new migration was
 validated directly with psql as described above; prior 13-test PostgreSQL evidence
 predates these rollout-preparation edits. Rerun the focused pytest suite once the
-backend test runtime is healthy, before release acceptance. No frontend files
+backend test runtime is healthy, before release acceptance. This rerun is now
+complete and passing as recorded above: both existing and new Docker Python
+runtimes recovered without any restart, package install or system change. No frontend files
 changed, so the already accepted P5 browser/build evidence was not repeated.
 
 ## Adversarial review
@@ -62,3 +72,13 @@ rollout sequence. Static preparation accepted with no safety blocker. Its requir
 conditions remain: actual target proof, all real writer roles, isolated Neon branch
 rehearsal and explicit live approvals. The statistics-visibility caveat was fixed.
 This is preparation acceptance, not production rollout acceptance.
+
+## Local integration
+
+The adversarial reviewer accepted local fast-forward after the 19 PostgreSQL and
+51 cloud/thesis contracts passed. Original main before this step: `776002a`.
+Rollout implementation: `3c07e2d`; the follow-up evidence/fixture commit includes
+this record. Integrate with `git merge --ff-only feat/thesis-rollout-prep`, then
+verify the original main and prep branch point to the same clean HEAD. No remote
+push, credential retrieval, Neon branch, live schema or deployment is authorized by
+this local integration.
