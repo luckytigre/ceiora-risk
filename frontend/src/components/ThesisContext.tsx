@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { thesisQuantityWire } from "@/lib/thesisQuantity";
 import { createThesisRequest, deleteThesisRequest, getThesisState, renameThesisRequest, replacePositionAllocationsRequest, saveManualOrderRequest, type ThesisStateDto } from "@/lib/thesisApi";
 
@@ -33,6 +33,7 @@ interface PositionAllocationDraft {
 }
 
 interface ThesisContextValue extends ThesisState {
+  workspaceKey: string | null;
   available: boolean;
   ready: boolean;
   busy: boolean;
@@ -67,6 +68,7 @@ function errorMessage(error: unknown): string { return error instanceof Error ? 
 
 const ThesisContext = createContext<ThesisContextValue>({
   ...EMPTY_STATE,
+  workspaceKey: null,
   available: false,
   ready: false,
   busy: false,
@@ -79,7 +81,9 @@ const ThesisContext = createContext<ThesisContextValue>({
   replacePositionAllocations: async () => "Thesis service is not ready.",
 });
 
-export function ThesisProvider({ children, workspaceId }: { children: ReactNode; workspaceId: string }) {
+export function ThesisProvider({ children, workspaceId, identity }: { children: ReactNode; workspaceId: string | null; identity: string }) {
+  const scope = `${identity}:${workspaceId ?? ""}`;
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [state, setState] = useState<ThesisState>(EMPTY_STATE);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -88,13 +92,15 @@ export function ThesisProvider({ children, workspaceId }: { children: ReactNode;
   const busyRef = useRef(false);
   const mountedRef = useRef(false);
   const requestRef = useRef(0);
+  const activeScopeRef = useRef(scope);
+  useLayoutEffect(() => { activeScopeRef.current = scope; requestRef.current += 1; }, [scope]);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; requestRef.current += 1; };
   }, []);
   const accept = useCallback((dto: ThesisStateDto) => {
-    if (dto.workspace_id !== workspaceId || dto.version !== 1 || !Number.isSafeInteger(dto.revision) || dto.revision < 0) {
+    if (scope !== activeScopeRef.current || dto.workspace_id !== workspaceId || dto.version !== 1 || !Number.isSafeInteger(dto.revision) || dto.revision < 0) {
       throw new Error("The thesis workspace changed. Reload this page before editing.");
     }
     const next = fromDto(dto);
@@ -103,9 +109,9 @@ export function ThesisProvider({ children, workspaceId }: { children: ReactNode;
     setState(next);
     setLoadError(null);
     return next;
-  }, [workspaceId]);
+  }, [scope, workspaceId]);
   const refresh = useCallback(async () => {
-    if (busyRef.current) return;
+    if (!workspaceId || scope !== activeScopeRef.current || busyRef.current) return;
     const ticket = ++requestRef.current;
     try {
       const dto = await getThesisState();
@@ -113,10 +119,22 @@ export function ThesisProvider({ children, workspaceId }: { children: ReactNode;
     } catch (error) {
       if (mountedRef.current && ticket === requestRef.current) setLoadError(errorMessage(error));
     } finally {
-      if (mountedRef.current && ticket === requestRef.current) setReady(true);
+      if (mountedRef.current && ticket === requestRef.current) { setReady(true); setLoadedScope(scope); }
     }
-  }, [accept]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  }, [accept, scope, workspaceId]);
+  useEffect(() => {
+    requestRef.current += 1;
+    stateRef.current = EMPTY_STATE;
+    setState(EMPTY_STATE);
+    setLoadedScope(null);
+    setReady(false);
+    busyRef.current = false;
+    setBusy(false);
+    setLoadError(null);
+    setSaveStatus("idle");
+    if (workspaceId) void refresh();
+    return () => { requestRef.current += 1; };
+  }, [refresh, workspaceId]);
   useEffect(() => {
     const onFocus = () => { void refresh(); };
     window.addEventListener("focus", onFocus);
@@ -124,7 +142,7 @@ export function ThesisProvider({ children, workspaceId }: { children: ReactNode;
   }, [refresh]);
 
   const runMutation = useCallback(async (request: (revision: number) => Promise<ThesisStateDto>) => {
-    if (!mountedRef.current || busyRef.current) return { next: null, error: "Another thesis change is still saving." };
+    if (!mountedRef.current || busyRef.current || scope !== activeScopeRef.current || !workspaceId || loadedScope !== scope || !ready || loadError) return { next: null, error: "Thesis workspace is not ready for another change." };
     busyRef.current = true;
     setBusy(true);
     setSaveStatus("saving");
@@ -145,10 +163,9 @@ export function ThesisProvider({ children, workspaceId }: { children: ReactNode;
       }
       return { next: null, error: message };
     } finally {
-      busyRef.current = false;
-      if (mountedRef.current) setBusy(false);
+      if (mountedRef.current && ticket === requestRef.current) { busyRef.current = false; setBusy(false); }
     }
-  }, [accept]);
+  }, [accept, loadError, loadedScope, ready, scope, workspaceId]);
 
   const createThesis = useCallback(async (rawName: string): Promise<PortfolioThesis | null> => {
     const name = rawName.trim();
@@ -166,14 +183,14 @@ export function ThesisProvider({ children, workspaceId }: { children: ReactNode;
 
   const deleteThesis = useCallback(async (thesisId: string) => (await runMutation((revision) => deleteThesisRequest(thesisId, revision))).error, [runMutation]);
 
-  const saveManualOrder = useCallback(async (scope: string, keys: string[]) => {
-    if (busyRef.current) return "Another thesis change is still saving.";
+  const saveManualOrder = useCallback(async (orderScope: string, keys: string[]) => {
+    if (busyRef.current || scope !== activeScopeRef.current || !workspaceId || loadedScope !== scope || !ready || loadError) return "Thesis workspace is not ready for another change.";
     const current = stateRef.current;
-    const optimistic = { ...current, manualOrders: { ...current.manualOrders, [scope]: keys } };
+    const optimistic = { ...current, manualOrders: { ...current.manualOrders, [orderScope]: keys } };
     stateRef.current = optimistic;
     setState(optimistic);
-    return (await runMutation((revision) => saveManualOrderRequest(scope, keys, revision))).error;
-  }, [runMutation]);
+    return (await runMutation((revision) => saveManualOrderRequest(orderScope, keys, revision))).error;
+  }, [loadError, loadedScope, ready, runMutation, scope, workspaceId]);
 
   const replacePositionAllocations = useCallback(async (
     rawAccountId: string,
@@ -190,21 +207,22 @@ export function ThesisProvider({ children, workspaceId }: { children: ReactNode;
   }, [runMutation]);
 
   const value = useMemo<ThesisContextValue>(() => ({
-    ...state,
-    available: ready && !loadError,
-    ready,
-    busy,
-    loadError,
+    ...(loadedScope === scope && workspaceId ? state : EMPTY_STATE),
+    workspaceKey: loadedScope === scope && workspaceId ? scope : null,
+    available: Boolean(workspaceId && loadedScope === scope && ready && !loadError),
+    ready: Boolean(workspaceId && loadedScope === scope && ready),
+    busy: Boolean(loadedScope === scope && busy),
+    loadError: loadedScope === scope ? loadError : null,
     refresh,
     createThesis,
     renameThesis,
     deleteThesis,
     saveManualOrder,
     replacePositionAllocations,
-  }), [busy, createThesis, deleteThesis, loadError, ready, refresh, renameThesis, replacePositionAllocations, saveManualOrder, state]);
+  }), [busy, createThesis, deleteThesis, loadError, ready, refresh, renameThesis, replacePositionAllocations, saveManualOrder, scope, state, workspaceId, loadedScope]);
 
   return <ThesisContext.Provider value={value}>
-    {(loadError || saveStatus !== "idle") ? <div className="thesis-save-feedback" role="status">
+    {workspaceId && loadedScope === scope && (loadError || saveStatus !== "idle") ? <div className="thesis-save-feedback" role="status">
       {loadError ? (loadError.startsWith("The thesis workspace changed") ? loadError : "Thesis workspace unavailable. Instrument view remains available.") : saveStatus === "saving" ? "Saving thesis changes…" : saveStatus === "saved" ? "Thesis changes saved." : "Thesis change failed. Review the table message and try again."}
       {loadError ? <button type="button" className="btn-action" onClick={() => { void refresh(); }}>Retry</button> : null}
     </div> : null}

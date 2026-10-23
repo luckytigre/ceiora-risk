@@ -1,3 +1,4 @@
+import { smokeEnv, authenticateSmokePage, smokeFetch as fetch } from "./smoke_auth.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
 const HOST = "127.0.0.1";
-const PORT = 3114;
+const PORT = Number(process.env.CEIORA_SMOKE_PORT ?? 3114);
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
@@ -16,11 +17,12 @@ const serverStdout = [];
 const serverStderr = [];
 const server = spawn(
   NEXT_BIN,
-  ["dev", "-H", HOST, "-p", String(PORT)],
+  [process.env.CEIORA_SMOKE_SERVER_MODE ?? "dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
       ...process.env,
+      ...smokeEnv,
       NEXT_TELEMETRY_DISABLED: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -128,23 +130,23 @@ try {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    await authenticateSmokePage(page, BASE_URL);
 
     await gotoWithRetry(page, `${BASE_URL}/`);
-    await page.getByTestId("family-split-landing").waitFor();
-    const chooserLinks = await page.locator('[data-testid="family-split-landing"] a').allTextContents();
-    assert.deepEqual(chooserLinks, ["cUSE", "cPAR"]);
+    await page.getByRole("heading", { name: "Meet the family", exact: true }).waitFor();
+    assert.equal(await page.locator(".public-engine-card").count(), 3);
 
     await gotoWithRetry(page, `${BASE_URL}/cuse/exposures`);
     const cuseTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();
-    assert.deepEqual(cuseTabs, ["Risk", "Explore", "Health"]);
+    assert.deepEqual(cuseTabs, ["DASH", "Risk", "Explore", "Health"]);
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/risk`);
     const cparTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();
-    assert.deepEqual(cparTabs, ["Risk", "Explore", "Hedge", "Health"]);
+    assert.deepEqual(cparTabs, ["DASH", "Risk", "Explore", "Hedge", "Health"]);
 
     await gotoWithRetry(page, `${BASE_URL}/positions`);
     const positionsTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();
-    assert.deepEqual(positionsTabs, ["Positions"]);
+    assert.deepEqual(positionsTabs, ["DASH", "Positions"]);
   } finally {
     await browser.close();
   }

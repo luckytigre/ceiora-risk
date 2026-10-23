@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAuthSession } from "@/components/AuthSessionContext";
+import { sessionPrincipalKey } from "@/lib/authSessionBootstrap";
 import ConfirmActionModal from "@/components/ConfirmActionModal";
 
 export interface ConfirmRequest {
@@ -25,42 +27,54 @@ const ConfirmContext = createContext<ConfirmFn | null>(null);
  * `if (!(await confirm({...}))) return;` reads the same as the code it replaces,
  * so the call sites stay legible.
  *
- * Falls back to `true` only if the provider is missing, which would be a wiring
- * bug; it never silently degrades to window.confirm.
+ * Requests from an obsolete login are cancelled; missing provider wiring throws.
  */
 export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
-  const [request, setRequest] = useState<ConfirmRequest | null>(null);
+  const { authenticated, session, context } = useAuthSession();
+  const principal = authenticated ? JSON.stringify([sessionPrincipalKey(session), [...(context?.account_ids ?? [])].sort()]) : "";
+  const principalRef = useRef(principal);
+  const resolverScopeRef = useRef(principal);
+  const [request, setRequest] = useState<(ConfirmRequest & { scope: string }) | null>(null);
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
 
   const settle = useCallback((value: boolean) => {
     const resolve = resolverRef.current;
     resolverRef.current = null;
     setRequest(null);
-    resolve?.(value);
+    resolve?.(value && resolverScopeRef.current === principalRef.current);
   }, []);
 
+  useLayoutEffect(() => {
+    principalRef.current = principal;
+    settle(false);
+  }, [principal, settle]);
+  useLayoutEffect(() => () => { resolverRef.current?.(false); resolverRef.current = null; }, []);
+
   const confirm = useCallback<ConfirmFn>((next) => {
+    if (!principal || principalRef.current !== principal) return Promise.resolve(false);
     // A second request while one is open resolves the first as cancelled rather
     // than orphaning its promise.
     resolverRef.current?.(false);
-    setRequest(next);
+    resolverScopeRef.current = principal;
+    setRequest({ ...next, scope: principal });
     return new Promise<boolean>((resolve) => {
       resolverRef.current = resolve;
     });
-  }, []);
+  }, [principal]);
 
+  const visible = request?.scope === principal ? request : null;
   const value = useMemo(() => confirm, [confirm]);
 
   return (
     <ConfirmContext.Provider value={value}>
       {children}
       <ConfirmActionModal
-        open={Boolean(request)}
-        title={request?.title ?? ""}
-        body={request?.body ?? ""}
-        dangerText={request?.dangerText ?? "Confirm"}
-        confirmValue={request?.confirmValue ?? null}
-        confirmLabel={request?.confirmLabel ?? "Type to confirm"}
+        open={Boolean(visible)}
+        title={visible?.title ?? ""}
+        body={visible?.body ?? ""}
+        dangerText={visible?.dangerText ?? "Confirm"}
+        confirmValue={visible?.confirmValue ?? null}
+        confirmLabel={visible?.confirmLabel ?? "Type to confirm"}
         onCancel={() => settle(false)}
         onConfirm={() => settle(true)}
       />

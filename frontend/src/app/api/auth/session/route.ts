@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
         authenticated: true,
         session: {
           authProvider: session.authProvider,
+          subject: session.subject,
           username: session.username,
           email: session.email ?? null,
           defaultAccountId: session.defaultAccountId ?? null,
@@ -64,6 +65,7 @@ export async function GET(req: NextRequest) {
       authenticated: true,
       session: {
         authProvider: session.authProvider,
+        subject: session.subject,
         username: session.username,
         email: session.email ?? null,
         defaultAccountId: session.defaultAccountId ?? null,
@@ -79,6 +81,7 @@ export async function GET(req: NextRequest) {
     authenticated: true,
       session: {
         authProvider: session.authProvider,
+        subject: session.subject,
         username: session.username,
         email: context?.email ?? session.email ?? null,
         defaultAccountId:

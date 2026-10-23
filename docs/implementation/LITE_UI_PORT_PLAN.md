@@ -196,3 +196,12 @@ checks after any rebase. Do not auto-deploy or merge this work as part of planni
   acceptance. Current remote-main reconciliation, clean dependency install/CI,
   production-like Neon validation, real auth/account configuration, deployment and
   live smoke are still rollout gates. No merge or deployment has occurred.
+
+- P5 closeout, 2026-10-23: completed both-theme/reduced-motion/narrow/short dialog
+  and keyboard review; fixed modal stack, restoration, split-leg focus and manual
+  keyboard ordering. Long-running tests found/fixed premature served-context
+  refresh and page remount during auth/capability hydration. True login changes
+  now cancel confirmations and reset cached reads via a masked document reload.
+  All eight legacy regressions, real PostgreSQL browser flow, accessibility and
+  signed two-user cache switch pass. See P5_MERGE_HANDOFF.md. Clean-install CI and
+  live activation remain separate gates; no merge/deployment.

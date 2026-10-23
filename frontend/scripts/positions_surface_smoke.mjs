@@ -1,3 +1,4 @@
+import { handleSmokeAuth, smokeEnv, authenticateSmokePage, smokeFetch as fetch } from "./smoke_auth.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
 const HOST = "127.0.0.1";
-const PORT = 3115;
+const PORT = Number(process.env.CEIORA_SMOKE_PORT ?? 3115);
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
@@ -19,11 +20,12 @@ let debugPage = null;
 
 const server = spawn(
   NEXT_BIN,
-  ["dev", "-H", HOST, "-p", String(PORT)],
+  [process.env.CEIORA_SMOKE_SERVER_MODE ?? "dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
       ...process.env,
+      ...smokeEnv,
       NEXT_TELEMETRY_DISABLED: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -248,12 +250,14 @@ try {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    await authenticateSmokePage(page, BASE_URL);
     debugPage = page;
     page.on("pageerror", (error) => {
       capturedPageError = error;
     });
 
     await page.route("**/api/**", async (route) => {
+      if (await handleSmokeAuth(route)) return;
       const requestUrl = new URL(route.request().url());
       const pathName = requestUrl.pathname;
       const method = route.request().method().toUpperCase();
@@ -273,6 +277,7 @@ try {
           runtime: { allowed_profiles: ["serve-refresh"] },
         });
       }
+      if (method === "GET" && pathName === "/api/cuse/risk-page") return fulfillJson({ portfolio: portfolioPayload(), risk: riskPayload() });
       if (method === "GET" && pathName === "/api/portfolio") return fulfillJson(portfolioPayload());
       if (method === "GET" && pathName === "/api/risk") return fulfillJson(riskPayload());
       if (method === "GET" && pathName === "/api/cpar/risk") return fulfillJson(cparRiskPayload());
@@ -295,18 +300,18 @@ try {
     await page.getByRole("heading", { name: "Holdings Manager" }).waitFor();
     await page.getByRole("heading", { name: /Portfolio Holdings \[2\]/ }).waitFor();
     await page.getByRole("heading", { name: "Modeled Snapshot" }).waitFor();
-    await page.getByText("Live Neon-backed holdings across all accounts.").waitFor();
-    await page.getByRole("button", { name: "SYNC" }).waitFor();
+    assert.equal(await page.getByTestId("positions-ledger").locator("tbody tr").count(), 2);
 
     const positionsTabs = await page.locator(".dash-tabs-center .dash-tab-btn").allTextContents();
-    assert.deepEqual(positionsTabs, ["Positions"]);
+    assert.deepEqual(positionsTabs, ["DASH", "Positions"]);
 
     await page.getByRole("columnheader", { name: /cUSE Method/ }).waitFor();
     await page.getByRole("columnheader", { name: /cPAR Method/ }).waitFor();
     await page.getByText("Returns Projection").waitFor();
-    await page.getByText("Package Fit").waitFor();
+    await page.getByText("Package Fit", { exact: true }).waitFor();
     await page.getByText("Package Fit (Limited)").waitFor();
-    await page.getByText("Loadings = 2026-03-27").waitFor();
+    await page.getByLabel("Explain Modeled Snapshot dates", { exact: true }).focus();
+    await page.locator(".col-help-bubble-plain").filter({ hasText: "Loadings = 2026-03-27" }).waitFor();
 
     if (capturedPageError) throw capturedPageError;
   } finally {

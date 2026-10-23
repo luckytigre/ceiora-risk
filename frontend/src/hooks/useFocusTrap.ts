@@ -11,6 +11,11 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
+const activeDialogs: HTMLElement[] = [];
+export function isTopFocusTrap(container: HTMLElement | null): boolean {
+  return Boolean(container && activeDialogs.at(-1) === container);
+}
+
 /**
  * A11Y-05 — keep Tab inside an open dialog and restore focus on close.
  *
@@ -18,9 +23,9 @@ const FOCUSABLE = [
  * Escape, but nothing kept focus inside them, so Tab walked out into the table
  * behind while the dialog was still covering it.
  *
- * `autoFocus` on the first input is left to the caller; this hook only takes over
- * when focus would otherwise leave, and returns focus to whatever was focused
- * before the dialog opened.
+ * Focus the preferred control after capturing the opener. Callers use
+ * data-dialog-autofocus instead of React autoFocus to preserve opener capture.
+ * Only the top dialog handles keyboard input when confirmations are nested.
  */
 export function useFocusTrap(
   ref: RefObject<HTMLElement | null>,
@@ -33,9 +38,11 @@ export function useFocusTrap(
     if (!container) return;
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
+    activeDialogs.push(container);
+    (container.querySelector<HTMLElement>("[data-dialog-autofocus]") ?? container.querySelector<HTMLElement>(FOCUSABLE))?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
+      if (event.key !== "Tab" || !isTopFocusTrap(container)) return;
       // Do not filter on offsetParent: it is null for position:fixed elements as
       // well as hidden ones, which would silently make a fixed control untabbable.
       const items = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
@@ -68,6 +75,8 @@ export function useFocusTrap(
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      const index = activeDialogs.indexOf(container);
+      if (index >= 0) activeDialogs.splice(index, 1);
       // Only restore if focus is still inside the dialog being torn down;
       // otherwise something else has deliberately taken it.
       if (!restoreFocus) return;

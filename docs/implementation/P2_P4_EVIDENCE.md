@@ -1,6 +1,8 @@
 # P2–P4 local integration evidence
 
 Date: 2026-10-22
+Historical P2–P4 checkpoint. P5_MERGE_HANDOFF.md records the subsequent lifecycle,
+accessibility fixes and completed local regression checks.
 Checkout: /Users/shaun/Projects/ceiora-risk-ui-port, feat/lite-ui-port.
 Scope: local implementation and disposable PostgreSQL verification. No live
 credentials/data, production migration, merge or deployment.

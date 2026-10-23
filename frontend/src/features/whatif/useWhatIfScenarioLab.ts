@@ -439,7 +439,6 @@ export function useWhatIfScenarioLab({
       await Promise.all([
         mutate(apiPath.holdingsAccounts()),
         mutate(apiPath.holdingsPositions(null)),
-        mutate(apiPath.exploreContext()),
         mutate(apiPath.refreshStatus()),
         mutate(apiPath.operatorStatus()),
       ]);

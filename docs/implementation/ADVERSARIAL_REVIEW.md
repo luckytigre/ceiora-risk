@@ -73,3 +73,24 @@ Final auth regression review also caught malformed returnTo URL parser exception
 The redirect now preserves query parameters, checks same origin, and falls back
 on invalid URLs; browser checks cover query retention, external and malformed
 slash-backslash forms.
+
+## P5 accessibility and lifecycle review — 2026-10-23
+
+Resolved missing allocation focus trap, nested confirmation Escape competition,
+header/rename opener restoration, drag-only manual ordering and truncated
+micro-share displays. Split legs now have distinct focus identities, collapsed
+active rows retain a visible tab stop, and successful moves expand their destination
+before restoring focus. Browser checks prove all of these behaviors.
+
+Long-run regression review caught the page-remount consequence of context/capability
+hydration. The stable scoped provider masks old state, invalidates tickets and
+rejects stale callbacks, without discarding same-login page drafts. Review caught
+and corrected a shadowed order-scope parameter during this refactor. Actual
+principal changes key page state, cancel scoped global confirmations and reload the
+document to clear generic cached reads. The signed-cookie test proves cached A
+holdings are absent while B requests are pending.
+
+Final static review found no remaining concrete blocker. Eight legacy regressions,
+final real PostgreSQL browser flow, extended accessibility/identity checks and six
+pure contracts pass. Local acceptance only: clean-install CI, production auth/Neon
+configuration, actual merge, deployment and live activation remain unperformed.

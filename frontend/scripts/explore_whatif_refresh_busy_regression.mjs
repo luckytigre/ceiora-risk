@@ -1,3 +1,4 @@
+import { handleSmokeAuth, smokeEnv, authenticateSmokePage, smokeFetch as fetch } from "./smoke_auth.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -6,8 +7,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
 const HOST = "127.0.0.1";
-const PORT = 3101;
+const PORT = Number(process.env.CEIORA_SMOKE_PORT ?? 3101);
 const BASE_URL = `http://${HOST}:${PORT}`;
+const unhandledRequests = [];
+let succeeded = false;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
 
@@ -46,11 +49,12 @@ let debugPage = null;
 let debugCounters = null;
 const server = spawn(
   "npx",
-  ["next", "dev", "-H", HOST, "-p", String(PORT)],
+  ["next", process.env.CEIORA_SMOKE_SERVER_MODE ?? "dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
       ...process.env,
+      ...smokeEnv,
       NEXT_TELEMETRY_DISABLED: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -81,6 +85,7 @@ try {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    await authenticateSmokePage(page, BASE_URL);
     debugPage = page;
 
     const counters = {
@@ -96,6 +101,7 @@ try {
     });
 
     await page.route("**/api/**", async (route) => {
+      if (await handleSmokeAuth(route, { enableTheses: true })) return;
       const requestUrl = new URL(route.request().url());
       const pathName = requestUrl.pathname;
       const method = route.request().method().toUpperCase();
@@ -105,6 +111,12 @@ try {
         contentType: "application/json",
         body: JSON.stringify(payload),
       });
+
+      if (method === "GET" && pathName === "/api/portfolio/theses/capability") return fulfillJson({ available: false });
+      if (method === "GET" && pathName === "/api/cuse/explore/context") {
+        counters.portfolio += 1;
+        return fulfillJson({ held_positions: [{ ticker: "AAPL", ric: "AAPL.O", account_id: "main", shares: 5, price: 190, market_value: 950, weight: 0.1, long_short: "long" }], _cached: true });
+      }
 
       if (method === "GET" && pathName === "/api/universe/factors") {
         return fulfillJson({
@@ -157,8 +169,8 @@ try {
       if (method === "GET" && pathName === "/api/universe/search") {
         return fulfillJson({
           query: requestUrl.searchParams.get("q") || "",
-          results: [],
-          total: 0,
+          results: [{ ticker: "AAPL", ric: "AAPL.O", name: "Apple Inc.", price: 190, whatif_ready: true }],
+          total: 1,
           _cached: true,
         });
       }
@@ -167,6 +179,7 @@ try {
         return fulfillJson({
           item: {
             ticker: "AAPL",
+            ric: "AAPL.O",
             name: "Apple Inc.",
             trbc_economic_sector_short: "Technology",
             trbc_economic_sector_short_abbr: "Tech",
@@ -456,7 +469,8 @@ try {
         });
       }
 
-      throw new Error(`Unhandled API request: ${method} ${pathName}${requestUrl.search}`);
+      unhandledRequests.push(`${method} ${pathName}`);
+      return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: `Unhandled fixture route ${method} ${pathName}` }) });
     });
 
     await page.goto(`${BASE_URL}/explore`, { waitUntil: "domcontentloaded" });
@@ -468,9 +482,10 @@ try {
     );
 
     await page.locator("#whatif-entry-ticker").fill("AAPL");
-    await page.locator("#whatif-entry-ticker").press("Enter");
+    await page.locator(".whatif-typeahead .explore-typeahead-item").filter({ hasText: "AAPL" }).first().click();
+    await page.locator(".ticker").filter({ hasText: /^AAPL$/ }).first().waitFor();
     await page.locator("#whatif-entry-qty").fill("10");
-    await page.getByRole("button", { name: "Stage" }).click();
+    await page.locator("button.ready-stage").click();
     await page.locator(".whatif-builder-pill").waitFor();
 
     await page.getByRole("button", { name: "Apply" }).click();
@@ -498,8 +513,14 @@ try {
       "Portfolio should revalidate once after the retry refresh reaches a terminal state",
     );
 
+    assert.deepEqual(unhandledRequests, [], "Unexpected fixture API request");
+    succeeded = true;
     console.log("Explore what-if busy refresh regression passed.");
   } finally {
+    if (!succeeded && debugPage) {
+      console.error("Fixture feedback:", await debugPage.locator(".whatif-builder-feedback").allTextContents());
+      console.error("Unexpected requests:", unhandledRequests);
+    }
     await browser.close();
   }
 } catch (error) {

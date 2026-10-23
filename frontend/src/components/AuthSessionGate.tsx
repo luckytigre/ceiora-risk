@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { Fragment, useEffect, useState } from "react";
+import { sessionPrincipalKey } from "@/lib/authSessionBootstrap";
 import { usePathname } from "next/navigation";
 import { isProtectedPagePath } from "@/lib/appAccess";
 import { useAuthSession } from "@/components/AuthSessionContext";
@@ -10,10 +12,20 @@ export default function AuthSessionGate({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const { loading, authenticated, session, context, error, contextErrorCode, refresh } = useAuthSession();
   const protectedPage = Boolean(pathname && isProtectedPagePath(pathname));
+  const principal = sessionPrincipalKey(session);
+  const [cachePrincipal, setCachePrincipal] = useState(principal);
+  const changingPrincipal = Boolean(authenticated && principal && cachePrincipal && principal !== cachePrincipal);
+  useEffect(() => {
+    if (!authenticated || !principal) return;
+    if (!cachePrincipal) { setCachePrincipal(principal); return; }
+    // Global SWR mutators use the default cache. A complete document reload on
+    // a different login clears both cached private reads and in-flight requests.
+    if (principal !== cachePrincipal) window.location.reload();
+  }, [authenticated, cachePrincipal, principal]);
 
   if (!protectedPage) return <>{children}</>;
 
-  if (loading) {
+  if (loading || changingPrincipal) {
     return (
       <div className="auth-session-gate">
         <div className="auth-session-gate-shell">
@@ -89,5 +101,5 @@ export default function AuthSessionGate({ children }: { children: React.ReactNod
     );
   }
 
-  return <>{children}</>;
+  return <Fragment key={sessionPrincipalKey(session)}>{children}</Fragment>;
 }

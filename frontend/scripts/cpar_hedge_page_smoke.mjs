@@ -1,3 +1,4 @@
+import { handleSmokeAuth } from "./smoke_auth.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
 const HOST = "127.0.0.1";
-const PORT = 3106;
+const PORT = Number(process.env.CEIORA_SMOKE_PORT ?? 3106);
 const BASE_URL = `http://${HOST}:${PORT}`;
 const SMOKE_USERNAME = "smoke";
 const SMOKE_SESSION_SECRET = "cpar-hedge-smoke-secret";
@@ -253,7 +254,7 @@ const serverStdout = [];
 const serverStderr = [];
 const server = spawn(
   NEXT_BIN,
-  ["dev", "-H", HOST, "-p", String(PORT)],
+  [process.env.CEIORA_SMOKE_SERVER_MODE ?? "dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
@@ -331,6 +332,7 @@ try {
     const page = await context.newPage();
 
     await page.route("**/api/**", async (route) => {
+      if (await handleSmokeAuth(route)) return;
       const requestUrl = new URL(route.request().url());
       const pathName = requestUrl.pathname;
       const method = route.request().method().toUpperCase();
@@ -361,12 +363,14 @@ try {
 
     await gotoWithRetry(page, `${BASE_URL}/cpar/hedge`);
     await page.getByTestId("cpar-hedge-scope").waitFor();
-    await page.getByTestId("cpar-hedge-risk-chart").waitFor();
+    await page.getByTestId("cpar-risk-factor-chart").waitFor();
     await page.getByTestId("cpar-risk-factor-summary").waitFor();
     await page.getByTestId("cpar-portfolio-hedge-recommendation").waitFor();
     await page.getByRole("combobox").waitFor();
     const options = await page.locator("select option").allTextContents();
-    assert.deepEqual(options, ["All Accounts", "Main", "Alt"]);
+    assert.equal(options[0], "All Accounts");
+    assert(options[1].startsWith("Main · "));
+    assert(options[2].startsWith("Alt · "));
     await page.getByText("Factor-Neutral Recommendation").waitFor();
     await page.getByText("Base Notional").waitFor();
     await page.getByText("AAPL").waitFor({ timeout: 1 }).catch(() => {}); // ignore row text absence in this page

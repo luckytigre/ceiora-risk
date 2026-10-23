@@ -128,6 +128,7 @@ async function requestServeRefreshAttempt(): Promise<{
 
 export async function revalidateServedAnalyticsViews(): Promise<void> {
   await Promise.all([
+    mutate(apiPath.exploreContext()),
     mutate(apiPath.refreshStatus()),
     mutate(apiPath.operatorStatus()),
     mutate(apiPath.riskPageSnapshot()),

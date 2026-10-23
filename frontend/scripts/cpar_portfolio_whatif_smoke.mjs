@@ -1,3 +1,4 @@
+import { handleSmokeAuth, smokeEnv, authenticateSmokePage, smokeFetch as fetch } from "./smoke_auth.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
 const HOST = "127.0.0.1";
-const PORT = 3109;
+const PORT = Number(process.env.CEIORA_SMOKE_PORT ?? 3109);
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
@@ -52,7 +53,7 @@ function baseMeta() {
 }
 
 function riskPayload() {
-  return {
+  const fixture = {
     ...baseMeta(),
     scope: "all_accounts",
     accounts_count: 3,
@@ -153,6 +154,11 @@ function riskPayload() {
       },
     ],
   };
+  // This fixture has identical display and trade values; expose both API bases.
+  return { ...fixture, display_factor_chart: fixture.factor_chart,
+    aggregate_display_loadings: fixture.aggregate_thresholded_loadings,
+    display_factor_variance_contributions: fixture.factor_variance_contributions };
+
 }
 
 async function waitForServer(url, timeoutMs = 120000) {
@@ -204,10 +210,10 @@ let capturedPageError = null;
 let scenario = "ok";
 const server = spawn(
   NEXT_BIN,
-  ["dev", "-H", HOST, "-p", String(PORT)],
+  [process.env.CEIORA_SMOKE_SERVER_MODE ?? "dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+    env: { ...process.env, ...smokeEnv, NEXT_TELEMETRY_DISABLED: "1" },
     stdio: ["ignore", "pipe", "pipe"],
   },
 );
@@ -232,12 +238,14 @@ try {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    await authenticateSmokePage(page, BASE_URL);
     debugPage = page;
     page.on("pageerror", (error) => {
       capturedPageError = error;
     });
 
     await page.route("**/api/**", async (route) => {
+      if (await handleSmokeAuth(route)) return;
       const requestUrl = new URL(route.request().url());
       const pathName = requestUrl.pathname;
       const method = route.request().method().toUpperCase();

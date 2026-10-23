@@ -1,3 +1,4 @@
+import { smokeEnv, authenticateSmokePage, smokeFetch as fetch } from "./smoke_auth.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -5,7 +6,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 const HOST = "127.0.0.1";
-const PORT = 3102;
+const PORT = Number(process.env.CEIORA_SMOKE_PORT ?? 3102);
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
@@ -31,11 +32,12 @@ const serverStdout = [];
 const serverStderr = [];
 const server = spawn(
   NEXT_BIN,
-  ["dev", "-H", HOST, "-p", String(PORT)],
+  [process.env.CEIORA_SMOKE_SERVER_MODE ?? "dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
       ...process.env,
+      ...smokeEnv,
       NEXT_TELEMETRY_DISABLED: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],

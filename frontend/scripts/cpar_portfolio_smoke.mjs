@@ -1,3 +1,4 @@
+import { handleSmokeAuth, smokeEnv, authenticateSmokePage, smokeFetch as fetch } from "./smoke_auth.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
 const HOST = "127.0.0.1";
-const PORT = 3108;
+const PORT = Number(process.env.CEIORA_SMOKE_PORT ?? 3108);
 const BASE_URL = `http://${HOST}:${PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const FRONTEND_ROOT = path.resolve(path.dirname(__filename), "..");
@@ -723,7 +724,7 @@ async function gotoWithRetry(page, url, options, attempts = 3) {
 }
 
 async function expectColoredRiskBars(page, modeLabel) {
-  await page.getByRole("button", { name: modeLabel }).click();
+  await page.getByRole("tab", { name: modeLabel, exact: true }).click();
   await delay(150);
   const hasColoredBars = await page.evaluate(() => {
     const host = document.querySelector('[data-testid="cpar-risk-factor-chart"]');
@@ -759,11 +760,12 @@ let capturedPageError = null;
 let scenario = "baseline";
 const server = spawn(
   NEXT_BIN,
-  ["dev", "-H", HOST, "-p", String(PORT)],
+  [process.env.CEIORA_SMOKE_SERVER_MODE ?? "dev", "-H", HOST, "-p", String(PORT)],
   {
     cwd: FRONTEND_ROOT,
     env: {
       ...process.env,
+      ...smokeEnv,
       NEXT_TELEMETRY_DISABLED: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -794,12 +796,14 @@ try {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    await authenticateSmokePage(page, BASE_URL);
     debugPage = page;
     page.on("pageerror", (error) => {
       capturedPageError = error;
     });
 
     await page.route("**/api/**", async (route) => {
+      if (await handleSmokeAuth(route)) return;
       const requestUrl = new URL(route.request().url());
       const pathName = requestUrl.pathname;
       const method = route.request().method().toUpperCase();

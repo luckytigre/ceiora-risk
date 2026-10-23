@@ -20,7 +20,7 @@ function fmtMarketValue(value: number | null): string {
 }
 
 function fmtShares(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+  return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
 function riskMix(pos: Position) {

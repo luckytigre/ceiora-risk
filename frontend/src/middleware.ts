@@ -122,6 +122,7 @@ function authBootstrapPayload(
     authenticated: true,
     session: {
       authProvider: session.authProvider,
+      subject: session.subject,
       username: session.username,
       email: context?.email ?? session.email ?? null,
       displayName: context?.display_name ?? session.displayName ?? null,

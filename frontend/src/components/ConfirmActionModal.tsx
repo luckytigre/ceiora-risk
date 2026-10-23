@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import useFocusTrap from "@/hooks/useFocusTrap";
+import useFocusTrap, { isTopFocusTrap } from "@/hooks/useFocusTrap";
 
 interface ConfirmActionModalProps {
   open: boolean;
@@ -45,7 +45,7 @@ export default function ConfirmActionModal({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && isTopFocusTrap(cardRef.current)) {
         event.stopPropagation();
         onCancel();
       }
@@ -83,7 +83,7 @@ export default function ConfirmActionModal({
               {confirmLabel}: <strong>{confirmValue}</strong>
             </label>
             <input
-              autoFocus
+              data-dialog-autofocus
               className="explore-input"
               value={typed}
               onChange={(e) => setTyped(e.target.value)}

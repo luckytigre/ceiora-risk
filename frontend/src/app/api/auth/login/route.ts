@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
     returnTo,
     session: {
       authProvider: session.authProvider,
+      subject: session.subject,
       username: session.username,
       email: session.email ?? null,
       defaultAccountId: session.defaultAccountId ?? null,

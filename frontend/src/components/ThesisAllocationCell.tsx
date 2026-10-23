@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTheses, thesisPositionKey } from "@/components/ThesisContext";
 import { isConcreteThesisPosition } from "@/lib/thesisIdentity";
+import useFocusTrap, { isTopFocusTrap } from "@/hooks/useFocusTrap";
 import { useConfirm } from "@/components/ConfirmDialogProvider";
 
 interface ThesisAllocationCellProps {
@@ -15,7 +16,7 @@ interface ThesisAllocationCellProps {
 }
 
 function formatQuantity(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 export default function ThesisAllocationCell({
   accountId,
@@ -25,12 +26,15 @@ export default function ThesisAllocationCell({
   disabled = false,
   summaryMode = "allocations",
 }: ThesisAllocationCellProps) {
-  const { available, theses, allocations, busy, createThesis, deleteThesis, replacePositionAllocations } = useTheses();
+  const { available, workspaceKey, theses, allocations, busy, createThesis, deleteThesis, replacePositionAllocations } = useTheses();
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [newThesisName, setNewThesisName] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const modalRef = useRef<HTMLElement | null>(null);
+  useFocusTrap(modalRef, open && available);
+  useEffect(() => { setOpen(false); setDrafts({}); setNewThesisName(""); setError(null); }, [workspaceKey]);
   const key = thesisPositionKey(accountId, ric);
   const positionAllocations = useMemo(
     () => allocations.filter((allocation) => thesisPositionKey(allocation.accountId, allocation.ric) === key),
@@ -40,7 +44,7 @@ export default function ThesisAllocationCell({
   const allocatedAbsolute = positionAllocations.reduce((sum, allocation) => sum + Math.abs(allocation.quantity), 0);
   useEffect(() => {
     if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape" && isTopFocusTrap(modalRef.current)) setOpen(false); };
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [open]);
@@ -103,7 +107,7 @@ export default function ThesisAllocationCell({
 
       {open ? (
         <div className="thesis-modal-backdrop" role="presentation" onMouseDown={() => setOpen(false)}>
-          <section className="thesis-modal thesis-allocation-modal" style={{ "--thesis-active-color": positionAllocations.length ? thesisById.get(positionAllocations[0].thesisId)?.color : "var(--analytics-cuse)" } as CSSProperties} role="dialog" aria-modal="true" aria-label={`Allocate ${ticker} by thesis`} onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={modalRef} className="thesis-modal thesis-allocation-modal" style={{ "--thesis-active-color": positionAllocations.length ? thesisById.get(positionAllocations[0].thesisId)?.color : "var(--analytics-cuse)" } as CSSProperties} role="dialog" aria-modal="true" aria-label={`Allocate ${ticker} by thesis`} onMouseDown={(event) => event.stopPropagation()}>
             <div className="thesis-modal-header">
               <div>
                 <span className="thesis-modal-folio">THESIS ALLOCATION</span>

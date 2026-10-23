@@ -6,6 +6,7 @@ export const APP_AUTH_BOOTSTRAP_HEADER = "x-app-auth-bootstrap";
 export interface AppSessionPayload {
   authProvider: AppAuthProvider;
   username: string;
+  subject?: string;
   email?: string | null;
   displayName?: string | null;
   defaultAccountId?: string | null;
@@ -58,4 +59,9 @@ export function decodeAuthSessionBootstrapHeader(value: string | null | undefine
   } catch {
     return null;
   }
+}
+
+/** Stable across account-context hydration; changes only for a different login. */
+export function sessionPrincipalKey(session: AppSessionPayload | null): string {
+  return session ? JSON.stringify([session.authProvider, session.subject || session.email || session.username]) : "";
 }

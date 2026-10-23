@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 import { createPortal } from "react-dom";
 import { manualPositionKey, thesisPositionKey, useTheses } from "@/components/ThesisContext";
 import { isConcreteThesisPosition } from "@/lib/thesisIdentity";
-import useFocusTrap from "@/hooks/useFocusTrap";
+import useFocusTrap, { isTopFocusTrap } from "@/hooks/useFocusTrap";
 import { useConfirm } from "@/components/ConfirmDialogProvider";
 
 export interface InlineThesisPosition {
@@ -57,7 +57,7 @@ function orderedByKeys<T>(items: T[], keys: string[], keyOf: (item: T) => string
   return [...items].sort((left, right) => (rank.get(keyOf(left)) ?? Number.MAX_SAFE_INTEGER) - (rank.get(keyOf(right)) ?? Number.MAX_SAFE_INTEGER));
 }
 
-function fmtQuantity(value: number): string { return value.toLocaleString(undefined, { maximumFractionDigits: 4 }); }
+function fmtQuantity(value: number): string { return value.toLocaleString(undefined, { maximumFractionDigits: 6 }); }
 function direction(value: number): string { return `${value < 0 ? "Short" : "Long"} ${fmtQuantity(Math.abs(value))}`; }
 function signedQuantity(value: number): string { return `${value < 0 ? "−" : "+"}${fmtQuantity(Math.abs(value))}`; }
 function fmtMoney(value: number | null): string {
@@ -76,7 +76,7 @@ function legMarketValue(leg: DragDescriptor): number | null {
 }
 
 export default function InlineThesisRows<T>({ rows, colSpan, getPosition, renderCells, grouped, emptyLabel = "No positions are loaded.", groupedSortMetric, groupedSortAscending = false, groupedMarketValueAbsolute = true, groupedTickerDirection, manualOrder = false, orderScope, marketValueColumnIndex, headerControlsId, ungroupedLimit }: InlineThesisRowsProps<T>) {
-  const { available, theses, allocations, manualOrders, busy, createThesis, renameThesis, deleteThesis, saveManualOrder, replacePositionAllocations } = useTheses();
+  const { available, workspaceKey, theses, allocations, manualOrders, busy, createThesis, renameThesis, deleteThesis, saveManualOrder, replacePositionAllocations } = useTheses();
   const concrete = rows.every(row => { const p = getPosition(row); return isConcreteThesisPosition(p.accountId, p.ric); });
   grouped = grouped && available && concrete;
   manualOrder = manualOrder && available && concrete;
@@ -117,18 +117,24 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
   const renameRef = useRef<HTMLElement | null>(null);
   const pendingRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    setPending(null); setShowCreate(false); setRenameDraft(null); setContextMenu(null);
+    setCreateName(""); setCreatingFor(null); setError(null); setActiveLegKey(null);
+    setCollapsedGroups(new Set()); menuInvokerKeyRef.current = null;
+  }, [workspaceKey]);
+
   // A11Y-02: open the move menu from the keyboard. Anchored to the row, since
   // there is no pointer position to anchor to.
   const legKeyOf = useCallback((leg: DragDescriptor) => `${leg.accountId}:${leg.ric}`, []);
 
   const focusLeg = useCallback((key: string) => {
-    const el = document.querySelector<HTMLElement>(`[data-leg-key="${CSS.escape(key)}"]`);
-    if (el) { setActiveLegKey(key); el.focus(); }
+    const el = document.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(key)}"]`) ?? document.querySelector<HTMLElement>(`[data-leg-key="${CSS.escape(key)}"]`);
+    if (el) { setActiveLegKey(el.dataset.focusKey ?? key); el.focus(); }
   }, []);
 
   const openMenuForRow = useCallback((el: HTMLElement, leg: DragDescriptor) => {
     const box = el.getBoundingClientRect();
-    menuInvokerKeyRef.current = `${leg.accountId}:${leg.ric}`;
+    menuInvokerKeyRef.current = `${leg.sourceId}:${leg.accountId}:${leg.ric}`;
     setContextMenu({
       x: Math.min(box.left + 24, window.innerWidth - 260),
       y: Math.min(box.bottom, window.innerHeight - 280),
@@ -140,6 +146,8 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
     if (!pending && !showCreate && !renameDraft && !contextMenu) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      const dialog = pendingRef.current ?? createRef.current ?? renameRef.current;
+      if (dialog && !isTopFocusTrap(dialog)) return;
       setPending(null); setShowCreate(false); setRenameDraft(null); setContextMenu(null); setError(null);
     };
     document.addEventListener("keydown", closeOnEscape);
@@ -157,9 +165,9 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
     setHeaderControlsHost(grouped && headerControlsId ? document.getElementById(headerControlsId) : null);
   }, [grouped, headerControlsId]);
 
-  useFocusTrap(createRef, showCreate, { restoreFocus: false });
-  useFocusTrap(renameRef, Boolean(renameDraft), { restoreFocus: false });
-  useFocusTrap(pendingRef, Boolean(pending), { restoreFocus: false });
+  useFocusTrap(createRef, showCreate && available, { restoreFocus: !menuInvokerKeyRef.current });
+  useFocusTrap(renameRef, Boolean(renameDraft) && available, { restoreFocus: !menuInvokerKeyRef.current });
+  useFocusTrap(pendingRef, Boolean(pending) && available, { restoreFocus: !menuInvokerKeyRef.current });
 
   // A11Y-02: focus the first item when the menu opens.
   useEffect(() => {
@@ -240,17 +248,21 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
       : rows, [getPosition, manualOrder, manualOrders, orderScope, rows]);
   const flatRows = ungroupedLimit == null ? orderedFlatRows : orderedFlatRows.slice(0, ungroupedLimit);
 
-  // The single default tab stop for the whole grid until a row is focused.
+  const flatFocusKey = useMemo(() => {
+    const keys = flatRows.map(row => { const p = getPosition(row); return manualPositionKey(p.accountId, p.ric); });
+    return activeLegKey && keys.includes(activeLegKey) ? activeLegKey : keys[0] ?? null;
+  }, [activeLegKey, flatRows, getPosition]);
+
+  // Split holdings have one focus identity per displayed group/leg. If a
+  // focused leg disappears or is collapsed, keep a visible default tab stop.
   const firstLegKey = useMemo(() => {
-    for (const group of groups) {
-      const leg = group.legs[0];
-      if (leg) return `${leg.leg.accountId}:${leg.leg.ric}`;
-    }
-    return null;
-  }, [groups]);
+    const visible = groups.flatMap(group => collapsedGroups.has(group.id) ? [] : group.legs.map(({ leg }) => `${group.id}:${leg.accountId}:${leg.ric}`));
+    return activeLegKey && visible.includes(activeLegKey) ? activeLegKey : visible[0] ?? null;
+  }, [activeLegKey, collapsedGroups, groups]);
 
   const beginMove = (leg: DragDescriptor, destinationId: string) => {
     if (leg.sourceId === destinationId) return;
+    menuInvokerKeyRef.current = `${leg.sourceId}:${leg.accountId}:${leg.ric}`;
     setAllocationMode("all"); setPartial(String(leg.sourceQuantity)); setError(null); setPending({ leg, destinationId });
   };
   const dropOn = (event: DragEvent, destinationId: string) => {
@@ -272,6 +284,15 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
   const persistOrder = async (scope: string, keys: string[]) => {
     const saveError = await saveManualOrder(scope, keys);
     if (saveError) setError(saveError);
+  };
+  const keyboardOrder = (event: ReactKeyboardEvent<HTMLElement>, scope: string, keys: string[], key: string) => {
+    if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return false;
+    event.preventDefault();
+    if (busy) return true;
+    const source = keys.indexOf(key);
+    const target = source + (event.key === "ArrowUp" ? -1 : 1);
+    if (source >= 0 && target >= 0 && target < keys.length) void persistOrder(scope, moveToIndex(keys, source, target));
+    return true;
   };
   const reorderFlatRows = (sourceKey: string, targetKey: string) => {
     const keys = orderedFlatRows.map((row) => { const position = getPosition(row); return manualPositionKey(position.accountId, position.ric); });
@@ -303,7 +324,9 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
     if (pending.destinationId !== "unallocated") current.set(pending.destinationId, Number(current.get(pending.destinationId) || 0) + signed);
     const saveError = await replacePositionAllocations(pending.leg.accountId, pending.leg.ric, [...current.entries()].map(([thesisId, quantity]) => ({ thesisId, quantity })));
     if (saveError) { setError(saveError); return; }
-    setRecentlyMovedKey(`${pending.destinationId}:${pending.leg.accountId}:${pending.leg.ric}`);
+    setCollapsedGroups(current => { const next = new Set(current); next.delete(pending.destinationId); return next; });
+    menuInvokerKeyRef.current = `${pending.destinationId}:${pending.leg.accountId}:${pending.leg.ric}`;
+    setRecentlyMovedKey(menuInvokerKeyRef.current);
     setPending(null); setError(null);
   };
   const handleCreate = async () => {
@@ -329,7 +352,16 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
     return <>{flatRows.length ? flatRows.map((row) => {
       const position = getPosition(row);
       const positionKey = manualPositionKey(position.accountId, position.ric || position.ticker);
-      return <tr key={positionKey} className={`${manualOrder ? "manual-sort-row" : ""}${rowOrderTargetKey === positionKey ? " order-target" : ""}`} draggable={manualOrder && !busy} onDragStart={(event) => { if (!manualOrder) return; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(FLAT_ORDER_MIME, positionKey); setDragOverGroupId(null); setThesisOrderTargetId(null); }} onDragEnd={endDrag} onDragOver={(event) => { if (!manualOrder || !event.dataTransfer.types.includes(FLAT_ORDER_MIME)) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setRowOrderTargetKey(positionKey); }} onDrop={(event) => { if (!manualOrder || !event.dataTransfer.types.includes(FLAT_ORDER_MIME)) return; event.preventDefault(); const sourceKey = event.dataTransfer.getData(FLAT_ORDER_MIME); endDrag(); reorderFlatRows(sourceKey, positionKey); }}>{renderCells(row, position.quantity, false)}</tr>;
+      return <tr key={positionKey} data-position-key={positionKey} className={`${manualOrder ? "manual-sort-row" : ""}${rowOrderTargetKey === positionKey ? " order-target" : ""}`} draggable={manualOrder && !busy} tabIndex={manualOrder ? (flatFocusKey === positionKey ? 0 : -1) : undefined} aria-keyshortcuts={manualOrder ? "Alt+ArrowUp Alt+ArrowDown" : undefined} aria-label={manualOrder ? `${position.ticker}. Alt+Up or Alt+Down to reorder.` : undefined} onFocus={() => { if (manualOrder) setActiveLegKey(positionKey); }} onKeyDown={(event) => {
+        if (!manualOrder || event.target !== event.currentTarget) return;
+        const keys = orderedFlatRows.map(item => { const p = getPosition(item); return manualPositionKey(p.accountId, p.ric); });
+        if (keyboardOrder(event, `positions:${orderScope}`, keys, positionKey)) return;
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          event.preventDefault();
+          const visible = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>("tr.manual-sort-row") ?? []);
+          const i = visible.indexOf(event.currentTarget); const next = visible[Math.max(0, Math.min(visible.length - 1, i + (event.key === "ArrowUp" ? -1 : 1)))]; next?.focus();
+        }
+      }} onDragStart={(event) => { if (!manualOrder) return; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(FLAT_ORDER_MIME, positionKey); setDragOverGroupId(null); setThesisOrderTargetId(null); }} onDragEnd={endDrag} onDragOver={(event) => { if (!manualOrder || !event.dataTransfer.types.includes(FLAT_ORDER_MIME)) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setRowOrderTargetKey(positionKey); }} onDrop={(event) => { if (!manualOrder || !event.dataTransfer.types.includes(FLAT_ORDER_MIME)) return; event.preventDefault(); const sourceKey = event.dataTransfer.getData(FLAT_ORDER_MIME); endDrag(); reorderFlatRows(sourceKey, positionKey); }}>{renderCells(row, position.quantity, false)}</tr>;
     }) : <tr><td colSpan={colSpan} className="holdings-empty-row">{emptyLabel}</td></tr>}</>;
   }
 
@@ -344,11 +376,11 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
 
   return <>
     {headerControlsHost ? createPortal(dragStatus ? <span className="thesis-header-drag-status" aria-live="polite">{dragStatus}</span> : <>{saveStatus ? <span className="thesis-header-save-status" title={error || undefined} aria-live="polite">{saveStatus}</span> : null}{theses.length > 0 ? <button type="button" disabled={toolbarDisabled} onClick={() => setCollapsedGroups(allGroupsCollapsed ? new Set() : new Set(groups.map((group) => group.id)))}>{allGroupsCollapsed ? "Expand groups" : "Collapse groups"}</button> : null}<button type="button" className="btn-action primary" disabled={toolbarDisabled} onClick={() => { setCreatingFor(null); setShowCreate(true); }}>+ New thesis</button></>, headerControlsHost) : null}
-    {groups.map((group) => { const groupLead = <>{manualOrder && group.id !== "unallocated" ? <button type="button" className="thesis-manual-handle" disabled={busy} draggable={!busy} aria-label={`Drag to reorder ${group.name}`} onDragStart={(event) => { event.stopPropagation(); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(THESIS_ORDER_MIME, group.id); setDraggingLeg(null); setDragOverGroupId(null); setRowOrderTargetKey(null); setDraggingThesisId(group.id); }} onDragEnd={endDrag}>⋮⋮</button> : null}<button type="button" className="thesis-group-toggle" aria-label={`${collapsedGroups.has(group.id) ? "Expand" : "Collapse"} ${group.name}`} aria-expanded={!collapsedGroups.has(group.id)} onClick={() => toggleGroup(group.id)}><span aria-hidden="true">{collapsedGroups.has(group.id) ? "›" : "⌄"}</span></button><span className="thesis-dot" style={{ background: group.color }} /><strong>{group.name}</strong><span>{group.legs.length} legs</span></>; const groupActions = group.id !== "unallocated" ? <span className="thesis-group-actions"><button type="button" onClick={() => { setError(null); setRenameDraft({ id: group.id, name: group.name }); }}>Rename</button><button type="button" className="danger" aria-label={`Delete thesis ${group.name}`} onClick={async () => { const proceed = await confirm({ title: `Delete “${group.name}”?`, body: `${group.legs.length} ${group.legs.length === 1 ? "leg returns" : "legs return"} to Unallocated. The underlying holdings are not changed.`, dangerText: "Delete thesis" }); if (!proceed) return; const nextError = await deleteThesis(group.id); if (nextError) setError(nextError); }}>Delete</button></span> : null; const hasMarketValueColumn = marketValueColumnIndex != null && marketValueColumnIndex > 0 && marketValueColumnIndex < colSpan - 1; const trailingSpan = hasMarketValueColumn ? colSpan - marketValueColumnIndex - 2 : 0; return <Fragment key={group.id}>
+    {groups.map((group) => { const groupLead = <>{manualOrder && group.id !== "unallocated" ? <button type="button" className="thesis-manual-handle" disabled={busy} draggable={!busy} aria-label={`Reorder ${group.name}`} title="Drag or press Alt+Up / Alt+Down to reorder" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown" onKeyDown={(event) => { keyboardOrder(event, "theses", groups.filter(item => item.id !== "unallocated").map(item => item.id), group.id); }} onDragStart={(event) => { event.stopPropagation(); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(THESIS_ORDER_MIME, group.id); setDraggingLeg(null); setDragOverGroupId(null); setRowOrderTargetKey(null); setDraggingThesisId(group.id); }} onDragEnd={endDrag}>⋮⋮</button> : null}<button type="button" className="thesis-group-toggle" aria-label={`${collapsedGroups.has(group.id) ? "Expand" : "Collapse"} ${group.name}`} aria-expanded={!collapsedGroups.has(group.id)} onClick={() => toggleGroup(group.id)}><span aria-hidden="true">{collapsedGroups.has(group.id) ? "›" : "⌄"}</span></button><span className="thesis-dot" style={{ background: group.color }} /><strong>{group.name}</strong><span>{group.legs.length} legs</span></>; const groupActions = group.id !== "unallocated" ? <span className="thesis-group-actions"><button type="button" onClick={() => { setError(null); setRenameDraft({ id: group.id, name: group.name }); }}>Rename</button><button type="button" className="danger" aria-label={`Delete thesis ${group.name}`} onClick={async () => { const proceed = await confirm({ title: `Delete “${group.name}”?`, body: `${group.legs.length} ${group.legs.length === 1 ? "leg returns" : "legs return"} to Unallocated. The underlying holdings are not changed.`, dangerText: "Delete thesis" }); if (!proceed) return; const nextError = await deleteThesis(group.id); if (nextError) setError(nextError); }}>Delete</button></span> : null; const hasMarketValueColumn = marketValueColumnIndex != null && marketValueColumnIndex > 0 && marketValueColumnIndex < colSpan - 1; const trailingSpan = hasMarketValueColumn ? colSpan - marketValueColumnIndex - 2 : 0; return <Fragment key={group.id}>
       <tr className={`thesis-inline-group-row${collapsedGroups.has(group.id) ? " collapsed" : ""}${dragOverGroupId === group.id ? " drop-target" : ""}${thesisOrderTargetId === group.id ? " order-target" : ""}${draggingThesisId === group.id ? " ordering" : ""}`} style={{ "--thesis-active-color": group.color } as CSSProperties} onDragOver={(event) => { if (manualOrder && group.id !== "unallocated" && event.dataTransfer.types.includes(THESIS_ORDER_MIME)) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDragOverGroupId(null); setRowOrderTargetKey(null); setThesisOrderTargetId(group.id); return; } dragOver(event, group.id); }} onDrop={(event) => { if (manualOrder && group.id !== "unallocated" && event.dataTransfer.types.includes(THESIS_ORDER_MIME)) { event.preventDefault(); const sourceId = event.dataTransfer.getData(THESIS_ORDER_MIME); endDrag(); reorderThesisGroups(sourceId, group.id); return; } dropOn(event, group.id); }}>
         {hasMarketValueColumn ? <><td colSpan={marketValueColumnIndex}>{groupLead}</td><td className="text-right thesis-group-market-value" title="Net allocated market value">{group.legs.length ? fmtMoney(group.marketValue) : "—"}</td>{trailingSpan > 0 ? <td colSpan={trailingSpan} /> : null}<td className="thesis-group-actions-cell">{groupActions}</td></> : <td colSpan={colSpan}>{groupLead}{group.legs.length ? <span>{fmtMoney(group.marketValue)} net</span> : null}{groupActions}</td>}
       </tr>
-      {!collapsedGroups.has(group.id) ? group.legs.map(({ row, leg }) => { const legKey = manualPositionKey(leg.accountId, leg.ric); return <tr key={`${group.id}:${leg.accountId}:${leg.ric}`} data-thesis-group-id={group.id} data-thesis-group-name={group.name} className={`thesis-inline-draggable${draggingLeg?.sourceId === leg.sourceId && draggingLeg.accountId === leg.accountId && draggingLeg.ric === leg.ric ? " dragging" : ""}${dragOverGroupId === group.id && draggingLeg?.sourceId !== group.id ? " drop-target-row" : ""}${rowOrderTargetKey === `${group.id}:${legKey}` ? " order-target" : ""}${recentlyMovedKey === `${group.id}:${leg.accountId}:${leg.ric}` ? " just-moved" : ""}`} style={{ "--thesis-active-color": group.color } as CSSProperties} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(LEG_MIME, JSON.stringify(leg)); setDraggingThesisId(null); setThesisOrderTargetId(null); setRowOrderTargetKey(null); setDraggingLeg(leg); }} onDragEnd={endDrag} onDragEnter={(event) => { if (manualOrder && draggingLeg?.sourceId === group.id) { event.preventDefault(); setDragOverGroupId(null); setRowOrderTargetKey(`${group.id}:${legKey}`); return; } dragOver(event, group.id); }} onDragOver={(event) => { if (manualOrder && draggingLeg?.sourceId === group.id) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDragOverGroupId(null); setRowOrderTargetKey(`${group.id}:${legKey}`); return; } dragOver(event, group.id); }} onDrop={(event) => { if (manualOrder && draggingLeg?.sourceId === group.id) { event.preventDefault(); const source = JSON.parse(event.dataTransfer.getData(LEG_MIME)) as DragDescriptor; endDrag(); reorderGroupLegs(group.id, source, leg); return; } dropOn(event, group.id); }} data-leg-key={`${leg.accountId}:${leg.ric}`} tabIndex={(activeLegKey ?? firstLegKey) === `${leg.accountId}:${leg.ric}` ? 0 : -1} aria-label={`${leg.ticker}, ${direction(leg.sourceQuantity)}, in ${group.name}. Press Enter to move.`} onFocus={() => setActiveLegKey(`${leg.accountId}:${leg.ric}`)} onKeyDown={(event: ReactKeyboardEvent<HTMLTableRowElement>) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMenuForRow(event.currentTarget, leg); return; } if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") { event.preventDefault(); const all = Array.from(document.querySelectorAll<HTMLElement>("tr.thesis-inline-draggable[data-leg-key]")); const i = all.indexOf(event.currentTarget); const next = event.key === "ArrowDown" ? all[Math.min(i + 1, all.length - 1)] : event.key === "ArrowUp" ? all[Math.max(i - 1, 0)] : event.key === "Home" ? all[0] : all[all.length - 1]; if (next) { setActiveLegKey(next.dataset.legKey ?? null); next.focus(); } } }} onContextMenu={(event: MouseEvent) => { event.preventDefault(); setContextMenu({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 280), leg }); }}>
+      {!collapsedGroups.has(group.id) ? group.legs.map(({ row, leg }) => { const legKey = manualPositionKey(leg.accountId, leg.ric); return <tr key={`${group.id}:${leg.accountId}:${leg.ric}`} data-thesis-group-id={group.id} data-thesis-group-name={group.name} className={`thesis-inline-draggable${draggingLeg?.sourceId === leg.sourceId && draggingLeg.accountId === leg.accountId && draggingLeg.ric === leg.ric ? " dragging" : ""}${dragOverGroupId === group.id && draggingLeg?.sourceId !== group.id ? " drop-target-row" : ""}${rowOrderTargetKey === `${group.id}:${legKey}` ? " order-target" : ""}${recentlyMovedKey === `${group.id}:${leg.accountId}:${leg.ric}` ? " just-moved" : ""}`} style={{ "--thesis-active-color": group.color } as CSSProperties} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(LEG_MIME, JSON.stringify(leg)); setDraggingThesisId(null); setThesisOrderTargetId(null); setRowOrderTargetKey(null); setDraggingLeg(leg); }} onDragEnd={endDrag} onDragEnter={(event) => { if (manualOrder && draggingLeg?.sourceId === group.id) { event.preventDefault(); setDragOverGroupId(null); setRowOrderTargetKey(`${group.id}:${legKey}`); return; } dragOver(event, group.id); }} onDragOver={(event) => { if (manualOrder && draggingLeg?.sourceId === group.id) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDragOverGroupId(null); setRowOrderTargetKey(`${group.id}:${legKey}`); return; } dragOver(event, group.id); }} onDrop={(event) => { if (manualOrder && draggingLeg?.sourceId === group.id) { event.preventDefault(); const source = JSON.parse(event.dataTransfer.getData(LEG_MIME)) as DragDescriptor; endDrag(); reorderGroupLegs(group.id, source, leg); return; } dropOn(event, group.id); }} data-leg-key={`${leg.accountId}:${leg.ric}`} data-focus-key={`${group.id}:${leg.accountId}:${leg.ric}`} tabIndex={firstLegKey === `${group.id}:${leg.accountId}:${leg.ric}` ? 0 : -1} aria-label={`${leg.ticker}, ${direction(leg.sourceQuantity)}, in ${group.name}. Press Enter to move.${manualOrder ? " Alt+Up or Alt+Down to reorder." : ""}`} aria-keyshortcuts={manualOrder ? "Alt+ArrowUp Alt+ArrowDown" : undefined} onFocus={() => setActiveLegKey(`${group.id}:${leg.accountId}:${leg.ric}`)} onKeyDown={(event: ReactKeyboardEvent<HTMLTableRowElement>) => { if (event.target !== event.currentTarget) return; if (manualOrder && keyboardOrder(event, group.id === "unallocated" ? `unallocated:${orderScope}` : `legs:${group.id}`, group.legs.map(item => manualPositionKey(item.leg.accountId, item.leg.ric)), legKey)) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMenuForRow(event.currentTarget, leg); return; } if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") { event.preventDefault(); const all = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>("tr.thesis-inline-draggable[data-leg-key]") ?? []); const i = all.indexOf(event.currentTarget); const next = event.key === "ArrowDown" ? all[Math.min(i + 1, all.length - 1)] : event.key === "ArrowUp" ? all[Math.max(i - 1, 0)] : event.key === "Home" ? all[0] : all[all.length - 1]; if (next) { setActiveLegKey(next.dataset.focusKey ?? null); next.focus(); } } }} onContextMenu={(event: MouseEvent) => { event.preventDefault(); menuInvokerKeyRef.current = `${group.id}:${leg.accountId}:${leg.ric}`; setContextMenu({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 280), leg }); }}>
         {renderCells(row, leg.sourceQuantity, true, group.id)}
       </tr>; }) : null}
       {!collapsedGroups.has(group.id) && !group.legs.length ? <tr className={`thesis-inline-empty-row${dragOverGroupId === group.id ? " drop-target" : ""}`} style={{ "--thesis-active-color": group.color } as CSSProperties} onDragEnter={(event) => dragOver(event, group.id)} onDragOver={(event) => dragOver(event, group.id)} onDrop={(event) => dropOn(event, group.id)}><td colSpan={colSpan}>{draggingLeg ? `Drop ${draggingLeg.ticker} into ${group.name}` : "Drop a position row here"}</td></tr> : null}
@@ -361,13 +393,13 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
       </div> : null}
       {showCreate ? <div className="thesis-modal-backdrop" role="presentation" onMouseDown={() => setShowCreate(false)}><section className="thesis-modal thesis-inline-modal" style={{ "--thesis-active-color": "var(--analytics-cuse)" } as CSSProperties} ref={createRef as never} role="dialog" aria-modal="true" aria-label="Create thesis" onMouseDown={(event) => event.stopPropagation()}>
         <div className="thesis-modal-header"><div><span className="thesis-modal-folio">NEW THESIS</span><h3>{creatingFor ? `Create from ${creatingFor.ticker}` : "Create thesis"}</h3></div><button type="button" className="thesis-modal-close" aria-label="Close create thesis" onClick={() => setShowCreate(false)}>×</button></div>
-        <input autoFocus value={createName} maxLength={80} onChange={(event) => setCreateName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void handleCreate(); }} placeholder="e.g. Memory Cycle" aria-label="Thesis name" />
+        <input data-dialog-autofocus value={createName} maxLength={80} onChange={(event) => setCreateName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void handleCreate(); }} placeholder="e.g. Memory Cycle" aria-label="Thesis name" />
         {error ? <div className="thesis-modal-error" role="alert">{error}</div> : null}
         <div className="thesis-modal-actions"><button type="button" className="btn-action" onClick={() => setShowCreate(false)}>Cancel</button><button type="button" className="btn-action primary" disabled={!createName.trim() || busy} onClick={() => void handleCreate()}>{busy ? "Creating…" : "Create"}</button></div>
       </section></div> : null}
       {renameDraft ? <div className="thesis-modal-backdrop" role="presentation" onMouseDown={() => setRenameDraft(null)}><section className="thesis-modal thesis-inline-modal" style={{ "--thesis-active-color": theses.find((thesis) => thesis.id === renameDraft.id)?.color || "var(--analytics-cuse)" } as CSSProperties} ref={renameRef as never} role="dialog" aria-modal="true" aria-label="Rename thesis" onMouseDown={(event) => event.stopPropagation()}>
         <div className="thesis-modal-header"><div><span className="thesis-modal-folio">RENAME THESIS</span><h3>{renameDraft.name}</h3></div><button type="button" className="thesis-modal-close" aria-label="Close rename thesis" onClick={() => setRenameDraft(null)}>×</button></div>
-        <input autoFocus value={renameDraft.name} maxLength={80} onChange={(event) => setRenameDraft({ ...renameDraft, name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void handleRename(); }} aria-label="Thesis name" />
+        <input data-dialog-autofocus value={renameDraft.name} maxLength={80} onChange={(event) => setRenameDraft({ ...renameDraft, name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void handleRename(); }} aria-label="Thesis name" />
         {error ? <div className="thesis-modal-error" role="alert">{error}</div> : null}
         <div className="thesis-modal-actions"><button type="button" className="btn-action" onClick={() => setRenameDraft(null)}>Cancel</button><button type="button" className="btn-action primary" disabled={!renameDraft.name.trim() || busy} onClick={() => void handleRename()}>{busy ? "Saving…" : "Save name"}</button></div>
       </section></div> : null}
@@ -378,7 +410,7 @@ export default function InlineThesisRows<T>({ rows, colSpan, getPosition, render
           <button type="button" role="radio" aria-checked={allocationMode === "all"} className={allocationMode === "all" ? "selected" : ""} onClick={() => setAllocationMode("all")}><span><strong>All available</strong><small>Move the entire row from this section</small></span><b>{signedQuantity(pending.leg.sourceQuantity)} shares</b></button>
           <button type="button" role="radio" aria-checked={allocationMode === "partial"} className={allocationMode === "partial" ? "selected" : ""} onClick={() => setAllocationMode("partial")}><span><strong>Partial allocation</strong><small>Split this row between sections</small></span><b>{Number.isFinite(Number(partial)) ? signedQuantity(Number(partial)) : "—"} shares</b></button>
         </div>
-        {allocationMode === "partial" ? <label className="thesis-partial-allocation"><span>Signed share quantity</span><input autoFocus type="number" step="any" value={partial} onChange={(event) => setPartial(event.target.value)} /><small>{pending.leg.quantity < 0 ? "Use a negative quantity for this short position." : "Use a positive quantity for this long position."}</small></label> : null}
+        {allocationMode === "partial" ? <label className="thesis-partial-allocation"><span>Signed share quantity</span><input data-dialog-autofocus type="number" step="any" value={partial} onChange={(event) => setPartial(event.target.value)} /><small>{pending.leg.quantity < 0 ? "Use a negative quantity for this short position." : "Use a positive quantity for this long position."}</small></label> : null}
         {error ? <div className="thesis-modal-error" role="alert">{error}</div> : null}
         <div className="thesis-modal-actions"><button type="button" className="btn-action" onClick={() => setPending(null)}>Cancel</button><button type="button" className="btn-action primary" disabled={busy} onClick={() => void applyMove()}>{busy ? "Saving…" : "Confirm move"}</button></div>
       </section></div> : null}
