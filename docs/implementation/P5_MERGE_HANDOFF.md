@@ -112,7 +112,7 @@ baseline, import the reviewed branch and validate its diff:
 ```sh
 git fetch /Users/shaun/Projects/ceiora-risk-ui-port feat/lite-ui-port:feat/lite-ui-port
 git diff --stat main...feat/lite-ui-port
-git diff --check main...feat/lite-ui-port
+git diff --check main...feat/lite-ui-port -- . ':!docs/implementation/LITE_NAVIGATION_SOURCE.patch'
 git merge --ff-only feat/lite-ui-port
 git status --short
 ```
@@ -121,3 +121,18 @@ A local fast-forward is possible while main remains at the recorded baseline.
 Reconcile any newly fetched upstream changes before merging. Follow
 ../operations/THESIS_WORKSPACE_ROLLOUT.md for additive migration, gated activation
 and rollback; rollback retains data and database invariants.
+
+## Verified carryover event
+
+Original main was clean at 23c6270a95b7397a2bad70f0d44ebb6b6bf863ff and
+fast-forwarded to 0f7296f16803de27a8f998f24492166d91284f00 on 2026-10-23.
+The working tree was clean and matched the reviewed integration checkout.
+Subsequent evidence-only bookkeeping does not change the verified app code.
+No push, live schema migration, deployment or owner activation occurred.
+
+Before checkout, Git used main's old attributes and flagged a preserved blank
+context line in the archived source patch. The pre-merge check therefore excludes
+only that byte-for-byte provenance artifact, matching the incoming branch's
+existing path-specific .gitattributes rule. After the fast-forward, the complete
+baseline-to-HEAD diff check passed with incoming attributes active. Application
+code has no whitespace exemption.
