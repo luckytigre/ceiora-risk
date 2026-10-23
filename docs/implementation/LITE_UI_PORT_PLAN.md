@@ -205,3 +205,9 @@ checks after any rebase. Do not auto-deploy or merge this work as part of planni
   All eight legacy regressions, real PostgreSQL browser flow, accessibility and
   signed two-user cache switch pass. See P5_MERGE_HANDOFF.md. Clean-install CI and
   live activation remain separate gates; no merge/deployment.
+
+- Final local carryover, 2026-10-23: fresh npm ci with the existing CI
+  --legacy-peer-deps policy, six contracts and production build passed without
+  lockfile changes. Reviewed history is fast-forwarded into original local main
+  after clean-status and remote-baseline checks. No push, migration or deployment;
+  live activation remains gated by THESIS_WORKSPACE_ROLLOUT.md.

@@ -20,7 +20,9 @@ expands that group before restoring focus. Explore now refreshes its served
 context after RECALC rather than during the immediate live-ledger refresh.
 
 No model kernels, dependency manifests/lockfiles, live credentials or deployment
-configuration changed. Original main and Lite source remain separate and intact.
+configuration changed. Original main stayed unchanged during isolated implementation and review. The
+reviewed history is now carried over locally with a fast-forward; Lite source
+remains intact. No push or cloud deployment is part of this local carryover.
 
 ## Evidence
 
@@ -86,23 +88,33 @@ cache provider. The signed-cookie test verifies the populated-cache switch.
 
 - Remote main was checked without credentials using git ls-remote and matches
   baseline 23c6270a95b7397a2bad70f0d44ebb6b6bf863ff. Recheck at actual merge time.
-- Clean-install CI remains unverified. Shaun was asked for package-install
-  approval under /Users/shaun/SYSTEM.md; no new install has been performed.
-- The branch has not been merged or deployed. Import it locally only after
-  checking original status, then review the final diff before integrating main.
+- Clean dependency verification passed in the disposable checkout
+  /Users/shaun/tmp/ceiora-risk-clean-check-20261023: npm ci --legacy-peer-deps
+  (the existing CI/Dockerfile policy), six pure contracts and production build.
+  Package manifests/lockfile stayed unchanged. Default npm ci hit the baseline
+  peer-resolution/npm edgesOut failure; using the repository's documented flags
+  succeeded. Logs: /tmp/ceiora-clean-install.log and /tmp/ceiora-clean-build.log.
+  This reproduces frontend CI locally; no hosted CI run is claimed.
+- Local integration fast-forwards original main from 23c6270, retaining the
+  reviewed UI implementation commit 2c488ab and the preceding P0–P4 commits.
+  Original status and remote main were clean/matching immediately before the
+  carryover; final main must match feat/lite-ui-port with a clean working tree.
+  No remote push, deployment or thesis activation was performed.
 - Production-like Neon migration, real auth/account mapping, owner activation and
   live smoke require their own authorized rollout. Local PostgreSQL proof is not
   a claim about the deployed environment.
 
-## Concrete merge rehearsal
+## Recorded local carryover procedure
 
-With a clean original checkout, these commands import the reviewed branch without
-changing its working tree:
+After checking the original checkout is clean and main matches the recorded
+baseline, import the reviewed branch and validate its diff:
 
 ```sh
 git fetch /Users/shaun/Projects/ceiora-risk-ui-port feat/lite-ui-port:feat/lite-ui-port
 git diff --stat main...feat/lite-ui-port
 git diff --check main...feat/lite-ui-port
+git merge --ff-only feat/lite-ui-port
+git status --short
 ```
 
 A local fast-forward is possible while main remains at the recorded baseline.
