@@ -100,3 +100,15 @@ CI/Dockerfile), six pure contracts and production build passed with unchanged
 manifests/lockfile. Reviewer found no local fast-forward integration blocker after
 original clean/main/remote-baseline checks. Production rollout remains unapproved
 and unperformed; local integration acceptance does not imply a live migration.
+
+
+## 2026-10-23 rollout preparation
+
+The adversarial reviewer identified invoker-trigger privileges affecting existing
+writers even when the UI is off, unbounded migration waits, inherited search_path,
+and an unverified candidate Neon target. Rollout preparation addresses these with
+atomic explicit role grants, local timeouts/public schema resolution, read-only
+preflight and staged approvals. Final static review accepted preparation with no
+code safety blocker; limited statistics visibility is reported explicitly. See
+[rollout-preparation evidence](ROLLOUT_PREP_EVIDENCE.md) for passed direct PostgreSQL
+and Terraform checks and the blocked full pytest rerun. Live rollout remains gated.

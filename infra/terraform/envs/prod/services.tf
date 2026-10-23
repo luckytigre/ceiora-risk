@@ -163,6 +163,17 @@ resource "google_cloud_run_v2_service" "serve" {
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
+  lifecycle {
+    precondition {
+      condition     = !var.portfolio_theses_enabled || length(var.portfolio_theses_owner_subjects) > 0
+      error_message = "Thesis activation requires at least one explicitly audited owner subject."
+    }
+    precondition {
+      condition     = !var.portfolio_theses_allow_shared_auth || var.app_shared_auth_accept_legacy
+      error_message = "Shared thesis auth requires the existing shared-auth access gate."
+    }
+  }
+
   scaling {
     min_instance_count    = 0
     manual_instance_count = 0
@@ -229,6 +240,21 @@ resource "google_cloud_run_v2_service" "serve" {
       env {
         name  = "APP_SHARED_AUTH_ACCEPT_LEGACY"
         value = var.app_shared_auth_accept_legacy ? "true" : "false"
+      }
+
+      env {
+        name  = "PORTFOLIO_THESES_ENABLED"
+        value = var.portfolio_theses_enabled ? "true" : "false"
+      }
+
+      env {
+        name  = "PORTFOLIO_THESES_OWNER_SUBJECTS"
+        value = local.portfolio_theses_owner_subjects_csv
+      }
+
+      env {
+        name  = "PORTFOLIO_THESES_ALLOW_SHARED_AUTH"
+        value = var.portfolio_theses_allow_shared_auth ? "true" : "false"
       }
 
       env {

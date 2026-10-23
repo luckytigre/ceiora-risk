@@ -227,3 +227,27 @@ variable "default_log_retention_days" {
   type        = number
   default     = 30
 }
+
+variable "portfolio_theses_enabled" {
+  description = "Enable owner-scoped thesis workspaces only after migration rehearsal."
+  type        = bool
+  default     = false
+}
+
+variable "portfolio_theses_owner_subjects" {
+  description = "Explicit trusted auth subjects enabled for thesis workspaces; case preserved."
+  type        = list(string)
+  default     = []
+  validation {
+    condition = alltrue([for subject in var.portfolio_theses_owner_subjects :
+      trimspace(subject) != "" && length(regexall("[,\\r\\n]", subject)) == 0
+    ])
+    error_message = "Thesis owner subjects must be nonempty and contain no commas or line breaks."
+  }
+}
+
+variable "portfolio_theses_allow_shared_auth" {
+  description = "Allow separately audited shared-auth subjects to use thesis workspaces."
+  type        = bool
+  default     = false
+}

@@ -246,3 +246,60 @@ def test_import_modes_preserve_saved_allocations_and_reject_invalid_reductions(p
     assert exc.value.sqlstate == "PTH01"
     conn.rollback()
     assert admin.execute("SELECT quantity FROM holdings_positions_current WHERE account_id='acct_main'").fetchone()[0] == Decimal(expected)
+
+
+def test_rollout_explicit_restricted_writer_and_readonly_preflight(pg):
+    conn, w, a, b, admin = pg
+    admin.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ceiora_test_writer') THEN CREATE ROLE ceiora_test_writer NOLOGIN; END IF; END $$")
+    admin.execute("GRANT USAGE ON SCHEMA public TO ceiora_test_writer")
+    admin.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON holdings_accounts, holdings_positions_current, app_users, account_memberships TO ceiora_test_writer")
+    # Hardened function defaults must also work; migration grants explicit execution.
+    admin.execute("REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC")
+    admin.execute("SELECT set_config('ceiora.portfolio_writer_roles', '[\"ceiora_test_writer\"]', false)")
+    admin.execute((MIGRATIONS / 'NEON_PORTFOLIO_THESES_SCHEMA.sql').read_text())
+    admin.execute((MIGRATIONS / 'NEON_PORTFOLIO_THESES_PREFLIGHT.sql').read_text())
+    admin.execute('SET ROLE ceiora_test_writer')
+    try:
+        with admin.transaction():
+            opened, _ = store.open_workspace(admin, subject='test-owner')
+            assert opened == w
+            admin.execute("UPDATE holdings_positions_current SET quantity=11 WHERE account_id='acct_main'")
+            admin.execute("UPDATE app_users SET display_name='Synthetic' WHERE user_id=%s", (OWNER,))
+            admin.execute("DELETE FROM account_memberships WHERE user_id=%s AND account_id='acct_main'", (OWNER,))
+        assert admin.execute('SELECT count(*) FROM portfolio_workspace_accounts WHERE workspace_id=%s AND account_id=%s', (w, 'acct_main')).fetchone()[0] == 0
+        assert not admin.execute("SELECT has_table_privilege(current_user,'portfolio_schema_versions','UPDATE')").fetchone()[0]
+    finally:
+        admin.execute('RESET ROLE')
+        admin.execute("RESET ceiora.portfolio_writer_roles")
+
+
+@pytest.mark.parametrize('roles', ['{}', '[7]', '["PUBLIC"]', '["ceiora_missing_role"]'])
+def test_rollout_invalid_roles_abort_transaction(pg, roles):
+    conn, w, a, b, admin = pg
+    before = admin.execute('SELECT applied_at FROM portfolio_schema_versions WHERE version=1').fetchone()
+    admin.execute("SELECT set_config('ceiora.portfolio_writer_roles', %s, false)", (roles,))
+    with pytest.raises(psycopg.Error):
+        admin.execute((MIGRATIONS / 'NEON_PORTFOLIO_THESES_SCHEMA.sql').read_text())
+    admin.execute('ROLLBACK')
+    admin.execute('RESET ceiora.portfolio_writer_roles')
+    assert admin.execute('SELECT applied_at FROM portfolio_schema_versions WHERE version=1').fetchone() == before
+
+
+def test_rollout_public_search_path_and_bounded_lock_wait(pg):
+    conn, w, a, b, admin = pg
+    admin.execute('CREATE SCHEMA operator_private')
+    admin.execute('SET search_path=operator_private,public')
+    admin.execute((MIGRATIONS / 'NEON_PORTFOLIO_THESES_SCHEMA.sql').read_text())
+    assert admin.execute("SELECT to_regclass('operator_private.portfolio_theses')").fetchone()[0] is None
+    assert admin.execute("SELECT current_setting('search_path')").fetchone()[0] == 'operator_private, public'
+    admin.execute('RESET search_path')
+    conn.execute('SELECT pg_advisory_xact_lock(1128614226,1)')
+    started = time.monotonic()
+    try:
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            admin.execute((MIGRATIONS / 'NEON_PORTFOLIO_THESES_SCHEMA.sql').read_text())
+        assert 4 <= time.monotonic() - started < 15
+    finally:
+        admin.execute('ROLLBACK')
+        conn.rollback()
+    assert admin.execute('SELECT count(*) FROM portfolio_schema_versions WHERE version=1').fetchone()[0] == 1

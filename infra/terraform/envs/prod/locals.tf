@@ -7,6 +7,8 @@ locals {
   endpoint_mode      = trimspace(var.endpoint_mode)
   edge_enabled       = var.edge_enabled
 
+  portfolio_theses_owner_subjects_csv = join(",", distinct([for subject in var.portfolio_theses_owner_subjects : trimspace(subject)]))
+
   hostnames = {
     frontend = "app.${var.cloudflare_zone_name}"
     serve    = "api.${var.cloudflare_zone_name}"

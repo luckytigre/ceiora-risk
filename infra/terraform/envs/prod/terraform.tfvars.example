@@ -49,3 +49,8 @@ edge_enabled                  = true
 # frontend_image_ref              = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/frontend:<tag>"
 # serve_image_ref                 = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/serve:<tag>"
 # control_image_ref               = "us-east4-docker.pkg.dev/project-4e18de12-63a3-4206-aaa/ceiora-images/control:<tag>"
+
+# Thesis rollout stays disabled until schema, all writer roles and owner mapping are verified.
+portfolio_theses_enabled           = false
+portfolio_theses_owner_subjects    = []
+portfolio_theses_allow_shared_auth = false

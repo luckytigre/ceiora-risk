@@ -1,6 +1,9 @@
 -- Additive thesis-workspace schema v1. Requires holdings and app-auth schemas.
 -- Run explicitly on a direct connection, never from serving reads.
 BEGIN;
+SET LOCAL search_path = public, pg_temp;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
 SELECT pg_advisory_xact_lock(1128614226, 1);
 
 CREATE TABLE IF NOT EXISTS portfolio_schema_versions (
@@ -275,6 +278,44 @@ $$;
 DROP TRIGGER IF EXISTS portfolio_order_guard ON portfolio_manual_orders;
 CREATE TRIGGER portfolio_order_guard BEFORE INSERT OR UPDATE ON portfolio_manual_orders
 FOR EACH ROW EXECUTE FUNCTION portfolio_validate_order();
+
+-- Optional reviewed writer-role JSON, supplied as a session setting before this file.
+-- Owner-only [] is safe only after auditing EVERY legacy holdings/auth writer.
+DO $grants$
+DECLARE
+    roles jsonb := COALESCE(NULLIF(current_setting('ceiora.portfolio_writer_roles', true), ''), '[]')::jsonb;
+    role_entry jsonb;
+    writer_role text;
+BEGIN
+    IF jsonb_typeof(roles) <> 'array' THEN
+        RAISE EXCEPTION 'portfolio_writer_roles must be a JSON array of existing role names';
+    END IF;
+    FOR role_entry IN SELECT value FROM jsonb_array_elements(roles) LOOP
+        IF jsonb_typeof(role_entry) <> 'string' THEN
+            RAISE EXCEPTION 'portfolio_writer_roles entries must be role-name strings';
+        END IF;
+        writer_role := role_entry #>> '{}';
+        IF lower(writer_role) = 'public' OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = writer_role) THEN
+            RAISE EXCEPTION 'portfolio_writer_roles must name existing non-PUBLIC roles';
+        END IF;
+        EXECUTE format('GRANT USAGE ON SCHEMA public TO %I', writer_role);
+        EXECUTE format('GRANT SELECT ON public.portfolio_schema_versions TO %I', writer_role);
+        EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.portfolio_workspaces, public.portfolio_workspace_accounts, public.portfolio_theses, public.portfolio_thesis_allocations, public.portfolio_manual_orders TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_thesis_lock() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_lock_statement() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_deny_truncate() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_touch_revision() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_validate_allocation() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_validate_holding() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_prune_orders(UUID) TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_cleanup_deleted() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_cleanup_membership() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_cleanup_inactive_account() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_validate_workspace_account() TO %I', writer_role);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.portfolio_validate_order() TO %I', writer_role);
+    END LOOP;
+END;
+$grants$;
 
 INSERT INTO portfolio_schema_versions(version) VALUES (1) ON CONFLICT DO NOTHING;
 COMMIT;
