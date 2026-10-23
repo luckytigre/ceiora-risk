@@ -1,8 +1,11 @@
 # Thesis production release proposal
 
-Status: proposed, not authorized or executed. The isolated Neon rehearsal passed
-and was cleaned up. Application code: original local main `5451413`; later evidence
-commits change documentation only. Record the final source SHA before publishing. Proposed source destination is
+Status: live release not authorized or executed. The isolated Neon rehearsal passed
+and was cleaned up. Approved source `ea42999` was published and three images/Plan A
+prepared, but locally accepted corrections at `da5b6c7` now supersede those artifacts.
+CI has 25 failures all reproduced on original baseline; no green-CI claim or waiver.
+See `../implementation/RELEASE_PREPARATION_EVIDENCE.md` before further action.
+Record and approve the replacement source SHA before publication. Proposed source destination is
 `https://github.com/luckytigre/ceiora-risk.git`, branch `main`; confirm the exact
 reviewed commit in the publication approval.
 

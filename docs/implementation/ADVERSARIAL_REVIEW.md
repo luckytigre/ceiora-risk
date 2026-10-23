@@ -121,3 +121,16 @@ cases and all 51 selected cloud/thesis contracts passed. The reviewer accepted t
 bootstrap test's current-reader fixture repair and local fast-forward once these
 checks passed. The runtime limitation is resolved; live target/role verification
 and external rollout permissions remain open.
+
+
+## Release preparation and CI audit
+
+Approved `ea42999` was published and its images/Plan A prepared without apply. Plan A
+has only six backend/job updates, existing frontend/auth/IAM unchanged and thesis
+flags off. Full CI's 25 failed nodes all reproduced on pristine `23c6270`; preserve
+that disclosed baseline debt. New offenders inside existing architecture checks
+were fixed locally in `da5b6c7` and accepted: neutral shared error UI and thin thesis
+route/service boundary, same auth and exception behavior. 103 focused tests, build,
+UI error contract and full DASH smoke passed. Published artifacts/plan are
+superseded; replacement exact-SHA publication and live actions remain unapproved.
+See `RELEASE_PREPARATION_EVIDENCE.md` for evidence and limitations.
