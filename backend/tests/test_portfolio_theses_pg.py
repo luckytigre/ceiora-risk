@@ -287,7 +287,7 @@ def test_rollout_invalid_roles_abort_transaction(pg, roles):
 
 def test_rollout_public_search_path_and_bounded_lock_wait(pg):
     conn, w, a, b, admin = pg
-    admin.execute('CREATE SCHEMA operator_private')
+    admin.execute('CREATE SCHEMA IF NOT EXISTS operator_private')
     admin.execute('SET search_path=operator_private,public')
     admin.execute((MIGRATIONS / 'NEON_PORTFOLIO_THESES_SCHEMA.sql').read_text())
     assert admin.execute("SELECT to_regclass('operator_private.portfolio_theses')").fetchone()[0] is None

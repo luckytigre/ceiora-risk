@@ -3,9 +3,9 @@
 import { Suspense, useMemo, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import HelpLabel from "@/components/HelpLabel";
-import ExposureBarChart from "@/components/ExposureBarChart";
+import ExposureBarChart from "@/features/cuse4/components/ExposureBarChart";
 import AnalyticsLoadingViz from "@/components/AnalyticsLoadingViz";
-import ApiErrorState from "@/features/cuse4/components/ApiErrorState";
+import RequestErrorState from "@/components/shared/RequestErrorState";
 import DashThesisPositionsTable from "@/features/dash/components/DashThesisPositionsTable";
 import CparRiskFactorLoadingsChart from "@/features/cpar/components/CparRiskFactorLoadingsChart";
 import { useCuseRiskPageSnapshot } from "@/hooks/useCuse4Api";
@@ -41,7 +41,7 @@ function CuseDash() {
       const gross = (factor: (typeof factors)[number]) => factor.drilldown.reduce((sum, row) => sum + Math.abs(Number(row.contribution || 0)), 0);
       return Math.max(Math.abs(right.value), gross(right)) - Math.max(Math.abs(left.value), gross(left));
     }).slice(0, 15).map((factor) => factor.factor_id), [factors]);
-  if (error || holdings.error) return <ApiErrorState surface="cUSE DASH" error={error || holdings.error} />;
+  if (error || holdings.error) return <RequestErrorState surface="cUSE DASH" error={error || holdings.error} />;
   if ((isLoading && !snapshot) || !holdings.data) return <AnalyticsLoadingViz message="Loading cUSE DASH…" />;
   if (!snapshot) return <p className="detail-history-empty">No cUSE snapshot is available.</p>;
   return <DashPanels
@@ -54,7 +54,7 @@ function CuseDash() {
 function CparDash() {
   const { data: risk, isLoading, error } = useCparRisk();
   const holdings = useHoldingsPositions(null);
-  if (error || holdings.error) return <ApiErrorState surface="cPAR DASH" error={error || holdings.error} />;
+  if (error || holdings.error) return <RequestErrorState surface="cPAR DASH" error={error || holdings.error} />;
   if ((isLoading && !risk) || !holdings.data) return <AnalyticsLoadingViz message="Loading cPAR DASH…" />;
   if (!risk) return <p className="detail-history-empty">No cPAR snapshot is available.</p>;
   const rows = [...risk.display_factor_chart].sort((a, b) => a.display_order - b.display_order);

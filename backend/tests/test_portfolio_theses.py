@@ -90,11 +90,11 @@ def test_enabled_request_honors_canonical_principal_denial(monkeypatch):
     closed = []
     monkeypatch.setattr(routes, "require_authenticated_session", lambda **kw: SimpleNamespace(subject="owner",provider="neon"))
     monkeypatch.setattr(service, "enabled_for", lambda *a: True)
-    monkeypatch.setattr(routes, "resolve_dsn", lambda _: "isolated")
-    monkeypatch.setattr(routes, "connect", lambda **kw: SimpleNamespace(close=lambda: closed.append(True)))
+    monkeypatch.setattr(service, "resolve_dsn", lambda _: "isolated")
+    monkeypatch.setattr(service, "connect", lambda **kw: SimpleNamespace(close=lambda: closed.append(True)))
     def deny(*args, **kw):
         raise AccountScopeDenied("Revoked allowlist")
-    monkeypatch.setattr(routes, "resolve_effective_principal", deny)
+    monkeypatch.setattr(service, "resolve_effective_principal", deny)
     monkeypatch.setattr(service, "request", lambda **kw: pytest.fail("Denied session reached owned workspace"))
     with pytest.raises(HTTPException) as exc:
         routes.get_state("test-token")

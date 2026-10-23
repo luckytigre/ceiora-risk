@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import ApiErrorState from "@/components/ApiErrorState";
+import RequestErrorState from "@/components/shared/RequestErrorState";
 
 export default function AppError({
   error,
@@ -14,5 +14,5 @@ export default function AppError({
     console.error(error);
   }, [error]);
 
-  return <ApiErrorState surface="this page" error={error} onRetry={reset} />;
+  return <RequestErrorState surface="this page" error={error} onRetry={reset} />;
 }

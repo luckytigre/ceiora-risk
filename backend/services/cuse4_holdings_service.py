@@ -305,6 +305,7 @@ def run_whatif_apply(
 
 
 __all__ = [
+    "PortfolioAllocationConflict",
     "IMPORT_MODES",
     "HoldingsDependencies",
     "get_holdings_dependencies",

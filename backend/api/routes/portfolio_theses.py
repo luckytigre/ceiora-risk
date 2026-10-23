@@ -7,9 +7,6 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api.auth import require_authenticated_session
-from backend.data.account_scope import resolve_effective_principal, AccountScopeDenied, AccountScopeProvisioningError
-from backend.data.neon import connect, resolve_dsn
-from backend.data.portfolio_thesis_store import ThesisError
 from backend.services import portfolio_thesis_service as service
 
 router = APIRouter()
@@ -43,20 +40,12 @@ class OrderRequest(RevisionRequest):
 def _request(token, operation, payload=None):
     principal = require_authenticated_session(x_app_session_token=token)
     try:
-        if service.enabled_for(principal.subject, principal.provider):
-            # Canonical allowlist/provider checks occur before the owned transaction;
-            # this resolver does not bootstrap or commit a workspace transaction.
-            conn = connect(dsn=resolve_dsn(None), autocommit=True)
-            try:
-                principal = resolve_effective_principal(conn, principal=principal)
-            finally:
-                conn.close()
-        return service.request(subject=principal.subject, provider=principal.provider, operation=operation, payload=payload)
-    except AccountScopeDenied as exc:
+        return service.request_for_principal(principal=principal, operation=operation, payload=payload)
+    except service.AccountScopeDenied as exc:
         raise HTTPException(status_code=403, detail="Account is not authorized for theses.") from exc
-    except AccountScopeProvisioningError as exc:
+    except service.AccountScopeProvisioningError as exc:
         raise HTTPException(status_code=409, detail="Account provisioning is required.") from exc
-    except ThesisError as exc:
+    except service.ThesisError as exc:
         raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail={"code": "theses_unavailable", "message": "Thesis workspace is temporarily unavailable."}) from exc

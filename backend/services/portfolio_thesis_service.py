@@ -6,7 +6,25 @@ import os
 import psycopg
 
 from backend.data import portfolio_thesis_store as store
+from backend.data.account_scope import (
+    AccountScopeDenied, AccountScopeProvisioningError, resolve_effective_principal,
+)
 from backend.data.neon import connect, resolve_dsn
+
+
+# Public service errors used by the thin HTTP adapter.
+ThesisError = store.ThesisError
+
+
+def request_for_principal(*, principal, operation: str, payload: dict | None = None) -> dict:
+    """Validate the canonical principal before opening the owned workspace transaction."""
+    if enabled_for(principal.subject, principal.provider):
+        conn = connect(dsn=resolve_dsn(None), autocommit=True)
+        try:
+            principal = resolve_effective_principal(conn, principal=principal)
+        finally:
+            conn.close()
+    return request(subject=principal.subject, provider=principal.provider, operation=operation, payload=payload)
 
 
 def enabled_for(subject: str, provider: str) -> bool:

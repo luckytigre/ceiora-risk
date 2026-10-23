@@ -1,7 +1,5 @@
 """cUSE4 portfolio serving and cUSE4 what-if preview routes."""
 
-from backend.data.portfolio_write_guard import PortfolioAllocationConflict
-
 from typing import Any
 
 from fastapi import APIRouter
@@ -120,7 +118,7 @@ async def post_portfolio_whatif(
     except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
         raise_account_scope_error(exc)
         raise
-    except PortfolioAllocationConflict as exc:
+    except holdings_service.PortfolioAllocationConflict as exc:
         raise HTTPException(status_code=409, detail={"code": "thesis_allocation_conflict", "message": str(exc)}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -165,7 +163,7 @@ async def post_portfolio_whatif_apply(
     except (AccountScopeAuthRequired, AccountScopeDenied, AccountScopeProvisioningError) as exc:
         raise_account_scope_error(exc)
         raise
-    except PortfolioAllocationConflict as exc:
+    except holdings_service.PortfolioAllocationConflict as exc:
         raise HTTPException(status_code=409, detail={"code": "thesis_allocation_conflict", "message": str(exc)}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

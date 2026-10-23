@@ -1,7 +1,7 @@
 "use client";
 
 import { useHoldingsPositions } from "@/hooks/useHoldingsApi";
-import ApiErrorState from "@/components/ApiErrorState";
+import RequestErrorState from "@/components/shared/RequestErrorState";
 import ThesisPositionsTable from "@/features/holdings/components/ThesisPositionsTable";
 import { buildDashPositions } from "@/features/dash/dashPositions";
 import type { Position } from "@/lib/types/analytics";
@@ -14,7 +14,7 @@ export default function AccountThesisWorkspace({ analytics, family }: {
   family: "cuse" | "cpar";
 }) {
   const holdings = useHoldingsPositions(null);
-  if (holdings.error) return <ApiErrorState surface="account positions" error={holdings.error} />;
+  if (holdings.error) return <RequestErrorState surface="account positions" error={holdings.error} />;
   if (!holdings.data) return <p role="status">Loading account positions…</p>;
   return <>
     <p className="section-subtitle">Theses group current account holdings. Prices and risk metadata use the last served model snapshot; unavailable account risk mixes show —. Portfolio risk measures remain in the instrument view.</p>
