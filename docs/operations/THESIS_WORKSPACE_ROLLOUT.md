@@ -73,12 +73,17 @@ restricted writer roles, plus reapplication, before requesting live execution.
 
 ## Target verification and release sequence
 
-Read-only connector metadata found candidate Neon project `barra-dashboard`
-(`dark-wildflower-28441812`), branch `main` (`br-autumn-fire-aifkc7z2`), database
-`neondb`, PostgreSQL 17. The base holdings/auth tables exist; thesis tables do not.
-The connector inspected as `neondb_owner`. This has NOT been correlated with the
-deployed Cloud Run database secret and does NOT establish actual runtime roles.
-No branch or cloud resource has been created or changed.
+The deployed Cloud Run database secret has now been verified against Neon project
+`barra-dashboard` (`dark-wildflower-28441812`), main (`br-autumn-fire-aifkc7z2`),
+database `neondb`, role `neondb_owner`. Serve, control and all four jobs reference
+that secret; the role owns the holdings/auth parents. Isolated rehearsal passed
+on child `br-shy-dew-aia1sv9d`; that child and its compute were deleted and absence
+verified. Parent schema/aggregate checks stayed unchanged. See
+`../implementation/NEON_THESIS_REHEARSAL_EVIDENCE.md` for exact checks and limitations
+and `THESIS_PRODUCTION_RELEASE_PLAN.md` for the pending release proposal.
+
+The following gates describe the overall sequence; verification and the temporary
+branch rehearsal are complete. Live release and owner activation remain unapproved.
 
 1. With separately approved credential access, compare the sanitized deployed
    endpoint/database/role to this candidate; never print the DSN or secret values.
